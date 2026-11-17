@@ -4494,12 +4494,12 @@ export type TranslationKey =
   | 'analysis.thresholds.category.bat'
   | 'analysis.thresholds.state.pending'
   | 'analysis.thresholds.state.failed'
-  | 'analysis.thresholds.state.notEnabled'
   | 'analysis.thresholds.empty'
-  | 'analysis.thresholds.sliderLabel' // params: name
-  | 'analysis.thresholds.usesThresholdOf' // params: name
-  | 'analysis.thresholds.notEnabledNote'
-  | 'analysis.thresholds.matchModel' // params: name
+  | 'analysis.thresholds.shared.label'
+  | 'analysis.thresholds.shared.usedBy' // params: models
+  | 'analysis.thresholds.shared.unused'
+  | 'analysis.thresholds.customSwitch'
+  | 'analysis.thresholds.usesShared'
   | 'analysis.speciesNames.title'
   | 'analysis.speciesNames.description'
   | 'analysis.inference.runtime.title'
@@ -5307,9 +5307,7 @@ export type TranslationParams = {
   'analysis.gallery.superseded.dialogNotice': { name: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
-  'analysis.thresholds.sliderLabel': { name: string | number };
-  'analysis.thresholds.usesThresholdOf': { name: string | number };
-  'analysis.thresholds.matchModel': { name: string | number };
+  'analysis.thresholds.shared.usedBy': { models: string | number };
   'analysis.scope.rangeFilter.appliesTo': { models: string | number };
   'analysis.scope.rangeFilter.notApplied': { models: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };

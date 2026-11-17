@@ -49,12 +49,14 @@
     watchModels,
   } from '$lib/stores/models.svelte';
   import {
-    BIRDNET_BOUNDS,
-    BIRDNET_THRESHOLD_FALLBACK,
+    SHARED_BOUNDS,
+    SHARED_THRESHOLD_FALLBACK,
+    usesSharedThreshold,
+    type ClassifierThresholdSection,
+    type ThresholdBounds,
     thresholdRows,
     thresholdSnapshot,
     type ThresholdRow,
-    type ThresholdSection,
     type ThresholdSectionValues,
   } from './analysisThresholds';
   import {
@@ -314,6 +316,23 @@
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
   const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
+  /** Bounds of the dynamic threshold fields (confidence values and a number of hours). */
+  const DYNAMIC_TRIGGER_BOUNDS = { min: 0, max: 1, step: 0.01 };
+  const DYNAMIC_MIN_BOUNDS = { min: 0, max: 0.99, step: 0.01 };
+  const DYNAMIC_HOURS_BOUNDS = { min: 0, max: 1000, step: 1 };
+  /** Ids linking the shared threshold and the dynamic threshold fields to their help text. */
+  const SHARED_THRESHOLD_HELP_ID = generateId('shared-threshold-help');
+  const RANGE_OVERVIEW_HEADING_ID = generateId('range-overview-heading');
+  const RANGE_THRESHOLD_HELP_ID = generateId('range-threshold-help');
+  /** Range filter threshold bounds, and the backend default shown until settings load. */
+  const RANGE_THRESHOLD_BOUNDS = { min: 0, max: 0.99, step: 0.01 };
+  const RANGE_THRESHOLD_FALLBACK = 0.01;
+  const DYNAMIC_TRIGGER_HELP_ID = generateId('dynamic-trigger-help');
+  const DYNAMIC_MIN_HELP_ID = generateId('dynamic-min-help');
+  const DYNAMIC_HOURS_HELP_ID = generateId('dynamic-hours-help');
+  /** One setting row: label and help on the left, the control on the right from tablet width. */
+  const SETTING_ROW_CLASS =
+    'grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]';
   /** Inference backend and OpenVINO device values ('' in the config also means auto). */
   const INFERENCE_AUTO = 'auto';
   const BACKEND_ONNX = 'onnx';
@@ -432,12 +451,12 @@
     $birdNetPlusSettings ?? { overrideThreshold: false, threshold: BIRDNET_PLUS_DEFAULT_THRESHOLD }
   );
   const thresholdTableRows = $derived(thresholdRows(getAvailableModels()));
-  // Name of the BirdNET v2.4 row, for the note on rows that use its threshold. The row is
-  // always listed while such a row is.
-  const birdnetRowName = $derived(
-    thresholdTableRows.find(row => row.descriptor.kind === 'birdnet')?.model.name ?? ''
+  // The shared threshold (birdnet.threshold) is a setting of its own: it applies to every
+  // classifier without a threshold of its own, whichever classifiers are installed.
+  const sharedThreshold = $derived(birdnet?.threshold ?? SHARED_THRESHOLD_FALLBACK);
+  const sharedThresholdUsers = $derived(
+    thresholdTableRows.filter(row => rowUsesShared(row)).map(row => row.model.name)
   );
-  const birdnetThreshold = $derived(birdnet?.threshold ?? BIRDNET_THRESHOLD_FALLBACK);
 
   // ── Change detection ──────────────────────────────────────────────────
   // The saved and the current value of each card, used by the card's unsaved-changes badge
@@ -1348,6 +1367,20 @@
     });
   }
 
+  function updateRangeThreshold(value: number) {
+    if (!Number.isFinite(value)) return;
+    settingsActions.updateSection('birdnet', {
+      rangeFilter: {
+        ...birdnet?.rangeFilter,
+        threshold: snapToStep(value, RANGE_THRESHOLD_BOUNDS),
+      },
+    });
+  }
+
+  function updateDynamicValue(key: string, bounds: ThresholdBounds, value: number) {
+    if (Number.isFinite(value)) updateDynamicThreshold(key, snapToStep(value, bounds));
+  }
+
   // The field clamps to the range; a fractional entry becomes a whole frame. A step equal to the
   // saved effective one restores the saved raw value (0 or none for the default), so the form
   // compares equal to the saved settings again and the save bar does not stay active.
@@ -1493,37 +1526,44 @@
     });
   }
 
-  // Threshold table handlers. Every edit saves to the row's own settings section.
-  // A typed value is rounded to the row's step, so the field, the slider and the saved value
+  // Rounds a value to a field's step and bounds, so the field, the slider and the saved value
   // agree (a value off the step would also mark the field invalid).
-  function updateRowThreshold(row: ThresholdRow, value: number) {
-    const { section, step } = row.descriptor;
-    if (!section || !Number.isFinite(value)) return;
+  function snapToStep(value: number, { min, max, step }: ThresholdBounds): number {
     const decimals = Math.max(0, Math.ceil(-Math.log10(step)));
-    const rounded = Number((Math.round(value / step) * step).toFixed(decimals));
-    settingsActions.updateSection(section, { threshold: rounded });
+    const snapped = Math.min(max, Math.max(min, Math.round(value / step) * step));
+    return Number(snapped.toFixed(decimals));
   }
 
-  // Switching a row to its own threshold keeps its saved value when that value is inside the
-  // row's bounds; otherwise (for example a saved 0) it starts from the value the row showed.
-  function updateRowOverride(row: ThresholdRow, value: boolean) {
+  function updateSharedThreshold(value: number) {
+    if (!Number.isFinite(value)) return;
+    settingsActions.updateSection('birdnet', { threshold: snapToStep(value, SHARED_BOUNDS) });
+  }
+
+  function updateRowThreshold(row: ThresholdRow, value: number) {
+    const { section } = row.descriptor;
+    if (!section || !Number.isFinite(value)) return;
+    settingsActions.updateSection(section, { threshold: snapToStep(value, row.descriptor) });
+  }
+
+  // Switching a row to a custom threshold keeps its saved value when that value is inside the
+  // row's bounds; otherwise (for example a saved 0) it starts from the shared threshold it
+  // showed.
+  function updateRowCustom(row: ThresholdRow, custom: boolean) {
     const { section, min, max } = row.descriptor;
     if (!section) return;
-    const own = sectionValues(section).threshold;
+    const own = classifierValues(section).threshold;
     const inBounds = own !== undefined && own >= min && own <= max;
     settingsActions.updateSection(
       section,
-      value && !inBounds
-        ? { overrideThreshold: true, threshold: Math.min(max, Math.max(min, birdnetThreshold)) }
-        : { overrideThreshold: value }
+      custom && !inBounds
+        ? { overrideThreshold: true, threshold: snapToStep(sharedThreshold, row.descriptor) }
+        : { overrideThreshold: custom }
     );
   }
 
-  // The settings values behind a row's section.
-  function sectionValues(section: ThresholdSection): ThresholdSectionValues {
+  // The settings values behind a classifier's own threshold section.
+  function classifierValues(section: ClassifierThresholdSection): ThresholdSectionValues {
     switch (section) {
-      case 'birdnet':
-        return { threshold: birdnetThreshold };
       case 'perch':
         return perch;
       case 'birdnetv3':
@@ -1537,22 +1577,30 @@
     }
   }
 
-  // Whether a row follows the BirdNET threshold: always for 'follows' rows, and for
-  // 'override' rows until their own threshold is switched on (backend
-  // modelGlobalConfidenceThreshold).
-  function rowFollowsBirdnet(row: ThresholdRow): boolean {
-    const { kind, section } = row.descriptor;
-    if (kind === 'follows') return true;
-    if (kind !== 'override' || !section) return false;
-    return !sectionValues(section).overrideThreshold;
+  function rowUsesShared(row: ThresholdRow): boolean {
+    const { section } = row.descriptor;
+    return usesSharedThreshold(row.descriptor, section ? classifierValues(section) : undefined);
   }
 
-  // The value the row's field shows: the effective threshold, so a row that follows
-  // BirdNET shows the BirdNET value.
+  // The value a row shows: the threshold that applies to it.
   function rowThresholdValue(row: ThresholdRow): number {
     const { section } = row.descriptor;
-    if (!section || rowFollowsBirdnet(row)) return birdnetThreshold;
-    return sectionValues(section).threshold ?? birdnetThreshold;
+    if (!section || rowUsesShared(row)) return sharedThreshold;
+    return classifierValues(section).threshold ?? sharedThreshold;
+  }
+
+  // One slider plus number field (or a number field alone) in the control column of a
+  // setting row. The thresholds and the dynamic threshold cards both use it, so their rows
+  // look and behave the same.
+  interface ValueControl {
+    label: string;
+    value: number;
+    bounds: ThresholdBounds;
+    disabled: boolean;
+    describedBy?: string;
+    /** False for a value without a meaningful range to slide over (a number of hours). */
+    slider?: boolean;
+    onChange: (_value: number) => void;
   }
 
   // ── Gallery tab definitions ───────────────────────────────────────────
@@ -1939,6 +1987,52 @@
 </script>
 
 <!-- ── Detection Tab: settings that apply to every classifier ────────── -->
+<!-- The control column of a setting row: a slider and a number field editing one value, or a
+     number field alone in the same column, so fields line up across rows and cards. -->
+{#snippet valueControl(c: ValueControl)}
+  <div class="flex min-w-0 items-center gap-4">
+    {#if c.slider === false}
+      <div class="min-w-0 flex-1"></div>
+    {:else}
+      <input
+        type="range"
+        class="range range-sm min-w-0 flex-1"
+        aria-label={c.label}
+        aria-describedby={c.describedBy}
+        min={c.bounds.min}
+        max={c.bounds.max}
+        step={c.bounds.step}
+        value={c.value}
+        disabled={c.disabled}
+        oninput={event => c.onChange(event.currentTarget.valueAsNumber)}
+      />
+    {/if}
+    <NumberField
+      label={c.label}
+      labelClassName="sr-only"
+      className="w-24 shrink-0"
+      value={c.value}
+      onUpdate={c.onChange}
+      min={c.bounds.min}
+      max={c.bounds.max}
+      step={c.bounds.step}
+      describedByExtra={c.describedBy}
+      disabled={c.disabled}
+    />
+  </div>
+{/snippet}
+
+<!-- A dynamic threshold setting row, laid out like a detection threshold row. -->
+{#snippet dynamicRow(label: string, help: string, helpId: string, control: ValueControl)}
+  <li class={SETTING_ROW_CLASS}>
+    <div class="min-w-0">
+      <span class="text-sm font-medium text-[var(--color-base-content)]">{label}</span>
+      <p id={helpId} class="help-text mt-1">{help}</p>
+    </div>
+    {@render valueControl(control)}
+  </li>
+{/snippet}
+
 <!-- One line stating which classifiers a card's settings act on. -->
 {#snippet scopeLine(text: string)}
   <p class="mb-4 text-sm text-[var(--color-base-content)]/70">{text}</p>
@@ -1955,28 +2049,41 @@
       currentData={thresholdsChange.current}
     >
       <ul class="divide-y divide-[var(--border-100)]" data-testid="threshold-list">
+        <!-- The shared threshold: a setting of its own, used by every classifier without a
+             threshold of its own, whichever classifiers are installed. -->
+        <li class={SETTING_ROW_CLASS} data-testid="threshold-row-shared">
+          <div class="min-w-0">
+            <span class="text-sm font-medium text-[var(--color-base-content)]">
+              {t('analysis.thresholds.shared.label')}
+            </span>
+            <p id={SHARED_THRESHOLD_HELP_ID} class="help-text mt-1">
+              {sharedThresholdUsers.length > 0
+                ? t('analysis.thresholds.shared.usedBy', {
+                    models: sharedThresholdUsers.join(', '),
+                  })
+                : t('analysis.thresholds.shared.unused')}
+            </p>
+          </div>
+          {@render valueControl({
+            label: t('analysis.thresholds.shared.label'),
+            value: sharedThreshold,
+            bounds: SHARED_BOUNDS,
+            disabled: store.isLoading || store.isSaving,
+            describedBy: SHARED_THRESHOLD_HELP_ID,
+            onChange: updateSharedThreshold,
+          })}
+        </li>
         {#each thresholdTableRows as row (row.model.id)}
           {@const section = row.descriptor.section}
-          {@const follows = rowFollowsBirdnet(row)}
-          {@const value = rowThresholdValue(row)}
+          {@const usesShared = rowUsesShared(row)}
           {@const nameId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-name`}
           {@const sourceId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-source`}
-          {@const controlsDisabled = store.isLoading || store.isSaving || follows}
-          {@const bounds = follows ? BIRDNET_BOUNDS : row.descriptor}
-          <li
-            class="grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]"
-            data-testid="threshold-row-{row.model.id}"
-          >
+          <li class={SETTING_ROW_CLASS} data-testid="threshold-row-{row.model.id}">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
                 <span id={nameId} class="text-sm font-medium text-[var(--color-base-content)]">
                   {row.model.name}
                 </span>
-                {#if !row.enabled}
-                  <Badge variant="neutral" size="xs">
-                    {t('analysis.thresholds.state.notEnabled')}
-                  </Badge>
-                {/if}
                 {#if row.model.category === 'bat'}
                   <Badge variant="neutral" size="xs">
                     {t('analysis.thresholds.category.bat')}
@@ -1992,66 +2099,37 @@
                   </Badge>
                 {/if}
               </div>
-              {#if row.descriptor.kind === 'override' && section}
+              {#if row.descriptor.kind === 'optional'}
                 <ToggleField
                   className="mt-2"
                   variant="inline"
                   size="sm"
-                  label={t('analysis.thresholds.matchModel', { name: birdnetRowName })}
-                  value={follows}
+                  label={t('analysis.thresholds.customSwitch')}
+                  value={!usesShared}
                   contextLabelId={nameId}
                   disabled={store.isLoading || store.isSaving}
-                  onUpdate={matches => updateRowOverride(row, !matches)}
+                  onUpdate={custom => updateRowCustom(row, custom)}
                 />
               {/if}
-              {#if !row.enabled || follows}
-                <p
-                  id={sourceId}
-                  class={!row.enabled || row.descriptor.kind === 'follows'
-                    ? 'help-text mt-1'
-                    : 'sr-only'}
-                >
-                  {#if !row.enabled}
-                    {t('analysis.thresholds.notEnabledNote')}
-                  {:else}
-                    {t('analysis.thresholds.usesThresholdOf', { name: birdnetRowName })}
-                  {/if}
-                </p>
+              {#if usesShared}
+                <p id={sourceId} class="help-text mt-1">{t('analysis.thresholds.usesShared')}</p>
               {/if}
             </div>
-
-            <!-- Slider and number edit the same value. -->
-            <div class="flex min-w-0 items-center gap-4">
-              <input
-                type="range"
-                class="range range-sm min-w-0 flex-1"
-                aria-label={t('analysis.thresholds.sliderLabel', { name: row.model.name })}
-                aria-describedby={!row.enabled || follows ? sourceId : undefined}
-                min={bounds.min}
-                max={bounds.max}
-                step={bounds.step}
-                {value}
-                disabled={controlsDisabled}
-                oninput={event => updateRowThreshold(row, event.currentTarget.valueAsNumber)}
-              />
-              <NumberField
-                label={row.model.name}
-                labelClassName="sr-only"
-                className="w-24 shrink-0"
-                {value}
-                onUpdate={newValue => updateRowThreshold(row, newValue)}
-                min={bounds.min}
-                max={bounds.max}
-                step={bounds.step}
-                describedByExtra={!row.enabled || follows ? sourceId : undefined}
-                disabled={controlsDisabled}
-              />
-            </div>
+            {@render valueControl({
+              label: row.model.name,
+              value: rowThresholdValue(row),
+              bounds: usesShared ? SHARED_BOUNDS : row.descriptor,
+              disabled: store.isLoading || store.isSaving || usesShared || !section,
+              describedBy: usesShared ? sourceId : undefined,
+              onChange: value => updateRowThreshold(row, value),
+            })}
           </li>
         {:else}
-          <li class="py-3 text-sm text-[var(--color-base-content)]/70">
-            {modelsLoading() ? t('common.loading') : t('analysis.thresholds.empty')}
-          </li>
+          {#if modelsLoading()}
+            <li class="py-3 text-sm text-[var(--color-base-content)]/70">
+              {t('common.loading')}
+            </li>
+          {/if}
         {/each}
       </ul>
     </SettingsSection>
@@ -2073,42 +2151,48 @@
       />
 
       {#if dynamicThreshold.enabled}
-        <div
-          class="mt-5 grid grid-cols-1 gap-6 border-t border-[var(--border-100)] pt-5 md:grid-cols-3"
-        >
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.trigger.label')}
-            value={dynamicThreshold.trigger}
-            onUpdate={value => updateDynamicThreshold('trigger', value)}
-            min={0.0}
-            max={1.0}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.trigger.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.minimum.label')}
-            value={dynamicThreshold.min}
-            onUpdate={value => updateDynamicThreshold('min', value)}
-            min={0.0}
-            max={0.99}
-            step={0.01}
-            helpText={t('settings.main.sections.dynamicThreshold.minimum.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-
-          <NumberField
-            label={t('settings.main.sections.dynamicThreshold.expireTime.label')}
-            value={dynamicThreshold.validHours}
-            onUpdate={value => updateDynamicThreshold('validHours', value)}
-            min={0}
-            max={1000}
-            step={1}
-            helpText={t('settings.main.sections.dynamicThreshold.expireTime.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
+        <ul class="mt-4 divide-y divide-[var(--border-100)] border-t border-[var(--border-100)]">
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.trigger.label'),
+            t('settings.main.sections.dynamicThreshold.trigger.helpText'),
+            DYNAMIC_TRIGGER_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.trigger.label'),
+              value: dynamicThreshold.trigger,
+              bounds: DYNAMIC_TRIGGER_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_TRIGGER_HELP_ID,
+              onChange: value => updateDynamicValue('trigger', DYNAMIC_TRIGGER_BOUNDS, value),
+            }
+          )}
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.minimum.label'),
+            t('settings.main.sections.dynamicThreshold.minimum.helpText'),
+            DYNAMIC_MIN_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.minimum.label'),
+              value: dynamicThreshold.min,
+              bounds: DYNAMIC_MIN_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_MIN_HELP_ID,
+              onChange: value => updateDynamicValue('min', DYNAMIC_MIN_BOUNDS, value),
+            }
+          )}
+          {@render dynamicRow(
+            t('settings.main.sections.dynamicThreshold.expireTime.label'),
+            t('settings.main.sections.dynamicThreshold.expireTime.helpText'),
+            DYNAMIC_HOURS_HELP_ID,
+            {
+              label: t('settings.main.sections.dynamicThreshold.expireTime.label'),
+              value: dynamicThreshold.validHours,
+              bounds: DYNAMIC_HOURS_BOUNDS,
+              disabled: store.isLoading || store.isSaving,
+              describedBy: DYNAMIC_HOURS_HELP_ID,
+              slider: false,
+              onChange: value => updateDynamicValue('validHours', DYNAMIC_HOURS_BOUNDS, value),
+            }
+          )}
+        </ul>
       {/if}
     </SettingsSection>
 
@@ -2268,102 +2352,112 @@
       currentData={rangeFilterChange.current}
     >
       {@render scopeLine(rangeFilterScope)}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <NumberField
-          label={t('settings.main.sections.rangeFilter.threshold.label')}
-          value={birdnet?.rangeFilter?.threshold ?? 0.01}
-          onUpdate={value =>
-            settingsActions.updateSection('birdnet', {
-              rangeFilter: { ...birdnet?.rangeFilter, threshold: value },
-            })}
-          min={0.0}
-          max={0.99}
-          step={0.01}
-          helpText={t('settings.main.sections.rangeFilter.threshold.helpText')}
-          disabled={store.isLoading || store.isSaving}
-        />
-
-        <div>
-          <div class="flex justify-start mb-1">
-            <span class="text-sm text-[var(--color-base-content)]"
-              >{t('settings.main.sections.rangeFilter.speciesCount.label')}</span
-            >
-          </div>
-          <div class="flex items-center gap-3">
-            <div
-              class="text-2xl font-bold text-[var(--text-primary)] tabular-nums"
-              class:opacity-60={rangeFilterState.testing}
-            >
-              {rangeFilterState.speciesCount !== null
-                ? formatNumber(rangeFilterState.speciesCount)
-                : '-'}
-            </div>
-            {#if rangeFilterState.testing}
-              <!-- Decorative: the status region below announces the state. -->
-              <LoadingSpinner size="sm" aria-hidden="true" />
-            {/if}
-            <!-- Always rendered so screen readers hear loading and the new count. -->
-            <span class="sr-only" role="status">
-              {rangeFilterState.testing
-                ? t('settings.main.sections.rangeFilter.speciesCount.loading')
-                : rangeFilterState.speciesCount !== null
-                  ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
-                  : ''}
+      <ul class="divide-y divide-[var(--border-100)]">
+        <li class={SETTING_ROW_CLASS}>
+          <div class="min-w-0">
+            <span class="text-sm font-medium text-[var(--color-base-content)]">
+              {t('settings.main.sections.rangeFilter.threshold.label')}
             </span>
+            <p id={RANGE_THRESHOLD_HELP_ID} class="help-text mt-1">
+              {t('settings.main.sections.rangeFilter.threshold.helpText')}
+            </p>
           </div>
-          <div class="flex flex-wrap items-center gap-2 mt-2">
-            <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
-                 natively disabled button would drop focus before the dialog could return it here -->
-            <button
-              type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
-              aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
-              aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
-              onclick={() => {
-                if (viewSpeciesBlocked) return;
-                rangeFilterState.showModal = true;
-                loadRangeFilterSpecies();
-              }}
-            >
-              {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount ||
-                rangeFilterState.downloading ||
-                !birdnet?.locationConfigured}
-              onclick={downloadSpeciesCSV}
-            >
-              <Download class="size-4" />
-              {t('analytics.filters.exportCsv')}
-            </button>
-            <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
-            {#if viewSpeciesBlockedReason}
-              <span
-                id="range-species-blocked-reason"
-                class="text-xs text-[var(--color-base-content)]/70"
+          {@render valueControl({
+            label: t('settings.main.sections.rangeFilter.threshold.label'),
+            value: birdnet?.rangeFilter?.threshold ?? RANGE_THRESHOLD_FALLBACK,
+            bounds: RANGE_THRESHOLD_BOUNDS,
+            disabled: store.isLoading || store.isSaving,
+            describedBy: RANGE_THRESHOLD_HELP_ID,
+            onChange: updateRangeThreshold,
+          })}
+        </li>
+
+        <li class={SETTING_ROW_CLASS}>
+          <div class="min-w-0">
+            <span class="text-sm font-medium text-[var(--color-base-content)]">
+              {t('settings.main.sections.rangeFilter.speciesCount.label')}
+            </span>
+            <p class="help-text mt-1">
+              {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
+            </p>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-3">
+              <div
+                class="text-2xl font-bold text-[var(--text-primary)] tabular-nums"
+                class:opacity-60={rangeFilterState.testing}
               >
-                {viewSpeciesBlockedReason}
+                {rangeFilterState.speciesCount !== null
+                  ? formatNumber(rangeFilterState.speciesCount)
+                  : '-'}
+              </div>
+              {#if rangeFilterState.testing}
+                <!-- Decorative: the status region below announces the state. -->
+                <LoadingSpinner size="sm" aria-hidden="true" />
+              {/if}
+              <!-- Always rendered so screen readers hear loading and the new count. -->
+              <span class="sr-only" role="status">
+                {rangeFilterState.testing
+                  ? t('settings.main.sections.rangeFilter.speciesCount.loading')
+                  : rangeFilterState.speciesCount !== null
+                    ? `${t('settings.main.sections.rangeFilter.speciesCount.label')}: ${formatNumber(rangeFilterState.speciesCount)}`
+                    : ''}
               </span>
-            {/if}
+            </div>
+            <div class="flex flex-wrap items-center gap-2 mt-2">
+              <!-- aria-disabled, not disabled: the click that opens the dialog starts the load, and a
+                 natively disabled button would drop focus before the dialog could return it here -->
+              <button
+                type="button"
+                class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:not-aria-disabled:bg-black/5 dark:hover:not-aria-disabled:bg-white/10 focus-ring transition-colors aria-disabled:text-[var(--color-base-content)]/50 aria-disabled:border-[var(--color-base-content)]/15 aria-disabled:cursor-not-allowed"
+                aria-disabled={viewSpeciesBlocked ? 'true' : undefined}
+                aria-describedby={viewSpeciesBlocked ? 'range-species-blocked-reason' : undefined}
+                onclick={() => {
+                  if (viewSpeciesBlocked) return;
+                  rangeFilterState.showModal = true;
+                  loadRangeFilterSpecies();
+                }}
+              >
+                {t('settings.main.sections.rangeFilter.speciesCount.viewSpecies')}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!rangeFilterState.speciesCount ||
+                  rangeFilterState.downloading ||
+                  !birdnet?.locationConfigured}
+                onclick={downloadSpeciesCSV}
+              >
+                <Download class="size-4" />
+                {t('analytics.filters.exportCsv')}
+              </button>
+              <!-- After both buttons, so a long reason wraps below them instead of splitting them -->
+              {#if viewSpeciesBlockedReason}
+                <span
+                  id="range-species-blocked-reason"
+                  class="text-xs text-[var(--color-base-content)]/70"
+                >
+                  {viewSpeciesBlockedReason}
+                </span>
+              {/if}
+            </div>
           </div>
-          <span class="help-text mt-1">
-            {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
-          </span>
-        </div>
-      </div>
+        </li>
+      </ul>
 
       {#if rangeFilterStatus && rangeFilterStatus.geomodel}
-        <details
-          class="mt-4 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]/50"
+        <!-- Always shown: the Filters tab is short, so the overview needs no disclosure. -->
+        <section
+          class="mt-6 border-t border-[var(--border-100)] pt-5"
+          aria-labelledby={RANGE_OVERVIEW_HEADING_ID}
         >
-          <summary
-            class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-lg transition-colors"
+          <h3
+            id={RANGE_OVERVIEW_HEADING_ID}
+            class="mb-3 text-sm font-medium text-[var(--color-base-content)]"
           >
             {t('analysis.rangeFilter.status.title')}
-          </summary>
-          <div class="px-4 pb-4">
+          </h3>
+          <div>
             <!-- Geomodel info line -->
             <div class="flex items-center gap-2 text-sm mb-3">
               <span class="font-medium">
@@ -2436,7 +2530,7 @@
               </div>
             {/if}
           </div>
-        </details>
+        </section>
 
         <!-- Pass unmapped species toggle (always visible, outside collapsible) -->
         <div class="mt-5 border-t border-[var(--border-100)] pt-5">

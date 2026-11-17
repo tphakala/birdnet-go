@@ -6107,14 +6107,16 @@
       },
       "state": {
         "pending": "Loading",
-        "failed": "Failed to load",
-        "notEnabled": "Not enabled"
+        "failed": "Failed to load"
       },
       "empty": "No classifiers are enabled.",
-      "sliderLabel": "{name} threshold",
-      "usesThresholdOf": "Uses the {name} threshold",
-      "notEnabledNote": "This classifier is not enabled. Its threshold still applies to the classifiers that use it.",
-      "matchModel": "Match {name}"
+      "shared": {
+        "label": "Shared threshold",
+        "usedBy": "Used by every classifier without a custom threshold: {models}.",
+        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+      },
+      "customSwitch": "Custom threshold",
+      "usesShared": "Uses the shared threshold"
     },
     "speciesNames": {
       "title": "Species names",
