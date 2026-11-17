@@ -170,6 +170,18 @@ describe('EnableOnSourcesStep', () => {
     expect(screen.queryByRole('switch')).toBeNull();
   });
 
+  it('shows a failed model list even while the default models are unknown', async () => {
+    acoustic.availability = { kind: 'unknown' };
+    vi.mocked(api.get).mockRejectedValueOnce(new Error('offline'));
+    seed([card('Default', [])]);
+    wizard.model = BAT_CONTEXT;
+
+    renderStep(EnableOnSourcesStep);
+
+    expect(await screen.findByRole('button', { name: 'common.retry' })).toBeInTheDocument();
+    expect(screen.getByText('settings.audio.models.listFailed')).toBeInTheDocument();
+  });
+
   it('appends the alias to an explicit list and saves only the changed section', async () => {
     const { leave } = await renderLoaded();
 

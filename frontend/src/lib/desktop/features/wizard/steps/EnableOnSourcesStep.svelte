@@ -162,8 +162,9 @@
 
   type View = 'loading' | 'listFailed' | 'notListed' | 'notLoaded' | 'noSources' | 'sources';
   let view = $derived.by((): View => {
-    if (listLoading || defaultsPending) return 'loading';
+    if (listLoading) return 'loading';
     if (listFailed) return 'listFailed';
+    if (defaultsPending) return 'loading';
     if (!listed) return 'notListed';
     if (listed.state === 'failed' || listed.state === 'pending') return 'notLoaded';
     if (cardRows.length === 0 && streamRows.length === 0) return 'noSources';
