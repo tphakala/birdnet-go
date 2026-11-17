@@ -2490,8 +2490,14 @@
           <div class="min-w-0">
             <div class="flex items-center gap-3">
               <div
-                class="text-2xl font-bold text-[var(--text-primary)] tabular-nums"
-                class:opacity-60={rangeFilterState.testing}
+                class={cn(
+                  'text-2xl font-bold tabular-nums',
+                  // Dimmed through the colour's alpha, which keeps the hue and dims in every
+                  // theme while staying above 3:1 for this large bold text.
+                  rangeFilterState.testing
+                    ? 'text-[var(--text-primary)]/70'
+                    : 'text-[var(--text-primary)]'
+                )}
               >
                 {rangeFilterState.speciesCount !== null
                   ? formatNumber(rangeFilterState.speciesCount)
