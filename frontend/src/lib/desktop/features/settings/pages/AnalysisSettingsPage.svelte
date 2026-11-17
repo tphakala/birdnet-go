@@ -49,6 +49,7 @@
     watchModels,
   } from '$lib/stores/models.svelte';
   import {
+    SECTION_THRESHOLD_DEFAULT,
     SHARED_BOUNDS,
     SHARED_THRESHOLD_FALLBACK,
     usesSharedThreshold,
@@ -170,10 +171,6 @@
   const DEFAULT_HUGGINGFACE_ENDPOINT = 'https://huggingface.co';
   /** Catalog ID of the BSG-BAT model (the other bat catalog entries are BattyBirdNET models). */
   const BSG_BAT_CATALOG_ID = 'bsg-bat';
-  /** Backend default of birdnetplus.threshold, used until the section is loaded. */
-  const BIRDNET_PLUS_DEFAULT_THRESHOLD = 0.5;
-  /** Backend default of bsgbat.threshold, used until the section is loaded. */
-  const BSG_BAT_DEFAULT_THRESHOLD = 0.5;
   /** Frames are whole numbers. */
   const BSG_BAT_STEP_INCREMENT = 1;
   /** Decimals of the step shown in seconds (one frame is 2 ms, so 0.01 s is five frames). */
@@ -317,7 +314,7 @@
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
   const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
   /** Bounds of the dynamic threshold fields (confidence values and a number of hours). */
-  const DYNAMIC_TRIGGER_BOUNDS = { min: 0, max: 1, step: 0.01 };
+  const DYNAMIC_TRIGGER_BOUNDS = SHARED_BOUNDS;
   const DYNAMIC_MIN_BOUNDS = { min: 0, max: 0.99, step: 0.01 };
   const DYNAMIC_HOURS_BOUNDS = { min: 0, max: 1000, step: 1 };
   /** Ids linking the shared threshold and the dynamic threshold fields to their help text. */
@@ -325,7 +322,7 @@
   const RANGE_OVERVIEW_HEADING_ID = generateId('range-overview-heading');
   const RANGE_THRESHOLD_HELP_ID = generateId('range-threshold-help');
   /** Range filter threshold bounds, and the backend default shown until settings load. */
-  const RANGE_THRESHOLD_BOUNDS = { min: 0, max: 0.99, step: 0.01 };
+  const RANGE_THRESHOLD_BOUNDS = DYNAMIC_MIN_BOUNDS;
   const RANGE_THRESHOLD_FALLBACK = 0.01;
   const DYNAMIC_TRIGGER_HELP_ID = generateId('dynamic-trigger-help');
   const DYNAMIC_MIN_HELP_ID = generateId('dynamic-min-help');
@@ -416,7 +413,7 @@
   let bat = $derived(
     $batSettings ?? {
       enabled: false,
-      threshold: 0.5,
+      threshold: SECTION_THRESHOLD_DEFAULT,
       filterEnabled: false,
       nighttimeOnly: true,
       falsePositiveFilter: { level: 0 },
@@ -425,7 +422,7 @@
   );
 
   let bsgBat: BSGBatSettings = $derived(
-    $bsgBatSettings ?? { threshold: BSG_BAT_DEFAULT_THRESHOLD }
+    $bsgBatSettings ?? { threshold: SECTION_THRESHOLD_DEFAULT }
   );
   // The step the form shows: the saved value, or the default for 0 or no value (the API can store
   // a raw 0, which the backend resolves to the default).
@@ -446,10 +443,14 @@
   // ── Detection thresholds table ────────────────────────────────────────
   // One row per enabled classifier (GET /api/v2/models, refreshed on topology
   // changes), so the table follows what is installed and running.
-  let perch = $derived($perchSettings ?? { overrideThreshold: false, threshold: 0.5 });
-  let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
+  let perch = $derived(
+    $perchSettings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
+  );
+  let birdnetV3 = $derived(
+    $birdNetV3Settings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
+  );
   let birdnetPlus = $derived(
-    $birdNetPlusSettings ?? { overrideThreshold: false, threshold: BIRDNET_PLUS_DEFAULT_THRESHOLD }
+    $birdNetPlusSettings ?? { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT }
   );
   const thresholdTableRows = $derived(thresholdRows(getAvailableModels()));
   // The shared threshold (birdnet.threshold) is a setting of its own: it applies to every
@@ -2041,13 +2042,19 @@
   </div>
 {/snippet}
 
+<!-- The label and help text on the left of a setting row. The label is a block so wrapped lines
+     keep the text-sm line height. -->
+{#snippet settingText(label: string, help: string, helpId?: string)}
+  <div class="min-w-0">
+    <span class="block text-sm font-medium text-[var(--color-base-content)]">{label}</span>
+    <p id={helpId} class="help-text mt-1">{help}</p>
+  </div>
+{/snippet}
+
 <!-- A dynamic threshold setting row, laid out like a detection threshold row. -->
 {#snippet dynamicRow(label: string, help: string, helpId: string, control: ValueControl)}
   <li class={SETTING_ROW_CLASS}>
-    <div class="min-w-0">
-      <span class="block text-sm font-medium text-[var(--color-base-content)]">{label}</span>
-      <p id={helpId} class="help-text mt-1">{help}</p>
-    </div>
+    {@render settingText(label, help, helpId)}
     {@render valueControl(control)}
   </li>
 {/snippet}
@@ -2071,18 +2078,15 @@
         <!-- The shared threshold: a setting of its own, used by every classifier without a
              threshold of its own, whichever classifiers are installed. -->
         <li class={SETTING_ROW_CLASS} data-testid="threshold-row-shared">
-          <div class="min-w-0">
-            <span class="block text-sm font-medium text-[var(--color-base-content)]">
-              {t('analysis.thresholds.shared.label')}
-            </span>
-            <p id={SHARED_THRESHOLD_HELP_ID} class="help-text mt-1">
-              {sharedThresholdUsers.length > 0
-                ? t('analysis.thresholds.shared.usedBy', {
-                    models: sharedThresholdUsers.join(', '),
-                  })
-                : t('analysis.thresholds.shared.unused')}
-            </p>
-          </div>
+          {@render settingText(
+            t('analysis.thresholds.shared.label'),
+            sharedThresholdUsers.length > 0
+              ? t('analysis.thresholds.shared.usedBy', {
+                  models: sharedThresholdUsers.join(', '),
+                })
+              : t('analysis.thresholds.shared.unused'),
+            SHARED_THRESHOLD_HELP_ID
+          )}
           {@render valueControl({
             label: t('analysis.thresholds.shared.label'),
             value: sharedThreshold,
@@ -2232,14 +2236,11 @@
       {@render scopeLine(t('analysis.scope.speciesNames'))}
       <ul>
         <li class={SETTING_ROW_CLASS}>
-          <div class="min-w-0">
-            <span class="block text-sm font-medium text-[var(--color-base-content)]">
-              {t('analysis.detection.locale.label')}
-            </span>
-            <p id={SPECIES_LANGUAGE_HELP_ID} class="help-text mt-1">
-              {t('analysis.detection.locale.helpText')}
-            </p>
-          </div>
+          {@render settingText(
+            t('analysis.detection.locale.label'),
+            t('analysis.detection.locale.helpText'),
+            SPECIES_LANGUAGE_HELP_ID
+          )}
           <div class="min-w-0">
             <SelectDropdown
               options={birdnetLocaleOptions}
@@ -2392,14 +2393,11 @@
       {@render scopeLine(rangeFilterScope)}
       <ul class="divide-y divide-[var(--border-100)]">
         <li class={SETTING_ROW_CLASS}>
-          <div class="min-w-0">
-            <span class="block text-sm font-medium text-[var(--color-base-content)]">
-              {t('settings.main.sections.rangeFilter.threshold.label')}
-            </span>
-            <p id={RANGE_THRESHOLD_HELP_ID} class="help-text mt-1">
-              {t('settings.main.sections.rangeFilter.threshold.helpText')}
-            </p>
-          </div>
+          {@render settingText(
+            t('settings.main.sections.rangeFilter.threshold.label'),
+            t('settings.main.sections.rangeFilter.threshold.helpText'),
+            RANGE_THRESHOLD_HELP_ID
+          )}
           {@render valueControl({
             label: t('settings.main.sections.rangeFilter.threshold.label'),
             value: birdnet?.rangeFilter?.threshold ?? RANGE_THRESHOLD_FALLBACK,
@@ -2411,14 +2409,10 @@
         </li>
 
         <li class={SETTING_ROW_CLASS}>
-          <div class="min-w-0">
-            <span class="block text-sm font-medium text-[var(--color-base-content)]">
-              {t('settings.main.sections.rangeFilter.speciesCount.label')}
-            </span>
-            <p class="help-text mt-1">
-              {t('settings.main.sections.rangeFilter.speciesCount.helpText')}
-            </p>
-          </div>
+          {@render settingText(
+            t('settings.main.sections.rangeFilter.speciesCount.label'),
+            t('settings.main.sections.rangeFilter.speciesCount.helpText')
+          )}
           <div class="min-w-0">
             <div class="flex items-center gap-3">
               <div
