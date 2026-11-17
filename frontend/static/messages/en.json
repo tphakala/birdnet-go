@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Commercial use allowed",
         "nonCommercialOnly": "Non-commercial use only",
         "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "acceptAndInstall": "Accept & Install",
+        "continue": "Continue",
+        "agreementNext": "This model has terms you need to agree to. They are shown on the next step."
       },
       "removeDialog": {
         "title": "Remove {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Go to Download Source",
         "dismiss": "Dismiss",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} needs your agreement to its terms before it can be installed.",
+        "documentUnavailable": "The document text could not be loaded and verified. Check that BirdNET-Go can reach the model download source, then try again."
       },
       "regionLabel": "Region",
       "speciesLabel": "Species",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Failed to apply",
         "upToDate": "All your models are already optimized for this hardware.",
         "licenseNote": "Swapping stays within the same model, so its license does not change."
+      },
+      "documents": {
+        "heading": "Documents",
+        "kinds": {
+          "license": "License",
+          "acceptable_use": "Acceptable use policy"
+        },
+        "genericKind": "Model terms",
+        "source": "From {repo}",
+        "textRegion": "{document} text",
+        "loading": "Loading document text",
+        "view": "View {document}",
+        "hide": "Hide {document}"
+      },
+      "agreement": {
+        "title": "Review and agree",
+        "intro": "Before {name} can be installed, read and agree to the terms below.",
+        "agree": "I have read and agree to: {document}",
+        "agreeAndContinue": "Agree and continue",
+        "tickEach": "Tick the box under each document to continue.",
+        "waitForText": "You can agree once every document has loaded.",
+        "unavailableBlocked": "A document could not be loaded, so you cannot agree to it yet. Use Retry to load it again."
       }
     },
     "bat": {

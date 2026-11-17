@@ -31,7 +31,12 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import { canReturnFocus, pickOpener } from '$lib/utils/pressedElement';
-  import type { CatalogEntry, DownloadProgress, ModelRegionsResponse } from '$lib/types/models';
+  import type {
+    AgreementDocument,
+    CatalogEntry,
+    DownloadProgress,
+    ModelRegionsResponse,
+  } from '$lib/types/models';
   import {
     fetchCatalog,
     fetchModelRegions,
@@ -40,8 +45,14 @@
     uninstallModel,
     subscribeInstallProgress,
     isNetworkDownloadError,
+    MODEL_AGREEMENT_REQUIRED_KEY,
     MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
+  import {
+    documentKindLabel,
+    refusalDocuments,
+    splitEntryDocuments,
+  } from '$lib/utils/modelDocuments';
   import {
     getAvailableModels,
     modelsLoading,
@@ -143,12 +154,16 @@
     type OptimizeOffer,
   } from '$lib/utils/variantSelection';
   import OptimizeReviewDialog from '$lib/desktop/features/settings/components/OptimizeReviewDialog.svelte';
-  import { safeArrayAccess } from '$lib/utils/security';
+  import ModelAgreementDialog from '$lib/desktop/features/settings/components/ModelAgreementDialog.svelte';
+  import ModelDocumentText from '$lib/desktop/features/settings/components/ModelDocumentText.svelte';
+  import { safeArrayAccess, validateProtocolURL } from '$lib/utils/security';
   import { generateId } from '$lib/utils/uuid';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
   import {
+    ArrowRight,
     Download,
+    ExternalLink,
     Trash2,
     Shield,
     ShieldAlert,
@@ -316,6 +331,34 @@
   );
   // Links the blocked (aria-disabled) Install button to the visible reason.
   const INSTALL_BLOCKED_HELP_ID = generateId('install-blocked-help');
+
+  // ── Document agreements ───────────────────────────────────────────────
+  // The documents of the entry in the license dialog: those that need an agreement
+  // first (the agreement dialog then follows the license dialog), and the rest,
+  // shown as a link or as text to view.
+  const licenseDocuments = $derived(
+    licenseModel ? splitEntryDocuments(licenseModel) : { outstanding: [], reference: [] }
+  );
+  const licenseNeedsAgreement = $derived(licenseDocuments.outstanding.length > 0);
+  // The hosted document whose text the license dialog shows, if any.
+  let licenseViewedSha = $state<string | null>(null);
+  const licenseViewedDocument = $derived(
+    licenseDocuments.reference.find(d => d.sha256 === licenseViewedSha)
+  );
+  const LICENSE_DOCUMENT_TEXT_ID = generateId('license-document-text');
+  const DOCUMENT_LINK_PROTOCOLS = ['https'];
+  const DOCUMENT_LINK_CLASS =
+    'inline-flex min-h-6 items-center gap-1 rounded-sm text-[var(--color-base-content)] underline underline-offset-2 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]';
+
+  // A start (install, reinstall or swap) that waits for the user to agree to the
+  // entry's documents. resume repeats that same start with the accepted sha256 list.
+  interface AgreementRequest {
+    modelId: string;
+    modelName: string;
+    documents: AgreementDocument[];
+    resume: (_accepted: string[]) => void;
+  }
+  let agreementRequest = $state<AgreementRequest | null>(null);
   const RANGE_DIALOG_TITLE_ID = generateId('range-filter-dialog-title');
   const BSG_BAT_STEP_READOUT_ID = generateId('bsg-bat-step-readout');
   /** Bounds of the dynamic threshold fields (confidence values and a number of hours). */
@@ -689,8 +732,8 @@
   }
 
   // Review dialog + apply-flow state. Applies reuse the normal install/variant-swap
-  // path (startInstall); a within-model swap never changes the license, so no extra
-  // consent is needed beyond the review dialog itself.
+  // path (startInstall), so a swap the server refuses for an outstanding document
+  // agreement opens the agreement dialog like any other start.
   let optimizeReviewOpen = $state(false);
   let appliedOptimizeIds = $state(new Set<string>());
   // Entry ids whose optimize swap failed this session (drives the dialog's per-row
@@ -748,21 +791,32 @@
   // set to the applying id): mark it applied on success, then advance the batch
   // queue. A failed swap (installError names the id) is not marked applied but still
   // advances the queue so one failure does not stall the rest.
+  // A swap waiting in the agreement dialog is not settled here: agreeing starts it
+  // again, and cancelling settles it as failed (handleAgreementCancel).
   $effect(() => {
     const current = installingId;
-    if (lastInstallingId !== null && current === null && lastInstallingId === optimizeApplyingId) {
-      const done = lastInstallingId;
-      optimizeApplyingId = null;
-      const failed = installError?.modelId === done;
-      if (failed) failedOptimizeIds = new Set(failedOptimizeIds).add(done);
-      else appliedOptimizeIds = new Set(appliedOptimizeIds).add(done);
-      if (applyAllQueue[0] === done) {
-        applyAllQueue = applyAllQueue.slice(1);
-        applyNextInQueue();
-      }
+    if (
+      lastInstallingId !== null &&
+      current === null &&
+      lastInstallingId === optimizeApplyingId &&
+      agreementRequest?.modelId !== lastInstallingId
+    ) {
+      settleOptimizeApply(lastInstallingId, installError?.modelId === lastInstallingId);
     }
     lastInstallingId = current;
   });
+
+  // Mark a finished optimize swap applied or failed, then advance the apply-all
+  // queue, so one failed or cancelled swap does not stall the rest.
+  function settleOptimizeApply(done: string, failed: boolean) {
+    optimizeApplyingId = null;
+    if (failed) failedOptimizeIds = new Set(failedOptimizeIds).add(done);
+    else appliedOptimizeIds = new Set(appliedOptimizeIds).add(done);
+    if (applyAllQueue[0] === done) {
+      applyAllQueue = applyAllQueue.slice(1);
+      applyNextInQueue();
+    }
+  }
 
   const availableWildlife = $derived(
     catalog.filter(e => !e.installed && e.category === 'wildlife')
@@ -1826,6 +1880,7 @@
   function openLicenseDialog(entry: CatalogEntry) {
     licenseModel = entry;
     chosenVariantId = null;
+    licenseViewedSha = null;
     licenseDialogRef?.showModal();
   }
 
@@ -1851,8 +1906,69 @@
     // Only a fresh install offers the next steps; a variant swap keeps the model's
     // place on the audio sources
     const nextSteps = licenseModel.installed ? undefined : nextStepsContext(licenseModel);
+    // Ask for any outstanding agreement before the first request, so a fresh install
+    // never needs the server's refusal to find out.
+    const documents = licenseDocuments.outstanding;
     closeLicenseDialog();
-    startInstall(modelId, modelName, variantId, nextSteps);
+    if (documents.length > 0) {
+      agreementRequest = {
+        modelId,
+        modelName,
+        documents,
+        resume: accepted => startInstall(modelId, modelName, variantId, { nextSteps, accepted }),
+      };
+      return;
+    }
+    startInstall(modelId, modelName, variantId, { nextSteps });
+  }
+
+  // True when the server refused a start because a document of the entry still
+  // needs an agreement. Classified by error_key, like isOperationInProgress.
+  function isAgreementRequired(e: unknown): e is ApiError {
+    return e instanceof ApiError && e.errorKey === MODEL_AGREEMENT_REQUIRED_KEY;
+  }
+
+  // Handle a start the server refused for an outstanding agreement: open the
+  // agreement dialog with the documents the server named; agreeing repeats the start
+  // through resume. Returns false for any other error, and for a refusal that named
+  // nothing the user can agree to, so the caller shows its reason.
+  function handleAgreementRefusal(
+    e: unknown,
+    modelId: string,
+    modelName: string,
+    resume: (_accepted: string[]) => void
+  ): boolean {
+    if (!isAgreementRequired(e)) return false;
+    const documents = refusalDocuments(e.errorParams);
+    if (documents.length === 0) return false;
+    agreementRequest = { modelId, modelName, documents, resume };
+    return true;
+  }
+
+  // Mark the documents the server accepted as agreed in the catalog, which is
+  // reloaded only after an install completes, so the license dialog does not ask
+  // again in the meantime.
+  function noteAgreed(modelId: string, accepted: string[]) {
+    if (accepted.length === 0) return;
+    for (const doc of catalog.find(e => e.id === modelId)?.documents ?? []) {
+      if (doc.sha256 && accepted.includes(doc.sha256)) doc.agreed = true;
+    }
+  }
+
+  function handleAgreementAccept(accepted: string[]) {
+    const request = agreementRequest;
+    agreementRequest = null;
+    request?.resume(accepted);
+  }
+
+  // Cancelling is the user's choice, not a failure, so no error banner shows. A
+  // cancelled optimize swap still settles as failed so the apply-all queue moves on.
+  function handleAgreementCancel() {
+    const request = agreementRequest;
+    agreementRequest = null;
+    if (request && optimizeApplyingId === request.modelId) {
+      settleOptimizeApply(request.modelId, true);
+    }
   }
 
   // Rebase the settings store on the server after a gallery action changed model
@@ -1900,13 +2016,22 @@
     }
   }
 
+  // What a start carries besides the model and variant (see startInstall).
+  interface StartInstallOptions {
+    nextSteps?: InstalledModelContext;
+    accepted?: string[];
+  }
+
   // The install body, extracted so a failed install's Retry can re-run it without
-  // reopening the license dialog (the license was accepted this session).
+  // reopening the license dialog. `options.nextSteps` is set for a fresh install,
+  // whose completion then offers the next steps; `options.accepted` lists the
+  // documents the user agreed to for this start. A refusal for an outstanding
+  // agreement opens the agreement dialog, which repeats this start with them.
   async function startInstall(
     modelId: string,
     modelName: string,
     variantId: string | undefined,
-    nextSteps?: InstalledModelContext
+    { nextSteps, accepted = [] }: StartInstallOptions = {}
   ) {
     // Defensive boundary: callers already gate on galleryActionInFlight, but keep
     // the invariant here so a future caller cannot start an overlapping action.
@@ -1921,7 +2046,9 @@
     });
 
     try {
-      await installModel(modelId, variantId);
+      if (accepted.length > 0) await installModel(modelId, variantId, accepted);
+      else await installModel(modelId, variantId);
+      noteAgreed(modelId, accepted);
 
       if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
@@ -1964,9 +2091,18 @@
         }
       );
     } catch (e) {
-      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
-      installError = installFailed(message, isOperationInProgress(e));
+      // Cleared before the agreement dialog opens, in the same synchronous step: the
+      // optimize completion effect then sees the swap is waiting for an agreement.
       installingId = null;
+      if (
+        handleAgreementRefusal(e, modelId, modelName, again =>
+          startInstall(modelId, modelName, variantId, { nextSteps, accepted: again })
+        )
+      ) {
+        return;
+      }
+      const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
+      installError = installFailed(message, isOperationInProgress(e) || isAgreementRequired(e));
     }
   }
 
@@ -2061,7 +2197,8 @@
   }
 
   // The reinstall body, extracted so a failed reinstall's Retry can re-run it.
-  async function startReinstall(modelId: string, modelName: string) {
+  // `accepted` works as in startInstall.
+  async function startReinstall(modelId: string, modelName: string, accepted: string[] = []) {
     // Defensive boundary: callers already gate on galleryActionInFlight.
     if (galleryActionInFlight) return;
     installError = null;
@@ -2069,7 +2206,9 @@
     downloadProgress = null;
 
     try {
-      await reinstallModel(modelId);
+      if (accepted.length > 0) await reinstallModel(modelId, accepted);
+      else await reinstallModel(modelId);
+      noteAgreed(modelId, accepted);
 
       if (progressCleanup) progressCleanup();
       progressCleanup = subscribeInstallProgress(
@@ -2106,6 +2245,14 @@
         }
       );
     } catch (e) {
+      reinstallingId = null;
+      if (
+        handleAgreementRefusal(e, modelId, modelName, again =>
+          startReinstall(modelId, modelName, again)
+        )
+      ) {
+        return;
+      }
       const message = e instanceof Error ? e.message : t('analysis.gallery.errors.installFailed');
       installError = reportActionError(
         modelId,
@@ -2113,9 +2260,8 @@
         'reinstall',
         message,
         undefined,
-        isOperationInProgress(e)
+        isOperationInProgress(e) || isAgreementRequired(e)
       );
-      reinstallingId = null;
     }
   }
 
@@ -2129,7 +2275,7 @@
     // survives future refactors that might retry while an action is running.
     if (galleryActionInFlight) return;
     const { modelId, modelName, variantId, kind, nextSteps } = installError;
-    if (kind === 'install') startInstall(modelId, modelName, variantId, nextSteps);
+    if (kind === 'install') startInstall(modelId, modelName, variantId, { nextSteps });
     else if (kind === 'reinstall') startReinstall(modelId, modelName);
   }
 
@@ -3461,6 +3607,55 @@
           </details>
         {/if}
 
+        {#if licenseDocuments.reference.length > 0}
+          <div class="text-sm">
+            <p class="font-medium text-[var(--color-base-content)]">
+              {t('analysis.gallery.documents.heading')}
+            </p>
+            <ul class="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+              {#each licenseDocuments.reference as doc (`${doc.repo}:${doc.kind}`)}
+                {@const label = documentKindLabel(doc.kind)}
+                {@const href =
+                  doc.url && validateProtocolURL(doc.url, DOCUMENT_LINK_PROTOCOLS) ? doc.url : null}
+                <li>
+                  {#if href}
+                    <a {href} target="_blank" rel="noopener noreferrer" class={DOCUMENT_LINK_CLASS}>
+                      {label}
+                      <ExternalLink class="size-3.5" aria-hidden="true" />
+                      <span class="sr-only">({t('common.aria.opensInNewTab')})</span>
+                    </a>
+                  {:else if doc.sha256}
+                    {@const sha = doc.sha256}
+                    {@const shown = licenseViewedSha === sha}
+                    <button
+                      type="button"
+                      aria-expanded={shown}
+                      aria-controls={LICENSE_DOCUMENT_TEXT_ID}
+                      onclick={() => (licenseViewedSha = shown ? null : sha)}
+                      class={DOCUMENT_LINK_CLASS}
+                    >
+                      {shown
+                        ? t('analysis.gallery.documents.hide', { document: label })
+                        : t('analysis.gallery.documents.view', { document: label })}
+                    </button>
+                  {:else}
+                    <span class="text-[var(--color-base-content)]">{label}</span>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+            <div id={LICENSE_DOCUMENT_TEXT_ID}>
+              {#if licenseViewedDocument?.sha256}
+                <ModelDocumentText
+                  sha256={licenseViewedDocument.sha256}
+                  label={documentKindLabel(licenseViewedDocument.kind)}
+                  className="mt-2"
+                />
+              {/if}
+            </div>
+          </div>
+        {/if}
+
         {#if !licenseModel.commercialUse}
           <div
             class="flex items-start gap-2 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 px-3 py-2.5 text-sm"
@@ -3476,6 +3671,11 @@
         {/if}
       </div>
 
+      {#if licenseNeedsAgreement}
+        <p class="mt-4 text-sm text-[var(--color-base-content)]/80">
+          {t('analysis.gallery.license.agreementNext')}
+        </p>
+      {/if}
       {#if installBlocked}
         <p id={INSTALL_BLOCKED_HELP_ID} class="mt-4 text-sm text-[var(--text-error)]" role="alert">
           {t('analysis.gallery.variants.incompatible')}
@@ -3497,8 +3697,13 @@
           title={installBlocked ? t('analysis.gallery.variants.incompatible') : undefined}
           class="inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-[var(--color-primary)]"
         >
-          <Download class="size-4" />
-          {t('analysis.gallery.license.acceptAndInstall')}
+          {#if licenseNeedsAgreement}
+            {t('analysis.gallery.license.continue')}
+            <ArrowRight class="size-4" aria-hidden="true" />
+          {:else}
+            <Download class="size-4" />
+            {t('analysis.gallery.license.acceptAndInstall')}
+          {/if}
         </button>
       </div>
     </div>
@@ -3563,6 +3768,15 @@
   onApply={applyOffer}
   onApplyAll={applyAllOffers}
   onClose={closeOptimizeReview}
+/>
+
+<!-- Document agreement step of an install, reinstall or swap -->
+<ModelAgreementDialog
+  open={agreementRequest !== null}
+  modelName={agreementRequest?.modelName ?? ''}
+  documents={agreementRequest?.documents ?? []}
+  onAgree={handleAgreementAccept}
+  onCancel={handleAgreementCancel}
 />
 
 <!-- Range Filter Species Modal -->

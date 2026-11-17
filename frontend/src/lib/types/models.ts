@@ -43,6 +43,43 @@ export interface CatalogVariant {
   hardwareClass?: string;
 }
 
+/**
+ * A licence or policy document of a catalog entry's own repo. Mirrors the Go
+ * CatalogDocumentResponse (internal/api/v2/models/models.go). A hosted document
+ * carries `sha256` (its verified text is served by the documents endpoint), an
+ * external one carries `url`. `kind` is an open vocabulary ('license',
+ * 'acceptable_use', others).
+ */
+export interface CatalogDocument {
+  repo: string;
+  kind: string;
+  requiresAgreement: boolean;
+  /** True when an agreement is recorded for this exact text. */
+  agreed: boolean;
+  sha256?: string;
+  url?: string;
+}
+
+/**
+ * A document the user must agree to before an install starts: one of the entry's
+ * outstanding catalog documents, or one listed by the server's agreement refusal.
+ */
+export interface AgreementDocument {
+  repo: string;
+  kind: string;
+  sha256: string;
+}
+
+/** Body of GET /api/v2/models/documents/:sha256. Mirrors Go ModelDocumentResponse. */
+export interface ModelDocument {
+  repo: string;
+  kind: string;
+  requiresAgreement: boolean;
+  sha256: string;
+  /** The verified document text, plain text to render as is. */
+  text: string;
+}
+
 /** A model entry in the catalog, enriched with install/compat status. */
 export interface CatalogEntry {
   id: string;
@@ -83,6 +120,8 @@ export interface CatalogEntry {
   recommendedVariantId?: string;
   /** Catalog IDs installed with this model; absent when it has none. May name hidden components the catalog does not list. */
   dependsOn?: string[];
+  /** Licence and policy documents of the entry's own repo; absent when it has none. */
+  documents?: CatalogDocument[];
 }
 
 /** Response wrapper for the catalog endpoint. */

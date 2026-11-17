@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Kereskedelmi felhasználás engedélyezett",
         "nonCommercialOnly": "Csak nem kereskedelmi célú felhasználás",
         "nonCommercialWarning": "Ez a modell csak nem kereskedelmi felhasználásra licencelt. A telepítéssel elfogadja a licencfeltételeket.",
-        "acceptAndInstall": "Elfogadás és telepítés"
+        "acceptAndInstall": "Elfogadás és telepítés",
+        "continue": "Tovább",
+        "agreementNext": "Ehhez a modellhez feltételek tartoznak, amelyeket el kell fogadnia. A következő lépésben jelennek meg."
       },
       "removeDialog": {
         "title": "{name} eltávolítása?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Ugrás a Letöltési forráshoz",
         "dismiss": "Bezárás",
         "details": "Részletek",
-        "removeRetryHint": "Az újbóli próbálkozáshoz használja az Eltávolítás gombot a modell kártyáján."
+        "removeRetryHint": "Az újbóli próbálkozáshoz használja az Eltávolítás gombot a modell kártyáján.",
+        "agreementRequired": "{name} csak a feltételeinek elfogadása után telepíthető.",
+        "documentUnavailable": "A dokumentum szövegét nem sikerült betölteni és ellenőrizni. Ellenőrizze, hogy a BirdNET-Go eléri-e a modellek letöltési forrását, majd próbálja újra."
       },
       "regionLabel": "Régió",
       "speciesLabel": "Fajok",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Nem sikerült alkalmazni",
         "upToDate": "Minden modelled optimalizálva van erre a hardverre.",
         "licenseNote": "A csere ugyanazon a modellen belül marad, így a licence nem változik."
+      },
+      "documents": {
+        "heading": "Dokumentumok",
+        "kinds": {
+          "license": "Licenc",
+          "acceptable_use": "Elfogadható használati szabályzat"
+        },
+        "genericKind": "Modellfeltételek",
+        "source": "Forrás: {repo}",
+        "textRegion": "Szöveg: {document}",
+        "loading": "Dokumentum szövegének betöltése",
+        "view": "Megjelenítés: {document}",
+        "hide": "Elrejtés: {document}"
+      },
+      "agreement": {
+        "title": "Olvassa el és fogadja el",
+        "intro": "A(z) {name} telepítése előtt olvassa el és fogadja el az alábbi feltételeket.",
+        "agree": "Elolvastam és elfogadom: {document}",
+        "agreeAndContinue": "Elfogadás és tovább",
+        "tickEach": "A folytatáshoz jelölje be a jelölőnégyzetet minden dokumentum alatt.",
+        "waitForText": "Az elfogadás akkor lehetséges, ha minden dokumentum betöltődött.",
+        "unavailableBlocked": "Egy dokumentumot nem sikerült betölteni, ezért még nem fogadhatja el. Töltse be újra az Újra gombbal."
       }
     },
     "bat": {

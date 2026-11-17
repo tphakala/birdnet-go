@@ -1,5 +1,37 @@
-import { describe, it, expect } from 'vitest';
-import { isNetworkDownloadError } from './modelsApi';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { installModel, isNetworkDownloadError, reinstallModel } from './modelsApi';
+import { api } from '$lib/utils/api';
+
+vi.mock('$lib/utils/api', () => ({
+  api: { get: vi.fn(), post: vi.fn().mockResolvedValue(null) },
+}));
+
+describe('install and reinstall request bodies', () => {
+  beforeEach(() => {
+    vi.mocked(api.post).mockClear();
+  });
+
+  // The server tolerates an empty body only when there is none at all, and older
+  // servers never saw one, so a request with nothing to say must send no body.
+  it('sends no body when there is no variant and nothing was accepted', async () => {
+    await installModel('m');
+    await installModel('m', undefined, []);
+    await reinstallModel('m');
+    await reinstallModel('m', []);
+    for (const call of vi.mocked(api.post).mock.calls) {
+      expect(call[1]).toBeUndefined();
+    }
+  });
+
+  it('sends the accepted documents with the variant, and on a reinstall', async () => {
+    await installModel('m', 'fp32', ['abc']);
+    await reinstallModel('m', ['abc']);
+    expect(vi.mocked(api.post).mock.calls).toEqual([
+      ['/api/v2/models/install/m', { variantId: 'fp32', acceptedDocuments: ['abc'] }],
+      ['/api/v2/models/reinstall/m', { acceptedDocuments: ['abc'] }],
+    ]);
+  });
+});
 
 describe('isNetworkDownloadError', () => {
   // The three CategoryNetwork download-failure formats the backend emits

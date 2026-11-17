@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Kommerzielle Nutzung erlaubt",
         "nonCommercialOnly": "Nur nichtkommerzielle Nutzung",
         "nonCommercialWarning": "Dieses Modell ist nur für nichtkommerzielle Nutzung lizenziert. Mit der Installation stimmen Sie den Lizenzbedingungen zu.",
-        "acceptAndInstall": "Akzeptieren & Installieren"
+        "acceptAndInstall": "Akzeptieren & Installieren",
+        "continue": "Weiter",
+        "agreementNext": "Für dieses Modell gelten Bedingungen, denen Sie zustimmen müssen. Sie werden im nächsten Schritt angezeigt."
       },
       "removeDialog": {
         "title": "{name} entfernen?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Zur Download-Quelle",
         "dismiss": "Schließen",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} kann erst installiert werden, wenn Sie den Bedingungen zugestimmt haben.",
+        "documentUnavailable": "Der Text des Dokuments konnte nicht geladen und überprüft werden. Prüfen Sie, ob BirdNET-Go die Downloadquelle der Modelle erreicht, und versuchen Sie es erneut."
       },
       "regionLabel": "Region",
       "speciesLabel": "Arten",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Fehler beim Anwenden",
         "upToDate": "Alle Ihre Modelle sind für diese Hardware bereits optimiert.",
         "licenseNote": "Der Wechsel erfolgt innerhalb desselben Modells, daher ändert sich die Lizenz nicht."
+      },
+      "documents": {
+        "heading": "Dokumente",
+        "kinds": {
+          "license": "Lizenz",
+          "acceptable_use": "Richtlinie zur zulässigen Nutzung"
+        },
+        "genericKind": "Modellbedingungen",
+        "source": "Aus {repo}",
+        "textRegion": "Text: {document}",
+        "loading": "Dokumenttext wird geladen",
+        "view": "Anzeigen: {document}",
+        "hide": "Ausblenden: {document}"
+      },
+      "agreement": {
+        "title": "Lesen und zustimmen",
+        "intro": "Bevor {name} installiert werden kann, lesen Sie die folgenden Bedingungen und stimmen Sie ihnen zu.",
+        "agree": "Ich habe gelesen und stimme zu: {document}",
+        "agreeAndContinue": "Zustimmen und weiter",
+        "tickEach": "Setzen Sie unter jedem Dokument das Häkchen, um fortzufahren.",
+        "waitForText": "Sie können zustimmen, sobald alle Dokumente geladen sind.",
+        "unavailableBlocked": "Ein Dokument konnte nicht geladen werden, daher können Sie ihm noch nicht zustimmen. Laden Sie es mit Erneut versuchen neu."
       }
     },
     "bat": {

@@ -27,6 +27,7 @@ vi.mock('$lib/utils/modelsApi', async () => {
     subscribeInstallProgress: vi.fn(),
     fetchModelRegions: vi.fn(),
     fetchRegionCoverageMap: vi.fn(),
+    fetchModelDocument: vi.fn(),
   };
 });
 
@@ -107,7 +108,10 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
-import { MODEL_OPERATION_IN_PROGRESS_KEY } from '$lib/utils/modelsApi';
+import {
+  MODEL_AGREEMENT_REQUIRED_KEY,
+  MODEL_OPERATION_IN_PROGRESS_KEY,
+} from '$lib/utils/modelsApi';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
 import { getAvailableModels, refreshModels } from '$lib/stores/models.svelte';
 import { toastActions } from '$lib/stores/toast';
@@ -1418,5 +1422,201 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     } finally {
       settingsStore.update(state => ({ ...state, dataLoaded: true }));
     }
+  });
+});
+
+describe('AnalysisSettingsPage model gallery document agreements', () => {
+  const POLICY_SHA = 'a'.repeat(64);
+  const policyDocument = {
+    repo: 'org/model',
+    kind: 'acceptable_use',
+    requiresAgreement: true,
+    agreed: false,
+    sha256: POLICY_SHA,
+  };
+
+  // The 409 a backend that enforces agreements answers for an outstanding document.
+  function agreementRefusal(): ApiError {
+    const refusal = new ApiError('needs agreement', 409, new Response(null, { status: 409 }));
+    refusal.errorKey = MODEL_AGREEMENT_REQUIRED_KEY;
+    refusal.errorParams = {
+      name: 'Test Bird Model',
+      documents: [{ repo: 'org/model', kind: 'acceptable_use', sha256: POLICY_SHA }],
+    };
+    return refusal;
+  }
+
+  // An installed model with a recommended variant other than the installed one, so it
+  // carries an optimize offer.
+  function swappable(id: string, name: string): CatalogEntry {
+    const variant = (variantId: string, installed: boolean) => ({
+      id: variantId,
+      precision: 'fp32',
+      default: installed,
+      installed,
+      speciesCount: 1,
+      sizeBytes: 1,
+      compatible: true,
+      recommended: !installed,
+    });
+    return birdEntry({
+      id,
+      name,
+      installed: true,
+      installedVariantId: 'old',
+      recommendedVariantId: 'new',
+      variants: [variant('old', true), variant('new', false)],
+    });
+  }
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
+    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+    vi.mocked(modelsApi.fetchModelDocument).mockResolvedValue({
+      repo: 'org/model',
+      kind: 'acceptable_use',
+      requiresAgreement: true,
+      sha256: POLICY_SHA,
+      text: 'policy text',
+    });
+    vi.mocked(modelsApi.subscribeInstallProgress).mockReturnValue(() => {});
+    // An earlier test may have dismissed the optimize banner for the session.
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.mocked(modelsApi.installModel).mockReset();
+    vi.mocked(modelsApi.reinstallModel).mockReset();
+  });
+
+  async function agreeToPolicy(): Promise<void> {
+    await fireEvent.click(
+      await screen.findByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ })
+    );
+    await fireEvent.click(
+      screen.getByRole('button', { name: /analysis\.gallery\.agreement\.agreeAndContinue/ })
+    );
+  }
+
+  it('asks for an outstanding agreement before the first install request', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [policyDocument] })],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+    );
+    expect(modelsApi.installModel).not.toHaveBeenCalled();
+
+    await agreeToPolicy();
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', undefined, [POLICY_SHA])
+    );
+    expect(modelsApi.installModel).toHaveBeenCalledTimes(1);
+  });
+
+  it('repeats a refused install with the accepted documents, and a cancel shows no error', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [birdEntry()] });
+    vi.mocked(modelsApi.installModel)
+      .mockRejectedValueOnce(agreementRefusal())
+      .mockRejectedValueOnce(agreementRefusal())
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+
+    // First attempt: the user cancels the agreement.
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+    await screen.findByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ });
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('checkbox')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // Second attempt: the user agrees and the same install is sent again with it.
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+    await agreeToPolicy();
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenLastCalledWith('test-bird', undefined, [POLICY_SHA])
+    );
+    expect(modelsApi.installModel).toHaveBeenCalledTimes(3);
+  });
+
+  it('repeats a refused reinstall with the accepted documents', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.reinstallModel)
+      .mockRejectedValueOnce(agreementRefusal())
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+    );
+
+    await agreeToPolicy();
+
+    await waitFor(() =>
+      expect(modelsApi.reinstallModel).toHaveBeenLastCalledWith('inst', [POLICY_SHA])
+    );
+  });
+
+  it('repeats a refused optimize apply with the accepted documents', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [swappable('one', 'Model One')],
+    });
+    vi.mocked(modelsApi.installModel)
+      .mockRejectedValueOnce(agreementRefusal())
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.optimize\.review/ })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /^analysis\.gallery\.optimize\.apply$/ })
+    );
+
+    await agreeToPolicy();
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenLastCalledWith('one', 'new', [POLICY_SHA])
+    );
+  });
+
+  it('moves the apply-all queue on when an agreement is cancelled', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [swappable('one', 'Model One'), swappable('two', 'Model Two')],
+    });
+    vi.mocked(modelsApi.installModel)
+      .mockRejectedValueOnce(agreementRefusal())
+      .mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.optimize\.review/ })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.optimize\.applyAll/ })
+    );
+
+    await screen.findByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ });
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenLastCalledWith('two', 'new'));
+    expect(screen.getByText('analysis.gallery.optimize.applyFailed')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Kommersiellt bruk tillåtet",
         "nonCommercialOnly": "Endast icke-kommersiellt bruk",
         "nonCommercialWarning": "Denna modell är licensierad enbart för icke-kommersiellt bruk. Genom att installera godkänner du att följa licensvillkoren.",
-        "acceptAndInstall": "Acceptera och installera"
+        "acceptAndInstall": "Acceptera och installera",
+        "continue": "Fortsätt",
+        "agreementNext": "Den här modellen har villkor som du måste godkänna. De visas i nästa steg."
       },
       "removeDialog": {
         "title": "Ta bort {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Gå till Nedladdningskälla",
         "dismiss": "Avfärda",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} kräver att du godkänner villkoren innan den kan installeras.",
+        "documentUnavailable": "Dokumentets text kunde inte läsas in och verifieras. Kontrollera att BirdNET-Go når nedladdningskällan för modeller och försök igen."
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Kunde inte tillämpa",
         "upToDate": "Alla dina modeller är redan optimerade för denna hårdvara.",
         "licenseNote": "Bytet sker inom samma modell, så dess licens ändras inte."
+      },
+      "documents": {
+        "heading": "Dokument",
+        "kinds": {
+          "license": "Licens",
+          "acceptable_use": "Policy för godtagbar användning"
+        },
+        "genericKind": "Modellvillkor",
+        "source": "Från {repo}",
+        "textRegion": "Text: {document}",
+        "loading": "Läser in dokumentets text",
+        "view": "Visa: {document}",
+        "hide": "Dölj: {document}"
+      },
+      "agreement": {
+        "title": "Läs och godkänn",
+        "intro": "Innan {name} kan installeras måste du läsa och godkänna villkoren nedan.",
+        "agree": "Jag har läst och godkänner: {document}",
+        "agreeAndContinue": "Godkänn och fortsätt",
+        "tickEach": "Markera rutan under varje dokument för att fortsätta.",
+        "waitForText": "Du kan godkänna när alla dokument har lästs in.",
+        "unavailableBlocked": "Ett dokument kunde inte läsas in, så du kan inte godkänna det ännu. Använd Försök igen för att läsa in det igen."
       }
     },
     "bat": {

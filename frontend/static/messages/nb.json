@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Kommersiell bruk tillatt",
         "nonCommercialOnly": "Kun ikke-kommersiell bruk",
         "nonCommercialWarning": "Denne modellen er lisensiert kun for ikke-kommersiell bruk. Ved installasjon godtar du å overholde lisensvilkårene.",
-        "acceptAndInstall": "Godta og installer"
+        "acceptAndInstall": "Godta og installer",
+        "continue": "Fortsett",
+        "agreementNext": "Denne modellen har vilkår du må godta. De vises i neste trinn."
       },
       "removeDialog": {
         "title": "Fjerne {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Gå til Nedlastingskilde",
         "dismiss": "Avvis",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} krever at du godtar vilkårene før den kan installeres.",
+        "documentUnavailable": "Teksten i dokumentet kunne ikke lastes inn og bekreftes. Kontroller at BirdNET-Go når nedlastingskilden for modeller, og prøv igjen."
       },
       "regionLabel": "Region",
       "speciesLabel": "Arter",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Kunne ikke bruke",
         "upToDate": "Alle modellene dine er allerede optimert for denne maskinvaren.",
         "licenseNote": "Byttet skjer innenfor samme modell, så lisensen endres ikke."
+      },
+      "documents": {
+        "heading": "Dokumenter",
+        "kinds": {
+          "license": "Lisens",
+          "acceptable_use": "Retningslinjer for akseptabel bruk"
+        },
+        "genericKind": "Modellvilkår",
+        "source": "Fra {repo}",
+        "textRegion": "Tekst: {document}",
+        "loading": "Laster inn dokumentteksten",
+        "view": "Vis: {document}",
+        "hide": "Skjul: {document}"
+      },
+      "agreement": {
+        "title": "Les og godta",
+        "intro": "Før {name} kan installeres, må du lese og godta vilkårene nedenfor.",
+        "agree": "Jeg har lest og godtar: {document}",
+        "agreeAndContinue": "Godta og fortsett",
+        "tickEach": "Kryss av i boksen under hvert dokument for å fortsette.",
+        "waitForText": "Du kan godta når alle dokumentene er lastet inn.",
+        "unavailableBlocked": "Et dokument kunne ikke lastes inn, så du kan ikke godta det ennå. Bruk Prøv igjen for å laste det inn på nytt."
       }
     },
     "bat": {

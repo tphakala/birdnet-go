@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Uso commerciale consentito",
         "nonCommercialOnly": "Solo uso non commerciale",
         "nonCommercialWarning": "Questo modello è concesso in licenza solo per uso non commerciale. Installandolo, accetti di rispettare i termini della licenza.",
-        "acceptAndInstall": "Accetta e installa"
+        "acceptAndInstall": "Accetta e installa",
+        "continue": "Continua",
+        "agreementNext": "Questo modello ha condizioni che devi accettare. Vengono mostrate nel passaggio successivo."
       },
       "removeDialog": {
         "title": "Rimuovere {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Vai a Sorgente di download",
         "dismiss": "Ignora",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} richiede che tu ne accetti le condizioni prima di poter essere installato.",
+        "documentUnavailable": "Impossibile caricare e verificare il testo del documento. Controlla che BirdNET-Go possa raggiungere l'origine di download dei modelli, poi riprova."
       },
       "regionLabel": "Regione",
       "speciesLabel": "Specie",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Applicazione non riuscita",
         "upToDate": "Tutti i tuoi modelli sono già ottimizzati per questo hardware.",
         "licenseNote": "La sostituzione rimane all'interno dello stesso modello, quindi la sua licenza non cambia."
+      },
+      "documents": {
+        "heading": "Documenti",
+        "kinds": {
+          "license": "Licenza",
+          "acceptable_use": "Politica di utilizzo accettabile"
+        },
+        "genericKind": "Condizioni del modello",
+        "source": "Da {repo}",
+        "textRegion": "Testo: {document}",
+        "loading": "Caricamento del testo del documento",
+        "view": "Mostra: {document}",
+        "hide": "Nascondi: {document}"
+      },
+      "agreement": {
+        "title": "Leggi e accetta",
+        "intro": "Prima di installare {name}, leggi e accetta le condizioni qui sotto.",
+        "agree": "Ho letto e accetto: {document}",
+        "agreeAndContinue": "Accetta e continua",
+        "tickEach": "Seleziona la casella sotto ogni documento per continuare.",
+        "waitForText": "Potrai accettare quando tutti i documenti saranno caricati.",
+        "unavailableBlocked": "Non è stato possibile caricare un documento, quindi non puoi ancora accettarlo. Usa Riprova per caricarlo di nuovo."
       }
     },
     "bat": {

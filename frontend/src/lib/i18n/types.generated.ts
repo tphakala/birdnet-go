@@ -4442,6 +4442,8 @@ export type TranslationKey =
   | 'analysis.gallery.license.nonCommercialOnly'
   | 'analysis.gallery.license.nonCommercialWarning'
   | 'analysis.gallery.license.acceptAndInstall'
+  | 'analysis.gallery.license.continue'
+  | 'analysis.gallery.license.agreementNext'
   | 'analysis.gallery.removeDialog.title' // params: name
   | 'analysis.gallery.removeDialog.confirmation'
   | 'analysis.gallery.errors.catalogLoadFailed'
@@ -4455,6 +4457,8 @@ export type TranslationKey =
   | 'analysis.gallery.errors.dismiss'
   | 'analysis.gallery.errors.details'
   | 'analysis.gallery.errors.removeRetryHint'
+  | 'analysis.gallery.errors.agreementRequired' // params: name
+  | 'analysis.gallery.errors.documentUnavailable'
   | 'analysis.gallery.regionLabel'
   | 'analysis.gallery.speciesLabel'
   | 'analysis.gallery.reinstall'
@@ -4494,6 +4498,22 @@ export type TranslationKey =
   | 'analysis.gallery.optimize.applyFailed'
   | 'analysis.gallery.optimize.upToDate'
   | 'analysis.gallery.optimize.licenseNote'
+  | 'analysis.gallery.documents.heading'
+  | 'analysis.gallery.documents.kinds.license'
+  | 'analysis.gallery.documents.kinds.acceptable_use'
+  | 'analysis.gallery.documents.genericKind'
+  | 'analysis.gallery.documents.source' // params: repo
+  | 'analysis.gallery.documents.textRegion' // params: document
+  | 'analysis.gallery.documents.loading'
+  | 'analysis.gallery.documents.view' // params: document
+  | 'analysis.gallery.documents.hide' // params: document
+  | 'analysis.gallery.agreement.title'
+  | 'analysis.gallery.agreement.intro' // params: name
+  | 'analysis.gallery.agreement.agree' // params: document
+  | 'analysis.gallery.agreement.agreeAndContinue'
+  | 'analysis.gallery.agreement.tickEach'
+  | 'analysis.gallery.agreement.waitForText'
+  | 'analysis.gallery.agreement.unavailableBlocked'
   | 'analysis.bat.title'
   | 'analysis.bat.description'
   | 'analysis.perch.title'
@@ -5327,12 +5347,19 @@ export type TranslationParams = {
   'analysis.gallery.errors.removeHasDependents': { name: string | number; models: string | number };
   'analysis.gallery.errors.operationInProgress': { name: string | number };
   'analysis.gallery.errors.actionFailed': { name: string | number };
+  'analysis.gallery.errors.agreementRequired': { name: string | number };
   'analysis.gallery.preview.buildLabel': { version: string | number; build: string | number };
   'analysis.gallery.preview.dialogNotice': { build: string | number };
   'analysis.gallery.superseded.cardNotice': { name: string | number };
   'analysis.gallery.superseded.dialogNotice': { name: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
+  'analysis.gallery.documents.source': { repo: string | number };
+  'analysis.gallery.documents.textRegion': { document: string | number };
+  'analysis.gallery.documents.view': { document: string | number };
+  'analysis.gallery.documents.hide': { document: string | number };
+  'analysis.gallery.agreement.intro': { name: string | number };
+  'analysis.gallery.agreement.agree': { document: string | number };
   'analysis.thresholds.shared.usedBy': { models: string | number };
   'analysis.scope.rangeFilter.appliesTo': { models: string | number };
   'analysis.scope.rangeFilter.notApplied': { models: string | number };

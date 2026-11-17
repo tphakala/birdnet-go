@@ -6021,7 +6021,9 @@
         "commercialUseAllowed": "Komerciāla izmantošana atļauta",
         "nonCommercialOnly": "Tikai nekomerciāla izmantošana",
         "nonCommercialWarning": "Šis modelis ir licencēts tikai nekomerciālai izmantošanai. Instalējot jūs piekrītat licences noteikumiem.",
-        "acceptAndInstall": "Pieņemt un instalēt"
+        "acceptAndInstall": "Pieņemt un instalēt",
+        "continue": "Turpināt",
+        "agreementNext": "Šim modelim ir noteikumi, kuriem jums jāpiekrīt. Tie tiek parādīti nākamajā solī."
       },
       "removeDialog": {
         "title": "Noņemt {name}?",
@@ -6038,7 +6040,9 @@
         "goToDownloadSource": "Doties uz Lejupielādes avots",
         "dismiss": "Noraidīt",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "Lai {name} varētu instalēt, jums jāpiekrīt tā noteikumiem.",
+        "documentUnavailable": "Dokumenta tekstu neizdevās ielādēt un pārbaudīt. Pārbaudiet, vai BirdNET-Go var piekļūt modeļu lejupielādes avotam, un mēģiniet vēlreiz."
       },
       "regionLabel": "Reģions",
       "speciesLabel": "Sugas",
@@ -6088,6 +6092,28 @@
         "applyFailed": "Neizdevās lietot",
         "upToDate": "Visi jūsu modeļi jau ir optimizēti šai aparatūrai.",
         "licenseNote": "Aizstāšana notiek viena modeļa ietvaros, tāpēc tā licence nemainās."
+      },
+      "documents": {
+        "heading": "Dokumenti",
+        "kinds": {
+          "license": "Licence",
+          "acceptable_use": "Pieņemamas lietošanas politika"
+        },
+        "genericKind": "Modeļa noteikumi",
+        "source": "No {repo}",
+        "textRegion": "Teksts: {document}",
+        "loading": "Ielādē dokumenta tekstu",
+        "view": "Rādīt: {document}",
+        "hide": "Slēpt: {document}"
+      },
+      "agreement": {
+        "title": "Izlasiet un piekrītiet",
+        "intro": "Pirms {name} instalēšanas izlasiet tālāk norādītos noteikumus un piekrītiet tiem.",
+        "agree": "Esmu izlasījis un piekrītu: {document}",
+        "agreeAndContinue": "Piekrist un turpināt",
+        "tickEach": "Lai turpinātu, atzīmējiet izvēles rūtiņu zem katra dokumenta.",
+        "waitForText": "Varēsiet piekrist, kad visi dokumenti būs ielādēti.",
+        "unavailableBlocked": "Dokumentu neizdevās ielādēt, tāpēc vēl nevarat tam piekrist. Izmantojiet Mēģināt vēlreiz, lai to ielādētu atkārtoti."
       }
     },
     "bat": {

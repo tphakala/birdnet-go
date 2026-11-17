@@ -232,7 +232,7 @@ describe('API utilities', () => {
       });
     });
 
-    it('exposes the error_key on ApiError', async () => {
+    it('exposes the error_key and error_params on ApiError', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 409,
@@ -249,6 +249,7 @@ describe('API utilities', () => {
       await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
         status: 409,
         errorKey: 'analysis.gallery.errors.operationInProgress',
+        errorParams: { name: 'Geomodel' },
       });
 
       mockFetch.mockResolvedValueOnce({
