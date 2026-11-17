@@ -192,10 +192,11 @@
     void refreshModels();
   }
 
-  // The links leave the wizard; it closes first so the page underneath shows
+  // An in-app navigation leaves the wizard behind, so it closes; a modified click
+  // opens a new tab and keeps this page and the wizard as they are
   function followLink(event: MouseEvent) {
-    wizardState.skip();
     handleAppLinkClick(event);
+    if (event.defaultPrevented) wizardState.skip();
   }
 
   // Applies the model to the chosen entries of a stored list; null when none changes

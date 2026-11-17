@@ -52,6 +52,7 @@ import { resetModelsForTest, type BackendModel } from '$lib/stores/models.svelte
 import { renderStep } from './stepTestUtils';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
+import { wizardState } from '../wizardState.svelte';
 
 const KEY = 'wizard.steps.enableOnSources';
 
@@ -133,6 +134,7 @@ describe('EnableOnSourcesStep', () => {
     vi.mocked(settingsActions.saveSection).mockReset().mockResolvedValue(undefined);
     vi.mocked(toastActions.success).mockClear();
     vi.mocked(t).mockClear();
+    vi.mocked(wizardState.skip).mockClear();
     acoustic.availability = { kind: 'ready', defaultTargets: ['BirdNET_V2.4', 'Perch_V2'] };
     serveModels([BIRDNET, PERCH]);
     seed([card('Garden', ['birdnet'])], [stream('Feeder', ['birdnet'])]);
@@ -307,5 +309,19 @@ describe('EnableOnSourcesStep', () => {
 
     expect(await screen.findByText(`${KEY}.noSources`)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: `${KEY}.openAudioSettings` })).toBeInTheDocument();
+  });
+
+  it('closes the wizard on a plain click of the audio settings link but not on a modified one', async () => {
+    seed([], []);
+    wizard.model = PERCH_CONTEXT;
+    renderStep(EnableOnSourcesStep);
+    const link = await screen.findByRole('link', { name: `${KEY}.openAudioSettings` });
+
+    // A modified click opens a new tab; this page and its wizard stay
+    await fireEvent.click(link, { ctrlKey: true });
+    expect(wizardState.skip).not.toHaveBeenCalled();
+
+    await fireEvent.click(link);
+    expect(wizardState.skip).toHaveBeenCalledTimes(1);
   });
 });
