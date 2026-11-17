@@ -913,36 +913,17 @@ describe('AnalysisSettingsPage dynamic threshold', () => {
 describe('AnalysisSettingsPage species language', () => {
   beforeEach(() => resetPage());
 
-  // Each row label is a label element for the row's control, and a block so wrapped lines keep
-  // the text-sm line height.
-  it('points each setting row label at its control and renders it as a block', async () => {
+  it('renders the shared, classifier and language row labels as blocks, so wrapped lines keep the text-sm line height', async () => {
     modelsList.current = [MODEL.perch];
-    seedSection('realtime', {
-      ...BASE_REALTIME,
-      dynamicThreshold: { ...BASE_REALTIME.dynamicThreshold, enabled: true },
-    });
     render(AnalysisSettingsPage);
-    const select = await screen.findByRole('combobox', { name: 'analysis.detection.locale.label' });
-    const sliderIn = (testId: string) => within(screen.getByTestId(testId)).getByRole('slider');
-    // The hours row has no slider: its field keeps its own label, so its name is said once.
-    expect(
-      screen.getByRole('spinbutton', {
-        name: 'settings.main.sections.dynamicThreshold.expireTime.label',
-      })
-    ).toBeInTheDocument();
+    await screen.findByRole('combobox', { name: 'analysis.detection.locale.label' });
 
-    const rows: Array<[string, HTMLElement]> = [
-      ['analysis.thresholds.shared.label', sliderIn('threshold-row-shared')],
-      [MODEL.perch.name, sliderIn(`threshold-row-${MODEL.perch.id}`)],
-      ['analysis.detection.locale.label', select],
-    ];
-    for (const [text, control] of rows) {
-      const label = screen
-        .getAllByText(text)
-        .find(el => el instanceof HTMLLabelElement && el.htmlFor === control.id);
-      expect(label?.className ?? `no label for ${text}`).toContain('block');
-      expect(label).toHaveClass('text-sm');
-    }
+    const labels = [
+      'analysis.thresholds.shared.label',
+      'analysis.detection.locale.label',
+      MODEL.perch.name,
+    ].map(text => screen.getAllByText(text).find(el => el.tagName === 'SPAN'));
+    for (const label of labels) expect(label).toHaveClass('block', 'text-sm');
   });
 
   it('is a setting row with the label and help beside the select', async () => {

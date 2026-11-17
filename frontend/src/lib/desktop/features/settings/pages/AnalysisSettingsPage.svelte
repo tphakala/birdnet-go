@@ -331,12 +331,6 @@
   const DYNAMIC_MIN_HELP_ID = generateId('dynamic-min-help');
   const DYNAMIC_HOURS_HELP_ID = generateId('dynamic-hours-help');
   const SPECIES_LANGUAGE_HELP_ID = generateId('species-language-help');
-  /** Ids of the controls the setting row labels point at. */
-  const SHARED_THRESHOLD_CONTROL_ID = generateId('shared-threshold');
-  const RANGE_THRESHOLD_CONTROL_ID = generateId('range-threshold');
-  const DYNAMIC_TRIGGER_CONTROL_ID = generateId('dynamic-trigger');
-  const DYNAMIC_MIN_CONTROL_ID = generateId('dynamic-min');
-  const SPECIES_LANGUAGE_ID = generateId('species-language');
   /** One setting row: label and help on the left, the control on the right from tablet width. */
   const SETTING_ROW_CLASS =
     'grid grid-cols-1 items-center gap-x-8 gap-y-3 py-4 first:pt-1 last:pb-0 md:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)]';
@@ -1655,11 +1649,6 @@
   // look and behave the same.
   interface ValueControl {
     label: string;
-    /**
-     * Id of the slider, which the row label points at. A row without a slider keeps a plain
-     * label: its number field already has its own, and a second label would repeat its name.
-     */
-    id?: string;
     value: number;
     bounds: ThresholdBounds;
     disabled: boolean;
@@ -2064,7 +2053,6 @@
     {:else}
       <input
         type="range"
-        id={c.id}
         class="range range-sm min-w-0 flex-1"
         aria-label={c.label}
         aria-describedby={c.describedBy}
@@ -2094,16 +2082,10 @@
 {/snippet}
 
 <!-- The label and help text on the left of a setting row. The label is a block so wrapped lines
-     keep the text-sm line height, and a label element for the row's control when it has one. -->
-{#snippet settingText(label: string, help: string, helpId?: string, controlId?: string)}
+     keep the text-sm line height. -->
+{#snippet settingText(label: string, help: string, helpId?: string)}
   <div class="min-w-0">
-    {#if controlId}
-      <label for={controlId} class="block text-sm font-medium text-[var(--color-base-content)]"
-        >{label}</label
-      >
-    {:else}
-      <span class="block text-sm font-medium text-[var(--color-base-content)]">{label}</span>
-    {/if}
+    <span class="block text-sm font-medium text-[var(--color-base-content)]">{label}</span>
     <p id={helpId} class="help-text mt-1">{help}</p>
   </div>
 {/snippet}
@@ -2111,7 +2093,7 @@
 <!-- A dynamic threshold setting row, laid out like a detection threshold row. -->
 {#snippet dynamicRow(label: string, help: string, helpId: string, control: ValueControl)}
   <li class={SETTING_ROW_CLASS}>
-    {@render settingText(label, help, helpId, control.slider === false ? undefined : control.id)}
+    {@render settingText(label, help, helpId)}
     {@render valueControl(control)}
   </li>
 {/snippet}
@@ -2144,12 +2126,10 @@
               : modelsLoading()
                 ? t('common.loading')
                 : t('analysis.thresholds.shared.unused'),
-            SHARED_THRESHOLD_HELP_ID,
-            SHARED_THRESHOLD_CONTROL_ID
+            SHARED_THRESHOLD_HELP_ID
           )}
           {@render valueControl({
             label: t('analysis.thresholds.shared.label'),
-            id: SHARED_THRESHOLD_CONTROL_ID,
             value: sharedThreshold,
             bounds: SHARED_BOUNDS,
             disabled: store.isLoading || store.isSaving,
@@ -2162,17 +2142,15 @@
           {@const usesShared = rowUsesShared(row)}
           {@const nameId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-name`}
           {@const sourceId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-source`}
-          {@const controlId = `${THRESHOLD_ROW_ID_PREFIX}-${row.model.id}-control`}
           <li class={SETTING_ROW_CLASS} data-testid="threshold-row-{row.model.id}">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <label
+                <span
                   id={nameId}
-                  for={controlId}
                   class="block text-sm font-medium text-[var(--color-base-content)]"
                 >
                   {row.model.name}
-                </label>
+                </span>
                 {#if row.model.category === 'bat'}
                   <Badge variant="neutral" size="xs">
                     {t('analysis.thresholds.category.bat')}
@@ -2206,7 +2184,6 @@
             </div>
             {@render valueControl({
               label: row.model.name,
-              id: controlId,
               value: rowThresholdValue(row),
               bounds: usesShared ? SHARED_BOUNDS : row.descriptor,
               disabled: store.isLoading || store.isSaving || usesShared || !section,
@@ -2248,7 +2225,6 @@
             DYNAMIC_TRIGGER_HELP_ID,
             {
               label: t('settings.main.sections.dynamicThreshold.trigger.label'),
-              id: DYNAMIC_TRIGGER_CONTROL_ID,
               value: dynamicThreshold.trigger,
               bounds: DYNAMIC_TRIGGER_BOUNDS,
               disabled: store.isLoading || store.isSaving,
@@ -2262,7 +2238,6 @@
             DYNAMIC_MIN_HELP_ID,
             {
               label: t('settings.main.sections.dynamicThreshold.minimum.label'),
-              id: DYNAMIC_MIN_CONTROL_ID,
               value: dynamicThreshold.min,
               bounds: DYNAMIC_MIN_BOUNDS,
               disabled: store.isLoading || store.isSaving,
@@ -2305,12 +2280,10 @@
           {@render settingText(
             t('analysis.detection.locale.label'),
             t('analysis.detection.locale.helpText'),
-            SPECIES_LANGUAGE_HELP_ID,
-            SPECIES_LANGUAGE_ID
+            SPECIES_LANGUAGE_HELP_ID
           )}
           <div class="min-w-0">
             <SelectDropdown
-              id={SPECIES_LANGUAGE_ID}
               options={birdnetLocaleOptions}
               value={birdnet?.locale ?? 'en'}
               aria-label={t('analysis.detection.locale.label')}
@@ -2468,12 +2441,10 @@
           {@render settingText(
             t('settings.main.sections.rangeFilter.threshold.label'),
             t('settings.main.sections.rangeFilter.threshold.helpText'),
-            RANGE_THRESHOLD_HELP_ID,
-            RANGE_THRESHOLD_CONTROL_ID
+            RANGE_THRESHOLD_HELP_ID
           )}
           {@render valueControl({
             label: t('settings.main.sections.rangeFilter.threshold.label'),
-            id: RANGE_THRESHOLD_CONTROL_ID,
             value: birdnet?.rangeFilter?.threshold ?? RANGE_THRESHOLD_FALLBACK,
             bounds: RANGE_THRESHOLD_BOUNDS,
             disabled: store.isLoading || store.isSaving,
