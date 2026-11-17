@@ -4,7 +4,7 @@ import { renderTyped, screen, waitFor, fireEvent } from '../../../../test/render
 import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import type { TranslationKey } from '$lib/i18n';
-import type { WizardStep, WizardStepProps } from './types';
+import type { InstalledModelContext, WizardStep, WizardStepProps } from './types';
 import { deferred } from '../../../../test/async-helpers';
 import { toastActions } from '$lib/stores/toast';
 
@@ -25,6 +25,7 @@ vi.mock('./wizardRegistry', () => ({
 }));
 
 const { api, ApiError } = await import('$lib/utils/api');
+const { t } = await import('$lib/i18n');
 const { getStepsForFlow } = await import('./wizardRegistry');
 const { wizardState, STEP_MOVE_GUARD_MS } = await import('./wizardState.svelte');
 const { stepControl } = await import('./wizardTestStepControl');
@@ -1101,5 +1102,54 @@ describe('WizardDialog Accessibility', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('wizard.errors.saveFailed')
     );
     expect(screen.getByRole('alert')).toHaveClass('text-[var(--text-error)]');
+  });
+});
+
+describe('WizardDialog model next steps flow', () => {
+  const MODEL = {
+    catalogId: 'perch-v2',
+    name: 'Perch v2',
+    category: 'bird',
+    registryId: 'Perch_V2',
+  } satisfies InstalledModelContext;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    wizardState._resetForTesting();
+    stepControl.reset();
+  });
+
+  function renderModelFlow(stepCount: number) {
+    vi.mocked(getStepsForFlow).mockReturnValue(componentSteps(stepCount));
+    wizardState.launch('model-next-steps', { model: MODEL });
+    return renderTyped(WizardDialog);
+  }
+
+  it('names the dialog after the model and the step, and closes with Not now without dismissing', async () => {
+    renderModelFlow(1);
+
+    expect(
+      await screen.findByRole('dialog', { name: 'wizard.modelNextSteps.title test.step1' })
+    ).toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith('wizard.modelNextSteps.title', { name: 'Perch v2' });
+    expect(screen.queryByRole('button', { name: 'wizard.skip' })).toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'wizard.notNow' }));
+
+    expect(wizardState.isActive).toBe(false);
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it('shows the progress dots for a model flow with more than one step', async () => {
+    renderModelFlow(2);
+
+    expect(await screen.findByRole('group', { name: 'wizard.progressLabel' })).toBeInTheDocument();
+  });
+
+  it('shows no progress dots for the changelog pages', async () => {
+    renderWizard(componentSteps(2), 'whats-new');
+    await screen.findByRole('dialog');
+
+    expect(screen.queryByRole('group', { name: 'wizard.progressLabel' })).toBeNull();
   });
 });

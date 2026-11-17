@@ -108,7 +108,8 @@ describe('wizardState - state machine', () => {
     it('does not activate when getStepsForFlow returns empty array', () => {
       vi.mocked(getStepsForFlow).mockReturnValue([]);
 
-      wizardState.launch('onboarding');
+      // The gallery shows its install toast instead when no flow opened
+      expect(wizardState.launch('onboarding')).toBe(false);
 
       expect(wizardState.isActive).toBe(false);
       expect(wizardState.flow).toBeNull();
@@ -118,7 +119,7 @@ describe('wizardState - state machine', () => {
       const steps = createTestSteps(3);
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
 
-      wizardState.launch('onboarding');
+      expect(wizardState.launch('onboarding')).toBe(true);
 
       expect(wizardState.isActive).toBe(true);
       expect(wizardState.status).toBe('active');
