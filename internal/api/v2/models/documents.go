@@ -173,8 +173,8 @@ func (c *Handler) acceptDocuments(ctx echo.Context, entry *classifier.CatalogEnt
 	}
 	svc := c.documentSvc()
 	own := svc.EntryDocuments(entry)
-	reqCtx, cancel := c.documentContext(ctx)
-	defer cancel()
+	// Validate every digest before fetching any text, so a refused request never
+	// fetches a document.
 	for _, sha := range accepted {
 		idx := slices.IndexFunc(own, func(d classifier.RepoDocument) bool {
 			return d.RequiresAgreement && d.SHA256 != "" && d.SHA256 == sha
@@ -182,13 +182,16 @@ func (c *Handler) acceptDocuments(ctx echo.Context, entry *classifier.CatalogEnt
 		if idx < 0 {
 			return nil, true, c.HandleError(ctx, nil, "accepted document "+sha+" is not an agreement document of model "+entry.ID, http.StatusBadRequest)
 		}
-		if slices.ContainsFunc(docs, func(d classifier.RepoDocument) bool { return d.SHA256 == sha }) {
-			continue
+		if !slices.ContainsFunc(docs, func(d classifier.RepoDocument) bool { return d.SHA256 == sha }) {
+			docs = append(docs, own[idx])
 		}
-		if _, terr := svc.Text(reqCtx, &own[idx]); terr != nil {
+	}
+	reqCtx, cancel := c.documentContext(ctx)
+	defer cancel()
+	for i := range docs {
+		if _, terr := svc.Text(reqCtx, &docs[i]); terr != nil {
 			return nil, true, c.documentUnavailable(ctx, terr)
 		}
-		docs = append(docs, own[idx])
 	}
 	return docs, false, nil
 }

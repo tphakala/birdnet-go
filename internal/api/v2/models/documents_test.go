@@ -377,6 +377,18 @@ func TestReinstallModel_RefusedBeforeFetchingDocuments(t *testing.T) {
 	assert.Empty(t, fake.recordedDocs())
 }
 
+// TestAcceptDocuments_ValidatesBeforeFetching pins that every accepted digest is
+// checked before any text is fetched: a list holding an agreement document that
+// cannot be fetched and a digest that is not one is a 400, not a 502.
+func TestAcceptDocuments_ValidatesBeforeFetching(t *testing.T) {
+	h, fake, _ := documentFixture(t, nil)
+	delete(fake.texts, docShaN)
+
+	rec := guardRequest(t, h.InstallModel, http.MethodPost, apiDepN, `{"acceptedDocuments":["`+docShaN+`","`+docShaLicense+`"]}`)
+	require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	assert.Empty(t, fake.recordedDocs())
+}
+
 // TestReinstallModel_SlowDocumentDoesNotHoldTheSlot pins that accepted documents
 // are resolved before the operation slot is taken: while the text is still being
 // fetched, another operation can start.
