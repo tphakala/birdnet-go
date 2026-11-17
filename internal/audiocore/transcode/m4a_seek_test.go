@@ -125,12 +125,34 @@ func patchEncoderDelay(t *testing.T, data []byte, mediaTime uint32) []byte {
 	return out
 }
 
+// patchSttsDelta rewrites the sample_delta of the first stts entry, which
+// inflates the media length the file declares.
+func patchSttsDelta(t *testing.T, data []byte, delta uint32) []byte {
+	t.Helper()
+	const (
+		sttsTypeLen  = 4
+		versionFlags = 4
+		entryCount   = 4
+		sampleCount  = 4
+	)
+	idx := bytes.Index(data, []byte("stts"))
+	require.GreaterOrEqual(t, idx, 0, "the fixture carries a time-to-sample table")
+	out := bytes.Clone(data)
+	binary.BigEndian.PutUint32(out[idx+sttsTypeLen+versionFlags+entryCount+sampleCount:], delta)
+	return out
+}
+
+// go-m4a clamps an edit list media_time to the media length the file declares,
+// so the fixture also declares a media length far beyond its real access units:
+// the raw delay then reaches openM4A, which must bound it by the units it can
+// decode.
 func TestOpenM4A_ClampsAHugeEncoderDelay(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "huge-delay.m4a")
-	writeBytes(t, path, patchEncoderDelay(t, cleanM4ABytes(t), hugeEncoderDelay))
+	writeBytes(t, path, patchSttsDelta(t, patchEncoderDelay(t, cleanM4ABytes(t), hugeEncoderDelay), math.MaxInt32))
 	info := m4aInfoOf(t, path)
+	require.Equal(t, int64(hugeEncoderDelay), info.EncoderDelay, "the patch must reach Info.EncoderDelay")
 
 	opened := openTestSource(t, path)
 	assert.LessOrEqual(t, opened.skipFrames, int64(info.FrameCount)*aaccodec.FrameSize, "the priming skip is bounded by the decoded length")
