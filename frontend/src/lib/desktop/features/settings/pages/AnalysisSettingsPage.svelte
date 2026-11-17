@@ -1934,17 +1934,20 @@
 
   // Handle a start the server refused for an outstanding agreement: open the
   // agreement dialog with the documents the server named; agreeing repeats the start
-  // through resume. Returns false for any other error, and for a refusal that named
-  // nothing the user can agree to, so the caller shows its reason.
+  // through resume. Returns false for any other error, for a refusal that named
+  // nothing the user can agree to, and for one that names only documents this start
+  // already sent, so the caller shows its reason instead of asking again in a loop.
   function handleAgreementRefusal(
     e: unknown,
     modelId: string,
     modelName: string,
+    accepted: string[],
     resume: (_accepted: string[]) => void
   ): boolean {
     if (!isAgreementRequired(e)) return false;
     const documents = refusalDocuments(e.errorParams);
     if (documents.length === 0) return false;
+    if (documents.every(doc => accepted.includes(doc.sha256))) return false;
     agreementRequest = { modelId, modelName, documents, resume };
     return true;
   }
@@ -2118,7 +2121,7 @@
       // optimize completion effect then sees the swap is waiting for an agreement.
       installingId = null;
       if (
-        handleAgreementRefusal(e, modelId, modelName, again =>
+        handleAgreementRefusal(e, modelId, modelName, accepted, again =>
           startInstall(modelId, modelName, variantId, {
             nextSteps,
             accepted: withAgreed(accepted, again),
@@ -2277,7 +2280,7 @@
     } catch (e) {
       reinstallingId = null;
       if (
-        handleAgreementRefusal(e, modelId, modelName, again =>
+        handleAgreementRefusal(e, modelId, modelName, accepted, again =>
           startReinstall(modelId, modelName, withAgreed(accepted, again))
         )
       ) {

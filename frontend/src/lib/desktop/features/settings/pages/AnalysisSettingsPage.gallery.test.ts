@@ -1940,6 +1940,29 @@ describe('AnalysisSettingsPage model gallery document agreements', () => {
     expect([...(resumed?.[2] ?? [])].sort()).toEqual([POLICY_SHA, otherSha].sort());
   });
 
+  it('shows the refusal instead of asking again for documents already sent', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [policyDocument] })],
+    });
+    // The server refuses the start even though it carried the policy agreement.
+    vi.mocked(modelsApi.installModel).mockRejectedValue(agreementRefusal());
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+    );
+    await agreeToPolicy();
+
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /analysis\.gallery\.retry/ })).toBeInTheDocument()
+    );
+    expect(
+      screen.queryByRole('checkbox', { name: /analysis\.gallery\.agreement\.agree/ })
+    ).not.toBeInTheDocument();
+  });
+
   it('keeps the agreed documents when a failed reinstall is retried', async () => {
     // The catalog lists the entry's own documents, which the refusal names again.
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
