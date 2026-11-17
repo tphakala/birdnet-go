@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/svelte';
+import { t } from '$lib/i18n';
 import SampleRateBadge from './SampleRateBadge.svelte';
 import { renderTyped } from '../../../../test/render-helpers';
 
@@ -12,6 +13,7 @@ describe('SampleRateBadge', () => {
       props: { sampleRate: 48000, minRate: 96000, recommendedRate: 256000 },
     });
     expect(screen.getByText(new RegExp(MIN_KEY))).toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith(MIN_KEY, { rate: '96' });
     expect(screen.queryByText(new RegExp(RECOMMENDED_KEY))).toBeNull();
   });
 
@@ -20,6 +22,7 @@ describe('SampleRateBadge', () => {
       props: { sampleRate: 96000, minRate: 96000, recommendedRate: 256000 },
     });
     expect(screen.getByText(new RegExp(RECOMMENDED_KEY))).toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith(RECOMMENDED_KEY, { rate: '256' });
   });
 
   it('shows nothing when the rate meets the recommendation or the model states no rates', () => {
