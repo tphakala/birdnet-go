@@ -1596,6 +1596,157 @@ describe('AnalysisSettingsPage model gallery document agreements', () => {
     );
   });
 
+  it('shows the refusal reason when the refusal names no document to agree to', async () => {
+    const refusal = agreementRefusal();
+    refusal.errorParams = { name: 'Test Bird Model', documents: [{ repo: 'org/model' }] };
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [birdEntry()] });
+    vi.mocked(modelsApi.installModel).mockRejectedValue(refusal);
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('needs agreement');
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.details');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('shows the refusal reason when a reinstall refusal names no document to agree to', async () => {
+    const refusal = agreementRefusal();
+    refusal.errorParams = { name: 'Installed Model', documents: [] };
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.reinstallModel).mockRejectedValue(refusal);
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('needs agreement');
+    expect(alert).not.toHaveTextContent('analysis.gallery.errors.details');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('installs an entry whose agreement is already recorded without asking again', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [{ ...policyDocument, agreed: true }] })],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', undefined)
+    );
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
+
+  it('does not ask again for documents the server accepted before the catalog reloads', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ documents: [policyDocument] })],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    // The download fails after the server accepted the request and its agreements.
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, _onProgress, _onComplete, onError) => {
+        onError('download failed');
+        return () => {};
+      }
+    );
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.continue/ })
+    );
+    await agreeToPolicy();
+    await screen.findByRole('alert');
+
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+
+    expect(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    ).toBeInTheDocument();
+  });
+
+  it('lists the other documents in the license dialog as a link or a text to view', async () => {
+    const licenseSha = 'c'.repeat(64);
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        birdEntry({
+          documents: [
+            {
+              repo: 'org/model',
+              kind: 'license',
+              requiresAgreement: false,
+              agreed: false,
+              sha256: licenseSha,
+            },
+            {
+              repo: 'org/other',
+              kind: 'license',
+              requiresAgreement: false,
+              agreed: false,
+              url: 'https://example.org/license',
+            },
+            {
+              repo: 'org/third',
+              kind: 'license',
+              requiresAgreement: false,
+              agreed: false,
+              url: 'javascript:alert(1)',
+            },
+            {
+              repo: 'org/fourth',
+              kind: 'license',
+              requiresAgreement: false,
+              agreed: false,
+              url: 'http://example.org/plain',
+            },
+          ],
+        }),
+      ],
+    });
+    vi.mocked(modelsApi.fetchModelDocument).mockResolvedValue({
+      repo: 'org/model',
+      kind: 'license',
+      requiresAgreement: false,
+      sha256: licenseSha,
+      text: 'license text',
+    });
+    render(AnalysisSettingsPage);
+    await gotoAvailableTab();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+
+    const links = await screen.findAllByRole('link', {
+      name: /analysis\.gallery\.documents\.kinds\.license/,
+    });
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute('href', 'https://example.org/license');
+    expect(links[0]).toHaveAttribute('target', '_blank');
+    expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer');
+
+    const view = screen.getByRole('button', { name: /analysis\.gallery\.documents\.view/ });
+    expect(view).toHaveAttribute('aria-expanded', 'false');
+    await fireEvent.click(view);
+    expect(await screen.findByText('license text')).toBeInTheDocument();
+    expect(modelsApi.fetchModelDocument).toHaveBeenCalledWith(licenseSha);
+    const hide = screen.getByRole('button', { name: /analysis\.gallery\.documents\.hide/ });
+    expect(hide).toHaveAttribute('aria-expanded', 'true');
+    await fireEvent.click(hide);
+    expect(screen.queryByText('license text')).not.toBeInTheDocument();
+  });
+
   it('moves the apply-all queue on when an agreement is cancelled', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [swappable('one', 'Model One'), swappable('two', 'Model Two')],

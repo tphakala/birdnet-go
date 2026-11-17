@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
-import { screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import { renderTyped } from '../../../../../test/render-helpers';
 import ModelAgreementDialog from './ModelAgreementDialog.svelte';
+import ModelDocumentText from './ModelDocumentText.svelte';
 import type { AgreementDocument } from '$lib/types/models';
 import { ApiError } from '$lib/utils/api';
 
@@ -27,10 +28,20 @@ beforeAll(() => {
 function renderDialog(documents: AgreementDocument[]) {
   const onAgree = vi.fn();
   const onCancel = vi.fn();
-  renderTyped(ModelAgreementDialog, {
-    props: { open: true, modelName: 'Test Model', documents, onAgree, onCancel },
-  });
-  return { onAgree, onCancel };
+  const props = { open: true, modelName: 'Test Model', documents, onAgree, onCancel };
+  const { rerender } = render(ModelAgreementDialog, { props });
+  const setOpen = (open: boolean) => rerender({ ...props, open });
+  return { onAgree, onCancel, setOpen };
+}
+
+function loadedDocument(sha256: string, text: string) {
+  return { repo: 'org/model', kind: 'acceptable_use', requiresAgreement: true, sha256, text };
+}
+
+function dialogElement(): HTMLDialogElement {
+  const dialog = document.querySelector('dialog');
+  if (!dialog) throw new Error('no dialog');
+  return dialog;
 }
 
 const agreeButton = () =>
@@ -169,6 +180,49 @@ describe('ModelAgreementDialog', () => {
     expect(dialog?.contains(document.activeElement)).toBe(true);
   });
 
+  it('cancels when the user closes the dialog, and not when the parent closes it', async () => {
+    vi.mocked(fetchModelDocument).mockReturnValue(new Promise(() => {}));
+    const { onCancel, setOpen } = renderDialog([policy]);
+
+    // Escape: the browser closes the element while the parent still has it open.
+    dialogElement().close();
+    dialogElement().dispatchEvent(new Event('close'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+
+    // Agree or Cancel: the parent closes it first, so the late event is not a cancel.
+    await setOpen(true);
+    dialogElement().showModal();
+    await setOpen(false);
+    dialogElement().dispatchEvent(new Event('close'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts unticked and reloads the text when shown again', async () => {
+    vi.mocked(fetchModelDocument).mockResolvedValue(loadedDocument('aaa', 'policy text'));
+    const { setOpen } = renderDialog([policy]);
+    await fireEvent.click(await screen.findByRole('checkbox'));
+    expect(screen.getByRole('checkbox')).toBeChecked();
+
+    await setOpen(false);
+    await setOpen(true);
+
+    expect(await screen.findByRole('checkbox')).not.toBeChecked();
+    expect(fetchModelDocument).toHaveBeenCalledTimes(2);
+    expect(agreeButton()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('shows markup in a document as text', async () => {
+    vi.mocked(fetchModelDocument).mockResolvedValue(
+      loadedDocument('aaa', '<b>bold</b> <img src=x onerror="alert(1)">')
+    );
+    renderDialog([policy]);
+
+    expect(
+      await screen.findByText('<b>bold</b> <img src=x onerror="alert(1)">')
+    ).toBeInTheDocument();
+    expect(dialogElement().querySelector('b, img')).toBeNull();
+  });
+
   it('names a document kind it does not know generically', async () => {
     vi.mocked(fetchModelDocument).mockResolvedValue({
       repo: 'org/model',
@@ -183,5 +237,62 @@ describe('ModelAgreementDialog', () => {
       await screen.findByRole('heading', { name: 'analysis.gallery.documents.genericKind' })
     ).toBeInTheDocument();
     expect(screen.queryByText('future_kind')).not.toBeInTheDocument();
+  });
+});
+
+describe('ModelDocumentText', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.mocked(fetchModelDocument).mockReset();
+  });
+
+  it('shows the text of the current document when an earlier response arrives late', async () => {
+    let releaseFirst: (value: ReturnType<typeof loadedDocument>) => void = () => {};
+    vi.mocked(fetchModelDocument)
+      .mockReturnValueOnce(
+        new Promise(resolve => {
+          releaseFirst = resolve;
+        })
+      )
+      .mockResolvedValueOnce(loadedDocument('bbb', 'second text'));
+    const { rerender } = render(ModelDocumentText, { props: { sha256: 'aaa', label: 'x' } });
+
+    await rerender({ sha256: 'bbb', label: 'x' });
+    expect(await screen.findByText('second text')).toBeInTheDocument();
+    releaseFirst(loadedDocument('aaa', 'first text'));
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(screen.queryByText('first text')).not.toBeInTheDocument();
+    expect(screen.getByText('second text')).toBeInTheDocument();
+  });
+
+  it('keeps the current text when an earlier request fails late', async () => {
+    let failFirst: (reason: unknown) => void = () => {};
+    vi.mocked(fetchModelDocument)
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          failFirst = reject;
+        })
+      )
+      .mockResolvedValueOnce(loadedDocument('bbb', 'second text'));
+    const { rerender } = render(ModelDocumentText, { props: { sha256: 'aaa', label: 'x' } });
+
+    await rerender({ sha256: 'bbb', label: 'x' });
+    expect(await screen.findByText('second text')).toBeInTheDocument();
+    failFirst(new Error('late failure'));
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(screen.getByText('second text')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /common\.retry/ })).not.toBeInTheDocument();
+  });
+
+  it('explains an unavailable text when the request fails without a server reason', async () => {
+    vi.mocked(fetchModelDocument).mockRejectedValue(new Error('Failed to fetch'));
+    renderTyped(ModelDocumentText, { props: { sha256: 'aaa', label: 'x' } });
+
+    expect(
+      await screen.findByText('analysis.gallery.errors.documentUnavailable')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Failed to fetch')).not.toBeInTheDocument();
   });
 });
