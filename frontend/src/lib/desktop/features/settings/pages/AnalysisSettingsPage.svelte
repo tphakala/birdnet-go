@@ -1373,6 +1373,16 @@
     settingsActions.updateSection('birdnet', { [key]: value });
   }
 
+  // The config stores an empty backend or device for auto. Picking the saved choice again writes
+  // the saved raw value back, so the form compares equal to the saved settings and the save bar
+  // does not stay active, as updateBsgBatStep does for the step.
+  function updateInferenceChoice(key: 'backend' | 'openVinoDevice', value: string) {
+    const saved = store.originalData.birdnet?.[key];
+    settingsActions.updateSection('birdnet', {
+      [key]: value === (saved || INFERENCE_AUTO) ? saved : value,
+    });
+  }
+
   function updateDynamicThreshold(key: string, value: number | boolean) {
     settingsActions.updateSection('realtime', {
       dynamicThreshold: { ...dynamicThreshold, [key]: value },
@@ -2788,7 +2798,7 @@
           variant="select"
           size="md"
           groupBy={false}
-          onChange={value => updateBirdnetSetting('backend', firstValue(value))}
+          onChange={value => updateInferenceChoice('backend', firstValue(value))}
         />
         {#if showDeviceField}
           <SelectDropdown
@@ -2801,7 +2811,7 @@
             variant="select"
             size="md"
             groupBy={false}
-            onChange={value => updateBirdnetSetting('openVinoDevice', firstValue(value))}
+            onChange={value => updateInferenceChoice('openVinoDevice', firstValue(value))}
           />
         {/if}
       </div>

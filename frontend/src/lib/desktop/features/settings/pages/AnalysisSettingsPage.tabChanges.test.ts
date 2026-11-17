@@ -720,6 +720,30 @@ describe('AnalysisSettingsPage inference runtime', () => {
     expect(screen.queryByRole('combobox', { name: DEVICE_LABEL })).toBeNull();
   });
 
+  it('restores the unset saved backend when Auto is picked again', async () => {
+    mockRuntime(async () => runtimeStatus());
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+    await waitFor(() => expect(backend).toBeEnabled());
+    const user = userEvent.setup();
+
+    await user.click(backend);
+    await user.click(
+      screen.getByRole('option', { name: 'analysis.inference.backend.options.onnx' })
+    );
+    await user.click(backend);
+    await user.click(
+      screen.getByRole('option', { name: 'analysis.inference.backend.options.auto' })
+    );
+
+    // The saved config has no backend key, so the form must not keep a raw 'auto' that a
+    // whole-form comparison would count as an unsaved change.
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', {
+      backend: undefined,
+    });
+  });
+
   it('offers GPU only when the host has one or it is saved', async () => {
     mockRuntime(async () => runtimeStatus({ devices: ['CPU'] }));
     render(AnalysisSettingsPage);
