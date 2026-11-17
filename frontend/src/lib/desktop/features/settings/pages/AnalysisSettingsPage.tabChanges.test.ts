@@ -556,6 +556,47 @@ describe('AnalysisSettingsPage detection thresholds', () => {
     });
   });
 
+  // Both ends of the shared range (0 and 1) lie outside the classifier bounds (0.01 to 0.99).
+  it.each([
+    { shared: 1, seeded: 0.99 },
+    { shared: 0, seeded: 0.01 },
+  ])(
+    'seeds a custom threshold inside the row bounds from a shared value of $shared',
+    async ({ shared, seeded }) => {
+      modelsList.current = [MODEL.birdnetv3];
+      seedSection('birdnet', { ...BASE_BIRDNET, threshold: shared });
+      seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
+      render(AnalysisSettingsPage);
+      const toggle = await screen.findByRole('switch', {
+        name: new RegExp(MODEL.birdnetv3.name),
+      });
+
+      await userEvent.setup().click(toggle);
+
+      expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnetv3', {
+        overrideThreshold: true,
+        threshold: seeded,
+      });
+    }
+  );
+
+  it('drops a classifier from the shared users as soon as its custom threshold is on', async () => {
+    modelsList.current = [MODEL.birdnet, MODEL.perch];
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.perch.name) });
+    expect(paramsFor('analysis.thresholds.shared.usedBy').at(-1)).toEqual({
+      models: `${MODEL.birdnet.name}, ${MODEL.perch.name}`,
+    });
+
+    await userEvent.setup().click(toggle);
+    await tick();
+
+    expect(paramsFor('analysis.thresholds.shared.usedBy').at(-1)).toEqual({
+      models: MODEL.birdnet.name,
+    });
+  });
+
   it('returns to the saved values when a seeded custom threshold is switched off again', async () => {
     modelsList.current = [MODEL.birdnetv3];
     seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
@@ -782,6 +823,41 @@ describe('AnalysisSettingsPage inference runtime', () => {
 describe('AnalysisSettingsPage range filter scope', () => {
   beforeEach(() => resetPage('filters'));
 
+  it('falls back to the generic range filter text while no status is loaded', async () => {
+    modelsList.current = [MODEL.birdnet, MODEL.perch];
+    render(AnalysisSettingsPage);
+
+    expect(await screen.findByText('analysis.scope.rangeFilter.generic')).toBeInTheDocument();
+    expect(paramsFor('analysis.scope.rangeFilter.appliesTo')).toEqual([]);
+  });
+
+  it('names the Bats tab in the false positive filter scope only while a bat model is installed', async () => {
+    render(AnalysisSettingsPage);
+    expect(await screen.findByText('analysis.scope.falsePositiveFilter')).toBeInTheDocument();
+    expect(screen.queryByText('analysis.scope.falsePositiveFilterBatTab')).toBeNull();
+
+    resetPage('filters');
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [batCatalogEntry()] });
+    render(AnalysisSettingsPage);
+    expect(await screen.findByText('analysis.scope.falsePositiveFilterBatTab')).toBeInTheDocument();
+  });
+
+  it('saves a typed range filter threshold rounded to the step', async () => {
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.rangeFilter.threshold.label',
+    });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '0.123');
+    await user.tab();
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', {
+      rangeFilter: { threshold: 0.12 },
+    });
+  });
+
   it('names only the classifiers the active range backend filters', async () => {
     modelsList.current = [MODEL.birdnet, MODEL.perch, MODEL.bat];
     vi.mocked(api.get).mockImplementation(async (url: string) =>
@@ -872,6 +948,46 @@ describe('AnalysisSettingsPage range filter overview', () => {
 
 describe('AnalysisSettingsPage dynamic threshold', () => {
   beforeEach(() => resetPage());
+
+  it('saves a typed trigger rounded to the step', async () => {
+    seedSection('realtime', {
+      ...BASE_REALTIME,
+      dynamicThreshold: { ...BASE_REALTIME.dynamicThreshold, enabled: true },
+    });
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.dynamicThreshold.trigger.label',
+    });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '0.856');
+    await user.tab();
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('realtime', {
+      dynamicThreshold: expect.objectContaining({ trigger: 0.86 }),
+    });
+  });
+
+  it('saves a typed expire time as whole hours', async () => {
+    seedSection('realtime', {
+      ...BASE_REALTIME,
+      dynamicThreshold: { ...BASE_REALTIME.dynamicThreshold, enabled: true },
+    });
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', {
+      name: 'settings.main.sections.dynamicThreshold.expireTime.label',
+    });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '48.6');
+    await user.tab();
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('realtime', {
+      dynamicThreshold: expect.objectContaining({ validHours: 49 }),
+    });
+  });
 
   const MIN_ABOVE_TRIGGER = 'analysis.dynamicThreshold.minAboveTrigger';
 
