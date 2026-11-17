@@ -6112,20 +6112,20 @@
         "threshold": "Threshold",
         "source": "Applies"
       },
-      "primary": "Primary",
-      "primaryNote": "Default for classifiers without their own threshold",
       "useOwn": "Use own threshold",
-      "followsBirdnet": "Follows the BirdNET threshold",
       "ownAlways": "Own threshold",
       "category": {
         "bat": "Bat"
       },
       "state": {
         "pending": "Loading",
-        "failed": "Failed to load"
+        "failed": "Failed to load",
+        "notEnabled": "Not enabled"
       },
       "empty": "No classifiers are enabled.",
-      "sliderLabel": "{name} threshold"
+      "sliderLabel": "{name} threshold",
+      "usesThresholdOf": "Uses the {name} threshold",
+      "notEnabledNote": "This classifier is not enabled. Its threshold still applies to the classifiers that use it."
     },
     "groups": {
       "confidence": "Confidence",

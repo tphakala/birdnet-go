@@ -4495,16 +4495,16 @@ export type TranslationKey =
   | 'analysis.thresholds.columns.classifier'
   | 'analysis.thresholds.columns.threshold'
   | 'analysis.thresholds.columns.source'
-  | 'analysis.thresholds.primary'
-  | 'analysis.thresholds.primaryNote'
   | 'analysis.thresholds.useOwn'
-  | 'analysis.thresholds.followsBirdnet'
   | 'analysis.thresholds.ownAlways'
   | 'analysis.thresholds.category.bat'
   | 'analysis.thresholds.state.pending'
   | 'analysis.thresholds.state.failed'
+  | 'analysis.thresholds.state.notEnabled'
   | 'analysis.thresholds.empty'
   | 'analysis.thresholds.sliderLabel' // params: name
+  | 'analysis.thresholds.usesThresholdOf' // params: name
+  | 'analysis.thresholds.notEnabledNote'
   | 'analysis.groups.confidence'
   | 'analysis.groups.filters'
   | 'analysis.groups.general'
@@ -5290,6 +5290,7 @@ export type TranslationParams = {
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
   'analysis.thresholds.sliderLabel': { name: string | number };
+  'analysis.thresholds.usesThresholdOf': { name: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };
 };
 

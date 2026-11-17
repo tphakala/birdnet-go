@@ -13,7 +13,7 @@
   - Settings tab groups: Confidence (thresholds, dynamic threshold), Filters (false
     positive filter, range filter, bat detection) and General (species names, advanced)
   - Detection thresholds list: one row per enabled classifier, with a slider and a number
-    field for its threshold and a switch for classifiers that can follow BirdNET
+    field for its threshold and a switch for classifiers that can use the BirdNET v2.4 threshold
   - Locale selector with flag icons for species labels
   - False positive filter with colored level badge
   - Range filter with species count, view/download functionality
@@ -49,7 +49,7 @@
     watchModels,
   } from '$lib/stores/models.svelte';
   import {
-    PRIMARY_THRESHOLD_FALLBACK,
+    BIRDNET_THRESHOLD_FALLBACK,
     thresholdRows,
     thresholdSnapshot,
     type ThresholdRow,
@@ -422,7 +422,12 @@
     $birdNetPlusSettings ?? { overrideThreshold: false, threshold: BIRDNET_PLUS_DEFAULT_THRESHOLD }
   );
   const thresholdTableRows = $derived(thresholdRows(getAvailableModels()));
-  const birdnetThreshold = $derived(birdnet?.threshold ?? PRIMARY_THRESHOLD_FALLBACK);
+  // Name of the BirdNET v2.4 row, for the note on rows that use its threshold. The row is
+  // always listed while such a row is.
+  const birdnetRowName = $derived(
+    thresholdTableRows.find(row => row.descriptor.kind === 'birdnet')?.model.name ?? ''
+  );
+  const birdnetThreshold = $derived(birdnet?.threshold ?? BIRDNET_THRESHOLD_FALLBACK);
 
   // ── Change detection ──────────────────────────────────────────────────
   // The saved and the current value of each card, used by the card's unsaved-changes badge
@@ -1834,9 +1839,9 @@
                   <span id={nameId} class="text-sm font-medium text-[var(--color-base-content)]">
                     {row.model.name}
                   </span>
-                  {#if row.descriptor.kind === 'primary'}
-                    <Badge variant="primary" size="xs">
-                      {t('analysis.thresholds.primary')}
+                  {#if !row.enabled}
+                    <Badge variant="neutral" size="xs">
+                      {t('analysis.thresholds.state.notEnabled')}
                     </Badge>
                   {/if}
                   {#if row.model.category === 'bat'}
@@ -1855,10 +1860,10 @@
                   {/if}
                 </div>
                 <p id={sourceId} class="help-text mt-1">
-                  {#if row.descriptor.kind === 'primary'}
-                    {t('analysis.thresholds.primaryNote')}
+                  {#if !row.enabled}
+                    {t('analysis.thresholds.notEnabledNote')}
                   {:else if follows}
-                    {t('analysis.thresholds.followsBirdnet')}
+                    {t('analysis.thresholds.usesThresholdOf', { name: birdnetRowName })}
                   {:else}
                     {t('analysis.thresholds.ownAlways')}
                   {/if}
@@ -3181,7 +3186,8 @@
 
 <style>
   /* The filled part of a threshold slider's track, up to the thumb. The fill is set per row
-     from the value; a disabled row (one that follows BirdNET) shows it in a neutral shade. */
+     from the value; a disabled row (one that uses the BirdNET v2.4 threshold) shows it in a
+     neutral shade. */
   .threshold-range {
     background-image: linear-gradient(
       to right,

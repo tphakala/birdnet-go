@@ -1,9 +1,14 @@
 /**
- * Rows of the Analysis page's detection thresholds table.
+ * Rows of the Analysis page's detection thresholds list.
  *
  * Each enabled classifier from GET /api/v2/models with a known registry ID gets one row, chosen by its
  * registry ID. The descriptor names the settings section that stores the
  * classifier's threshold, how the row behaves, and the field bounds.
+ *
+ * The rows are peers. Some classifiers read the BirdNET v2.4 threshold (birdnet.threshold)
+ * instead of a value of their own (backend modelGlobalConfidenceThreshold), and that value
+ * applies even while BirdNET v2.4 is not enabled, so its row is kept whenever a listed
+ * classifier can use it.
  */
 import type { BackendModel } from '$lib/stores/models.svelte';
 
@@ -20,20 +25,24 @@ export const REGISTRY_ID = {
 
 /** Config alias of the built-in BirdNET model (conf.ModelIDBirdNET). */
 const BIRDNET_ALIAS = 'birdnet';
+/** Name of BirdNET v2.4 for its row while the model is not in the list (a product name, not translated). */
+const BIRDNET_NAME = 'BirdNET v2.4';
+/** Category of BirdNET v2.4 in the models list. */
+const BIRDNET_CATEGORY = 'bird';
 
-/** BirdNET threshold shown until the birdnet section is loaded. */
-export const PRIMARY_THRESHOLD_FALLBACK = 0.3;
-/** Backend default threshold of the secondary classifier sections. */
-export const SECONDARY_THRESHOLD_DEFAULT = 0.5;
+/** BirdNET v2.4 threshold shown until the birdnet section is loaded. */
+export const BIRDNET_THRESHOLD_FALLBACK = 0.3;
+/** Backend default threshold of the other classifier sections. */
+export const SECTION_THRESHOLD_DEFAULT = 0.5;
 
 /**
  * How a row behaves:
- * - primary: the BirdNET threshold, which other classifiers may follow
- * - override: follows BirdNET until the classifier's own threshold is switched on
+ * - birdnet: BirdNET v2.4, whose threshold some other classifiers also use
+ * - override: uses the BirdNET v2.4 threshold until the classifier's own threshold is switched on
  * - own: always uses the classifier's own threshold
- * - follows: has no threshold setting and always uses the BirdNET threshold
+ * - follows: has no threshold setting and always uses the BirdNET v2.4 threshold
  */
-export type ThresholdRowKind = 'primary' | 'override' | 'own' | 'follows';
+export type ThresholdRowKind = 'birdnet' | 'override' | 'own' | 'follows';
 
 /** Settings sections that hold a classifier threshold. */
 export type ThresholdSection = 'birdnet' | 'perch' | 'birdnetv3' | 'birdnetplus' | 'bat' | 'bsgbat';
@@ -41,30 +50,37 @@ export type ThresholdSection = 'birdnet' | 'perch' | 'birdnetv3' | 'birdnetplus'
 /** How one classifier's threshold row is rendered and saved. */
 export interface ThresholdRowDescriptor {
   kind: ThresholdRowKind;
-  /** Section the threshold is saved to; absent for rows that follow BirdNET. */
+  /** Section the threshold is saved to; absent for rows that always use the BirdNET v2.4 threshold. */
   section?: ThresholdSection;
   min: number;
   max: number;
   step: number;
 }
 
-/** One table row: the listed model and its descriptor. */
+/** One row: the model and its descriptor. */
 export interface ThresholdRow {
   model: BackendModel;
   descriptor: ThresholdRowDescriptor;
+  /**
+   * False for the BirdNET v2.4 row kept while that model is not enabled, because its
+   * threshold still applies to the listed classifiers that use it.
+   */
+  enabled: boolean;
 }
 
-const PRIMARY_BOUNDS = { min: 0, max: 1, step: 0.05 };
-const SECONDARY_BOUNDS = { min: 0.01, max: 0.99, step: 0.01 };
+/** Bounds of birdnet.threshold. */
+const BIRDNET_BOUNDS = { min: 0, max: 1, step: 0.05 };
+/** Bounds of the thresholds in the other classifier sections. */
+const SECTION_BOUNDS = { min: 0.01, max: 0.99, step: 0.01 };
 
 const DESCRIPTORS = new Map<string, ThresholdRowDescriptor>([
-  [REGISTRY_ID.birdnetV24, { kind: 'primary', section: 'birdnet', ...PRIMARY_BOUNDS }],
-  [REGISTRY_ID.perchV2, { kind: 'override', section: 'perch', ...SECONDARY_BOUNDS }],
-  [REGISTRY_ID.birdnetV30, { kind: 'override', section: 'birdnetv3', ...SECONDARY_BOUNDS }],
-  [REGISTRY_ID.birdnetPlusV30, { kind: 'override', section: 'birdnetplus', ...SECONDARY_BOUNDS }],
-  [REGISTRY_ID.bat, { kind: 'own', section: 'bat', ...SECONDARY_BOUNDS }],
-  [REGISTRY_ID.bsgBat, { kind: 'own', section: 'bsgbat', ...SECONDARY_BOUNDS }],
-  [REGISTRY_ID.bsg, { kind: 'follows', ...PRIMARY_BOUNDS }],
+  [REGISTRY_ID.birdnetV24, { kind: 'birdnet', section: 'birdnet', ...BIRDNET_BOUNDS }],
+  [REGISTRY_ID.perchV2, { kind: 'override', section: 'perch', ...SECTION_BOUNDS }],
+  [REGISTRY_ID.birdnetV30, { kind: 'override', section: 'birdnetv3', ...SECTION_BOUNDS }],
+  [REGISTRY_ID.birdnetPlusV30, { kind: 'override', section: 'birdnetplus', ...SECTION_BOUNDS }],
+  [REGISTRY_ID.bat, { kind: 'own', section: 'bat', ...SECTION_BOUNDS }],
+  [REGISTRY_ID.bsgBat, { kind: 'own', section: 'bsgbat', ...SECTION_BOUNDS }],
+  [REGISTRY_ID.bsg, { kind: 'follows', ...BIRDNET_BOUNDS }],
 ]);
 
 /** The descriptor for one listed model, or undefined when it has no threshold row. */
@@ -75,16 +91,40 @@ export function thresholdDescriptor(model: BackendModel): ThresholdRowDescriptor
   return registryId === undefined ? undefined : DESCRIPTORS.get(registryId);
 }
 
-/** Table rows for the listed models: BirdNET first, the rest in list order. */
+/** Whether a row of this kind can use the BirdNET v2.4 threshold. */
+function canUseBirdnetThreshold(kind: ThresholdRowKind): boolean {
+  return kind === 'override' || kind === 'follows';
+}
+
+/**
+ * Rows for the listed models, in list order. When BirdNET v2.4 is not listed but a listed
+ * classifier can use its threshold, a row for that threshold is added in front, so the value
+ * stays editable.
+ */
 export function thresholdRows(models: readonly BackendModel[]): ThresholdRow[] {
   const rows: ThresholdRow[] = [];
   for (const model of models) {
     const descriptor = thresholdDescriptor(model);
-    if (descriptor) rows.push({ model, descriptor });
+    if (descriptor) rows.push({ model, descriptor, enabled: true });
   }
-  return rows.sort(
-    (a, b) => Number(b.descriptor.kind === 'primary') - Number(a.descriptor.kind === 'primary')
-  );
+  const birdnetDescriptor = DESCRIPTORS.get(REGISTRY_ID.birdnetV24);
+  if (
+    birdnetDescriptor &&
+    !rows.some(row => row.descriptor.kind === 'birdnet') &&
+    rows.some(row => canUseBirdnetThreshold(row.descriptor.kind))
+  ) {
+    rows.unshift({
+      model: {
+        id: BIRDNET_ALIAS,
+        registryId: REGISTRY_ID.birdnetV24,
+        name: BIRDNET_NAME,
+        category: BIRDNET_CATEGORY,
+      },
+      descriptor: birdnetDescriptor,
+      enabled: false,
+    });
+  }
+  return rows;
 }
 
 /** The threshold fields of one settings section. */
@@ -107,18 +147,18 @@ export function thresholdSnapshot(
     if (!descriptor.section) continue;
     const values = sections[descriptor.section];
     switch (descriptor.kind) {
-      case 'primary':
-        snapshot[model.id] = { threshold: values?.threshold ?? PRIMARY_THRESHOLD_FALLBACK };
+      case 'birdnet':
+        snapshot[model.id] = { threshold: values?.threshold ?? BIRDNET_THRESHOLD_FALLBACK };
         break;
       case 'override':
         snapshot[model.id] = {
           override: values?.overrideThreshold ?? false,
-          threshold: values?.threshold ?? SECONDARY_THRESHOLD_DEFAULT,
+          threshold: values?.threshold ?? SECTION_THRESHOLD_DEFAULT,
         };
         break;
       case 'own':
       case 'follows':
-        snapshot[model.id] = { threshold: values?.threshold ?? SECONDARY_THRESHOLD_DEFAULT };
+        snapshot[model.id] = { threshold: values?.threshold ?? SECTION_THRESHOLD_DEFAULT };
         break;
     }
   }
