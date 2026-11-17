@@ -115,9 +115,11 @@ export function usesSharedThreshold(
 const SHARED_KEY = 'shared:threshold';
 
 /**
- * The shared threshold and the per-classifier values of the given rows, with the backend
- * defaults filled in. Used for both the saved and the current side of the card's change
- * pair, so a section that is not loaded yet never shows as a change.
+ * The shared threshold and the per-classifier values of the given rows. An unloaded shared
+ * threshold reads as SHARED_THRESHOLD_FALLBACK, the page's placeholder, and unloaded
+ * classifier values read as the backend section defaults. Used for both the saved and the
+ * current side of the card's change pair, so a section that is not loaded yet never shows
+ * as a change.
  */
 export function thresholdSnapshot(
   rows: readonly ThresholdRow[],

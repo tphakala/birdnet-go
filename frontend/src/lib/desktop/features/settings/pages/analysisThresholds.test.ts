@@ -93,7 +93,7 @@ describe('thresholdSnapshot', () => {
     model(REGISTRY_ID.bat),
   ]);
 
-  it('treats sections not loaded yet as their backend defaults, so they are no change', () => {
+  it('treats sections not loaded yet as their fallback values, so they are no change', () => {
     const defaults = thresholdSnapshot(rows, {
       birdnet: { threshold: SHARED_THRESHOLD_FALLBACK },
       perch: { overrideThreshold: false, threshold: SECTION_THRESHOLD_DEFAULT },
