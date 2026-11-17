@@ -11,13 +11,14 @@ describe('install and reinstall request bodies', () => {
     vi.mocked(api.post).mockClear();
   });
 
-  // The server tolerates an empty body only when there is none at all, and older
-  // servers never saw one, so a request with nothing to say must send no body.
+  // A request with nothing to send keeps the bodiless form these endpoints have
+  // always received.
   it('sends no body when there is no variant and nothing was accepted', async () => {
     await installModel('m');
     await installModel('m', undefined, []);
     await reinstallModel('m');
     await reinstallModel('m', []);
+    expect(api.post).toHaveBeenCalledTimes(4);
     for (const call of vi.mocked(api.post).mock.calls) {
       expect(call[1]).toBeUndefined();
     }

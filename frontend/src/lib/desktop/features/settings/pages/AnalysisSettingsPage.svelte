@@ -1962,9 +1962,8 @@
     return e instanceof ApiError && e.status === HTTP_STATUS_BAD_REQUEST ? [] : accepted;
   }
 
-  // Mark the documents the server accepted as agreed in the catalog, which is
-  // reloaded only after an install completes, so the license dialog does not ask
-  // again in the meantime.
+  // Mark the documents the server accepted as agreed in the catalog, so the license
+  // dialog does not ask again before the next catalog load reports them.
   function noteAgreed(modelId: string, accepted: string[]) {
     if (accepted.length === 0) return;
     for (const doc of catalog.find(e => e.id === modelId)?.documents ?? []) {
