@@ -31,7 +31,8 @@ let stepError = $state<TranslationKey | null>(null);
 let stepBlockedReason = $state<TranslationKey | null>(null);
 let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
-// The model passed to the last launch (only the model next steps flow passes one); null when closed
+// The model passed to the last launch that opened a flow (only the model next steps flow
+// passes one); null when closed
 let installedModel = $state<InstalledModelContext | null>(null);
 
 const totalSteps = $derived(steps.length);
@@ -349,7 +350,7 @@ export const wizardState = {
   get previousVersion() {
     return previousVersion;
   },
-  /** The model passed to the last launch (only the model next steps flow passes one); null when closed. */
+  /** The model passed to the last launch that opened a flow (only the model next steps flow passes one); null when closed. */
   get installedModel() {
     return installedModel;
   },
