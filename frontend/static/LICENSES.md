@@ -153,7 +153,7 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.24/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.25/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
@@ -213,7 +213,7 @@ Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.16.3/LICENSE
+License: https://github.com/labstack/echo/blob/v4.16.5/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
@@ -253,12 +253,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.22.1/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.24.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.22.1/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.24.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/pb33f/go-yaml
@@ -353,7 +353,7 @@ Source: Apache-2.0
 
 ### github.com/spf13/pflag
 
-License: https://github.com/spf13/pflag/blob/v1.0.10/LICENSE
+License: https://github.com/spf13/pflag/blob/v1.1.0/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/spf13/viper
@@ -463,12 +463,12 @@ Source: MIT
 
 ### github.com/tphakala/go-m4a
 
-License: https://github.com/tphakala/go-m4a/blob/v0.8.0/LICENSE
+License: https://github.com/tphakala/go-m4a/blob/v0.9.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-mp3
 
-License: https://github.com/tphakala/go-mp3/blob/v0.3.0/LICENSE
+License: https://github.com/tphakala/go-mp3/blob/v0.4.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-opus
@@ -548,7 +548,7 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.58.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.59.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/image
@@ -578,7 +578,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.47.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.48.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
@@ -593,12 +593,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.311.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.315.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/2ffab32bce7e/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/d1e00e9f33ab/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
