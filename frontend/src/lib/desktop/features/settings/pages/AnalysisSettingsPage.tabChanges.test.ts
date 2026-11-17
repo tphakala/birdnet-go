@@ -246,6 +246,8 @@ beforeAll(() => {
 function resetPage(tabId = 'detection') {
   cleanup();
   vi.clearAllMocks();
+  // clearAllMocks keeps implementations, so drop the form-writing one applyUpdatesToForm installs.
+  vi.mocked(settingsActions.updateSection).mockReset();
   modelsList.current = [];
   mockStore.update(state => ({ ...state, originalData: savedConfig(), formData: savedConfig() }));
   vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [] });
