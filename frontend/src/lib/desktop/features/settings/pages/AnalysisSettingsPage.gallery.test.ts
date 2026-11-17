@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-li
 import { tick } from 'svelte';
 import type { CatalogEntry, ModelRegionsResponse } from '$lib/types/models';
 import { catalogEntry as birdEntry, downloadProgress } from '../../../../../test/fixtures/catalog';
+import { deferred } from '../../../../../test/async-helpers';
 
 // Page-level coverage for the model-gallery install-error split:
 // a failed install must NOT blank the grid (installError is a separate banner from
@@ -1144,12 +1145,15 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
 });
 
 describe('AnalysisSettingsPage model gallery next steps after an install', () => {
-  // The completion timer that refreshes the gallery after an install
-  const COMPLETION_WAIT = { timeout: 3000 };
+  // Longer than the completion timer that refreshes the gallery after an install
+  const PAST_COMPLETION_MS = 5000;
 
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    // The clock is driven by the tests; it also follows real time so the
+    // testing-library waits keep working
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setTimeout', 'clearTimeout'] });
     vi.mocked(wizardState.launch).mockReturnValue(true);
     vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
     vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
@@ -1163,6 +1167,16 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     );
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+    setWizardActive(false);
+  });
+
+  // The mock's isActive is a plain value; a test sets it to stand for an open wizard
+  function setWizardActive(active: boolean): void {
+    Object.defineProperty(wizardState, 'isActive', { value: active, configurable: true });
+  }
+
   async function installFromLicenseDialog(cardButton: RegExp): Promise<void> {
     render(AnalysisSettingsPage);
     await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
@@ -1175,14 +1189,18 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     );
   }
 
-  // The gallery reloads its catalog when the completion timer has run
-  async function waitForCompletionTimer(): Promise<void> {
-    await waitFor(
-      () => expect(vi.mocked(modelsApi.fetchCatalog).mock.calls.length).toBeGreaterThan(1),
-      COMPLETION_WAIT
-    );
+  // Runs the completion timer and lets the settings refresh after it settle
+  async function runCompletionTimer(): Promise<void> {
+    await vi.advanceTimersByTimeAsync(PAST_COMPLETION_MS);
     await tick();
   }
+
+  const FRESH_MODEL = {
+    catalogId: 'test-bird',
+    name: 'Test Bird Model',
+    category: 'bird',
+    registryId: 'Test_Bird',
+  };
 
   it('offers the next steps for the installed model after a fresh install', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
@@ -1190,19 +1208,9 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     });
 
     await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
 
-    await waitFor(
-      () =>
-        expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', {
-          model: {
-            catalogId: 'test-bird',
-            name: 'Test Bird Model',
-            category: 'bird',
-            registryId: 'Test_Bird',
-          },
-        }),
-      COMPLETION_WAIT
-    );
+    expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL });
     expect(settingsActions.refreshKeepingEdits).toHaveBeenCalled();
     expect(toastActions.success).not.toHaveBeenCalled();
   });
@@ -1212,8 +1220,9 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [birdEntry()] });
 
     await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
 
-    await waitFor(() => expect(toastActions.success).toHaveBeenCalled(), COMPLETION_WAIT);
+    expect(toastActions.success).toHaveBeenCalled();
     expect(t).toHaveBeenCalledWith('analysis.gallery.installSuccess', { name: 'Test Bird Model' });
   });
 
@@ -1227,7 +1236,10 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
       await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
     );
 
-    await waitForCompletionTimer();
+    await waitFor(() => expect(modelsApi.reinstallModel).toHaveBeenCalledWith('inst'));
+    await runCompletionTimer();
+    // The completion timer ran: it reloads the catalog
+    expect(vi.mocked(modelsApi.fetchCatalog).mock.calls.length).toBeGreaterThan(1);
     expect(wizardState.launch).not.toHaveBeenCalled();
   });
 
@@ -1266,7 +1278,73 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
     );
 
     await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledWith('inst', 'int8'));
-    await waitForCompletionTimer();
+    await runCompletionTimer();
     expect(wizardState.launch).not.toHaveBeenCalled();
+  });
+
+  it('still offers the next steps when a failed fresh install succeeds on Retry', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementationOnce(
+      (_id, _onProgress, _onComplete, onError) => {
+        onError('download failed');
+        return () => {};
+      }
+    );
+
+    await installFromLicenseDialog(installButtonName);
+    await fireEvent.click(await screen.findByRole('button', { name: /analysis\.gallery\.retry/ }));
+    await runCompletionTimer();
+
+    expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL });
+  });
+
+  it('shows the success toast instead of a second wizard when one is already open', async () => {
+    setWizardActive(true);
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
+
+    expect(wizardState.launch).not.toHaveBeenCalled();
+    expect(t).toHaveBeenCalledWith('analysis.gallery.installSuccess', { name: 'Test Bird Model' });
+  });
+
+  it('waits for the settings refresh before it offers the next steps', async () => {
+    const refresh = deferred();
+    vi.mocked(settingsActions.refreshKeepingEdits).mockReturnValueOnce(refresh.promise);
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
+    expect(wizardState.launch).not.toHaveBeenCalled();
+
+    refresh.resolve();
+    await tick();
+    await waitFor(() =>
+      expect(wizardState.launch).toHaveBeenCalledWith('model-next-steps', { model: FRESH_MODEL })
+    );
+  });
+
+  it('offers nothing when the page was left before the settings refresh finished', async () => {
+    const refresh = deferred();
+    vi.mocked(settingsActions.refreshKeepingEdits).mockReturnValueOnce(refresh.promise);
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
+    cleanup();
+    refresh.resolve();
+    await tick();
+
+    expect(wizardState.launch).not.toHaveBeenCalled();
+    expect(toastActions.success).not.toHaveBeenCalled();
   });
 });
