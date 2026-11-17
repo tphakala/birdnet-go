@@ -289,9 +289,16 @@ func TestBuildDocuments_Validation(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Len(t, got, len(tc.in))
-			if tc.name == "unknown kind is kept" {
-				assert.Equal(t, "future_kind", got["o/a"][1].Kind)
-			}
 		})
 	}
+}
+
+func TestBuildDocuments_KeepsUnknownKind(t *testing.T) {
+	t.Parallel()
+
+	lic := manifestDocument{Kind: "license", URL: "https://example.org/license"}
+	future := manifestDocument{Kind: "future_kind", URL: "https://example.org/future"}
+	got, err := buildDocuments([]namedManifest{{name: "a.json", m: &manifest{Repo: "o/a", FamilyMeta: manifestFamilyMeta{Documents: []manifestDocument{lic, future}}}}})
+	require.NoError(t, err)
+	assert.Equal(t, []manifestDocument{lic, future}, got["o/a"])
 }

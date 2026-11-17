@@ -624,12 +624,9 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 }
 
 // buildDocumentResponses maps the documents of the entry's own repo to their API
-// form, or nil when it has none so the field is omitted.
+// form; an entry with none gets an empty slice, which omitempty drops.
 func buildDocumentResponses(entry *classifier.CatalogEntry) []CatalogDocumentResponse {
 	docs := classifier.EntryDocuments(entry)
-	if len(docs) == 0 {
-		return nil
-	}
 	out := make([]CatalogDocumentResponse, 0, len(docs))
 	for i := range docs {
 		out = append(out, CatalogDocumentResponse{

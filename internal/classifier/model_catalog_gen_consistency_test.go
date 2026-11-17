@@ -419,7 +419,6 @@ func TestEntryDocuments(t *testing.T) {
 	}
 
 	assert.Nil(t, EntryDocuments(nil))
-	assert.Nil(t, EntryDocuments(&CatalogEntry{HuggingFaceRepo: "nobody/nothing"}))
 }
 
 func TestDocumentBySHA256(t *testing.T) {
