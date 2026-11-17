@@ -152,9 +152,17 @@
   let chosen = $state<string[]>([]);
   let allChosen = $derived(toggleable.length > 0 && toggleable.every(r => chosen.includes(r.key)));
 
+  // A source that follows the defaults is saved as the defaults plus the model, so
+  // it waits until the defaults are known; with them unknown the save would drop
+  // the default models the source really runs
+  let defaultsPending = $derived(
+    acousticModelAvailability().kind === 'unknown' &&
+      [...cardRows, ...streamRows].some(row => row.followsDefaults)
+  );
+
   type View = 'loading' | 'listFailed' | 'notListed' | 'notLoaded' | 'noSources' | 'sources';
   let view = $derived.by((): View => {
-    if (listLoading) return 'loading';
+    if (listLoading || defaultsPending) return 'loading';
     if (listFailed) return 'listFailed';
     if (!listed) return 'notListed';
     if (listed.state === 'failed' || listed.state === 'pending') return 'notLoaded';

@@ -156,6 +156,20 @@ describe('EnableOnSourcesStep', () => {
     expect(screen.queryByText('settings.audio.models.loading')).toBeNull();
   });
 
+  it('waits for the default models before it offers a source that follows them', async () => {
+    // With the defaults unknown, a default-following source would be saved without
+    // the default models it really runs
+    acoustic.availability = { kind: 'unknown' };
+    serveModels([BIRDNET, PERCH, BAT]);
+    seed([card('Default', [])]);
+    wizard.model = BAT_CONTEXT;
+
+    renderStep(EnableOnSourcesStep);
+
+    expect(await screen.findByText('settings.audio.models.loading')).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).toBeNull();
+  });
+
   it('appends the alias to an explicit list and saves only the changed section', async () => {
     const { leave } = await renderLoaded();
 
