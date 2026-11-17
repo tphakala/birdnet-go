@@ -1858,11 +1858,16 @@
   // Rebase the settings store on the server after a gallery action changed model
   // config outside the form. Call it before the completion timer, which unmount
   // cancels. A failure is only logged; the next save rebases again. The returned
-  // promise never rejects.
-  function refreshSettingsAfterGalleryChange(): Promise<void> {
-    return settingsActions.refreshKeepingEdits().catch((e: unknown) => {
-      logger.error('Failed to refresh settings after a model gallery change:', e);
-    });
+  // promise never rejects: it resolves to whether the store now holds the server
+  // values (a refresh before the first settings load returns without loading).
+  function refreshSettingsAfterGalleryChange(): Promise<boolean> {
+    return settingsActions.refreshKeepingEdits().then(
+      () => store.dataLoaded,
+      (e: unknown) => {
+        logger.error('Failed to refresh settings after a model gallery change:', e);
+        return false;
+      }
+    );
   }
 
   function nextStepsContext(entry: CatalogEntry): InstalledModelContext {
@@ -1875,11 +1880,16 @@
   }
 
   // After a fresh install: the recommended next steps when one applies, else a
-  // success toast. The steps build their payloads from the settings store, so this
-  // runs once the settings refresh has finished.
-  function offerNextSteps(model: InstalledModelContext) {
+  // success toast. The steps save whole source lists built from the settings
+  // store, so this runs once the settings refresh has finished, and only a
+  // refresh that succeeded opens them.
+  function offerNextSteps(model: InstalledModelContext, settingsFresh: boolean) {
     if (unmounted) return;
-    if (wizardState.isActive || !wizardState.launch('model-next-steps', { model })) {
+    if (
+      !settingsFresh ||
+      wizardState.isActive ||
+      !wizardState.launch('model-next-steps', { model })
+    ) {
       toastActions.success(t('analysis.gallery.installSuccess', { name: model.name }));
     }
   }
@@ -1934,8 +1944,8 @@
             loadCatalog();
             // After both refreshes, so the steps read the current sources and list the new model
             if (nextSteps) {
-              void Promise.all([settingsRefreshed, modelsRefreshed]).then(() =>
-                offerNextSteps(nextSteps)
+              void Promise.all([settingsRefreshed, modelsRefreshed]).then(([fresh]) =>
+                offerNextSteps(nextSteps, fresh)
               );
             }
           }, 2000);

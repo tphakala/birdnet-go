@@ -64,6 +64,7 @@ vi.mock('$lib/stores/settings', async () => {
     isLoading: false,
     isSaving: false,
     error: null,
+    dataLoaded: true,
     originalData: { birdnet: { huggingFaceEndpoint: '' } },
     formData: { birdnet: { huggingFaceEndpoint: '' } },
   });
@@ -1346,5 +1347,37 @@ describe('AnalysisSettingsPage model gallery next steps after an install', () =>
 
     expect(wizardState.launch).not.toHaveBeenCalled();
     expect(toastActions.success).not.toHaveBeenCalled();
+  });
+
+  it('shows the success toast instead of the next steps when the settings refresh fails', async () => {
+    vi.mocked(settingsActions.refreshKeepingEdits).mockRejectedValueOnce(new Error('offline'));
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    await installFromLicenseDialog(installButtonName);
+    await runCompletionTimer();
+
+    expect(wizardState.launch).not.toHaveBeenCalled();
+    expect(t).toHaveBeenCalledWith('analysis.gallery.installSuccess', { name: 'Test Bird Model' });
+  });
+
+  it('shows the success toast instead of the next steps when the settings never loaded', async () => {
+    settingsStore.update(state => ({ ...state, dataLoaded: false }));
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ registryId: 'Test_Bird' })],
+    });
+
+    try {
+      await installFromLicenseDialog(installButtonName);
+      await runCompletionTimer();
+
+      expect(wizardState.launch).not.toHaveBeenCalled();
+      expect(t).toHaveBeenCalledWith('analysis.gallery.installSuccess', {
+        name: 'Test Bird Model',
+      });
+    } finally {
+      settingsStore.update(state => ({ ...state, dataLoaded: true }));
+    }
   });
 });
