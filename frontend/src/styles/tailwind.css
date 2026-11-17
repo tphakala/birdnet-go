@@ -786,6 +786,10 @@
     border-color: var(--color-warning);
   }
 
+  .input:user-invalid:hover:not(:disabled, :focus) {
+    border-color: var(--color-error);
+  }
+
   /* ----------------------------------------
      SELECT
      ---------------------------------------- */
@@ -948,6 +952,10 @@
 
   .textarea-success:hover:not(:disabled, :focus) {
     border-color: var(--color-success);
+  }
+
+  .textarea:user-invalid:hover:not(:disabled, :focus) {
+    border-color: var(--color-error);
   }
 
   /* ----------------------------------------

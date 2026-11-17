@@ -49,6 +49,14 @@ describe('form state borders on hover', () => {
     expect(hover?.index).toBeGreaterThan(baseHover?.index ?? Infinity);
   });
 
+  it.each(['input', 'textarea'])('keeps the error border of a :user-invalid %s on hover', base => {
+    const hover = findRule(`.${base}:user-invalid${HOVER_GUARD}`);
+    expect(hover, `missing .${base}:user-invalid${HOVER_GUARD} rule`).not.toBeNull();
+    // No order check: the pseudo-class makes this rule more specific than the base hover rule
+    // wherever it sits.
+    expect(hover?.body).toContain('border-color: var(--color-error);');
+  });
+
   it('leaves the base hover rule unlowered so .input-ghost keeps its hover border', () => {
     expect(findRule(`.input${HOVER_GUARD}`)?.body).toContain(
       'border-color: var(--field-border-hover)'
