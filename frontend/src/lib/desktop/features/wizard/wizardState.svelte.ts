@@ -52,15 +52,20 @@ let leaveHandler: StepLeaveHandler | null = null;
 // belongs to an earlier session can be recognised and dropped.
 let session = 0;
 
-// The save error keys per flow: the onboarding ones point to skipping setup, which
-// the model next steps flow does not have
+// The save error keys per flow: the setup ones point to skipping setup, which the
+// model next steps flow does not have
+const SETUP_SAVE_ERRORS = {
+  failed: 'wizard.errors.saveFailed',
+  rejected: 'wizard.errors.saveRejected',
+} as const satisfies { failed: TranslationKey; rejected: TranslationKey };
 const SAVE_ERROR_KEYS = {
-  setup: { failed: 'wizard.errors.saveFailed', rejected: 'wizard.errors.saveRejected' },
-  modelNextSteps: {
+  onboarding: SETUP_SAVE_ERRORS,
+  'whats-new': SETUP_SAVE_ERRORS,
+  'model-next-steps': {
     failed: 'wizard.modelNextSteps.errors.saveFailed',
     rejected: 'wizard.modelNextSteps.errors.saveRejected',
   },
-} as const satisfies Record<string, { failed: TranslationKey; rejected: TranslationKey }>;
+} as const satisfies Record<WizardFlow, { failed: TranslationKey; rejected: TranslationKey }>;
 const SAVE_UNFINISHED_KEY: TranslationKey = 'wizard.errors.saveUnfinished';
 const HTTP_STATUS_BAD_REQUEST = 400;
 const HTTP_STATUS_UNPROCESSABLE = 422;
@@ -75,8 +80,8 @@ function saveErrorKey(err: unknown, wizardFlow: WizardFlow | null): TranslationK
     err instanceof ApiError &&
     !err.isNetworkError &&
     (err.status === HTTP_STATUS_BAD_REQUEST || err.status === HTTP_STATUS_UNPROCESSABLE);
-  const keys =
-    wizardFlow === 'model-next-steps' ? SAVE_ERROR_KEYS.modelNextSteps : SAVE_ERROR_KEYS.setup;
+  // A save runs only while a flow is open
+  const keys = wizardFlow ? SAVE_ERROR_KEYS[wizardFlow] : SETUP_SAVE_ERRORS;
   return refused ? keys.rejected : keys.failed;
 }
 
