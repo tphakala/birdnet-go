@@ -371,14 +371,21 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
       });
     });
 
-    it('shows the whole frame when a fractional entry rounds back to the current step', async () => {
-      seedSection('bsgbat', { threshold: 0.5, stepFrames: 250 });
-      await renderWithCatalog(BSG_BAT_CATALOG_ID);
+    it.each([
+      { name: 'a saved 250', section: { threshold: 0.5, stepFrames: 250 } },
+      { name: 'a saved 0', section: { threshold: 0.5, stepFrames: 0 } },
+      { name: 'no saved step', section: { threshold: 0.5 } },
+    ])(
+      'shows the whole frame when a fractional entry rounds back to the current step with $name',
+      async ({ section }) => {
+        seedSection('bsgbat', section);
+        await renderWithCatalog(BSG_BAT_CATALOG_ID);
 
-      await typeStep('250.4');
+        await typeStep('250.4');
 
-      expect(stepInput()).toHaveValue(250);
-    });
+        expect(stepInput()).toHaveValue(250);
+      }
+    );
   });
 
   describe('change tracking', () => {
