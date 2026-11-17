@@ -157,7 +157,7 @@ type CatalogEntryResponse struct {
 	ID string `json:"id"`
 	// RegistryID is the classifier registry ID the entry loads as (e.g.
 	// "BirdNET_V2.4"). It is the join key against the registryId of the items
-	// served by GET /api/v2/models, which carry the config alias that audio
+	// served by GET /api/v2/models (enabled models only), which carry the config alias that audio
 	// source model lists use. Omitted for an entry that is not a classifier,
 	// such as the geomodel.
 	RegistryID    string `json:"registryId,omitempty"`
