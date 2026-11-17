@@ -27,7 +27,10 @@ vi.mock('$lib/utils/modelsApi', async () => {
 });
 
 vi.mock('$lib/stores/models.svelte', () => ({
-  invalidateModels: vi.fn(),
+  getAvailableModels: vi.fn(() => []),
+  modelsLoading: vi.fn(() => false),
+  refreshModels: vi.fn(),
+  watchModels: vi.fn(() => () => {}),
 }));
 
 vi.mock('$lib/stores/acousticModels.svelte', () => ({
@@ -193,8 +196,8 @@ function descriptionOf(tab: HTMLElement): string {
   return id ? (document.getElementById(id)?.textContent ?? '') : '';
 }
 
-function settingsTab(): HTMLElement {
-  return screen.getByRole('tab', { name: /analysis\.tabs\.settings/ });
+function batsTab(): HTMLElement {
+  return screen.getByRole('tab', { name: /analysis\.tabs\.bats/ });
 }
 
 /** Params of the t() calls made for a key, in call order. */
@@ -248,7 +251,7 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
       writable: true,
       configurable: true,
     });
-    navigation.redirect('/ui/settings/analysis');
+    navigation.redirect('/ui/settings/analysis?tab=bats');
   });
 
   describe('visibility and shown value', () => {
@@ -384,25 +387,25 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
 
       await typeStep('300');
       expect(formDiffersFromSaved()).toBe(true);
-      expect(descriptionOf(settingsTab())).toBe(HAS_CHANGES);
+      expect(descriptionOf(batsTab())).toBe(HAS_CHANGES);
 
       await typeStep('250');
       expect(formDiffersFromSaved()).toBe(false);
-      expect(descriptionOf(settingsTab())).toBe('');
+      expect(descriptionOf(batsTab())).toBe('');
     });
 
-    it('lights the Settings tab for a step edit and clears it when set back', async () => {
+    it('lights the Bats tab for a step edit and clears it when set back', async () => {
       seedSection('bsgbat', { threshold: 0.5, stepFrames: 250 });
       await renderWithCatalog(BSG_BAT_CATALOG_ID);
-      expect(descriptionOf(settingsTab())).toBe('');
+      expect(descriptionOf(batsTab())).toBe('');
 
       editSection('bsgbat', { stepFrames: 400 });
       await tick();
-      expect(descriptionOf(settingsTab())).toBe(HAS_CHANGES);
+      expect(descriptionOf(batsTab())).toBe(HAS_CHANGES);
 
       editSection('bsgbat', { stepFrames: 250 });
       await tick();
-      expect(descriptionOf(settingsTab())).toBe('');
+      expect(descriptionOf(batsTab())).toBe('');
     });
 
     it('treats a saved 0 and the default of 250 as the same step', async () => {
@@ -412,7 +415,7 @@ describe('AnalysisSettingsPage BSG-BAT analysis step', () => {
       editSection('bsgbat', { stepFrames: 250 });
       await tick();
 
-      expect(descriptionOf(settingsTab())).toBe('');
+      expect(descriptionOf(batsTab())).toBe('');
     });
   });
 

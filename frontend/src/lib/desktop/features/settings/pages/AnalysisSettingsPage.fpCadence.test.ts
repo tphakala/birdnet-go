@@ -40,7 +40,10 @@ vi.mock('$lib/utils/modelsApi', async () => {
 });
 
 vi.mock('$lib/stores/models.svelte', () => ({
-  invalidateModels: vi.fn(),
+  getAvailableModels: vi.fn(() => []),
+  modelsLoading: vi.fn(() => false),
+  refreshModels: vi.fn(),
+  watchModels: vi.fn(() => () => {}),
 }));
 
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
@@ -183,7 +186,7 @@ describe('AnalysisSettingsPage false positive filter cadence', () => {
       writable: true,
       configurable: true,
     });
-    navigation.redirect('/ui/settings/analysis');
+    navigation.redirect('/ui/settings/analysis?tab=filters');
     vi.mocked(t).mockClear();
     cadenceState.value = null;
   });

@@ -607,11 +607,6 @@
     (openVinoSupported || selectedDevice !== INFERENCE_AUTO) && selectedBackend !== BACKEND_ONNX
   );
 
-  // The Bats tab goes away when the last bat model is removed; leave it for the first tab.
-  $effect(() => {
-    if (pageTab === 'bats' && !hasBatModel) pageTab = 'detection';
-  });
-
   // ── Derived catalog views ─────────────────────────────────────────────
   // Installed models, with the permanent built-in classifier (BirdNET v2.4) sorted
   // first so it heads the list where the old hardcoded static card used to sit.

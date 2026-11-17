@@ -2,11 +2,14 @@ import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import userEvent from '@testing-library/user-event';
-import type { CatalogEntry, InstalledModel } from '$lib/types/models';
+import type { CatalogEntry } from '$lib/types/models';
+import type { BackendModel } from '$lib/stores/models.svelte';
 
 // The Analysis page tabs show an unsaved-change dot when any card badge on the tab would.
 // These tests pin which edits light which tab, using the same accessible description the
-// Security page tests use (the dot itself is aria-hidden, its sr-only text describes the tab).
+// Security page tests use (the dot itself is aria-hidden, its sr-only text describes the tab),
+// and the detection thresholds card: the shared threshold, the custom threshold switch and the
+// classifier rows built from the models list.
 
 vi.mock('$lib/utils/modelsApi', async () => {
   const actual =
@@ -24,8 +27,14 @@ vi.mock('$lib/utils/modelsApi', async () => {
   };
 });
 
+// The enabled models list (GET /api/v2/models) that drives the threshold rows. Tests set it
+// before rendering.
+const { modelsList } = vi.hoisted(() => ({ modelsList: { current: [] as BackendModel[] } }));
 vi.mock('$lib/stores/models.svelte', () => ({
-  invalidateModels: vi.fn(),
+  getAvailableModels: vi.fn(() => modelsList.current),
+  modelsLoading: vi.fn(() => false),
+  refreshModels: vi.fn(),
+  watchModels: vi.fn(() => () => {}),
 }));
 
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
@@ -84,8 +93,8 @@ vi.mock('$lib/stores/settings', async () => {
     birdnetSettings: derived(mockStore, state => state.formData.birdnet),
     dynamicThresholdSettings: derived(mockStore, state => state.formData.realtime.dynamicThreshold),
     realtimeSettings: derived(mockStore, state => state.formData.realtime),
-    // No bat, Perch or BirdNET v3.0 section in the config unless a test seeds one, as on a
-    // default install.
+    // No bat, Perch, BirdNET v3.0 or BirdNET+ section in the config unless a test seeds one,
+    // as on a default install.
     batSettings: derived(mockStore, state => state.formData.bat),
     bsgBatSettings: derived(mockStore, state => state.formData.bsgbat),
     perchSettings: derived(mockStore, state => state.formData.perch),
@@ -110,24 +119,41 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
+import { api } from '$lib/utils/api';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { settingsActions } from '$lib/stores/settings';
+import { t } from '$lib/i18n';
 
 const HAS_CHANGES = 'settings.tabs.hasChanges';
-
-const SETTINGS_SECTION_TITLE = {
-  bat: 'analysis.bat.title',
-  perch: 'analysis.perch.title',
-  birdnetv3: 'analysis.birdnetv3.title',
-  birdnetplus: 'analysis.birdnetplus.title',
-} as const;
-
-const PERCH_CATALOG_ID = 'perch-v2';
-const BIRDNET_V3_CATALOG_ID = 'birdnet-v3.0';
-const BIRDNET_PLUS_CATALOG_ID = 'birdnet-plus-v3.0';
 const BAT_CATALOG_ID = 'bat-test';
 const BSG_BAT_CATALOG_ID = 'bsg-bat';
 const EDITED_THRESHOLD = 0.7;
 const EDITED_TRIGGER = 0.9;
+const RANGE_STATUS_URL = '/api/v2/range/status';
+
+/** Enabled models as GET /api/v2/models lists them. */
+const MODEL = {
+  birdnet: { id: 'birdnet', registryId: 'BirdNET_V2.4', name: 'BirdNET v2.4', category: 'bird' },
+  bsg: { id: 'bsg', registryId: 'BSG', name: 'BSG Finland', category: 'bird' },
+  perch: { id: 'perch_v2', registryId: 'Perch_V2', name: 'Google Perch v2', category: 'wildlife' },
+  birdnetv3: {
+    id: 'birdnet_v3.0',
+    registryId: 'BirdNET_V3.0',
+    name: 'BirdNET v3.0',
+    category: 'wildlife',
+  },
+  birdnetplus: {
+    id: 'birdnet_plus_v3.0',
+    registryId: 'BirdNET_Plus_V3.0',
+    name: 'BirdNET+ V3.0',
+    category: 'wildlife',
+  },
+  bat: { id: 'bat', registryId: 'Bat', name: 'Bat Classifier', category: 'bat' },
+  bsgbat: { id: 'bsg_bat', registryId: 'BSG_BAT', name: 'BSG-BAT', category: 'bat' },
+} satisfies Record<string, BackendModel>;
+
+/** Tabs that are always present, in page order. The Bats tab exists only with a bat model. */
+const ALWAYS_TABS = ['detection', 'filters', 'inference', 'models'] as const;
 
 /** A fresh copy of the saved config every test starts from. */
 function savedConfig() {
@@ -136,10 +162,7 @@ function savedConfig() {
 
 /** Edit birdnet keys in the form copy only, as a control does. */
 function editBirdnet(patch: Record<string, unknown>) {
-  mockStore.update(state => ({
-    ...state,
-    formData: { ...state.formData, birdnet: { ...state.formData.birdnet, ...patch } },
-  }));
+  editSection('birdnet', patch);
 }
 
 /** Edit keys of a top-level config section in the form copy only. */
@@ -157,16 +180,6 @@ function seedSection(section: string, value: Record<string, unknown>) {
     originalData: { ...state.originalData, [section]: { ...value } },
     formData: { ...state.formData, [section]: { ...value } },
   }));
-}
-
-function installedModel(catalogId: string): InstalledModel {
-  return {
-    catalogId,
-    modelPath: `/models/${catalogId}.onnx`,
-    labelsPath: `/models/${catalogId}.txt`,
-    installedAt: '2026-01-01T00:00:00Z',
-    version: '1.0',
-  };
 }
 
 function batCatalogEntry(id: string = BAT_CATALOG_ID): CatalogEntry {
@@ -195,12 +208,21 @@ function descriptionOf(tab: HTMLElement): string {
   return id ? (document.getElementById(id)?.textContent ?? '') : '';
 }
 
-function settingsTab(): HTMLElement {
-  return screen.getByRole('tab', { name: /analysis\.tabs\.settings/ });
+function tab(id: string): HTMLElement {
+  return screen.getByRole('tab', { name: new RegExp(`analysis\\.tabs\\.${id}`) });
 }
 
-function modelsTab(): HTMLElement {
-  return screen.getByRole('tab', { name: /analysis\.tabs\.models/ });
+/** Which of the always-present tabs show the change dot. */
+function dottedTabs(): string[] {
+  return ALWAYS_TABS.filter(id => descriptionOf(tab(id)) === HAS_CHANGES);
+}
+
+/** Params of the t() calls made for a key, in call order. */
+function paramsFor(key: string): Array<Record<string, unknown>> {
+  return vi
+    .mocked(t)
+    .mock.calls.filter(([k]) => k === key)
+    .map(([, params]) => params ?? {});
 }
 
 // jsdom does not implement <dialog> showModal/close, which the page's dialogs call on mount.
@@ -213,57 +235,72 @@ beforeAll(() => {
   };
 });
 
-describe('AnalysisSettingsPage tab change dots', () => {
-  beforeEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-    // The saved copy is never edited, so the form copy starts equal to it.
-    mockStore.update(state => ({
-      ...state,
-      originalData: savedConfig(),
-      formData: savedConfig(),
-    }));
-    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [] });
-    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
-    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
-    // Use jsdom's real Location so the router reads the query string.
-    Object.defineProperty(window, 'location', {
-      value: document.location,
-      writable: true,
-      configurable: true,
-    });
-    navigation.redirect('/ui/settings/analysis');
+/** Reset the store, the mocks and the URL; open the page on the given tab. */
+function resetPage(tabId = 'detection') {
+  cleanup();
+  vi.clearAllMocks();
+  modelsList.current = [];
+  mockStore.update(state => ({ ...state, originalData: savedConfig(), formData: savedConfig() }));
+  vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [] });
+  vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
+  vi.mocked(api.get).mockResolvedValue({});
+  // Use jsdom's real Location so the router reads the query string.
+  Object.defineProperty(window, 'location', {
+    value: document.location,
+    writable: true,
+    configurable: true,
   });
+  navigation.redirect(`/ui/settings/analysis?tab=${tabId}`);
+}
 
+describe('AnalysisSettingsPage tab change dots', () => {
+  beforeEach(() => resetPage());
+
+  // Each edit lights exactly the tab its card renders on. A change pair left in the wrong tab's
+  // aggregate after a card moves would light the wrong tab.
   it.each([
+    { name: 'shared threshold', edit: () => editBirdnet({ threshold: 0.5 }), tab: 'detection' },
     {
-      name: 'a detection threshold edit lights only the Settings tab',
-      patch: { threshold: 0.5 },
-      settings: true,
-      models: false,
+      name: 'dynamic threshold',
+      edit: () =>
+        editSection('realtime', {
+          dynamicThreshold: { ...BASE_REALTIME.dynamicThreshold, trigger: EDITED_TRIGGER },
+        }),
+      tab: 'detection',
+    },
+    { name: 'species language', edit: () => editBirdnet({ locale: 'fi' }), tab: 'detection' },
+    {
+      name: 'false positive filter',
+      edit: () => editSection('realtime', { falsePositiveFilter: { level: 3 } }),
+      tab: 'filters',
     },
     {
-      name: 'a download source edit lights only the Models tab',
-      patch: { huggingFaceEndpoint: 'https://mirror.example.org' },
-      settings: false,
-      models: true,
+      name: 'range filter',
+      edit: () => editBirdnet({ rangeFilter: { threshold: EDITED_THRESHOLD } }),
+      tab: 'filters',
+    },
+    { name: 'inference threads', edit: () => editBirdnet({ threads: 2 }), tab: 'inference' },
+    {
+      name: 'inference backend',
+      edit: () => editBirdnet({ backend: 'openvino' }),
+      tab: 'inference',
     },
     {
-      name: 'a location edit lights neither tab, since Main owns the Location tab',
-      patch: { latitude: 61.5, longitude: 25.1 },
-      settings: false,
-      models: false,
+      name: 'download source',
+      edit: () => editBirdnet({ huggingFaceEndpoint: 'https://mirror.example.org' }),
+      tab: 'models',
     },
-  ])('$name', async ({ patch, settings, models }) => {
+    // Main owns the Location tab, so a location edit lights none of these.
+    { name: 'location', edit: () => editBirdnet({ latitude: 61.5, longitude: 25.1 }), tab: null },
+  ])('a $name edit lights only its tab', async ({ edit, tab: expected }) => {
     render(AnalysisSettingsPage);
     await tick();
-    editBirdnet(patch);
+    expect(dottedTabs()).toEqual([]);
+
+    edit();
     await tick();
 
-    expect({
-      settings: descriptionOf(settingsTab()),
-      models: descriptionOf(modelsTab()),
-    }).toEqual({ settings: settings ? HAS_CHANGES : '', models: models ? HAS_CHANGES : '' });
+    expect(dottedTabs()).toEqual(expected ? [expected] : []);
   });
 
   it('clears the dot when an edit is set back to the saved value', async () => {
@@ -271,294 +308,327 @@ describe('AnalysisSettingsPage tab change dots', () => {
     await tick();
     editBirdnet({ threshold: 0.5 });
     await tick();
-    expect(descriptionOf(settingsTab())).toBe(HAS_CHANGES);
+    expect(dottedTabs()).toEqual(['detection']);
 
-    editBirdnet({ threshold: 0.03 });
+    editBirdnet({ threshold: BASE_BIRDNET.threshold });
     await tick();
-    expect(descriptionOf(settingsTab())).toBe('');
+    expect(dottedTabs()).toEqual([]);
   });
 
-  it('shows no dot when nothing is edited, ignoring the model cards hidden for lack of a model', async () => {
-    // No bat, Perch or BirdNET v3.0 section in the saved config or the form, and none of those
-    // models installed: their hidden cards must not light the Settings tab.
+  it('treats an "auto" backend and an unset one as the same value', async () => {
     render(AnalysisSettingsPage);
     await tick();
-    expect(descriptionOf(settingsTab())).toBe('');
-    expect(descriptionOf(modelsTab())).toBe('');
+    editBirdnet({ backend: 'auto', openVinoDevice: 'auto' });
+    await tick();
+    expect(dottedTabs()).toEqual([]);
   });
 
-  it.each([
-    {
-      name: 'a range filter edit',
-      edit: () => editBirdnet({ rangeFilter: { threshold: EDITED_THRESHOLD } }),
-    },
-    {
-      name: 'a dynamic threshold edit',
-      edit: () =>
-        editSection('realtime', {
-          dynamicThreshold: { ...BASE_REALTIME.dynamicThreshold, trigger: EDITED_TRIGGER },
-        }),
-    },
-  ])('$name lights only the Settings tab', async ({ edit }) => {
-    render(AnalysisSettingsPage);
-    await tick();
-    expect(descriptionOf(settingsTab())).toBe('');
-
-    edit();
-    await tick();
-
-    expect(descriptionOf(settingsTab())).toBe(HAS_CHANGES);
-    expect(descriptionOf(modelsTab())).toBe('');
-  });
-
-  describe('model cards', () => {
-    const modelCases = [
+  describe('classifier threshold rows', () => {
+    const rowCases = [
       {
         name: 'Perch',
+        model: MODEL.perch,
         section: 'perch',
         saved: { overrideThreshold: false, threshold: 0.5 },
         edit: { overrideThreshold: true, threshold: EDITED_THRESHOLD },
-        titleKey: SETTINGS_SECTION_TITLE.perch,
-        install: () => {
-          vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([installedModel(PERCH_CATALOG_ID)]);
-        },
       },
       {
         name: 'BirdNET v3.0',
+        model: MODEL.birdnetv3,
         section: 'birdnetv3',
         saved: { overrideThreshold: false, threshold: 0.5 },
-        edit: { overrideThreshold: true, threshold: EDITED_THRESHOLD },
-        titleKey: SETTINGS_SECTION_TITLE.birdnetv3,
-        install: () => {
-          vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([
-            installedModel(BIRDNET_V3_CATALOG_ID),
-          ]);
-        },
+        edit: { overrideThreshold: true },
       },
       {
         name: 'BirdNET+ V3.0',
+        model: MODEL.birdnetplus,
         section: 'birdnetplus',
-        saved: { overrideThreshold: false, threshold: 0.5 },
-        edit: { overrideThreshold: true, threshold: EDITED_THRESHOLD },
-        titleKey: SETTINGS_SECTION_TITLE.birdnetplus,
-        install: () => {
-          vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([
-            installedModel(BIRDNET_PLUS_CATALOG_ID),
-          ]);
-        },
-      },
-      {
-        name: 'BSG-BAT',
-        section: 'bsgbat',
-        saved: { threshold: 0.5 },
+        saved: { overrideThreshold: true, threshold: 0.5 },
         edit: { threshold: EDITED_THRESHOLD },
-        titleKey: SETTINGS_SECTION_TITLE.bat,
-        install: () => {
-          // The bat card also reads the bat section, which a server always sends.
-          seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true });
-          vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
-            catalog: [batCatalogEntry(BSG_BAT_CATALOG_ID)],
-          });
-        },
       },
       {
         name: 'bat',
+        model: MODEL.bat,
         section: 'bat',
         saved: { enabled: true, threshold: 0.5, nighttimeOnly: true },
         edit: { threshold: EDITED_THRESHOLD },
-        titleKey: SETTINGS_SECTION_TITLE.bat,
-        install: () => {
-          vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [batCatalogEntry()] });
-        },
       },
       {
-        name: 'bat discard unlikely',
-        section: 'bat',
-        saved: {
-          enabled: true,
-          threshold: 0.5,
-          nighttimeOnly: true,
-          ultrasonicFilter: { enabled: true, discardUnlikely: false },
-        },
-        edit: { ultrasonicFilter: { enabled: true, discardUnlikely: true } },
-        titleKey: SETTINGS_SECTION_TITLE.bat,
-        install: () => {
-          vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [batCatalogEntry()] });
-        },
+        name: 'BSG-BAT',
+        model: MODEL.bsgbat,
+        section: 'bsgbat',
+        saved: { threshold: 0.5 },
+        edit: { threshold: EDITED_THRESHOLD },
       },
     ];
 
-    it.each(modelCases)(
-      'an edit of the $name card lights the Settings tab when the model is installed',
-      async ({ section, saved, edit, titleKey, install }) => {
-        install();
+    it.each(rowCases)(
+      'a $name threshold edit lights the Detection tab while the classifier is enabled',
+      async ({ model, section, saved, edit }) => {
+        modelsList.current = [model];
         seedSection(section, saved);
         render(AnalysisSettingsPage);
-        await screen.findByText(titleKey);
-        expect(descriptionOf(settingsTab())).toBe('');
+        await screen.findByTestId(`threshold-row-${model.id}`);
+        expect(dottedTabs()).toEqual([]);
 
         editSection(section, edit);
         await tick();
 
-        expect(descriptionOf(settingsTab())).toBe(HAS_CHANGES);
-        expect(descriptionOf(modelsTab())).toBe('');
+        expect(dottedTabs()).toEqual(['detection']);
       }
     );
 
-    it.each(modelCases)(
-      'an edit of the $name card does not light the Settings tab when the model is not installed',
-      async ({ section, saved, edit, titleKey }) => {
+    it.each(rowCases)(
+      'a $name threshold edit lights no tab while the classifier is not enabled',
+      async ({ model, section, saved, edit }) => {
         seedSection(section, saved);
         render(AnalysisSettingsPage);
-        await waitFor(() => expect(modelsApi.fetchInstalled).toHaveBeenCalled());
         await tick();
-        expect(screen.queryByText(titleKey)).toBeNull();
+        expect(screen.queryByTestId(`threshold-row-${model.id}`)).toBeNull();
 
         editSection(section, edit);
         await tick();
 
-        expect(descriptionOf(settingsTab())).toBe('');
+        expect(dottedTabs()).toEqual([]);
       }
     );
+  });
+
+  describe('Bats tab', () => {
+    it('is absent while no bat model is installed', async () => {
+      render(AnalysisSettingsPage);
+      await waitFor(() => expect(modelsApi.fetchCatalog).toHaveBeenCalled());
+      await tick();
+      expect(screen.queryByRole('tab', { name: /analysis\.tabs\.bats/ })).toBeNull();
+    });
+
+    it('lights for a bat card edit and leaves the other tabs alone', async () => {
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [batCatalogEntry()] });
+      seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true });
+      render(AnalysisSettingsPage);
+      const batsTab = await screen.findByRole('tab', { name: /analysis\.tabs\.bats/ });
+      expect(descriptionOf(batsTab)).toBe('');
+
+      editSection('bat', { nighttimeOnly: false });
+      await tick();
+
+      expect(descriptionOf(batsTab)).toBe(HAS_CHANGES);
+      expect(dottedTabs()).toEqual([]);
+    });
+
+    it('shows no dot for BSG-BAT while no bsgbat section is saved', async () => {
+      // A server always sends the bat section; the bsgbat section is the one left out.
+      modelsList.current = [MODEL.bsgbat];
+      seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true });
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+        catalog: [batCatalogEntry(BSG_BAT_CATALOG_ID)],
+      });
+      render(AnalysisSettingsPage);
+      const batsTab = await screen.findByRole('tab', { name: /analysis\.tabs\.bats/ });
+      await tick();
+
+      expect(descriptionOf(batsTab)).toBe('');
+      expect(dottedTabs()).toEqual([]);
+    });
   });
 });
 
-describe('AnalysisSettingsPage bat thresholds', () => {
-  const BATTY_LABEL = 'analysis.detection.batThreshold.label';
-  const BSG_BAT_LABEL = 'analysis.detection.bsgBatThreshold.label';
-  const BSG_BAT_WARNING = 'analysis.detection.bsgBatThreshold.sampleRateWarning';
+describe('AnalysisSettingsPage detection thresholds', () => {
+  beforeEach(() => resetPage());
 
-  beforeEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-    mockStore.update(state => ({
-      ...state,
-      originalData: savedConfig(),
-      formData: savedConfig(),
-    }));
-    vi.mocked(modelsApi.fetchInstalled).mockResolvedValue([]);
-    vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
-    Object.defineProperty(window, 'location', {
-      value: document.location,
-      writable: true,
-      configurable: true,
+  const SHARED_LABEL = 'analysis.thresholds.shared.label';
+
+  it('shows the shared threshold while BirdNET v2.4 is not enabled', async () => {
+    modelsList.current = [MODEL.birdnetplus];
+    render(AnalysisSettingsPage);
+    await screen.findByTestId('threshold-row-shared');
+
+    expect(screen.queryByTestId(`threshold-row-${MODEL.birdnet.id}`)).toBeNull();
+    expect(paramsFor('analysis.thresholds.shared.usedBy').at(-1)).toEqual({
+      models: MODEL.birdnetplus.name,
     });
-    navigation.redirect('/ui/settings/analysis');
   });
+
+  it('lists only the classifiers that use the shared threshold', async () => {
+    modelsList.current = [MODEL.birdnet, MODEL.perch, MODEL.bsg, MODEL.bat];
+    seedSection('perch', { overrideThreshold: true, threshold: 0.6 });
+    render(AnalysisSettingsPage);
+    await screen.findByTestId('threshold-row-shared');
+
+    expect(paramsFor('analysis.thresholds.shared.usedBy').at(-1)).toEqual({
+      models: `${MODEL.birdnet.name}, ${MODEL.bsg.name}`,
+    });
+  });
+
+  it('says so when no enabled classifier uses the shared threshold', async () => {
+    modelsList.current = [MODEL.bat];
+    render(AnalysisSettingsPage);
+    await screen.findByTestId('threshold-row-shared');
+
+    expect(screen.getByText('analysis.thresholds.shared.unused')).toBeInTheDocument();
+  });
+
+  it('gives no row to a classifier without a known threshold', async () => {
+    modelsList.current = [
+      MODEL.birdnet,
+      { id: 'mystery', registryId: 'Mystery_V1', name: 'Mystery', category: 'bird' },
+    ];
+    render(AnalysisSettingsPage);
+    await screen.findByTestId(`threshold-row-${MODEL.birdnet.id}`);
+
+    expect(screen.queryByTestId('threshold-row-mystery')).toBeNull();
+  });
+
+  it('saves a shared threshold edit to the birdnet section, rounded to the step', async () => {
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', { name: SHARED_LABEL });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '0.456');
+    await user.tab();
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnet', { threshold: 0.46 });
+  });
+
+  it('shows the shared value, disabled, on a row that uses it', async () => {
+    modelsList.current = [MODEL.perch];
+    seedSection('perch', { overrideThreshold: false, threshold: 0.6 });
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', { name: MODEL.perch.name });
+
+    expect(input).toBeDisabled();
+    expect(input).toHaveValue(BASE_BIRDNET.threshold);
+  });
+
+  it('switches a classifier to its custom threshold, keeping a saved value in range', async () => {
+    modelsList.current = [MODEL.perch];
+    seedSection('perch', { overrideThreshold: false, threshold: 0.6 });
+    render(AnalysisSettingsPage);
+    const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.perch.name) });
+
+    await userEvent.setup().click(toggle);
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('perch', {
+      overrideThreshold: true,
+    });
+  });
+
+  it('starts a custom threshold from the shared value when the saved one is out of range', async () => {
+    modelsList.current = [MODEL.birdnetv3];
+    // A saved 0 is accepted by the backend but below the row's minimum.
+    seedSection('birdnetv3', { overrideThreshold: false, threshold: 0 });
+    render(AnalysisSettingsPage);
+    const toggle = await screen.findByRole('switch', { name: new RegExp(MODEL.birdnetv3.name) });
+
+    await userEvent.setup().click(toggle);
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('birdnetv3', {
+      overrideThreshold: true,
+      threshold: BASE_BIRDNET.threshold,
+    });
+  });
+
+  it('saves a typed classifier threshold rounded to the step, to its own section only', async () => {
+    modelsList.current = [MODEL.bsgbat];
+    seedSection('bsgbat', { threshold: 0.5 });
+    render(AnalysisSettingsPage);
+    const input = await screen.findByRole('spinbutton', { name: MODEL.bsgbat.name });
+
+    const user = userEvent.setup();
+    await user.clear(input);
+    await user.type(input, '0.736');
+    await user.tab();
+
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('bsgbat', { threshold: 0.74 });
+    expect(
+      vi.mocked(settingsActions.updateSection).mock.calls.map(([section]) => section)
+    ).not.toContain('bat');
+  });
+});
+
+describe('AnalysisSettingsPage range filter scope', () => {
+  beforeEach(() => resetPage('filters'));
+
+  it('names only the classifiers the active range backend filters', async () => {
+    modelsList.current = [MODEL.birdnet, MODEL.perch, MODEL.bat];
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url === RANGE_STATUS_URL
+        ? {
+            geomodel: null,
+            classifiers: [
+              { id: 'BirdNET_V2.4', name: MODEL.birdnet.name, coveredByBackend: true },
+              { id: 'Perch_V2', name: MODEL.perch.name, coveredByBackend: false },
+            ],
+          }
+        : {}
+    );
+    render(AnalysisSettingsPage);
+
+    await waitFor(() =>
+      expect(paramsFor('analysis.scope.rangeFilter.appliesTo').at(-1)).toEqual({
+        models: MODEL.birdnet.name,
+      })
+    );
+    expect(paramsFor('analysis.scope.rangeFilter.notApplied').at(-1)).toEqual({
+      models: `${MODEL.perch.name}, ${MODEL.bat.name}`,
+    });
+  });
+});
+
+describe('AnalysisSettingsPage bat card', () => {
+  const BSG_BAT_WARNING = 'analysis.detection.bsgBatThreshold.sampleRateWarning';
+  const DISCARD_LABEL = 'analysis.detection.batDiscardUnlikely.label';
+  const FILTER_FIELDS = {
+    cvThreshold: 0.15,
+    fftSize: 8192,
+    hopSize: 4096,
+    frequencySplitHz: 20000,
+  };
+
+  beforeEach(() => resetPage('bats'));
 
   async function renderWithCatalog(...ids: string[]) {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: ids.map(id => batCatalogEntry(id)),
     });
     render(AnalysisSettingsPage);
-    await screen.findByText(SETTINGS_SECTION_TITLE.bat);
+    await screen.findByText('analysis.bat.title');
   }
 
-  it('shows only the BattyBirdNET threshold when only a BattyBirdNET model is installed', async () => {
+  function seedBat(ultrasonicFilter: Record<string, unknown>) {
+    seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true, ultrasonicFilter });
+  }
+
+  it('shows the BSG-BAT sample rate warning only while BSG-BAT is installed', async () => {
+    await renderWithCatalog(BAT_CATALOG_ID);
+    expect(screen.queryByText(BSG_BAT_WARNING)).toBeNull();
+
+    cleanup();
+    await renderWithCatalog(BSG_BAT_CATALOG_ID);
+    expect(screen.getByText(BSG_BAT_WARNING)).toBeInTheDocument();
+  });
+
+  it('shows the discard unlikely switch only while post detection validation is on', async () => {
+    seedBat({ enabled: false });
+    await renderWithCatalog(BAT_CATALOG_ID);
+    expect(screen.queryByText(DISCARD_LABEL)).toBeNull();
+
+    cleanup();
+    seedBat({ enabled: true });
+    await renderWithCatalog(BAT_CATALOG_ID);
+    expect(screen.getByText(DISCARD_LABEL)).toBeInTheDocument();
+  });
+
+  it('saves the discard unlikely switch without dropping the other filter fields', async () => {
+    const seeded = { enabled: true, ...FILTER_FIELDS };
+    seedBat(seeded);
     await renderWithCatalog(BAT_CATALOG_ID);
 
-    expect(screen.getByText(BATTY_LABEL)).toBeInTheDocument();
-    expect(screen.queryByText(BSG_BAT_LABEL)).toBeNull();
-    expect(screen.queryByText(BSG_BAT_WARNING)).toBeNull();
-  });
+    await userEvent.setup().click(screen.getByRole('switch', { name: DISCARD_LABEL }));
 
-  it('shows only the BSG-BAT threshold and its warning when only BSG-BAT is installed', async () => {
-    await renderWithCatalog(BSG_BAT_CATALOG_ID);
-
-    expect(screen.getByText(BSG_BAT_LABEL)).toBeInTheDocument();
-    expect(screen.getByText(BSG_BAT_WARNING)).toBeInTheDocument();
-    expect(screen.queryByText(BATTY_LABEL)).toBeNull();
-  });
-
-  it('gives each threshold field one form control under a direct grid child for the shared rows', async () => {
-    await renderWithCatalog(BAT_CATALOG_ID, BSG_BAT_CATALOG_ID);
-    const grid = screen.getByLabelText(BSG_BAT_LABEL).closest('.grid');
-
-    // The shared-row utilities select grid > * and grid > * > .form-control, so each field must
-    // keep that shape, with the label as the first child of its form control.
-    expect(grid?.querySelectorAll(':scope>*>.form-control')).toHaveLength(2);
-    expect(grid?.querySelectorAll(':scope>*>.form-control>label:first-child')).toHaveLength(2);
-  });
-
-  it('links the BSG-BAT warning to its threshold input', async () => {
-    await renderWithCatalog(BSG_BAT_CATALOG_ID);
-
-    const describedBy = screen.getByLabelText(BSG_BAT_LABEL).getAttribute('aria-describedby') ?? '';
-    const note = screen.getByText(BSG_BAT_WARNING).closest('[id]');
-    expect(note).not.toBeNull();
-    expect(describedBy.split(' ')).toContain(note?.id);
-  });
-
-  it('shows both thresholds when both bat models are installed', async () => {
-    await renderWithCatalog(BAT_CATALOG_ID, BSG_BAT_CATALOG_ID);
-
-    expect(screen.getByText(BATTY_LABEL)).toBeInTheDocument();
-    expect(screen.getByText(BSG_BAT_LABEL)).toBeInTheDocument();
-  });
-
-  it('shows no change dot for BSG-BAT while no bsgbat section is saved', async () => {
-    // A server always sends the bat section; the bsgbat section is the one left out.
-    seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true });
-    await renderWithCatalog(BSG_BAT_CATALOG_ID);
-    await screen.findByLabelText(BSG_BAT_LABEL);
-    await tick();
-
-    expect(descriptionOf(settingsTab())).toBe('');
-  });
-
-  it('saves a BSG-BAT threshold edit to the bsgbat section only', async () => {
-    seedSection('bsgbat', { threshold: 0.5 });
-    await renderWithCatalog(BSG_BAT_CATALOG_ID);
-
-    const user = userEvent.setup();
-    const input = screen.getByLabelText(BSG_BAT_LABEL);
-    await user.clear(input);
-    await user.type(input, '0.7');
-    await user.tab();
-
-    const { settingsActions } = await import('$lib/stores/settings');
-    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('bsgbat', {
-      threshold: EDITED_THRESHOLD,
-    });
-    expect(
-      vi.mocked(settingsActions.updateSection).mock.calls.map(([section]) => section)
-    ).not.toContain('bat');
-  });
-  describe('discard unlikely toggle', () => {
-    const DISCARD_LABEL = 'analysis.detection.batDiscardUnlikely.label';
-    const FILTER_FIELDS = {
-      cvThreshold: 0.15,
-      fftSize: 8192,
-      hopSize: 4096,
-      frequencySplitHz: 20000,
-    };
-
-    function seedBat(ultrasonicFilter: Record<string, unknown>) {
-      seedSection('bat', { enabled: true, threshold: 0.5, nighttimeOnly: true, ultrasonicFilter });
-    }
-
-    it('shows the toggle only while post detection validation is on', async () => {
-      seedBat({ enabled: false });
-      await renderWithCatalog(BAT_CATALOG_ID);
-      expect(screen.queryByText(DISCARD_LABEL)).toBeNull();
-
-      cleanup();
-      seedBat({ enabled: true });
-      await renderWithCatalog(BAT_CATALOG_ID);
-      expect(screen.getByText(DISCARD_LABEL)).toBeInTheDocument();
-    });
-
-    it('saves the toggle without dropping the other filter fields', async () => {
-      const seeded = { enabled: true, ...FILTER_FIELDS };
-      seedBat(seeded);
-      await renderWithCatalog(BAT_CATALOG_ID);
-
-      await userEvent.setup().click(screen.getByLabelText(DISCARD_LABEL));
-
-      const { settingsActions } = await import('$lib/stores/settings');
-      expect(settingsActions.updateSection).toHaveBeenLastCalledWith('bat', {
-        ultrasonicFilter: { ...seeded, discardUnlikely: true },
-      });
+    expect(settingsActions.updateSection).toHaveBeenLastCalledWith('bat', {
+      ultrasonicFilter: { ...seeded, discardUnlikely: true },
     });
   });
 });

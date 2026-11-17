@@ -2544,12 +2544,12 @@
           "title": "Dynamiskt tröskelvärde",
           "description": "Justera detektionskänsligheten automatiskt baserat på tidigare observationer",
           "enable": {
-            "label": "Aktivera dynamiskt tröskelvärde (BirdNET-Go-specifik funktion)",
-            "helpText": "Aktiverar funktionen för dynamiskt konfidenströskelvärde för mer adaptiv fågellätedetektering."
+            "label": "Aktivera dynamiskt tröskelvärde",
+            "helpText": "Sänker konfidenströskeln för en art efter att den har detekterats med hög konfidens."
           },
           "trigger": {
             "label": "Utlösningströskelvärde",
-            "helpText": "Konfidensnivån vid vilken det dynamiska tröskelvärdet aktiveras. Om ett fågelläte detekteras med konfidens över detta värde sänks tröskelvärdet för positiva matchningar av den arten för efterföljande läten."
+            "helpText": "Konfidensnivån vid vilken det dynamiska tröskelvärdet aktiveras. Om en art detekteras med konfidens över detta värde sänks tröskelvärdet för positiva matchningar av den arten för efterföljande detekteringar."
           },
           "minimum": {
             "label": "Minsta dynamiskt tröskelvärde",
@@ -2598,7 +2598,7 @@
           "overloadedNoticeTitle": "Den här enheten hinner inte med analysen",
           "overloadedNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning. Analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant.",
           "unknownLatency": "Bearbetningstiden kunde inte mätas för {models}, så den räknas inte med när överlappningen begränsas. Analysen kan ändå hamna efter.",
-          "cpuNote": "En högre styrka analyserar överlappande ljud oftare, vilket kostar CPU-tid för varje aktiverad modell och ljudkälla. BirdNET-Go begränsar överlappningen automatiskt till vad den här enheten klarar att bearbeta."
+          "cpuNote": "En högre styrka analyserar överlappande ljud oftare, vilket kostar CPU-tid för varje aktiverad klassificerare som detta filter gäller för och för varje ljudkälla. BirdNET-Go begränsar överlappningen automatiskt till vad den här enheten klarar att bearbeta."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
@@ -5785,25 +5785,19 @@
     "title": "Analys",
     "tabs": {
       "models": "Modeller",
-      "detection": "Detection",
-      "bats": "Bats",
-      "inference": "Inference",
-      "filters": "Filters"
+      "detection": "Detektion",
+      "bats": "Fladdermöss",
+      "inference": "Inferens",
+      "filters": "Filter"
     },
     "detection": {
       "title": "Detektionsinställningar",
       "description": "Konfigurera konfidenströsklar och språk för artklassificering.",
-      "confidenceThreshold": {
-        "label": "Konfidenströskel",
-        "helpText": "Lägsta konfidensvärde (0,0 - 1,0) som krävs för att en detektering ska registreras."
-      },
       "batThreshold": {
-        "label": "Tröskel för fladdermöss-detektion (BattyBirdNET)",
-        "helpText": "Minsta konfidenspoäng för BattyBirdNET:s detektering av fladdermusarter. BSG-BAT har en egen tröskel."
+        "label": "Tröskel för fladdermöss-detektion (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Tröskel för fladdermöss-detektion (BSG-BAT)",
-        "helpText": "Minsta konfidenspoäng för BSG-BAT:s detektering av fladdermusarter.",
         "sampleRateWarning": "Inspelningar med 192 kHz fungerar, men arter som ropar över 96 kHz kan inte identifieras och poängen är mindre tillförlitliga. En inspelningsfrekvens på 384 kHz rekommenderas."
       },
       "bsgBatStep": {
@@ -5844,23 +5838,6 @@
       "locale": {
         "label": "Artspråk",
         "helpText": "Språk som används för arternas vardagliga namn i gränssnittet."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold below. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override above to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
-      },
-      "birdnetplusThreshold": {
-        "label": "Konfidenströskel för BirdNET+ V3.0"
       }
     },
     "rangeFilter": {
@@ -5878,13 +5855,13 @@
         "noFilter": "Inget områdesfilter aktivt",
         "passUnmapped": {
           "label": "Tillåt arter utan områdesdata",
-          "helpText": "Tillåt detektioner av arter som geomodellen saknar geografiska data för. När inaktiverad filtreras dessa arter alltid bort."
+          "helpText": "Tillåt detektioner av arter som geomodellen saknar geografiska data för. När inaktiverad filtreras dessa arter alltid bort. Detta påverkar bara de klassificerare som områdesfiltret gäller för."
         }
       }
     },
     "advanced": {
       "title": "Avancerat",
-      "description": "Bearbetning och anpassad modellkonfiguration."
+      "description": "Anpassade modell- och etikettfiler."
     },
     "downloadSource": {
       "title": "Nedladdningskälla",
@@ -5898,7 +5875,7 @@
     },
     "gallery": {
       "title": "Modellgalleri",
-      "description": "Hantera klassificeringsmodeller för fågel- och fladdermusdetektion.",
+      "description": "Hantera klassificeringsmodellerna.",
       "region": {
         "title": "Modellregion",
         "modeAuto": "Automatisk",
@@ -6085,86 +6062,83 @@
     },
     "bat": {
       "title": "Fladdermusdetektering",
-      "description": "Konfigurera tröskel, schemaläggning och filtrering av falska positiva för fladdermusklassificerare."
+      "description": "Schemaläggning, validering och filtrering av falska positiva för fladdermusklassificerare."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
     },
     "birdnetplus": {
-      "title": "BirdNET+ V3.0-detektering",
-      "description": "Ange ett eget konfidenströskelvärde för BirdNET+ V3.0-detekteringar, oberoende av det huvudsakliga BirdNET-tröskelvärdet."
+      "title": "BirdNET+ V3.0-detektering"
     },
     "thresholds": {
-      "title": "Detection thresholds",
-      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "title": "Detektionströsklar",
+      "description": "Minsta konfidens en detektering behöver innan den registreras, för varje aktiverad klassificerare.",
       "category": {
-        "bat": "Bat"
+        "bat": "Fladdermöss"
       },
       "state": {
-        "pending": "Loading",
-        "failed": "Failed to load"
+        "pending": "Läser in",
+        "failed": "Det gick inte att läsa in"
       },
-      "empty": "No classifiers are enabled.",
+      "empty": "Inga klassificerare är aktiverade.",
       "shared": {
-        "label": "Shared threshold",
-        "usedBy": "Used by every classifier without a custom threshold: {models}.",
-        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+        "label": "Delat tröskelvärde",
+        "usedBy": "Används av varje klassificerare utan eget tröskelvärde: {models}.",
+        "unused": "Används av varje klassificerare utan eget tröskelvärde. Ingen aktiverad klassificerare använder det just nu."
       },
-      "customSwitch": "Custom threshold",
-      "usesShared": "Uses the shared threshold"
+      "customSwitch": "Anpassat tröskelvärde",
+      "usesShared": "Använder det delade tröskelvärdet"
     },
     "speciesNames": {
-      "title": "Species names",
-      "description": "How detected species are named in the interface."
+      "title": "Artnamn",
+      "description": "Hur detekterade arter namnges i gränssnittet."
     },
     "inference": {
       "runtime": {
-        "title": "Inference runtime",
-        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+        "title": "Inferenskörtid",
+        "description": "Vilken körtid och enhet som kör klassificerarna, och hur många CPU-trådar de använder."
       },
       "backend": {
         "label": "Backend",
-        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "helpText": "Automatiskt väljer den snabbaste körtiden som den här enheten stöder för varje modell.",
         "options": {
-          "auto": "Auto (recommended)",
+          "auto": "Automatiskt (rekommenderat)",
           "onnx": "ONNX Runtime",
           "openvino": "OpenVINO"
         }
       },
       "device": {
-        "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
+        "label": "OpenVINO-enhet",
+        "helpText": "Används för modeller som körs på OpenVINO.",
         "options": {
-          "auto": "Auto",
+          "auto": "Automatiskt",
           "cpu": "CPU",
           "gpu": "GPU"
         }
       },
-      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
-      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "reloadNote": "Byte av backend eller enhet laddar om modellerna, så detekteringen pausar i några sekunder.",
+      "backendsUnavailable": "Kunde inte läsa vilka körtider den här enheten stöder. Backend och enhet kan ändras när den har lästs in.",
       "running": {
-        "title": "Running now",
-        "description": "The runtime and precision each enabled classifier runs with.",
-        "unknown": "Not reported"
+        "title": "Körs nu",
+        "description": "Körtiden och precisionen som varje aktiverad klassificerare körs med.",
+        "unknown": "Ej rapporterad"
       }
     },
     "scope": {
-      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
-      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
-      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
-      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "dynamicThreshold": "Gäller alla klassificerare, inklusive fladdermusklassificerare. En art med eget anpassat tröskelvärde justeras inte.",
+      "speciesNames": "Gäller alla klassificerare. En art utan namn på det valda språket behåller namnet från sin klassificerare.",
+      "falsePositiveFilter": "Gäller alla klassificerare utom fladdermusklassificerare, som har sitt eget filter för falska positiva.",
+      "falsePositiveFilterBatTab": "Gäller alla klassificerare utom fladdermusklassificerare, som har sitt eget filter för falska positiva på fliken Fladdermöss.",
       "rangeFilter": {
-        "appliesTo": "Applies to {models}.",
-        "notApplied": "Not range filtered: {models}.",
-        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
-        "needsLocation": "Works only when the station location is set."
+        "appliesTo": "Gäller {models}.",
+        "notApplied": "Inte områdesfiltrerad: {models}.",
+        "generic": "Gäller de klassificerare som områdesmodellen stöder. Fladdermusklassificerare områdesfiltreras aldrig.",
+        "needsLocation": "Fungerar bara när stationsplatsen är inställd."
       },
-      "bat": "Applies to bat classifiers only."
+      "bat": "Gäller bara fladdermusklassificerare."
     }
   },
   "restart": {

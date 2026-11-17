@@ -30,7 +30,10 @@ vi.mock('$lib/utils/modelsApi', async () => {
 });
 
 vi.mock('$lib/stores/models.svelte', () => ({
-  invalidateModels: vi.fn(),
+  getAvailableModels: vi.fn(() => []),
+  modelsLoading: vi.fn(() => false),
+  refreshModels: vi.fn(),
+  watchModels: vi.fn(() => () => {}),
 }));
 
 // The region selector fetches on mount and is irrelevant to this flow; stub it to a
@@ -97,7 +100,7 @@ import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
 import { MODEL_OPERATION_IN_PROGRESS_KEY } from '$lib/utils/modelsApi';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
-import { invalidateModels } from '$lib/stores/models.svelte';
+import { refreshModels } from '$lib/stores/models.svelte';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
@@ -175,7 +178,7 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     await screen.findByRole('button', { name: installButtonName });
     navigation.navigate('/ui/settings/analysis?tab=removed&modelTab=available');
     await waitFor(() =>
-      expect(screen.getByRole('tab', { name: /analysis\.tabs\.settings/ })).toHaveAttribute(
+      expect(screen.getByRole('tab', { name: /analysis\.tabs\.detection/ })).toHaveAttribute(
         'aria-selected',
         'true'
       )
@@ -374,8 +377,8 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
       }
 
       await waitFor(() => expect(settingsActions.refreshKeepingEdits).toHaveBeenCalledTimes(1));
-      // invalidateModels runs inside the 2 s completion timer, which unmount cancels.
-      expect(invalidateModels).not.toHaveBeenCalled();
+      // refreshModels runs inside the 2 s completion timer, which unmount cancels.
+      expect(refreshModels).not.toHaveBeenCalled();
     }
   );
 });

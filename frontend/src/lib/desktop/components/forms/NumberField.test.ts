@@ -16,6 +16,20 @@ describe('NumberField', () => {
     expect(screen.getByRole('spinbutton')).toHaveValue(0);
   });
 
+  it('applies labelClassName to the label and keeps the field named by it', () => {
+    render(NumberField, {
+      props: {
+        label: 'Shared threshold',
+        labelClassName: 'sr-only',
+        value: 0.7,
+        onUpdate: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Shared threshold').closest('label')).toHaveClass('sr-only');
+    expect(screen.getByRole('spinbutton', { name: 'Shared threshold' })).toHaveValue(0.7);
+  });
+
   it('passes extra describedby ids to the input after the help text id', () => {
     render(NumberField, {
       props: {
