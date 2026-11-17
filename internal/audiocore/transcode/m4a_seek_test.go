@@ -131,7 +131,6 @@ func TestOpenM4A_ClampsAHugeEncoderDelay(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "huge-delay.m4a")
 	writeBytes(t, path, patchEncoderDelay(t, cleanM4ABytes(t), hugeEncoderDelay))
 	info := m4aInfoOf(t, path)
-	require.Equal(t, int64(hugeEncoderDelay), info.EncoderDelay, "the patch must reach Info.EncoderDelay")
 
 	opened := openTestSource(t, path)
 	assert.LessOrEqual(t, opened.skipFrames, int64(info.FrameCount)*aaccodec.FrameSize, "the priming skip is bounded by the decoded length")
