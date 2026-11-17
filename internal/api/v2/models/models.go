@@ -556,6 +556,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 		recsByVariant, recommendedVariant, hostArch = c.rankCatalog(visible, ortStatus)
 	}
 
+	docSvc := c.documentSvc()
 	for i := range visible {
 		entry := &visible[i]
 
@@ -605,7 +606,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			HasGeomodel:          classifier.ProvidesGeomodel(entry, ""),
 			DependsOn:            entry.DependsOn,
 			Permanent:            classifier.IsPermanentEntry(entry),
-			Documents:            c.buildDocumentResponses(entry),
+			Documents:            buildDocumentResponses(docSvc, entry),
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
 			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID], hostArch),
@@ -635,8 +636,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 
 // buildDocumentResponses maps the documents of the entry's own repo to their API
 // form; an entry with none gets an empty slice, which omitempty drops.
-func (c *Handler) buildDocumentResponses(entry *classifier.CatalogEntry) []CatalogDocumentResponse {
-	svc := c.documentSvc()
+func buildDocumentResponses(svc documentService, entry *classifier.CatalogEntry) []CatalogDocumentResponse {
 	docs := svc.EntryDocuments(entry)
 	out := make([]CatalogDocumentResponse, 0, len(docs))
 	for i := range docs {

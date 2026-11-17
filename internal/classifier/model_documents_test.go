@@ -1,8 +1,6 @@
 package classifier
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,12 +22,6 @@ const (
 	testDocText     = "You may use this model only for conservation.\n"
 )
 
-// testDocHash returns the hex sha256 of text.
-func testDocHash(text string) string {
-	sum := sha256.Sum256([]byte(text))
-	return hex.EncodeToString(sum[:])
-}
-
 // testPolicyDoc returns a hosted agreement document for repo pinned to text.
 func testPolicyDoc(repo, text string) RepoDocument {
 	return RepoDocument{
@@ -38,7 +30,7 @@ func testPolicyDoc(repo, text string) RepoDocument {
 		RequiresAgreement: true,
 		Path:              testDocPath,
 		Revision:          testDocRevision,
-		SHA256:            testDocHash(text),
+		SHA256:            sha256Hex([]byte(text)),
 	}
 }
 
