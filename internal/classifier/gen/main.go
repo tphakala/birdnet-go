@@ -31,6 +31,11 @@
 // Bootstrap safety: this program is package main and does NOT import
 // internal/classifier, so a broken generated file never blocks regenerating it.
 //
+// A second output, model_catalog_documents_gen.go, carries the licence and
+// policy documents of every vendored manifest (gen/manifests/*.models.json and
+// the document-only gen/manifests/documents/*.models.json) as a registry keyed
+// by repo; see documents.go.
+//
 // Run via: go generate ./internal/classifier
 package main
 
@@ -170,7 +175,11 @@ type regionTally struct{ total, live int }
 // manifest and its nested types mirror only the acoustic-models schema-2 fields
 // this generator consumes. Unknown fields are ignored.
 type manifest struct {
-	Models []manifestModel `json:"models"`
+	// Repo is the HuggingFace repository the manifest describes; the document
+	// registry is keyed by it.
+	Repo       string             `json:"repo"`
+	FamilyMeta manifestFamilyMeta `json:"family_meta"`
+	Models     []manifestModel    `json:"models"`
 }
 
 type manifestModel struct {
@@ -298,7 +307,7 @@ func run() error {
 		return fmt.Errorf("write %s: %w", outputFile, err)
 	}
 	fmt.Printf("wrote %s (%d variants across %d families)\n", outputFile, total, len(families))
-	return nil
+	return runDocuments()
 }
 
 // build parses the family's manifest and region table and returns the rendered

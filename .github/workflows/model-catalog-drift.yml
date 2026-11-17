@@ -5,6 +5,7 @@ on:
     paths:
       - 'internal/classifier/gen/**'
       - 'internal/classifier/model_catalog_regional_gen.go'
+      - 'internal/classifier/model_catalog_documents_gen.go'
       - 'internal/classifier/region/data/**'
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'internal/classifier/gen/**'
       - 'internal/classifier/model_catalog_regional_gen.go'
+      - 'internal/classifier/model_catalog_documents_gen.go'
       - 'internal/classifier/region/data/**'
 
 permissions:
@@ -41,18 +43,19 @@ jobs:
 
       - name: Check for drift
         run: |
-          if git diff --exit-code -- internal/classifier/model_catalog_regional_gen.go; then
+          if git diff --exit-code -- internal/classifier/model_catalog_regional_gen.go internal/classifier/model_catalog_documents_gen.go; then
             echo "### Model Catalog In Sync" >> $GITHUB_STEP_SUMMARY
           else
             echo "### Model Catalog Out Of Sync" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The committed \`internal/classifier/model_catalog_regional_gen.go\` does not match" >> $GITHUB_STEP_SUMMARY
+            echo "The committed \`internal/classifier/model_catalog_regional_gen.go\` or" >> $GITHUB_STEP_SUMMARY
+            echo "\`internal/classifier/model_catalog_documents_gen.go\` does not match" >> $GITHUB_STEP_SUMMARY
             echo "the output of \`go generate ./internal/classifier\`." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "Run the following and commit the result:" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "go generate ./internal/classifier" >> $GITHUB_STEP_SUMMARY
-            echo "git add internal/classifier/model_catalog_regional_gen.go" >> $GITHUB_STEP_SUMMARY
+            echo "git add internal/classifier/model_catalog_regional_gen.go internal/classifier/model_catalog_documents_gen.go" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi

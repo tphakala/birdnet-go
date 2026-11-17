@@ -2,13 +2,29 @@
   "schema": 2,
   "repo": "tphakala/BirdNET-Plus-V3.0",
   "family": "birdnet-plus",
-  "updated": "2026-11-15",
+  "updated": "2026-11-16",
   "family_meta": {
     "display_name": "BirdNET+ V3.0",
     "description": "BirdNET+ V3.0 global wildlife classifier (11,725 classes: 11,709 species, birds and other fauna, and 16 non-animal sound classes; scientific and common names).",
     "author": "Cornell Lab of Ornithology & Chemnitz University of Technology",
     "license": "Apache-2.0",
     "commercial_use": true,
+    "documents": [
+      {
+        "kind": "license",
+        "requires_agreement": false,
+        "path": "LICENSE-v3.0.md",
+        "revision": "ba1c7529e785e9ec745dcbb3271853abfa3026d6",
+        "sha256": "d14187d490b14db618cb397e9ba96576d928006fbfd248ab80b3b64a35c7658d"
+      },
+      {
+        "kind": "acceptable_use",
+        "requires_agreement": true,
+        "path": "ACCEPTABLE_USE-v3.0.md",
+        "revision": "ba1c7529e785e9ec745dcbb3271853abfa3026d6",
+        "sha256": "3ede50997d96045d7753576547d615c0bc6a33a5d87bffce9d3c5888dec9ed86"
+      }
+    ],
     "channel": "stable",
     "upstream_url": "https://doi.org/10.5281/zenodo.24162518",
     "species_count": 11725,
@@ -22,6 +38,22 @@
         "channel": "stable",
         "license": "Apache-2.0",
         "commercial_use": true,
+        "documents": [
+          {
+            "kind": "license",
+            "requires_agreement": false,
+            "path": "LICENSE-v3.0.md",
+            "revision": "ba1c7529e785e9ec745dcbb3271853abfa3026d6",
+            "sha256": "d14187d490b14db618cb397e9ba96576d928006fbfd248ab80b3b64a35c7658d"
+          },
+          {
+            "kind": "acceptable_use",
+            "requires_agreement": true,
+            "path": "ACCEPTABLE_USE-v3.0.md",
+            "revision": "ba1c7529e785e9ec745dcbb3271853abfa3026d6",
+            "sha256": "3ede50997d96045d7753576547d615c0bc6a33a5d87bffce9d3c5888dec9ed86"
+          }
+        ],
         "upstream_source": "https://github.com/birdnet-team/model-converter/tree/85e80e5d2740b6cd7222fd9dcfab6da90feb6951/models/02_BirdNET%2B_V3.0_Global_12K"
       }
     }
