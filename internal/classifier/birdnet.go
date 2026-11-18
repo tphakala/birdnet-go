@@ -776,9 +776,12 @@ var stockMDataRangeFilterNames = [...]string{
 }
 
 // isStockMDataRangeFilterPath reports whether modelPath names a stock MData range
-// filter model file. Only the base name counts, compared case-insensitively because
-// Windows file names are case-insensitive. An empty path is not a stock path.
+// filter model file. Environment variables are expanded first, as getMetaModelData
+// and buildMappedGeoModel do when they load a path; then only the base name counts,
+// compared case-insensitively because Windows file names are case-insensitive. An
+// empty path is not a stock path.
 func isStockMDataRangeFilterPath(modelPath string) bool {
+	modelPath = os.ExpandEnv(modelPath)
 	if modelPath == "" {
 		return false
 	}

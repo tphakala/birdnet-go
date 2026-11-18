@@ -145,6 +145,20 @@ func TestIsStockMDataRangeFilterPath(t *testing.T) {
 	}
 }
 
+// TestIsStockMDataRangeFilterPath_ExpandsEnv pins that a model path written through
+// an environment variable is judged by the file it expands to, the same expansion
+// the range filter loader applies, so a stock MData file named that way still yields
+// to an installed geomodel.
+func TestIsStockMDataRangeFilterPath_ExpandsEnv(t *testing.T) {
+	// Not parallel: t.Setenv.
+	t.Setenv("BNG_TEST_RF_DIR", DefaultModelDirectory)
+	t.Setenv("BNG_TEST_RF_MODEL", filepath.Join(DefaultModelDirectory, DefaultRangeFilterV2ONNXModelName))
+
+	assert.True(t, isStockMDataRangeFilterPath("${BNG_TEST_RF_MODEL}"), "a whole path in a variable")
+	assert.True(t, isStockMDataRangeFilterPath(filepath.Join("${BNG_TEST_RF_DIR}", DefaultRangeFilterV1ModelName)), "a variable directory")
+	assert.False(t, isStockMDataRangeFilterPath("${BNG_TEST_RF_UNSET}"), "an unset variable expands to nothing")
+}
+
 // TestRangeFilterYieldsToGeomodel pins which range filter configs give way to an
 // installed geomodel: every model value except v3, with no path or a stock MData path.
 // A custom path never yields.
