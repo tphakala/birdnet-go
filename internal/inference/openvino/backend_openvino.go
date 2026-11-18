@@ -378,6 +378,7 @@ import "unsafe" //nolint:gocritic // dupImport: false positive with cgo import "
 
 import (
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -390,24 +391,39 @@ import (
 // True here (built under the "openvino" tag); false in stub_noopenvino.go.
 const Supported = true
 
-// loadedLibraryPath records the path handed to the loader that bound
-// libopenvino_c, set once by the first successful load. The bound handle is kept
-// for the process lifetime and reused on later InitOV calls, so a
-// later InitOV with a different path (after ov_core_create failed once) does
-// not change which library is in use. Never guarded by ovMu, so a reader cannot
-// block behind a model compile.
-var loadedLibraryPath atomic.Pointer[string]
+// loadedLibrary records the library that bound libopenvino_c: the path handed
+// to the loader (after resolution) and whether it came from configuration.
+type loadedLibrary struct {
+	path       string
+	configured bool
+}
+
+// loadedLib is set once by the first successful load. The bound handle is kept
+// for the process lifetime and reused on later InitOV calls, so a later InitOV
+// with a different path (after ov_core_create failed once) does not change which
+// library is in use. Never guarded by ovMu, so a reader cannot block behind a
+// model compile.
+var loadedLib atomic.Pointer[loadedLibrary]
 
 // LoadedLibraryPath reports the library path passed to the loader that bound
-// libopenvino_c; "" means the default soname (DefaultLibraryName). loaded is
-// false until a load has succeeded. It is an atomic read and never waits on a
-// model compile.
+// libopenvino_c: the configured path made absolute, a discovered path, or ""
+// for a load by the default library name (DefaultLibraryName). loaded is false
+// until a load has succeeded. It is an atomic read and never waits on a model
+// compile.
 func LoadedLibraryPath() (path string, loaded bool) {
-	p := loadedLibraryPath.Load()
-	if p == nil {
+	l := loadedLib.Load()
+	if l == nil {
 		return "", false
 	}
-	return *p, true
+	return l.path, true
+}
+
+// LoadedLibraryConfigured reports whether the bound library path came from
+// configuration (true) or from automatic discovery or the default library name
+// (false). It is false until a load has succeeded.
+func LoadedLibraryConfigured() bool {
+	l := loadedLib.Load()
+	return l != nil && l.configured
 }
 
 const (
@@ -442,19 +458,15 @@ var (
 // scrubPaths (e.g. the model or library path) are redacted from the OpenVINO
 // message so file paths do not leak into errors or telemetry.
 func lastErr(op string, status C.ov_status_e, scrubPaths ...string) error {
-	msg := C.GoString(C.ovbind_get_last_err_msg())
-	for _, p := range scrubPaths {
-		if p != "" {
-			msg = strings.ReplaceAll(msg, p, "<path>")
-		}
-	}
+	msg := scrubLibraryPaths(C.GoString(C.ovbind_get_last_err_msg()), scrubPaths...)
 	return errors.Newf("openvino: %s failed: status=%d: %s", op, int(status), msg).Build()
 }
 
-// InitOV loads libopenvino_c (libraryPath, or by soname when empty), binds its
-// symbols and creates the process-global core. It is idempotent and safe to
-// retry after a failure so hot-reload recovery can re-attempt with a corrected
-// path. It mirrors inference.InitONNXRuntime semantics. The core is freed only
+// InitOV loads libopenvino_c (libraryPath; when empty, the platform default:
+// the soname on Unix, an automatic search of the known install locations and
+// then the bare DLL name on Windows), binds its symbols and creates the
+// process-global core. It is idempotent and safe to retry after a failure so
+// hot-reload recovery can re-attempt with a corrected path. It mirrors inference.InitONNXRuntime semantics. The core is freed only
 // by DestroyOV, never on a model reload.
 func InitOV(libraryPath string) error {
 	// Pin to one OS thread so the load/create call and any ov_get_last_err_msg
@@ -469,27 +481,44 @@ func InitOV(libraryPath string) error {
 	}
 
 	if C.ovbind_is_loaded() == 0 {
-		err := bindLibrary(libraryPath)
+		resolved, _ := resolveLibraryPath(libraryPath, platformDiscoveryDeps())
+		err := bindLibrary(resolved)
 		if err != nil {
-			errMsg := err.Error()
-			if libraryPath != "" {
-				errMsg = strings.ReplaceAll(errMsg, libraryPath, "<path>")
-			}
-			return errors.Newf("openvino: failed to load libopenvino_c: %s", errMsg).Build()
+			return errors.Newf("openvino: failed to load libopenvino_c: %s",
+				scrubLibraryPaths(err.Error(), libraryPath, resolved)).Build()
 		}
 		// Only the first success loads the library; later ones reuse the
-		// handle (see loadedLibraryPath).
-		loaded := libraryPath
-		loadedLibraryPath.CompareAndSwap(nil, &loaded)
+		// handle (see loadedLib).
+		loadedLib.CompareAndSwap(nil, &loadedLibrary{path: resolved, configured: libraryPath != ""})
 	}
 
 	var core *C.ov_core_t
 	if st := C.ovbind_core_create(&core); !ovOK(st) {
-		return lastErr("ov_core_create", st)
+		scrub := []string{libraryPath}
+		if l := loadedLib.Load(); l != nil {
+			scrub = append(scrub, l.path)
+		}
+		return lastErr("ov_core_create", st, scrub...)
 	}
 	ovCore = core
 	ovLoaded = true
 	return nil
+}
+
+// scrubLibraryPaths redacts each non-empty path from msg, longest first, so
+// file paths do not leak into errors or telemetry.
+func scrubLibraryPaths(msg string, paths ...string) string {
+	// Longest first: a configured relative path can be a suffix of its resolved
+	// absolute form, and replacing the suffix first would leave the directory
+	// prefix of the absolute path in the message.
+	paths = slices.Clone(paths)
+	slices.SortFunc(paths, func(a, b string) int { return len(b) - len(a) })
+	for _, p := range paths {
+		if p != "" {
+			msg = strings.ReplaceAll(msg, p, "<path>")
+		}
+	}
+	return msg
 }
 
 // bindLibrary loads the library, resolves every symbol in OVBIND_SYMBOLS order

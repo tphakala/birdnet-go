@@ -11,7 +11,7 @@ OpenVINO is an optional inference backend that can run BirdNET-Go's neural netwo
 
 **You want this if:** you run on an Intel machine with an integrated GPU and want to offload inference to it, or you run a Raspberry Pi 5 and want to opt into the OpenVINO CPU path with `birdnet.backend: openvino` or `birdnet.openvinodevice: cpu`.
 
-**You can skip this if:** you are on a Raspberry Pi 4 or older ARM board (no native f16, OpenVINO is slower there), on Windows or macOS (the OpenVINO backend is Linux-only), or you are happy with ONNX Runtime performance.
+**You can skip this if:** you are on a Raspberry Pi 4 or older ARM board (no native f16, OpenVINO is slower there), on macOS (no OpenVINO backend), or you are happy with ONNX Runtime performance.
 
 **Docker / container installs:** The published Linux images bundle the OpenVINO runtime libraries. amd64 images also bundle the Intel GPU compute runtime (NEO/OpenCL driver), including Intel's legacy driver track for older Gen8, Gen9 and Gen11 iGPUs (for example Coffee Lake UHD 630), so iGPU offload works as soon as you pass the device through. See [Enabling OpenVINO in Docker](#enabling-openvino-in-docker).
 
@@ -182,6 +182,18 @@ birdnet:
 
 Start BirdNET-Go and [verify](#verifying-openvino-is-active).
 
+## Enabling OpenVINO on Windows
+
+The Windows x86-64 binaries are built with the OpenVINO backend compiled in, but the OpenVINO runtime is not included. Install it yourself, either the OpenVINO Toolkit package from Intel (for example through `winget`) or Intel's archive release. You do not need to run `setupvars` or edit `PATH`: BirdNET-Go looks for `openvino_c.dll` in this order and uses the first one it finds.
+
+1. The directory of `birdnet-go.exe`.
+2. Every absolute directory in `PATH` (relative entries are skipped).
+3. `%INTEL_OPENVINO_DIR%\runtime\bin\intel64\Release`, when the variable holds an absolute path.
+4. `%ProgramFiles(x86)%\Intel\openvino*`, newest version first.
+5. The OpenVINO Toolkit package under `%ProgramFiles%\WindowsApps`, newest version first. Non-elevated processes cannot list that directory, so the package location is also read from the system package registry.
+
+The bundled oneTBB library beside the runtime is found automatically. To use a specific runtime, set `birdnet.openvinopath` to the full path of `openvino_c.dll`; a configured path is never replaced by the search. If nothing is found, BirdNET-Go keeps running on ONNX Runtime. The startup log line `OpenVINO runtime loaded` shows which library was used and whether it came from configuration. For GPU offload the host also needs a current Intel graphics driver.
+
 ## Verifying OpenVINO Is Active
 
 Do not assume it worked; confirm it. There are four independent ways.
@@ -249,6 +261,8 @@ ldconfig -p | grep libopenvino_c
 
 Install the runtime ([Step 1](#step-1-install-the-openvino-runtime-libraries)), run `sudo ldconfig`, or set `birdnet.openvinopath` to the exact library path. Confirm the runtime release matches the version BirdNET-Go is built against.
 
+On Windows the same message ending in `the specified module could not be found` means `openvino_c.dll` was not found by the search described in [Enabling OpenVINO on Windows](#enabling-openvino-on-windows), or one of the DLLs it depends on is missing. Install the runtime, or set `birdnet.openvinopath` to the full path of `openvino_c.dll`.
+
 ### Permission denied opening `/dev/dri/renderD128`
 
 The runtime user is not in the render group. In Docker the entrypoint handles this when the device is passed; for rootless Podman add `--group-add keep-groups`. On native installs add the service user to the `render` group and restart.
@@ -267,7 +281,7 @@ Do not override precision manually. BirdNET v2.4 is intentionally run at f32 on 
 | -------- | --------------- | :------------------------: | :-------------------: | :--------------------------------------------------------: |
 | Linux    | x86-64 (amd64)  |            Yes             | Yes (Intel iGPU/dGPU) |                Benchmark only (no f16 win)                 |
 | Linux    | aarch64 (arm64) |            Yes             |           -           | Opt-in: `backend: openvino` or device `cpu`; ORT on `auto` |
-| Windows  | x86-64          |             -              |           -           |                             -                              |
+| Windows  | x86-64          |            Yes             | Yes (Intel iGPU/dGPU) |                Benchmark only (no f16 win)                 |
 | macOS    | any             |             -              |           -           |                             -                              |
 
 ## Further Reading

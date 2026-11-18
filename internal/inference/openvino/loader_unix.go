@@ -59,6 +59,8 @@ import "C" //nolint:gocritic // dupImport: cgo import "C" must be separate from 
 import "unsafe" //nolint:gocritic // dupImport: false positive with cgo import "C"
 
 import (
+	"runtime"
+
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -96,4 +98,11 @@ func lookupSymbol(handle uintptr, name string) (uintptr, error) {
 // closed.
 func closeLibrary(handle uintptr) {
 	C.ovloader_close(C.uintptr_t(handle))
+}
+
+// platformDiscoveryDeps returns the lookups for resolveLibraryPath. On Unix the
+// resolver returns the configured path unchanged and never consults them, so
+// only the operating system name is set.
+func platformDiscoveryDeps() discoveryDeps {
+	return discoveryDeps{goos: runtime.GOOS}
 }

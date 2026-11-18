@@ -428,9 +428,10 @@ type OpenVINOInfo struct {
 	LibrarySource string            `json:"library_source,omitempty"`
 	Probe         OpenVINOProbeInfo `json:"probe"`
 
-	// LibraryPath is the raw value the provider fills; empty when no library
-	// is loaded.
-	LibraryPath string `json:"-"`
+	// LibraryPath and LibraryConfigured are the raw values the provider fills;
+	// the path is empty when no library is loaded.
+	LibraryPath       string `json:"-"`
+	LibraryConfigured bool   `json:"-"`
 }
 
 // OpenVINOProbeInfo is the cached OpenVINO device probe result.

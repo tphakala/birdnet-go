@@ -67,8 +67,8 @@ func finalizeRuntimeInfo(info *RuntimeInfo) {
 		ort.LibraryPath, ort.LibraryConfigured = "", false
 	}
 	if ov := info.OpenVINO; ov != nil {
-		ov.LibraryFile, ov.LibraryDir, ov.LibrarySource = libraryLocation(ov.LibraryPath, ov.LibraryPath != "")
-		ov.LibraryPath = ""
+		ov.LibraryFile, ov.LibraryDir, ov.LibrarySource = libraryLocation(ov.LibraryPath, ov.LibraryConfigured)
+		ov.LibraryPath, ov.LibraryConfigured = "", false
 	}
 	for i := range info.Models {
 		m := &info.Models[i]

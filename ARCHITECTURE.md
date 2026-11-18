@@ -150,7 +150,7 @@ Regional BirdNET v2.4 variants and geographic range models exist in the catalog.
 
 - **TFLite** through `go-tflite` (CGO), built unless the `notflite` tag is set. Used for BirdNET v2.4.
 - **ONNX Runtime** through `onnxruntime_go`, loaded as a shared library (`task download-onnxruntime`).
-- **OpenVINO** behind the `openvino` build tag, loaded at runtime, with ONNX Runtime as the fallback when the library is absent. Selected with `birdnet.backend` (`auto`, `onnx`, `openvino`). The default Linux amd64 and arm64 builds carry the tag.
+- **OpenVINO** behind the `openvino` build tag, loaded at runtime, with ONNX Runtime as the fallback when the library is absent. Selected with `birdnet.backend` (`auto`, `onnx`, `openvino`). The default Linux amd64, Linux arm64 and Windows amd64 builds carry the tag.
 
 `internal/hwprofile` decides which model builds a machine can run.
 

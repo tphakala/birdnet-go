@@ -162,3 +162,27 @@ func TestLibraryLocation(t *testing.T) {
 		})
 	}
 }
+
+// TestFinalizeRuntimeInfo_OpenVINOLibrarySource pins that the OpenVINO library
+// source follows the configured flag, not whether a path is present: a library
+// found by the automatic search has a path and must be reported as "auto".
+func TestFinalizeRuntimeInfo_OpenVINOLibrarySource(t *testing.T) {
+	t.Parallel()
+	const libraryPath = "/opt/x/lib/libopenvino_c.so"
+	for name, tt := range map[string]struct {
+		configured bool
+		want       string
+	}{
+		"discovered": {configured: false, want: LibrarySourceAuto},
+		"configured": {configured: true, want: LibrarySourceConfigured},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			info := &RuntimeInfo{OpenVINO: &OpenVINOInfo{LibraryPath: libraryPath, LibraryConfigured: tt.configured}}
+			finalizeRuntimeInfo(info)
+			assert.Equal(t, tt.want, info.OpenVINO.LibrarySource)
+			assert.Equal(t, "libopenvino_c.so", info.OpenVINO.LibraryFile)
+			assert.Empty(t, info.OpenVINO.LibraryPath, "the raw path must be cleared")
+		})
+	}
+}

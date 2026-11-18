@@ -120,3 +120,14 @@ func TestOpenVINOAvailableDevices(t *testing.T) {
 	assert.Contains(t, devs, DeviceCPU, "CPU device must always be enumerated")
 	t.Logf("OpenVINO devices: %v", devs)
 }
+
+// TestScrubLibraryPaths_LongestFirst pins that a resolved absolute path is
+// redacted whole even when the configured relative path is its suffix.
+func TestScrubLibraryPaths_LongestFirst(t *testing.T) {
+	t.Parallel()
+	configured := `ov\openvino_c.dll`
+	resolved := `C:\Users\someone\birdnet\ov\openvino_c.dll`
+	got := scrubLibraryPaths("cannot load "+resolved, configured, resolved)
+	assert.Equal(t, "cannot load <path>", got)
+	assert.NotContains(t, got, "someone")
+}

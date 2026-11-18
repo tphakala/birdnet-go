@@ -445,3 +445,33 @@ func TestEnsureOpenVINOProbeNoopWithoutCore(t *testing.T) {
 
 	assert.Equal(t, 0, calls.count())
 }
+
+// TestInitOpenVINORecordsLoadedLibraryPath pins that the path later handed to
+// the probe child is the library the loader really bound, not the configured
+// string: with nothing configured the loader may have discovered one, and a
+// child that received "" would rediscover (or load another) library.
+func TestInitOpenVINORecordsLoadedLibraryPath(t *testing.T) {
+	const discovered = "/discovered/openvino/libopenvino_c.so"
+	for name, tt := range map[string]struct {
+		configured string
+		loaded     string
+		want       string
+	}{
+		"discovered path replaces empty config": {configured: "", loaded: discovered, want: discovered},
+		"configured path is kept":               {configured: "/pinned/lib.so", loaded: "/pinned/lib.so", want: "/pinned/lib.so"},
+		"default name load is named":            {configured: "", loaded: "", want: ov.DefaultLibraryName},
+	} {
+		t.Run(name, func(t *testing.T) {
+			markOVCoreLoadedForTest(t, false, "")
+			t.Cleanup(func() { ovInitializedSnap.Store(false) })
+			origInit, origLoaded := ovInit, ovLoadedLibrary
+			t.Cleanup(func() { ovInit, ovLoadedLibrary = origInit, origLoaded })
+			ovInit = func(string) error { return nil }
+			ovLoadedLibrary = func() (string, bool) { return tt.loaded, true }
+
+			require.NoError(t, InitOpenVINO(tt.configured))
+
+			assert.Equal(t, tt.want, OpenVINOLoadedLibraryPath())
+		})
+	}
+}

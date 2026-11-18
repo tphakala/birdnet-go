@@ -15,11 +15,6 @@ const DefaultPrecisionHint = "f16"
 // classifier.openVINOPrecisionFor for the per-model, per-device policy).
 const PrecisionF32 = "f32"
 
-// DefaultLibraryName is the soname the backend loads when no library path is
-// configured. It is the fallback in openLibrary (loader_unix.go) and is used
-// only to report which library a path-less load resolved to.
-const DefaultLibraryName = "libopenvino_c.so"
-
 const (
 	// DeviceCPU is the OpenVINO CPU device. ARMv8.2 f16 acceleration runs here.
 	DeviceCPU = "CPU"
