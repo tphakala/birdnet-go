@@ -72,7 +72,8 @@ This requires Administrator privileges.
 
 BirdNET-Go can run its models through Intel OpenVINO instead of ONNX Runtime,
 for example on an Intel GPU. Install the OpenVINO runtime separately; no PATH
-change is needed because BirdNET-Go finds it automatically. See the
+change is needed when it is installed in a standard location, because BirdNET-Go
+searches for it there. See the
 [OpenVINO acceleration guide](https://github.com/tphakala/birdnet-go/wiki/openvino-acceleration#enabling-openvino-on-windows).
 
 ## Running as a Windows Service

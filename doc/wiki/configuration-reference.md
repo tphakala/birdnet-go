@@ -76,7 +76,7 @@ BirdNET configuration
 | `birdnet.labelpath` | string | path to external label file (empty for embedded) |
 | `birdnet.usexnnpack` | boolean | true to use XNNPACK delegate for inference acceleration |
 | `birdnet.onnxruntimepath` | string | path to ONNX Runtime shared library (required for ONNX models) |
-| `birdnet.openvinopath` | string | path to the OpenVINO C runtime (libopenvino_c.so, or openvino_c.dll on Windows); empty searches the known install locations |
+| `birdnet.openvinopath` | string | path to the OpenVINO C runtime (libopenvino_c.so, or openvino_c.dll on Windows); empty uses the default library name, and on Windows first searches the known install locations |
 | `birdnet.backend` | string | inference backend preference: "auto" (default), "onnx", or "openvino" |
 | `birdnet.openvinodevice` | string | OpenVINO device preference: "auto" (default), "cpu", or "gpu" |
 | `birdnet.huggingfaceendpoint` | string | model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co |

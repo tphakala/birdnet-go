@@ -496,7 +496,7 @@
         },
         "openvinopath": {
           "type": "string",
-          "description": "path to the OpenVINO C runtime (libopenvino_c.so, or openvino_c.dll on Windows); empty searches the known install locations"
+          "description": "path to the OpenVINO C runtime (libopenvino_c.so, or openvino_c.dll on Windows); empty uses the default library name, and on Windows first searches the known install locations"
         },
         "backend": {
           "type": "string",
