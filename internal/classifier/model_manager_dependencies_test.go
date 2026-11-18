@@ -170,9 +170,10 @@ func TestPrimarySwap_ToDFTKeepsCustomRangeFilter(t *testing.T) {
 func TestInstall_GeomodelReplacesStockMDataRangeFilterAndReloads(t *testing.T) {
 	h := newDepHarness(t)
 	stock := conf.CloneSettings(conf.GetSettings())
-	stock.RangeFilterConfig().Model = conf.RangeFilterModelLatest
-	stock.RangeFilterConfig().ModelPath = filepath.Join(DefaultModelDirectory, DefaultRangeFilterV2ONNXModelName)
-	stock.RangeFilterConfig().LabelsPath = ""
+	stockRF := stock.RangeFilterConfig()
+	stockRF.Model = conf.RangeFilterModelLatest
+	stockRF.ModelPath = filepath.Join(DefaultModelDirectory, DefaultRangeFilterV2ONNXModelName)
+	stockRF.LabelsPath = ""
 	conf.StoreSettings(stock)
 
 	var atReload []conf.RangeFilterSettings

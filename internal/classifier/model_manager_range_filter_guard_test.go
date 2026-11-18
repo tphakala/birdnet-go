@@ -87,6 +87,15 @@ func assertCustomRangeFilter(t *testing.T, rf *conf.RangeFilterSettings) {
 	assert.Equal(t, guardCustomLabelsPath, rf.LabelsPath, "a custom labels path is never rewritten")
 }
 
+// assertGuardGeomodel asserts rf points at the guard catalog's geomodel files under
+// modelsDir.
+func assertGuardGeomodel(t *testing.T, rf *conf.RangeFilterSettings, modelsDir, msg string) {
+	t.Helper()
+	assert.Equal(t, geomodelRangeFilterVersion, rf.Model, msg)
+	assert.Equal(t, guardSharedPath(modelsDir, guardGeomodelName), rf.ModelPath, msg)
+	assert.Equal(t, guardSharedPath(modelsDir, guardGeomodelLabelsName), rf.LabelsPath, msg)
+}
+
 // guardModelsDir returns a models directory whose base name is "models", the
 // shape a real install has, under a fresh temporary root.
 func guardModelsDir(t *testing.T) string {
@@ -247,10 +256,7 @@ func TestApplyInstalledGeomodelConfig_PathGuard(t *testing.T) {
 		mm.applyInstalledGeomodelConfig(GetLogger(), &entry, entry.ID)
 
 		promoted := conf.GetSettings()
-		current := promoted.RangeFilterConfig()
-		assert.Equal(t, geomodelRangeFilterVersion, current.Model)
-		assert.Equal(t, guardSharedPath(modelsDir, guardGeomodelName), current.ModelPath)
-		assert.Equal(t, guardSharedPath(modelsDir, guardGeomodelLabelsName), current.LabelsPath)
+		assertGuardGeomodel(t, promoted.RangeFilterConfig(), modelsDir, "a stock MData path is promoted")
 
 		mm.applyInstalledGeomodelConfig(GetLogger(), &entry, entry.ID)
 		assert.Same(t, promoted, conf.GetSettings(), "a promoted config is not rewritten again")
@@ -271,20 +277,14 @@ func TestRangeFilterConfig_StockMDataTransitions(t *testing.T) {
 	stockPath := filepath.Join(DefaultModelDirectory, DefaultRangeFilterV1ModelName)
 	updated := &conf.Settings{}
 	rf := updated.RangeFilterConfig()
-	assertGeomodel := func(msg string) {
-		t.Helper()
-		assert.Equal(t, geomodelRangeFilterVersion, rf.Model, msg)
-		assert.Equal(t, guardSharedPath(modelsDir, guardGeomodelName), rf.ModelPath, msg)
-		assert.Equal(t, guardSharedPath(modelsDir, guardGeomodelLabelsName), rf.LabelsPath, msg)
-	}
 
 	rf.Model = conf.RangeFilterModelLegacy
 	rf.ModelPath = stockPath
 	mm.applyRangeFilterConfigForInstall(updated, &entry)
-	assertGeomodel("install replaces a legacy pin on a stock MData path")
+	assertGuardGeomodel(t, rf, modelsDir, "install replaces a legacy pin on a stock MData path")
 
 	mm.applyRangeFilterConfigForInstall(updated, &entry)
-	assertGeomodel("a second install leaves the geomodel config as it is")
+	assertGuardGeomodel(t, rf, modelsDir, "a second install leaves the geomodel config as it is")
 
 	rf.PassUnmappedSpecies = true
 	mm.applyRangeFilterConfigForUninstall(updated, &entry)
@@ -302,7 +302,7 @@ func TestRangeFilterConfig_StockMDataTransitions(t *testing.T) {
 	assert.True(t, rf.PassUnmappedSpecies)
 
 	mm.applyRangeFilterConfigForInstall(updated, &entry)
-	assertGeomodel("a reinstall replaces the stock MData path again")
+	assertGuardGeomodel(t, rf, modelsDir, "a reinstall replaces the stock MData path again")
 }
 
 func TestApplyRangeFilterConfigForUninstall_KeepsCustomPathWhenNoSurvivor(t *testing.T) {
