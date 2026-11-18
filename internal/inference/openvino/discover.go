@@ -80,8 +80,9 @@ type discoveryDeps struct {
 	// absPath makes a path absolute, as filepath.Abs.
 	absPath func(string) (string, error)
 	// registryPackages lists installed MSIX packages from the system package
-	// repository registry key. It is the fallback for non-elevated processes,
-	// which cannot list the WindowsApps directory. May be nil.
+	// repository registry key. It is the fallback when the WindowsApps listing
+	// yields no DLL, chiefly for non-elevated processes, which cannot list that
+	// directory. May be nil.
 	registryPackages func() []installRoot
 }
 
@@ -182,9 +183,10 @@ func discoverArchiveInstall(d discoveryDeps) string {
 }
 
 // discoverMSIX finds the newest 64-bit OpenVINO Toolkit MSIX package. It lists
-// %ProgramFiles%\WindowsApps; when that fails or finds no matching package
-// (non-elevated processes cannot list it), it falls back to the package
-// repository registry key.
+// %ProgramFiles%\WindowsApps; when that fails or finds no matching package that
+// contains the DLL (non-elevated processes cannot list it, and a stale package
+// directory can be left behind), it falls back to the package repository
+// registry key.
 func discoverMSIX(d discoveryDeps) string {
 	var roots []installRoot
 	if pf := d.getenv(envProgramFiles); pf != "" {
@@ -197,11 +199,13 @@ func discoverMSIX(d discoveryDeps) string {
 			}
 		}
 	}
-	if len(roots) == 0 && d.registryPackages != nil {
-		for _, pkg := range d.registryPackages() {
-			if isOpenVINOMSIXName(pkg.Name) && pkg.Root != "" {
-				roots = append(roots, pkg)
-			}
+	if lib := newestLibrary(roots, d); lib != "" || d.registryPackages == nil {
+		return lib
+	}
+	roots = roots[:0]
+	for _, pkg := range d.registryPackages() {
+		if isOpenVINOMSIXName(pkg.Name) && pkg.Root != "" {
+			roots = append(roots, pkg)
 		}
 	}
 	return newestLibrary(roots, d)

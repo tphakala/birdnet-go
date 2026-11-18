@@ -378,6 +378,7 @@ import "unsafe" //nolint:gocritic // dupImport: false positive with cgo import "
 
 import (
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -504,9 +505,14 @@ func InitOV(libraryPath string) error {
 	return nil
 }
 
-// scrubLibraryPaths redacts each non-empty path from msg so file paths do not
-// leak into errors or telemetry.
+// scrubLibraryPaths redacts each non-empty path from msg, longest first, so
+// file paths do not leak into errors or telemetry.
 func scrubLibraryPaths(msg string, paths ...string) string {
+	// Longest first: a configured relative path can be a suffix of its resolved
+	// absolute form, and replacing the suffix first would leave the directory
+	// prefix of the absolute path in the message.
+	paths = slices.Clone(paths)
+	slices.SortFunc(paths, func(a, b string) int { return len(b) - len(a) })
 	for _, p := range paths {
 		if p != "" {
 			msg = strings.ReplaceAll(msg, p, "<path>")
