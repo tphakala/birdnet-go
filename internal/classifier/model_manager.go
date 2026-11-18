@@ -1785,7 +1785,7 @@ func ensureModelEnabled(s *conf.Settings, registryID string) bool {
 // variant swap. It writes ONLY the family's model field: a family's label set is
 // identical across its variants (embedded for BirdNET v2.4), so a swap must never
 // disturb a user-configured label path. An empty modelPath reverts to the family's
-// built-in/default source (for the primary, the embedded BuiltIn baseline). When
+// built-in/default source (for BirdNET v2.4, the embedded BuiltIn baseline). When
 // rangeFilter is non-nil (the geomodel dependency of the new variant) the range-filter
 // config is re-pointed at its files in the same clone and save, as
 // rangeFilterReplaceableByGeomodel allows. It publishes through conf.UpdateSettings,
