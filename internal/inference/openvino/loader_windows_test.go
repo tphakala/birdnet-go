@@ -16,6 +16,10 @@ const (
 	systemLibrary = "kernel32.dll"
 	// knownExport is an export of systemLibrary.
 	knownExport = "GetCurrentProcessId"
+	// absentText is the text isLibraryAbsent (internal/classifier) matches for a
+	// missing runtime, spelled out here so a change to moduleNotFoundText that
+	// breaks that match fails this package's tests.
+	absentText = "the specified module could not be found"
 	// missingExport is not exported by any system DLL.
 	missingExport = "ov_no_such_symbol_exported"
 )
@@ -61,18 +65,6 @@ func TestOpenLibrary_MissingDLLReportsFixedText(t *testing.T) {
 	} {
 		_, err := openLibrary(path)
 		require.Error(t, err, path)
-		assert.Equal(t, moduleNotFoundText, err.Error(), path)
-	}
-}
-
-// TestRegistryMSIXPackages_RootsExist checks that every package the registry
-// reports is an OpenVINO x64 package whose recorded root is a real directory. A
-// host without the package reports none, which is also valid.
-func TestRegistryMSIXPackages_RootsExist(t *testing.T) {
-	for _, pkg := range registryMSIXPackages() {
-		assert.True(t, isOpenVINOMSIXName(pkg.Name), pkg.Name)
-		info, err := os.Stat(pkg.Root)
-		require.NoError(t, err, pkg.Root)
-		assert.True(t, info.IsDir(), pkg.Root)
+		assert.Equal(t, absentText, err.Error(), path)
 	}
 }

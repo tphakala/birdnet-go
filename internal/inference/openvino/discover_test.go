@@ -194,6 +194,16 @@ func TestResolveLibraryPath_RegistryFallback(t *testing.T) {
 		assert.Equal(t, want, got)
 		assert.True(t, discovered)
 	})
+	t.Run("a readable listing with no matching package uses registry roots", func(t *testing.T) {
+		e := newDiscoveryEnv(t)
+		require.NoError(t, os.MkdirAll(filepath.Join(e.env[envProgramFiles], windowsAppsDir, "Unrelated.Package_1.0_x64__x"), 0o750))
+		root := filepath.Join(e.root, "elsewhere", testMSIX2026_3)
+		want := e.dll(root)
+		e.reg = []installRoot{{Name: testMSIX2026_3, Root: root}}
+		got, discovered := e.resolve()
+		assert.Equal(t, want, got)
+		assert.True(t, discovered)
+	})
 	t.Run("a registry name without the x64 marker is ignored", func(t *testing.T) {
 		e := newDiscoveryEnv(t)
 		root := filepath.Join(e.root, "elsewhere", testMSIXArm)
