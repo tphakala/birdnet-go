@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,7 +28,8 @@ func TestGeomodelIssueFor(t *testing.T) {
 		{"geomodel backend serves the set", conf.RangeFilterSettings{}, true, true, true, GeomodelIssueNone},
 		{"default config, no files, no backend", conf.RangeFilterSettings{}, true, false, false, GeomodelIssueNotInstalled},
 		{"default config, no files, v2.4 MData backend", conf.RangeFilterSettings{}, true, false, false, GeomodelIssueNotInstalled},
-		{"legacy config with files", conf.RangeFilterSettings{Model: conf.RangeFilterModelLegacy}, true, false, true, GeomodelIssueNotSelected},
+		{"legacy pin with files yields to the geomodel", conf.RangeFilterSettings{Model: conf.RangeFilterModelLegacy}, true, false, true, GeomodelIssueLoadFailed},
+		{"stock MData path with files yields to the geomodel", conf.RangeFilterSettings{ModelPath: filepath.Join(DefaultModelDirectory, DefaultRangeFilterV2ONNXModelName)}, true, false, true, GeomodelIssueLoadFailed},
 		{"strict ONNX path without labels, with files", conf.RangeFilterSettings{ModelPath: "/m/custom.onnx"}, true, false, true, GeomodelIssueNotSelected},
 		{"latest with files and no backend", conf.RangeFilterSettings{Model: conf.RangeFilterModelLatest}, true, false, true, GeomodelIssueLoadFailed},
 		{"explicit v3 with no files", conf.RangeFilterSettings{Model: conf.RangeFilterModelV3}, true, false, false, GeomodelIssueLoadFailed},
@@ -65,8 +67,9 @@ func TestRangeFilterStatus_GeomodelIssueFollowsLiveState(t *testing.T) {
 	assert.Equal(t, GeomodelIssueNotInstalled, o.RangeFilterStatus().GeomodelIssue, "Perch without geomodel files")
 
 	writeSharedGeomodel(t, modelsDir)
-	settings.BirdNET.RangeFilter.Model = conf.RangeFilterModelLegacy
-	assert.Equal(t, GeomodelIssueNotSelected, o.RangeFilterStatus().GeomodelIssue, "files installed, legacy model configured")
+	settings.BirdNET.RangeFilter.ModelPath = "/m/custom.onnx"
+	assert.Equal(t, GeomodelIssueNotSelected, o.RangeFilterStatus().GeomodelIssue, "files installed, custom range filter configured")
+	settings.BirdNET.RangeFilter.ModelPath = ""
 
 	o.rangeFilter.state.Store(&rangeFilterState{
 		backend: &fakeUniversalRangeFilter{}, kind: rfKindGeomodelV3, generation: 1,
@@ -78,6 +81,51 @@ func TestRangeFilterStatus_GeomodelIssueFollowsLiveState(t *testing.T) {
 	})
 	o.models = map[string]*modelEntry{}
 	assert.Equal(t, GeomodelIssueNone, o.RangeFilterStatus().GeomodelIssue, "no participant needs the geomodel")
+}
+
+// TestBuildMetaModel_StockMDataConfigYieldsToGeomodel pins Rule 1 for a participant set
+// that needs the geomodel (Perch, no v2.4) with the shared files installed: a stock MData
+// path or a legacy pin is replaced by the geomodel, so the build reaches the mapped
+// geomodel (which fails on the fake files), while a custom path is honored and reports no
+// backend because strict MData needs v2.4.
+func TestBuildMetaModel_StockMDataConfigYieldsToGeomodel(t *testing.T) {
+	t.Parallel()
+
+	modelsDir := t.TempDir()
+	writeSharedGeomodel(t, modelsDir)
+	perchLabels := []string{"Turdus merula_Common Blackbird"}
+	view := rangeFilterView{
+		modelsDir:     modelsDir,
+		participants:  []participantLabels{{id: RegistryIDPerchV2, labels: perchLabels}},
+		wantsGeomodel: true,
+	}
+
+	tests := []struct {
+		name        string
+		rf          conf.RangeFilterSettings
+		wantGeoload bool
+	}{
+		{"stock MData path", conf.RangeFilterSettings{Model: conf.RangeFilterModelLatest, ModelPath: filepath.Join(DefaultModelDirectory, DefaultRangeFilterV2ONNXModelName)}, true},
+		{"legacy pin", conf.RangeFilterSettings{Model: conf.RangeFilterModelLegacy}, true},
+		{"custom path", conf.RangeFilterSettings{Model: conf.RangeFilterModelLatest, ModelPath: "/m/custom.onnx"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := &conf.Settings{}
+			settings.BirdNET.RangeFilter = tt.rf
+
+			backend, kind, _, err := buildMetaModel(settings, view, nil)
+
+			if tt.wantGeoload {
+				require.Error(t, err, "the geomodel build is attempted and fails on the fake files")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, rfKindNone, kind)
+			}
+			assert.Nil(t, backend)
+		})
+	}
 }
 
 // TestReload_FailureMarksStateUntilNextPublishedState checks that a failed reload that

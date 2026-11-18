@@ -157,7 +157,7 @@ birdnet:
   latitude: 00.000        # latitude of recording location for prediction filtering
   longitude: 00.000       # longitude of recording location for prediction filtering
   rangefilter:
-      model: latest       # model to use for range filter: "latest" or "legacy" for previous model
+      model: latest       # model to use for range filter: "latest" or "legacy" for previous model; an installed BirdNET Geomodel v3.0 replaces the stock models
       threshold: 0.01     # rangefilter species occurrence threshold
   modelpath: ""           # path to external model file (empty for embedded)
   labelpath: ""           # path to external label file (empty for embedded)

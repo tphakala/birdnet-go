@@ -1952,7 +1952,7 @@
         },
         "model": {
           "type": "string",
-          "description": "range filter model version: \"legacy\" for v1, \"v3\" for geomodel v3.0, or empty/default for v2"
+          "description": "range filter model version: \"legacy\" for v1, \"v3\" for geomodel v3.0, or empty/default for v2; an installed geomodel replaces the stock v1 and v2 models"
         },
         "modelpath": {
           "type": "string",

@@ -766,6 +766,46 @@ const DefaultRangeFilterV1ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.t
 // This filename is used when RangeFilter.Model is set to "latest" or unspecified in noembed builds.
 const DefaultRangeFilterV2ModelName = "BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite"
 
+// stockMDataRangeFilterNames lists the file names of the stock MData range filter
+// models. A range filter path naming one of them, in any directory, is a stock model
+// that an installed geomodel replaces.
+var stockMDataRangeFilterNames = [...]string{
+	DefaultRangeFilterV2ONNXModelName,
+	DefaultRangeFilterV1ModelName,
+	DefaultRangeFilterV2ModelName,
+}
+
+// isStockMDataRangeFilterPath reports whether modelPath names a stock MData range
+// filter model file. Environment variables are expanded first, as getMetaModelData
+// and buildMappedGeoModel do when they load a path; then only the base name counts,
+// compared case-insensitively because Windows file names are case-insensitive. An
+// empty path is not a stock path.
+func isStockMDataRangeFilterPath(modelPath string) bool {
+	modelPath = os.ExpandEnv(modelPath)
+	if modelPath == "" {
+		return false
+	}
+	base := filepath.Base(modelPath)
+	for _, name := range stockMDataRangeFilterNames {
+		if strings.EqualFold(base, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// rangeFilterYieldsToGeomodel reports whether a range filter config gives way to the
+// shared geomodel when its files are installed: the config does not already select
+// the geomodel, and it names no model path or a stock MData model. This covers the
+// "", "latest" and "legacy" model values; an installed geomodel replaces a legacy
+// pin as well. buildMetaModel Rule 1 and geomodelIssueFor share this test.
+func rangeFilterYieldsToGeomodel(rf *conf.RangeFilterSettings) bool {
+	if rf.Model == conf.RangeFilterModelV3 {
+		return false
+	}
+	return rf.ModelPath == "" || isStockMDataRangeFilterPath(rf.ModelPath)
+}
+
 // DefaultModelDirectory is the default directory name where model files are expected to be found.
 // This is a relative path that will be resolved against various base paths during model discovery.
 // In Docker containers with WORKDIR /data, this resolves to /data/model/.
@@ -1257,14 +1297,14 @@ func geomodelFilesPresent(modelsDir string) bool {
 // geomodelIssueFor diagnoses why the geomodel backend is not serving a participant set
 // that needs it. The rules apply in order: nothing needs the geomodel or the geomodel
 // backend serves it (none); the config selects a geomodel (load_failed); the stock files
-// are installed (not_selected); otherwise not_installed. The auto-select terms mirror
-// buildMetaModel Rule 1 (auto-select model, no explicit model path); keep them in step.
+// are installed (not_selected); otherwise not_installed. The auto-select test is
+// rangeFilterYieldsToGeomodel, shared with buildMetaModel Rule 1.
 func geomodelIssueFor(rf *conf.RangeFilterSettings, wantsGeomodel, geomodelServing, stockFilesPresent bool) GeomodelIssue {
 	if !wantsGeomodel || geomodelServing {
 		return GeomodelIssueNone
 	}
 	selectsGeomodel := resolveRangeFilterBackend(rf) == rangeFilterBackendMappedGeomodel ||
-		(isAutoSelectRangeFilterModel(rf.Model) && rf.ModelPath == "" && stockFilesPresent)
+		(rangeFilterYieldsToGeomodel(rf) && stockFilesPresent)
 	switch {
 	case selectsGeomodel:
 		return GeomodelIssueLoadFailed
@@ -1273,18 +1313,6 @@ func geomodelIssueFor(rf *conf.RangeFilterSettings, wantsGeomodel, geomodelServi
 	default:
 		return GeomodelIssueNotInstalled
 	}
-}
-
-// shouldAutoSelectV3GeomodelForConfig reports whether initializeMetaModel should
-// auto-select the stock v3 geomodel for this range-filter config. It requires the
-// model to be auto-select ("" or the "latest" default), no explicit range-filter
-// modelpath (an explicit user path is never overridden), a known models dir, and a
-// compatible classifier with the stock geomodel files present on disk. The
-// modelpath guard mirrors shouldSelectDefaultONNXRangeFilter so both auto-select
-// gates honor an explicit path consistently.
-func shouldAutoSelectV3GeomodelForConfig(model, modelPath, classifierID, modelsDir string) bool {
-	return isAutoSelectRangeFilterModel(model) && modelPath == "" && modelsDir != "" &&
-		shouldAutoSelectV3Geomodel(classifierID, modelsDir)
 }
 
 // applyAutoSelectedGeomodelPaths configures the range filter settings to

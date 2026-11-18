@@ -927,10 +927,10 @@ func (rfs *rangeFilterService) occurrenceAtTime(species string, detectionTime ti
 
 // buildMetaModel selects and builds the range-filter backend for the resolved
 // settings, returning the backend and whether it is the embedded TFLite fallback.
-// It is the build-and-return port of BirdNET.initializeMetaModel: routing and
-// auto-selection are unchanged; the only difference is it returns the backend
-// instead of assigning bn.rangeFilter, and closes any partial backend on failure so
-// it never leaks.
+// It is the build-and-return port of BirdNET.initializeMetaModel, with routing and
+// auto-selection in the numbered rules below; it returns the backend instead of
+// assigning bn.rangeFilter, and closes any partial backend on failure so it never
+// leaks.
 func buildMetaModel(settings *conf.Settings, view rangeFilterView, debug debugFunc) (backend inference.RangeFilter, kind rangeFilterBackendKind, fellBack bool, err error) {
 	log := GetLogger()
 	rf := settings.BirdNET.RangeFilter
@@ -946,11 +946,12 @@ func buildMetaModel(settings *conf.Settings, view rangeFilterView, debug debugFu
 		logger.String("models_dir", view.modelsDir))
 
 	// Rule 1: auto-select the shared v3 geomodel when any loaded participant fits it
-	// (view.wantsGeomodel) and the stock files are present, on an auto-select config
-	// with no explicit path. Keyed on the participant set instead of a single
-	// classifier's compat, so a Perch/v3.0 set auto-selects the geomodel while a
-	// v2.4-only set (wantsGeomodel=false) stays on MData exactly as before.
-	if isAutoSelectRangeFilterModel(rf.Model) && rf.ModelPath == "" && view.wantsGeomodel &&
+	// (view.wantsGeomodel) and the stock files are present, on a config that yields to
+	// it: no path, a stock MData path, or a legacy pin (rangeFilterYieldsToGeomodel).
+	// Keyed on the participant set instead of a single classifier's compat, so a
+	// Perch/v3.0 set auto-selects the geomodel while a v2.4-only set
+	// (wantsGeomodel=false) stays on MData exactly as before.
+	if view.wantsGeomodel && rangeFilterYieldsToGeomodel(&rf) &&
 		geomodelFilesPresent(view.modelsDir) {
 		localSettings := conf.CloneSettings(settings)
 		applyAutoSelectedGeomodelPaths(localSettings, view.modelsDir)
