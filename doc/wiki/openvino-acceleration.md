@@ -187,8 +187,8 @@ Start BirdNET-Go and [verify](#verifying-openvino-is-active).
 The Windows x86-64 binaries are built with the OpenVINO backend compiled in, but the OpenVINO runtime is not included. Install it yourself, either the OpenVINO Toolkit package from Intel (for example through `winget`) or Intel's archive release. You do not need to run `setupvars` or edit `PATH`: BirdNET-Go looks for `openvino_c.dll` in this order and uses the first one it finds.
 
 1. The directory of `birdnet-go.exe`.
-2. Every directory in `PATH`.
-3. `%INTEL_OPENVINO_DIR%\runtime\bin\intel64\Release`.
+2. Every absolute directory in `PATH` (relative entries are skipped).
+3. `%INTEL_OPENVINO_DIR%\runtime\bin\intel64\Release`, when the variable holds an absolute path.
 4. `%ProgramFiles(x86)%\Intel\openvino*`, newest version first.
 5. The OpenVINO Toolkit package under `%ProgramFiles%\WindowsApps`, newest version first. Non-elevated processes cannot list that directory, so the package location is also read from the system package registry.
 
