@@ -1165,12 +1165,6 @@ func TestModelManager_UninstallDeregistersWhenFileDeletionFails(t *testing.T) {
 	mm.ScanInstalled()
 	require.True(t, mm.IsInstalled(entry.ID), "model must be installed before uninstall")
 
-	// Remove the standalone geomodel entry so shared files are not retained,
-	// mirroring TestModelManager_UninstallSucceedsWhenModelNotLoaded.
-	if mm.IsInstalled("birdnet-geomodel-v3") {
-		require.NoError(t, mm.Uninstall("birdnet-geomodel-v3"))
-	}
-
 	// Sabotage one model/data file so os.Remove fails with a non-ENOENT error:
 	// replace the file with a non-empty directory (os.Remove returns ENOTEMPTY).
 	var sabotaged string
