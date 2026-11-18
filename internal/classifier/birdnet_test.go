@@ -131,6 +131,11 @@ func TestIsStockMDataRangeFilterPath(t *testing.T) {
 		{"shared geomodel file", filepath.Join("models", sharedDirName, conf.GeomodelONNXLocalName), false},
 		{"stock name as a directory", filepath.Join(DefaultRangeFilterV2ONNXModelName, "my_filter.onnx"), false},
 		{"stock name with a suffix", DefaultRangeFilterV2ONNXModelName + ".bak", false},
+		// Literal names that existing user configs hold; they must stay stock even if
+		// the Default* constants are renamed for a new release.
+		{"literal ONNX MData name", "model/BirdNET_MData_V2.onnx", true},
+		{"literal V1 TFLite MData name", "model/BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite", true},
+		{"literal V2 TFLite MData name", "model/BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
