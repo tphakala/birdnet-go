@@ -149,6 +149,13 @@ func TestResolveLibraryPath_NewestVersionWinsNumerically(t *testing.T) {
 		got, _ := e.resolve()
 		assert.Equal(t, newest, got, "2026.10.0 is newer than 2026.3.0")
 	})
+	t.Run("msix package revision", func(t *testing.T) {
+		e := newDiscoveryEnv(t)
+		e.dll(e.msixDir("Intel.OpenVINOToolkit.2026.3.0_2026.3.0.9_x64__aqcv7fbxf4wm4"))
+		newest := e.dll(e.msixDir("Intel.OpenVINOToolkit.2026.3.0_2026.3.0.10_x64__aqcv7fbxf4wm4"))
+		got, _ := e.resolve()
+		assert.Equal(t, newest, got, "revision 10 is newer than revision 9")
+	})
 	t.Run("program files x86", func(t *testing.T) {
 		e := newDiscoveryEnv(t)
 		e.dll(e.archiveDir("openvino_2026.3.0"))
