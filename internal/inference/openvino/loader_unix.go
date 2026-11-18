@@ -66,7 +66,7 @@ import (
 // when path is empty, and returns its handle. The error text is the raw
 // dlerror() string so callers can match on it (isLibraryAbsent in
 // internal/classifier).
-func openLibrary(path string) (handle uintptr, err error) {
+func openLibrary(path string) (uintptr, error) {
 	if path == "" {
 		path = DefaultLibraryName
 	}
@@ -91,8 +91,9 @@ func lookupSymbol(handle uintptr, name string) (uintptr, error) {
 	return addr, nil
 }
 
-// closeLibrary releases a handle returned by openLibrary. InitOV calls it only
-// when symbol resolution fails; a successfully bound library is never closed.
+// closeLibrary releases a handle returned by openLibrary. bindLibrary calls it
+// only when symbol resolution fails; a successfully bound library is never
+// closed.
 func closeLibrary(handle uintptr) {
 	C.ovloader_close(C.uintptr_t(handle))
 }
