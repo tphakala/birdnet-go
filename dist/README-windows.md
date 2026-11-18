@@ -68,6 +68,13 @@ copy tensorflowlite_c.dll C:\Windows\System32\
 
 This requires Administrator privileges.
 
+## Optional: OpenVINO Acceleration
+
+BirdNET-Go can run its models through Intel OpenVINO instead of ONNX Runtime,
+for example on an Intel GPU. Install the OpenVINO runtime separately; no PATH
+change is needed because BirdNET-Go finds it automatically. See the
+[OpenVINO acceleration guide](https://github.com/tphakala/birdnet-go/wiki/openvino-acceleration#enabling-openvino-on-windows).
+
 ## Running as a Windows Service
 
 Use a tool like [NSSM](https://nssm.cc/) to install BirdNET-Go as a service:

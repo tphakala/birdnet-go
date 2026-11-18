@@ -119,10 +119,11 @@ func (p *runtimeInfoProvider) openVINO() *supportpkg.OpenVINOInfo {
 		path = ov.DefaultLibraryName
 	}
 	return &supportpkg.OpenVINOInfo{
-		CompiledIn:  rt.CompiledIn,
-		Initialized: rt.Initialized,
-		Active:      rt.Active,
-		LibraryPath: path,
+		CompiledIn:        rt.CompiledIn,
+		Initialized:       rt.Initialized,
+		Active:            rt.Active,
+		LibraryPath:       path,
+		LibraryConfigured: rt.LibraryConfigured,
 		Probe: supportpkg.OpenVINOProbeInfo{
 			Status:  rt.ProbeStatus,
 			Devices: rt.ProbeDevices,

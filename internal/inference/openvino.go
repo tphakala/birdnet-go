@@ -13,10 +13,19 @@ import (
 var (
 	ovInitMu      sync.Mutex
 	ovInitialized bool
-	// ovInitPath is the library path the loaded core came from, recorded by
-	// InitOpenVINO so EnsureOpenVINOProbe can probe the same library out of
-	// process. Guarded by ovInitMu.
+	// ovInitPath is the library path the loaded core really came from (the
+	// resolved path, or ov.DefaultLibraryName for a default-name load), recorded
+	// by InitOpenVINO so every probe describes the library this process loaded
+	// and the probe child never rediscovers one. Guarded by ovInitMu.
 	ovInitPath string
+)
+
+// Seams for the OpenVINO loader, replaced in tests.
+//
+//nolint:gochecknoglobals // test seams
+var (
+	ovInit          = ov.InitOV
+	ovLoadedLibrary = ov.LoadedLibraryPath
 )
 
 // ovActiveClassifiers counts OpenVINO classifiers currently serving inference.
@@ -274,21 +283,41 @@ func (e *openvinoEmbeddingExtractor) Close() {
 
 // InitOpenVINO initializes the OpenVINO runtime (loads libopenvino_c and the
 // process-global core). Safe to call repeatedly; retries after failure for
-// hot-reload recovery. Mirrors InitONNXRuntime. On success it records
-// libraryPath for EnsureOpenVINOProbe.
+// hot-reload recovery. Mirrors InitONNXRuntime. On success it records the
+// library path the loader actually used (which, with no configured path, may
+// have been discovered) for the probes, and logs it once.
 func InitOpenVINO(libraryPath string) error {
 	ovInitMu.Lock()
 	defer ovInitMu.Unlock()
 	if ovInitialized {
 		return nil
 	}
-	if err := ov.InitOV(libraryPath); err != nil {
+	if err := ovInit(libraryPath); err != nil {
 		return err
+	}
+	loaded, _ := ovLoadedLibrary()
+	if loaded == "" {
+		loaded = ov.DefaultLibraryName
 	}
 	ovInitialized = true
 	ovInitializedSnap.Store(true)
-	ovInitPath = libraryPath
+	ovInitPath = loaded
+	logger.Global().Module("inference").Info("OpenVINO runtime loaded",
+		logger.String("library_path", loaded),
+		logger.Bool("configured", libraryPath != ""))
 	return nil
+}
+
+// OpenVINOLoadedLibraryPath returns the library path the OpenVINO core was
+// loaded from, or "" when no core is loaded. Probes must use it instead of the
+// configured path so they describe the library this process actually loaded.
+func OpenVINOLoadedLibraryPath() string {
+	ovInitMu.Lock()
+	defer ovInitMu.Unlock()
+	if !ovInitialized {
+		return ""
+	}
+	return ovInitPath
 }
 
 // DestroyOpenVINO tears down the OpenVINO core. Call only on shutdown.

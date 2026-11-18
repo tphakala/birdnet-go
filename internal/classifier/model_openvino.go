@@ -304,8 +304,10 @@ func openVINOGPUAvailable(libraryPath string) bool {
 	// SIGABRT during cgo, issue #4236 - a systemd crash-loop on the first GPU
 	// enablement). A crashing probe child degrades to the ordinary ORT
 	// fallback instead. The probe result is cached per process, so this costs
-	// one child run per library path.
-	devices, err := inference.OpenVINOProbeDevices(libraryPath)
+	// one child run per library path. Probe the library the core was loaded from,
+	// not the configured path: with nothing configured, the loader may have
+	// discovered one, and the child must describe that same library.
+	devices, err := inference.OpenVINOProbeDevices(inference.OpenVINOLoadedLibraryPath())
 	if err != nil {
 		GetLogger().Warn("OpenVINO device probe failed; treating GPU as unavailable",
 			logger.Error(err))

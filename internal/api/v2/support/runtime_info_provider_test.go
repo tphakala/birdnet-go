@@ -135,12 +135,13 @@ func TestRuntimeInfoProvider_OrchestratorAndContainer(t *testing.T) {
 	}
 
 	p.ovSnap = func() inference.OpenVINORuntime {
-		return inference.OpenVINORuntime{LibraryLoaded: true, ProbeStatus: inference.OVProbeStatusCached}
+		return inference.OpenVINORuntime{LibraryLoaded: true, LibraryConfigured: true, ProbeStatus: inference.OVProbeStatusCached}
 	}
 
 	info := p.CollectRuntimeInfo(t.Context())
 
 	assert.Equal(t, ov.DefaultLibraryName, info.OpenVINO.LibraryPath, "a default-soname load has an empty path and must be named")
+	assert.True(t, info.OpenVINO.LibraryConfigured, "the configured flag must reach the collector")
 	assert.True(t, info.OrchestratorAvailable)
 	require.Len(t, info.Models, 1)
 	assert.Equal(t, supportpkg.ModelRuntimeInfo{

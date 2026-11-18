@@ -41,9 +41,13 @@ type OpenVINORuntime struct {
 	Initialized bool
 	// Active is true while at least one classifier runs on OpenVINO.
 	Active bool
-	// LibraryPath is the path handed to the dlopen that bound libopenvino_c;
-	// empty means the default soname. Meaningful only when LibraryLoaded.
+	// LibraryPath is the path handed to the loader that bound libopenvino_c: the
+	// configured path made absolute, a discovered path, or empty for the default
+	// library name. Meaningful only when LibraryLoaded.
 	LibraryPath string
+	// LibraryConfigured is true when LibraryPath came from configuration and
+	// false when it was discovered or is the default library name.
+	LibraryConfigured bool
 	// LibraryLoaded is true once libopenvino_c has been bound.
 	LibraryLoaded bool
 	// ProbeStatus is one of the OVProbeStatus constants.
@@ -95,14 +99,15 @@ func OpenVINORuntimeSnapshot() OpenVINORuntime {
 	path, loaded := ov.LoadedLibraryPath()
 	devices, status, err := cachedOVProbeDevices()
 	return OpenVINORuntime{
-		CompiledIn:    ov.Supported,
-		Initialized:   ovInitializedSnap.Load(),
-		Active:        ovActiveClassifiers.Load() > 0,
-		LibraryPath:   path,
-		LibraryLoaded: loaded,
-		ProbeStatus:   probeStatusName(status),
-		ProbeDevices:  devices,
-		ProbeFailed:   err != nil,
+		CompiledIn:        ov.Supported,
+		Initialized:       ovInitializedSnap.Load(),
+		Active:            ovActiveClassifiers.Load() > 0,
+		LibraryPath:       path,
+		LibraryConfigured: ov.LoadedLibraryConfigured(),
+		LibraryLoaded:     loaded,
+		ProbeStatus:       probeStatusName(status),
+		ProbeDevices:      devices,
+		ProbeFailed:       err != nil,
 	}
 }
 

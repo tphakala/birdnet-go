@@ -28,3 +28,6 @@ func DestroyOV() error { return ErrOpenVINOUnavailable }
 
 // LoadedLibraryPath always reports nothing loaded without the openvino build tag.
 func LoadedLibraryPath() (path string, loaded bool) { return "", false }
+
+// LoadedLibraryConfigured always reports false without the openvino build tag.
+func LoadedLibraryConfigured() bool { return false }
