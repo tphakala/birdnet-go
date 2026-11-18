@@ -164,6 +164,33 @@ func TestPrimarySwap_ToDFTKeepsCustomRangeFilter(t *testing.T) {
 	assert.Contains(t, installedSnapshot(h.mm), depIDG, "the dependency is still recorded")
 }
 
+// TestInstall_GeomodelReplacesStockMDataRangeFilterAndReloads pins that installing the
+// geomodel at runtime replaces a stock MData range filter path and reloads the range
+// filter with the geomodel config already published, so no restart is needed.
+func TestInstall_GeomodelReplacesStockMDataRangeFilterAndReloads(t *testing.T) {
+	h := newDepHarness(t)
+	stock := conf.CloneSettings(conf.GetSettings())
+	stock.RangeFilterConfig().Model = conf.RangeFilterModelLatest
+	stock.RangeFilterConfig().ModelPath = filepath.Join(DefaultModelDirectory, DefaultRangeFilterV2ONNXModelName)
+	stock.RangeFilterConfig().LabelsPath = ""
+	conf.StoreSettings(stock)
+
+	var atReload []conf.RangeFilterSettings
+	h.mm.reloadRangeFilterFn = func() error {
+		atReload = append(atReload, *conf.GetSettings().RangeFilterConfig())
+		return nil
+	}
+
+	require.NoError(t, h.install(depIDG, ""))
+
+	require.Len(t, atReload, 1, "the install reloads the range filter once")
+	for _, rf := range []conf.RangeFilterSettings{atReload[0], *conf.GetSettings().RangeFilterConfig()} {
+		assert.Equal(t, depGeomodelVer, rf.Model)
+		assert.Equal(t, h.shared(depLocalGeoModel), rf.ModelPath)
+		assert.Equal(t, h.shared(depLocalGeoLabels), rf.LabelsPath)
+	}
+}
+
 func TestPrimarySwap_ToBuiltinInstallsAndRecordsMissingDependency(t *testing.T) {
 	h := newDepHarness(t)
 	require.NoError(t, h.install(depIDP, depVariantDFT))
