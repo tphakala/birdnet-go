@@ -716,10 +716,6 @@ func TestPrimarySwap_FailureKeepsRefetchedFileTheCurrentVariantUses(t *testing.T
 	assert.Equal(t, depVariantDFT, installedSnapshot(h.mm)[depIDP].VariantID, "the previous variant stays installed")
 }
 
-// geomodelCatalogID is the shipped geomodel entry the three BirdNET+ v3.0, BirdNET
-// v3.0 and Perch v2 entries depend on.
-const geomodelCatalogID = "birdnet-geomodel-v3"
-
 func TestEmbeddedCatalog_InstallRegistersGeomodelDependency(t *testing.T) {
 	plus, ok := GetCatalogEntry("birdnet-plus-v3.0")
 	require.True(t, ok)
@@ -739,9 +735,9 @@ func TestEmbeddedCatalog_InstallRegistersGeomodelDependency(t *testing.T) {
 			require.NoError(t, h.install(tc.id, tc.variant))
 
 			got := installedSnapshot(h.mm)
-			require.Contains(t, got, geomodelCatalogID)
-			assert.Equal(t, h.shared(conf.GeomodelONNXLocalName), got[geomodelCatalogID].ModelPath)
-			assert.Equal(t, h.shared(conf.GeomodelLabelsLocalName), got[geomodelCatalogID].LabelsPath)
+			require.Contains(t, got, geomodelV3CatalogID)
+			assert.Equal(t, h.shared(conf.GeomodelONNXLocalName), got[geomodelV3CatalogID].ModelPath)
+			assert.Equal(t, h.shared(conf.GeomodelLabelsLocalName), got[geomodelV3CatalogID].LabelsPath)
 			rf := conf.GetSettings().RangeFilterConfig()
 			assert.Equal(t, "v3", rf.Model)
 			assert.Equal(t, h.shared(conf.GeomodelONNXLocalName), rf.ModelPath)
@@ -760,7 +756,7 @@ func TestEmbeddedCatalog_GeomodelOutlivesItsDependents(t *testing.T) {
 	h.assertDependencyInvariants(t, "after both installs")
 
 	// The geomodel cannot be removed while a dependent is installed.
-	requireDependents(t, h.mm.Uninstall(geomodelCatalogID), geomodelCatalogID, "birdnet-plus-v3.0", "perch-v2")
+	requireDependents(t, h.mm.Uninstall(geomodelV3CatalogID), geomodelV3CatalogID, "birdnet-plus-v3.0", "perch-v2")
 	h.assertDependencyInvariants(t, "after refused geomodel uninstall")
 
 	// Removing one dependent keeps the taxonomy the other still carries.
@@ -775,7 +771,7 @@ func TestEmbeddedCatalog_GeomodelOutlivesItsDependents(t *testing.T) {
 
 	// Removing the last dependent leaves the geomodel installed and active.
 	require.NoError(t, h.mm.Uninstall("perch-v2"))
-	assert.Contains(t, installedSnapshot(h.mm), geomodelCatalogID)
+	assert.Contains(t, installedSnapshot(h.mm), geomodelV3CatalogID)
 	assert.FileExists(t, h.shared(conf.GeomodelONNXLocalName))
 	assert.FileExists(t, h.shared(conf.GeomodelLabelsLocalName))
 	assert.NoFileExists(t, h.shared("taxonomy.csv"))
@@ -784,7 +780,7 @@ func TestEmbeddedCatalog_GeomodelOutlivesItsDependents(t *testing.T) {
 	h.assertDependencyInvariants(t, "after last dependent uninstall")
 
 	// With no dependent left the geomodel can go, and the range filter is cleared.
-	require.NoError(t, h.mm.Uninstall(geomodelCatalogID))
+	require.NoError(t, h.mm.Uninstall(geomodelV3CatalogID))
 	assert.NoFileExists(t, h.shared(conf.GeomodelONNXLocalName))
 	assert.NoFileExists(t, h.shared(conf.GeomodelLabelsLocalName))
 	rf := conf.GetSettings().RangeFilterConfig()

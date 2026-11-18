@@ -202,8 +202,9 @@ func TestEmbeddedCatalog_GeomodelIsADependency(t *testing.T) {
 	require.Len(t, geomodelOwn, 2)
 
 	dependents := map[string]bool{"birdnet-plus-v3.0": true, "birdnet-v3.0": true, "perch-v2": true}
-	for _, e := range ActiveCatalog() {
-		entry := &e
+	catalog := ActiveCatalog()
+	for i := range catalog {
+		entry := &catalog[i]
 		assert.False(t, entry.Component, "%s must not be a component", entry.ID)
 		if !dependents[entry.ID] {
 			assert.Empty(t, entry.DependsOn, "%s must not declare dependencies", entry.ID)
