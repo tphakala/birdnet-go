@@ -121,6 +121,25 @@ func TestResolveLibraryPath_PrecedenceAcrossSources(t *testing.T) {
 	assert.Equal(t, exeDLL, got, "a DLL next to the executable beats PATH")
 }
 
+func TestResolveLibraryPath_SkipsRelativeSearchEntries(t *testing.T) {
+	// A relative PATH or INTEL_OPENVINO_DIR entry would be resolved against the
+	// working directory by the stat but loaded as a bare name by the loader, and
+	// would stop discovery before a later valid install. Both are skipped.
+	e := newDiscoveryEnv(t)
+	valid := e.dll(e.msixDir(testMSIX2026_3))
+	workDir := filepath.Join(e.root, "work")
+	e.touch(filepath.Join(workDir, "bin", windowsLibraryName))
+	e.touch(runtimeLibraryIn(filepath.Join(workDir, "ovroot")))
+	t.Chdir(workDir)
+	e.env[envPath] = "bin" + string(os.PathListSeparator) + "."
+	e.env[envOpenVINODir] = "ovroot"
+
+	got, discovered := e.resolve()
+
+	assert.Equal(t, valid, got, "relative entries must not win over a later absolute install")
+	assert.True(t, discovered)
+}
+
 func TestResolveLibraryPath_NewestVersionWinsNumerically(t *testing.T) {
 	t.Run("msix", func(t *testing.T) {
 		e := newDiscoveryEnv(t)

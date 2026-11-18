@@ -130,7 +130,8 @@ func resolveLibraryPath(configured string, d discoveryDeps) (path string, discov
 }
 
 // discoverWindowsLibrary returns the first existing OpenVINO C runtime DLL in
-// the documented search order, or "".
+// the documented search order, or "". Every candidate is an absolute path: a
+// relative PATH or INTEL_OPENVINO_DIR entry is skipped.
 func discoverWindowsLibrary(d discoveryDeps) string {
 	if exeDir, err := d.executableDir(); err == nil {
 		if p := filepath.Join(exeDir, windowsLibraryName); d.fileExists(p) {
@@ -138,14 +139,16 @@ func discoverWindowsLibrary(d discoveryDeps) string {
 		}
 	}
 	for _, dir := range filepath.SplitList(d.getenv(envPath)) {
-		if dir == "" {
+		// A relative entry is resolved against the working directory by the
+		// stat but loaded as a bare name by the loader, so it is skipped.
+		if !filepath.IsAbs(dir) {
 			continue
 		}
 		if p := filepath.Join(dir, windowsLibraryName); d.fileExists(p) {
 			return p
 		}
 	}
-	if root := d.getenv(envOpenVINODir); root != "" {
+	if root := d.getenv(envOpenVINODir); filepath.IsAbs(root) {
 		if p := runtimeLibraryIn(root); d.fileExists(p) {
 			return p
 		}
