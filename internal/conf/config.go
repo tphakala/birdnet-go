@@ -1407,7 +1407,7 @@ var ModelRegionSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
 	Debug                   bool                `yaml:"debug" json:"debug"`                               // true to enable debug mode
-	Model                   string              `yaml:"model" json:"model"`                               // range filter model version: "legacy" for v1, "v3" for geomodel v3.0, or empty/default for v2
+	Model                   string              `yaml:"model" json:"model"`                               // range filter model version: "legacy" for v1, "v3" for geomodel v3.0, or empty/default for v2; an installed geomodel replaces the stock v1 and v2 models
 	ModelPath               string              `yaml:"modelpath" json:"modelPath"`                       // path to external meta model file (empty for embedded)
 	LabelsPath              string              `yaml:"labelspath,omitempty" json:"labelsPath,omitempty"` // path to geomodel labels file (required when geomodel differs from classifier labels)
 	Threshold               float32             `yaml:"threshold" json:"threshold"`                       // rangefilter species occurrence threshold

@@ -178,7 +178,7 @@ birdnet:
   usexnnpack: true # Use XNNPACK delegate for inference acceleration
   rangefilter:
     debug: false # Enable debug mode for range filter
-    model: "" # Range filter model to use. "" (default) uses V2, "legacy" uses V1.
+    model: "" # Range filter model to use. "" (default) uses V2, "legacy" uses V1. An installed BirdNET Geomodel v3.0 replaces the stock models.
     threshold:
       0.01 # Range filter species occurrence threshold (0.0-1.0)
       # Default (0.01) is recommended for most users
@@ -1207,7 +1207,7 @@ birdnet:
   longitude: 24.9384 # Your location longitude
   rangefilter:
     debug: false # Enable debug logging
-    model: "" # "" for V2 (default), "legacy" for V1
+    model: "" # "" for V2 (default), "legacy" for V1; an installed BirdNET Geomodel v3.0 replaces the stock models
     threshold: 0.01 # Species occurrence threshold (0.0-1.0)
 ```
 
@@ -1310,9 +1310,11 @@ This displays all species that pass the threshold for your current location and 
 BirdNET-Go supports two range filter model versions:
 
 - **V2 (Default)**: Latest model with improved accuracy
-- **V1 (Legacy)**: Original model, use `model: "legacy"` if needed for compatibility
+- **V1 (Legacy)**: Original model, use `model: "legacy"` if needed for compatibility, unless the BirdNET Geomodel v3.0 is installed
 
 The V2 model generally provides better predictions and should be used unless you have specific compatibility requirements.
+
+> **Note**: When the BirdNET Geomodel v3.0 is installed, it replaces the V1 and V2 range filter models, including `model: "legacy"` and a `modelpath` that points at a stock MData model file. A `modelpath` to a file with any other name is kept. Installing Perch v2 or BirdNET+ v3.0 also installs the geomodel.
 
 ### Troubleshooting
 

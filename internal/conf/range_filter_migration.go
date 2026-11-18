@@ -16,7 +16,9 @@ const (
 // Range filter model sentinels for birdnet.rangefilter.model. The empty string
 // and RangeFilterModelLatest both request automatic backend selection (see
 // classifier.isAutoSelectRangeFilterModel); RangeFilterModelLegacy pins the V1
-// MData model; RangeFilterModelV3 selects the geomodel. Defined here in conf
+// MData model; RangeFilterModelV3 selects the geomodel. An installed geomodel
+// replaces the stock MData models, a legacy pin included; a modelpath to a file
+// with another name is kept. Defined here in conf
 // (which classifier imports) so the sentinels are shared, not duplicated per
 // package.
 const (

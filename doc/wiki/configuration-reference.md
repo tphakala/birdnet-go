@@ -67,7 +67,7 @@ BirdNET configuration
 | `birdnet.threads` | integer | number of CPU threads to use for analysis |
 | `birdnet.locale` | string | language to use for labels |
 | `birdnet.rangefilter.debug` | boolean | true to enable debug mode |
-| `birdnet.rangefilter.model` | string | range filter model version: "legacy" for v1, "v3" for geomodel v3.0, or empty/default for v2 |
+| `birdnet.rangefilter.model` | string | range filter model version: "legacy" for v1, "v3" for geomodel v3.0, or empty/default for v2; an installed geomodel replaces the stock v1 and v2 models |
 | `birdnet.rangefilter.modelpath` | string | path to external meta model file (empty for embedded) |
 | `birdnet.rangefilter.labelspath` | string | path to geomodel labels file (required when geomodel differs from classifier labels) |
 | `birdnet.rangefilter.threshold` | number | rangefilter species occurrence threshold |
