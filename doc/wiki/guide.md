@@ -1314,7 +1314,7 @@ BirdNET-Go supports two range filter model versions:
 
 The V2 model generally provides better predictions and should be used unless you have specific compatibility requirements.
 
-> **Note**: When the BirdNET Geomodel v3.0 is installed, it replaces the V1 and V2 range filter models, including `model: "legacy"` and a `modelpath` that points at a stock MData model file. A `modelpath` to a file with any other name is kept. Installing Perch v2 or BirdNET+ v3.0 also installs the geomodel.
+> **Note**: When the BirdNET Geomodel v3.0 is installed, it replaces the V1 and V2 range filter models, including `model: "legacy"` and a `modelpath` that points at a stock MData model file. A `modelpath` to a file with any other name is kept. Installing Perch v2, BirdNET+ v3.0 or the BirdNET v3.0 preview also installs the geomodel.
 
 ### Troubleshooting
 
