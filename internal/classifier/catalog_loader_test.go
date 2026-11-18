@@ -627,8 +627,25 @@ func TestCatalogChecksum_OmitemptyKeepsOldFilesPristine(t *testing.T) {
 	// pristine catalog written by an older version still hashes the same.
 	plain, err := json.Marshal(EmbeddedCatalog)
 	require.NoError(t, err)
-	assert.NotContains(t, string(plain), `"depends_on"`)
 	assert.NotContains(t, string(plain), `"component"`)
+
+	// Only entries that declare a dependency carry the key; the rest omit it.
+	var independent []CatalogEntry
+	for i := range EmbeddedCatalog {
+		if len(EmbeddedCatalog[i].DependsOn) == 0 {
+			e := EmbeddedCatalog[i]
+			e.Variants = nil
+			independent = append(independent, e)
+		}
+	}
+	require.NotEmpty(t, independent)
+	noDeps, err := json.Marshal(independent)
+	require.NoError(t, err)
+	assert.NotContains(t, string(noDeps), `"depends_on"`)
+
+	dependent, err := json.Marshal(CatalogEntry{ID: "a", DependsOn: []string{"b"}})
+	require.NoError(t, err)
+	assert.Contains(t, string(dependent), `"depends_on":["b"]`)
 
 	// Only entries that name a successor carry the entry-level key; the rest omit
 	// it. Variants are stripped: a withdrawn variant carries its own superseded_by.

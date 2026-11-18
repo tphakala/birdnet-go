@@ -24,7 +24,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/amazonia/birdnet-v3.0-preview3.1-amazonia-fp16-b1.onnx", LocalName: "birdnet_v3.0_amazonia_fp16.onnx", Role: RoleModel, SHA256: "17d78ec07209fd7faa6753ba643b489df52db9abcd2420c90a6058990e120bba", SizeBytes: 75013090},
 				{RemotePath: "regional/amazonia/birdnet-v3.0-preview3.1-amazonia-labels-b1.txt", LocalName: "birdnet_v3.0_amazonia_labels.txt", Role: RoleLabels, SHA256: "d41569fd0a4c847339f923265a39c34e4069b522dc6261e1a8df9cb49c66ca76", SizeBytes: 32275},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@amazonia",
@@ -42,7 +42,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/amazonia/birdnet-v3.0-preview3.1-amazonia-fp32-b1.onnx", LocalName: "birdnet_v3.0_amazonia_fp32.onnx", Role: RoleModel, SHA256: "ef395f9cf3e9db65bf9e5f0a5e3ca857615c013e155e94037043299a9fe1e73e", SizeBytes: 149658055},
 				{RemotePath: "regional/amazonia/birdnet-v3.0-preview3.1-amazonia-labels-b1.txt", LocalName: "birdnet_v3.0_amazonia_labels.txt", Role: RoleLabels, SHA256: "d41569fd0a4c847339f923265a39c34e4069b522dc6261e1a8df9cb49c66ca76", SizeBytes: 32275},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@andes",
@@ -60,7 +60,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/andes/birdnet-v3.0-preview3.1-andes-fp16-b1.onnx", LocalName: "birdnet_v3.0_andes_fp16.onnx", Role: RoleModel, SHA256: "ec9f1bbc04ffb7485595292782fad35dc846fa39c3ec3d9047b1efb0937c299f", SizeBytes: 75013090},
 				{RemotePath: "regional/andes/birdnet-v3.0-preview3.1-andes-labels-b1.txt", LocalName: "birdnet_v3.0_andes_labels.txt", Role: RoleLabels, SHA256: "181fedd7b183cf6c9aa03b90cb344c2d6097767c97041dc200d8af080989d632", SizeBytes: 32124},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@andes",
@@ -78,7 +78,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/andes/birdnet-v3.0-preview3.1-andes-fp32-b1.onnx", LocalName: "birdnet_v3.0_andes_fp32.onnx", Role: RoleModel, SHA256: "bcbbf32b126261b70bea8648b2ff880a4dcd8d1902bf663cd952a6eb4d374c61", SizeBytes: 149658055},
 				{RemotePath: "regional/andes/birdnet-v3.0-preview3.1-andes-labels-b1.txt", LocalName: "birdnet_v3.0_andes_labels.txt", Role: RoleLabels, SHA256: "181fedd7b183cf6c9aa03b90cb344c2d6097767c97041dc200d8af080989d632", SizeBytes: 32124},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@australia-east",
@@ -96,7 +96,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/australia-east/birdnet-v3.0-preview3.1-australia-east-fp16-b1.onnx", LocalName: "birdnet_v3.0_australia-east_fp16.onnx", Role: RoleModel, SHA256: "e631d2714c241093065e2d01de934dd925d1a35369a324da6af141e1f0fd540b", SizeBytes: 73098736},
 				{RemotePath: "regional/australia-east/birdnet-v3.0-preview3.1-australia-east-labels-b1.txt", LocalName: "birdnet_v3.0_australia-east_labels.txt", Role: RoleLabels, SHA256: "15b410825662d5375e2c82d3d3e35ddebe5c39ad6357bf021e9c87a70b03de3f", SizeBytes: 26783},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@australia-east",
@@ -114,7 +114,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/australia-east/birdnet-v3.0-preview3.1-australia-east-fp32-b1.onnx", LocalName: "birdnet_v3.0_australia-east_fp32.onnx", Role: RoleModel, SHA256: "c57a62b9abb7e13614eb24073f8f9b219dc38950be6d25a91f61000549c0eeec", SizeBytes: 145829347},
 				{RemotePath: "regional/australia-east/birdnet-v3.0-preview3.1-australia-east-labels-b1.txt", LocalName: "birdnet_v3.0_australia-east_labels.txt", Role: RoleLabels, SHA256: "15b410825662d5375e2c82d3d3e35ddebe5c39ad6357bf021e9c87a70b03de3f", SizeBytes: 26783},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@azores",
@@ -132,7 +132,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/azores/birdnet-v3.0-preview3.1-azores-fp16-b1.onnx", LocalName: "birdnet_v3.0_azores_fp16.onnx", Role: RoleModel, SHA256: "362e66b655c6ec6ada44b8d35ee397aed2baf6f8a9613a591f53858591ff66c9", SizeBytes: 63924992},
 				{RemotePath: "regional/azores/birdnet-v3.0-preview3.1-azores-labels-b1.txt", LocalName: "birdnet_v3.0_azores_labels.txt", Role: RoleLabels, SHA256: "f2e17ba806cfb39479c025aa2c451b24a5e3cb0e91059b58cc7c8f1bdff96379", SizeBytes: 7552},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@azores",
@@ -150,7 +150,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/azores/birdnet-v3.0-preview3.1-azores-fp32-b1.onnx", LocalName: "birdnet_v3.0_azores_fp32.onnx", Role: RoleModel, SHA256: "340fe271f7f921b23c4ed64743ad7b606ee10217f32c47e41cd4342140176fe3", SizeBytes: 127481865},
 				{RemotePath: "regional/azores/birdnet-v3.0-preview3.1-azores-labels-b1.txt", LocalName: "birdnet_v3.0_azores_labels.txt", Role: RoleLabels, SHA256: "f2e17ba806cfb39479c025aa2c451b24a5e3cb0e91059b58cc7c8f1bdff96379", SizeBytes: 7552},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@baltics",
@@ -168,7 +168,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/baltics/birdnet-v3.0-preview3.1-baltics-fp16-b1.onnx", LocalName: "birdnet_v3.0_baltics_fp16.onnx", Role: RoleModel, SHA256: "dd83173755d8b78b7c46a9fee454cd52b33fa247e11051771859bede7990dd51", SizeBytes: 67981148},
 				{RemotePath: "regional/baltics/birdnet-v3.0-preview3.1-baltics-labels-b1.txt", LocalName: "birdnet_v3.0_baltics_labels.txt", Role: RoleLabels, SHA256: "88af53f955717097f37e3d70b0b33fe29b72340697f8d20400dc851bbbc511c1", SizeBytes: 14920},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@baltics",
@@ -186,7 +186,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/baltics/birdnet-v3.0-preview3.1-baltics-fp32-b1.onnx", LocalName: "birdnet_v3.0_baltics_fp32.onnx", Role: RoleModel, SHA256: "dd30c5fc35cd1d14dca1f399977225859cde888278e91eb8432edbe31f65d177", SizeBytes: 135594187},
 				{RemotePath: "regional/baltics/birdnet-v3.0-preview3.1-baltics-labels-b1.txt", LocalName: "birdnet_v3.0_baltics_labels.txt", Role: RoleLabels, SHA256: "88af53f955717097f37e3d70b0b33fe29b72340697f8d20400dc851bbbc511c1", SizeBytes: 14920},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@british-isles",
@@ -204,7 +204,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/birdnet-v3.0-preview3.1-british-isles-fp16-b1.onnx", LocalName: "birdnet_v3.0_british-isles_fp16.onnx", Role: RoleModel, SHA256: "45c9781f56286be1e05c509e1645f136a4db8ac230b7c978dae438e2f7e3ef94", SizeBytes: 70274590},
 				{RemotePath: "regional/british-isles/birdnet-v3.0-preview3.1-british-isles-labels-b1.txt", LocalName: "birdnet_v3.0_british-isles_labels.txt", Role: RoleLabels, SHA256: "a3d9873909bb502c3964ca4f39d86068abeb323f45369d2206242410010bfe86", SizeBytes: 19328},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@british-isles",
@@ -222,7 +222,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/birdnet-v3.0-preview3.1-british-isles-fp32-b1.onnx", LocalName: "birdnet_v3.0_british-isles_fp32.onnx", Role: RoleModel, SHA256: "6816af2076ea79ae4f2c4a22ec005e7e4c9011971c65533d68e3b7a9c3037adb", SizeBytes: 140181055},
 				{RemotePath: "regional/british-isles/birdnet-v3.0-preview3.1-british-isles-labels-b1.txt", LocalName: "birdnet_v3.0_british-isles_labels.txt", Role: RoleLabels, SHA256: "a3d9873909bb502c3964ca4f39d86068abeb323f45369d2206242410010bfe86", SizeBytes: 19328},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@canada-alaska",
@@ -240,7 +240,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-fp16-b1.onnx", LocalName: "birdnet_v3.0_canada-alaska_fp16.onnx", Role: RoleModel, SHA256: "4c7277dc189757e7bb38f1478f03c3a4917160c2055a5f0ad9e9cf85aa7afde6", SizeBytes: 73859859},
 				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-labels-b1.txt", LocalName: "birdnet_v3.0_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "cfeedb34ac7dba1a6398029228d2a8188418397dd05a4e2707320df868214c1d", SizeBytes: 13854},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@canada-alaska",
@@ -258,7 +258,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-fp32-b1.onnx", LocalName: "birdnet_v3.0_canada-alaska_fp32.onnx", Role: RoleModel, SHA256: "ab32a0b1662591e1190d4033055f58ff209bd933c60e7b7ef78e9500b78ffd4e", SizeBytes: 146966587},
 				{RemotePath: "regional/canada-alaska/birdnet-v3.0-preview3.1-canada-alaska-labels-b1.txt", LocalName: "birdnet_v3.0_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "cfeedb34ac7dba1a6398029228d2a8188418397dd05a4e2707320df868214c1d", SizeBytes: 13854},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@canary-islands",
@@ -276,7 +276,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canary-islands/birdnet-v3.0-preview3.1-canary-islands-fp16-b1.onnx", LocalName: "birdnet_v3.0_canary-islands_fp16.onnx", Role: RoleModel, SHA256: "3376f82981595545ed20b120291acd8219522b7446bff0b24071c396234a61e4", SizeBytes: 67033448},
 				{RemotePath: "regional/canary-islands/birdnet-v3.0-preview3.1-canary-islands-labels-b1.txt", LocalName: "birdnet_v3.0_canary-islands_labels.txt", Role: RoleLabels, SHA256: "07daabee7f9ad44b93bbdcec679ee3d2202eee41c00a0feddd7bbc70a48f440b", SizeBytes: 13543},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@canary-islands",
@@ -294,7 +294,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canary-islands/birdnet-v3.0-preview3.1-canary-islands-fp32-b1.onnx", LocalName: "birdnet_v3.0_canary-islands_fp32.onnx", Role: RoleModel, SHA256: "074503470eb21dc298a09ea711a2372295e9d8c402a012900face0326d811629", SizeBytes: 133698785},
 				{RemotePath: "regional/canary-islands/birdnet-v3.0-preview3.1-canary-islands-labels-b1.txt", LocalName: "birdnet_v3.0_canary-islands_labels.txt", Role: RoleLabels, SHA256: "07daabee7f9ad44b93bbdcec679ee3d2202eee41c00a0feddd7bbc70a48f440b", SizeBytes: 13543},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@cape-verde",
@@ -312,7 +312,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/cape-verde/birdnet-v3.0-preview3.1-cape-verde-fp16-b1.onnx", LocalName: "birdnet_v3.0_cape-verde_fp16.onnx", Role: RoleModel, SHA256: "5ff4d3be9a81d56a3ffce41fa7a85ccb5798d2b2b986188edabae14fc5c99750", SizeBytes: 62389718},
 				{RemotePath: "regional/cape-verde/birdnet-v3.0-preview3.1-cape-verde-labels-b1.txt", LocalName: "birdnet_v3.0_cape-verde_labels.txt", Role: RoleLabels, SHA256: "94d98ccc9b9fad51835fc0d1da69f899cc04a5919fd7ac4015fa4c5050922fbb", SizeBytes: 5122},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@cape-verde",
@@ -330,7 +330,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/cape-verde/birdnet-v3.0-preview3.1-cape-verde-fp32-b1.onnx", LocalName: "birdnet_v3.0_cape-verde_fp32.onnx", Role: RoleModel, SHA256: "81f79feaadb3023088ea41be045e127a70e5a88a8f6bdf4881e4b67b5317ebb7", SizeBytes: 124411317},
 				{RemotePath: "regional/cape-verde/birdnet-v3.0-preview3.1-cape-verde-labels-b1.txt", LocalName: "birdnet_v3.0_cape-verde_labels.txt", Role: RoleLabels, SHA256: "94d98ccc9b9fad51835fc0d1da69f899cc04a5919fd7ac4015fa4c5050922fbb", SizeBytes: 5122},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@central-africa",
@@ -348,7 +348,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-fp16-b1.onnx", LocalName: "birdnet_v3.0_central-africa_fp16.onnx", Role: RoleModel, SHA256: "6a8389564e0b861f581350df4668cee5874a9bf6f5a02f51c4baab3cbc6e6d3b", SizeBytes: 88097666},
 				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-labels-b1.txt", LocalName: "birdnet_v3.0_central-africa_labels.txt", Role: RoleLabels, SHA256: "13fb3701a59e5b9fcde3aaf4fa9e48914643e14102ae273e942498e10409a76b", SizeBytes: 29833},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@central-africa",
@@ -366,7 +366,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-fp32-b1.onnx", LocalName: "birdnet_v3.0_central-africa_fp32.onnx", Role: RoleModel, SHA256: "50b0739ba41d9eb3a84b29812087dafc0ea4e1457e8845892fc9659d2cc66399", SizeBytes: 176042023},
 				{RemotePath: "regional/central-africa/birdnet-v3.0-preview3.1-central-africa-labels-b1.txt", LocalName: "birdnet_v3.0_central-africa_labels.txt", Role: RoleLabels, SHA256: "13fb3701a59e5b9fcde3aaf4fa9e48914643e14102ae273e942498e10409a76b", SizeBytes: 29833},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@central-europe",
@@ -384,7 +384,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-europe/birdnet-v3.0-preview3.1-central-europe-fp16-b1.onnx", LocalName: "birdnet_v3.0_central-europe_fp16.onnx", Role: RoleModel, SHA256: "9d6843c59ef022e9ecb70fbc1ae2414b779432f1c7630fedbb0beab5c3f336a8", SizeBytes: 71885680},
 				{RemotePath: "regional/central-europe/birdnet-v3.0-preview3.1-central-europe-labels-b1.txt", LocalName: "birdnet_v3.0_central-europe_labels.txt", Role: RoleLabels, SHA256: "e64919cbbbd13ad9ca5efe2ea03a098ad56b827b0578a703051738d0c892596a", SizeBytes: 22527},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@central-europe",
@@ -402,7 +402,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-europe/birdnet-v3.0-preview3.1-central-europe-fp32-b1.onnx", LocalName: "birdnet_v3.0_central-europe_fp32.onnx", Role: RoleModel, SHA256: "83d07745a4c7bb22643a87397cde3a5192e72bba8a33ceac4d9e6be4970114e4", SizeBytes: 143403235},
 				{RemotePath: "regional/central-europe/birdnet-v3.0-preview3.1-central-europe-labels-b1.txt", LocalName: "birdnet_v3.0_central-europe_labels.txt", Role: RoleLabels, SHA256: "e64919cbbbd13ad9ca5efe2ea03a098ad56b827b0578a703051738d0c892596a", SizeBytes: 22527},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@china-north-central",
@@ -420,7 +420,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-north-central/birdnet-v3.0-preview3.1-china-north-central-fp16-b1.onnx", LocalName: "birdnet_v3.0_china-north-central_fp16.onnx", Role: RoleModel, SHA256: "1291c3df3c38b363f77eac6f0e9fba28253e4daf370322f3cde08276ac144a06", SizeBytes: 73932712},
 				{RemotePath: "regional/china-north-central/birdnet-v3.0-preview3.1-china-north-central-labels-b1.txt", LocalName: "birdnet_v3.0_china-north-central_labels.txt", Role: RoleLabels, SHA256: "3adbf2172b798082b9cdccaf4aaebed74f3c49df146f6778408314cdbb670d52", SizeBytes: 28192},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-north-central",
@@ -438,7 +438,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-north-central/birdnet-v3.0-preview3.1-china-north-central-fp32-b1.onnx", LocalName: "birdnet_v3.0_china-north-central_fp32.onnx", Role: RoleModel, SHA256: "aa9fe728c50dc2bcf0fffe27fe008c16d314c37da11ec188f62f8b8f5cd3495c", SizeBytes: 147497299},
 				{RemotePath: "regional/china-north-central/birdnet-v3.0-preview3.1-china-north-central-labels-b1.txt", LocalName: "birdnet_v3.0_china-north-central_labels.txt", Role: RoleLabels, SHA256: "3adbf2172b798082b9cdccaf4aaebed74f3c49df146f6778408314cdbb670d52", SizeBytes: 28192},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@china-northeast",
@@ -456,7 +456,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-northeast/birdnet-v3.0-preview3.1-china-northeast-fp16-b1.onnx", LocalName: "birdnet_v3.0_china-northeast_fp16.onnx", Role: RoleModel, SHA256: "bb84013aaf4250d03a1d385e719484030f4a8ccf32febd874a81af79c3ef522c", SizeBytes: 71999404},
 				{RemotePath: "regional/china-northeast/birdnet-v3.0-preview3.1-china-northeast-labels-b1.txt", LocalName: "birdnet_v3.0_china-northeast_labels.txt", Role: RoleLabels, SHA256: "f5a8ea91d28b2d98937e8c542e67bac5ef4a472390c87790cd3d93213fb574f0", SizeBytes: 23690},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-northeast",
@@ -474,7 +474,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-northeast/birdnet-v3.0-preview3.1-china-northeast-fp32-b1.onnx", LocalName: "birdnet_v3.0_china-northeast_fp32.onnx", Role: RoleModel, SHA256: "8c2ee2399c9f463468671e68fbdd77356d3f8a61f5e9def96ce6317338b39c1b", SizeBytes: 143630683},
 				{RemotePath: "regional/china-northeast/birdnet-v3.0-preview3.1-china-northeast-labels-b1.txt", LocalName: "birdnet_v3.0_china-northeast_labels.txt", Role: RoleLabels, SHA256: "f5a8ea91d28b2d98937e8c542e67bac5ef4a472390c87790cd3d93213fb574f0", SizeBytes: 23690},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@china-southeast",
@@ -492,7 +492,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southeast/birdnet-v3.0-preview3.1-china-southeast-fp16-b1.onnx", LocalName: "birdnet_v3.0_china-southeast_fp16.onnx", Role: RoleModel, SHA256: "ec17f53f3ce5ec4042d969ef55cf30e15553b6805b1a513b5537620a40e8c278", SizeBytes: 74994136},
 				{RemotePath: "regional/china-southeast/birdnet-v3.0-preview3.1-china-southeast-labels-b1.txt", LocalName: "birdnet_v3.0_china-southeast_labels.txt", Role: RoleLabels, SHA256: "e78174684a403c57e730c3696df609e99fc6b7ab39e530dd9ded9f65ca88df60", SizeBytes: 30955},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-southeast",
@@ -510,7 +510,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southeast/birdnet-v3.0-preview3.1-china-southeast-fp32-b1.onnx", LocalName: "birdnet_v3.0_china-southeast_fp32.onnx", Role: RoleModel, SHA256: "4fe240c7240978fb21d379f6d37c93aea38ba54a142bc3cf1b97a997746a8985", SizeBytes: 149620147},
 				{RemotePath: "regional/china-southeast/birdnet-v3.0-preview3.1-china-southeast-labels-b1.txt", LocalName: "birdnet_v3.0_china-southeast_labels.txt", Role: RoleLabels, SHA256: "e78174684a403c57e730c3696df609e99fc6b7ab39e530dd9ded9f65ca88df60", SizeBytes: 30955},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@china-southwest",
@@ -528,7 +528,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/birdnet-v3.0-preview3.1-china-southwest-fp16-b1.onnx", LocalName: "birdnet_v3.0_china-southwest_fp16.onnx", Role: RoleModel, SHA256: "4236ccdc5fc0455abbe36cbebf2c23cd37aff0b3921f7a9b262f60c7991d5a60", SizeBytes: 75145768},
 				{RemotePath: "regional/china-southwest/birdnet-v3.0-preview3.1-china-southwest-labels-b1.txt", LocalName: "birdnet_v3.0_china-southwest_labels.txt", Role: RoleLabels, SHA256: "96219a5a02b54ef5a0542aaec4a39afd586521f44ab887bfd7df97ae3fa1388f", SizeBytes: 32104},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-southwest",
@@ -546,7 +546,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/birdnet-v3.0-preview3.1-china-southwest-fp32-b1.onnx", LocalName: "birdnet_v3.0_china-southwest_fp32.onnx", Role: RoleModel, SHA256: "b8d3adffe207d7fe158e96d0686cc8893826346e5ab6b20401b4f14884014ab0", SizeBytes: 149923411},
 				{RemotePath: "regional/china-southwest/birdnet-v3.0-preview3.1-china-southwest-labels-b1.txt", LocalName: "birdnet_v3.0_china-southwest_labels.txt", Role: RoleLabels, SHA256: "96219a5a02b54ef5a0542aaec4a39afd586521f44ab887bfd7df97ae3fa1388f", SizeBytes: 32104},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@east-africa",
@@ -564,7 +564,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-fp16-b1.onnx", LocalName: "birdnet_v3.0_east-africa_fp16.onnx", Role: RoleModel, SHA256: "4909eb67467907c7bea5f454e3c94d1161d521b465f90d6f8f2755857dff2da1", SizeBytes: 93385832},
 				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-labels-b1.txt", LocalName: "birdnet_v3.0_east-africa_labels.txt", Role: RoleLabels, SHA256: "8f8c798043919c93e487c01057f807a00f40830f997a99edc74a7ab1df7e99f2", SizeBytes: 35080},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@east-africa",
@@ -582,7 +582,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-fp32-b1.onnx", LocalName: "birdnet_v3.0_east-africa_fp32.onnx", Role: RoleModel, SHA256: "91962150cf2fc8171fe282d106c070ba7ba118604e5a2b8e79059a18f1a0de18", SizeBytes: 186618355},
 				{RemotePath: "regional/east-africa/birdnet-v3.0-preview3.1-east-africa-labels-b1.txt", LocalName: "birdnet_v3.0_east-africa_labels.txt", Role: RoleLabels, SHA256: "8f8c798043919c93e487c01057f807a00f40830f997a99edc74a7ab1df7e99f2", SizeBytes: 35080},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@eastern-brazil",
@@ -600,7 +600,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-brazil/birdnet-v3.0-preview3.1-eastern-brazil-fp16-b1.onnx", LocalName: "birdnet_v3.0_eastern-brazil_fp16.onnx", Role: RoleModel, SHA256: "676ae019d456bcd0a2ce5fa9f1197781a3e7c56354f5deb70ffde823a99af8c0", SizeBytes: 75069952},
 				{RemotePath: "regional/eastern-brazil/birdnet-v3.0-preview3.1-eastern-brazil-labels-b1.txt", LocalName: "birdnet_v3.0_eastern-brazil_labels.txt", Role: RoleLabels, SHA256: "ce9a20f287bb6c0cbaf52ac5f28df02d5e0c17e335020687a40c0987c921844e", SizeBytes: 32664},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@eastern-brazil",
@@ -618,7 +618,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-brazil/birdnet-v3.0-preview3.1-eastern-brazil-fp32-b1.onnx", LocalName: "birdnet_v3.0_eastern-brazil_fp32.onnx", Role: RoleModel, SHA256: "23cb0971ec650c86126c6fcfd5eee330288f87a45c8e07af7dce8f52a4dad538", SizeBytes: 149771779},
 				{RemotePath: "regional/eastern-brazil/birdnet-v3.0-preview3.1-eastern-brazil-labels-b1.txt", LocalName: "birdnet_v3.0_eastern-brazil_labels.txt", Role: RoleLabels, SHA256: "ce9a20f287bb6c0cbaf52ac5f28df02d5e0c17e335020687a40c0987c921844e", SizeBytes: 32664},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@eastern-europe",
@@ -636,7 +636,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-europe/birdnet-v3.0-preview3.1-eastern-europe-fp16-b1.onnx", LocalName: "birdnet_v3.0_eastern-europe_fp16.onnx", Role: RoleModel, SHA256: "3e8dd58e59fb2d5b201a04df99ee5a311f6edb31e1c1c28b5a060dfb91cc3864", SizeBytes: 69497476},
 				{RemotePath: "regional/eastern-europe/birdnet-v3.0-preview3.1-eastern-europe-labels-b1.txt", LocalName: "birdnet_v3.0_eastern-europe_labels.txt", Role: RoleLabels, SHA256: "393c21dc9868ef6ae582c76f525044134476f214ae6aae9c845356a8c4337898", SizeBytes: 18100},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@eastern-europe",
@@ -654,7 +654,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-europe/birdnet-v3.0-preview3.1-eastern-europe-fp32-b1.onnx", LocalName: "birdnet_v3.0_eastern-europe_fp32.onnx", Role: RoleModel, SHA256: "a7cb46814165832308eeca0363b4dc906d28f8f06ca02e25a1a7deb053deec15", SizeBytes: 138626827},
 				{RemotePath: "regional/eastern-europe/birdnet-v3.0-preview3.1-eastern-europe-labels-b1.txt", LocalName: "birdnet_v3.0_eastern-europe_labels.txt", Role: RoleLabels, SHA256: "393c21dc9868ef6ae582c76f525044134476f214ae6aae9c845356a8c4337898", SizeBytes: 18100},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@galapagos",
@@ -672,7 +672,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/galapagos/birdnet-v3.0-preview3.1-galapagos-fp16-b1.onnx", LocalName: "birdnet_v3.0_galapagos_fp16.onnx", Role: RoleModel, SHA256: "777fcbe063fb108ee2a297c0cdf8768a1a6f8804a7adcd8eedd24543d9f182a0", SizeBytes: 62257040},
 				{RemotePath: "regional/galapagos/birdnet-v3.0-preview3.1-galapagos-labels-b1.txt", LocalName: "birdnet_v3.0_galapagos_labels.txt", Role: RoleLabels, SHA256: "38c3e85ee20065453d708b067a3de5c2ff64ff570b19d155641dbcba3a44cd41", SizeBytes: 4818},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@galapagos",
@@ -690,7 +690,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/galapagos/birdnet-v3.0-preview3.1-galapagos-fp32-b1.onnx", LocalName: "birdnet_v3.0_galapagos_fp32.onnx", Role: RoleModel, SHA256: "bda04467c1114a1733ff3b2f27c80e86b4a7d881e182e55a08c8fb45aa389f34", SizeBytes: 124145961},
 				{RemotePath: "regional/galapagos/birdnet-v3.0-preview3.1-galapagos-labels-b1.txt", LocalName: "birdnet_v3.0_galapagos_labels.txt", Role: RoleLabels, SHA256: "38c3e85ee20065453d708b067a3de5c2ff64ff570b19d155641dbcba3a44cd41", SizeBytes: 4818},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@hawaii",
@@ -708,7 +708,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/hawaii/birdnet-v3.0-preview3.1-hawaii-fp16-b1.onnx", LocalName: "birdnet_v3.0_hawaii_fp16.onnx", Role: RoleModel, SHA256: "61cfd0db88506999da9776abae57beed02f7b8653ddd295b90e203bd3a875dc0", SizeBytes: 64834784},
 				{RemotePath: "regional/hawaii/birdnet-v3.0-preview3.1-hawaii-labels-b1.txt", LocalName: "birdnet_v3.0_hawaii_labels.txt", Role: RoleLabels, SHA256: "3279fb4b3b5e4ba4d12e0d3b6c212c5d70eb9d135eb04e51b585ede318346fc2", SizeBytes: 9439},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@hawaii",
@@ -726,7 +726,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/hawaii/birdnet-v3.0-preview3.1-hawaii-fp32-b1.onnx", LocalName: "birdnet_v3.0_hawaii_fp32.onnx", Role: RoleModel, SHA256: "3cdf5846bd3144ca19dcfef99bc95deacf0139ce3800f3bcfc62ed5c41351c6f", SizeBytes: 129301457},
 				{RemotePath: "regional/hawaii/birdnet-v3.0-preview3.1-hawaii-labels-b1.txt", LocalName: "birdnet_v3.0_hawaii_labels.txt", Role: RoleLabels, SHA256: "3279fb4b3b5e4ba4d12e0d3b6c212c5d70eb9d135eb04e51b585ede318346fc2", SizeBytes: 9439},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@himalaya",
@@ -744,7 +744,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/himalaya/birdnet-v3.0-preview3.1-himalaya-fp16-b1.onnx", LocalName: "birdnet_v3.0_himalaya_fp16.onnx", Role: RoleModel, SHA256: "11b49e82857a849e07990de758c05555b8e3bfc5b86c9e626cf9a492a1a8e879", SizeBytes: 75069952},
 				{RemotePath: "regional/himalaya/birdnet-v3.0-preview3.1-himalaya-labels-b1.txt", LocalName: "birdnet_v3.0_himalaya_labels.txt", Role: RoleLabels, SHA256: "5c7b56877022eada1eb57f5f0069ad5f1d8cef3042efdb254ad00606bc06802c", SizeBytes: 31141},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@himalaya",
@@ -762,7 +762,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/himalaya/birdnet-v3.0-preview3.1-himalaya-fp32-b1.onnx", LocalName: "birdnet_v3.0_himalaya_fp32.onnx", Role: RoleModel, SHA256: "624e56af0422e5ec87416958d32281c4d399b96afa55c7392a8bea8ab4adeee0", SizeBytes: 149771779},
 				{RemotePath: "regional/himalaya/birdnet-v3.0-preview3.1-himalaya-labels-b1.txt", LocalName: "birdnet_v3.0_himalaya_labels.txt", Role: RoleLabels, SHA256: "5c7b56877022eada1eb57f5f0069ad5f1d8cef3042efdb254ad00606bc06802c", SizeBytes: 31141},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@iberia",
@@ -780,7 +780,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iberia/birdnet-v3.0-preview3.1-iberia-fp16-b1.onnx", LocalName: "birdnet_v3.0_iberia_fp16.onnx", Role: RoleModel, SHA256: "07335badaf7d3f6b72b836b9589cfc23b5047d5f069fb51487e0bc8ce947b3ce", SizeBytes: 71563462},
 				{RemotePath: "regional/iberia/birdnet-v3.0-preview3.1-iberia-labels-b1.txt", LocalName: "birdnet_v3.0_iberia_labels.txt", Role: RoleLabels, SHA256: "82d0ca3d9dba1dfd2cb1d2d5c0343b52bcbca8df007ac21fc76ae522fa7ad034", SizeBytes: 22027},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@iberia",
@@ -798,7 +798,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iberia/birdnet-v3.0-preview3.1-iberia-fp32-b1.onnx", LocalName: "birdnet_v3.0_iberia_fp32.onnx", Role: RoleModel, SHA256: "de133241c5b76a07832bdbe736880241ebcddf4e9823c9c05adee00a4f11a537", SizeBytes: 142758799},
 				{RemotePath: "regional/iberia/birdnet-v3.0-preview3.1-iberia-labels-b1.txt", LocalName: "birdnet_v3.0_iberia_labels.txt", Role: RoleLabels, SHA256: "82d0ca3d9dba1dfd2cb1d2d5c0343b52bcbca8df007ac21fc76ae522fa7ad034", SizeBytes: 22027},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@iceland",
@@ -816,7 +816,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iceland/birdnet-v3.0-preview3.1-iceland-fp16-b1.onnx", LocalName: "birdnet_v3.0_iceland_fp16.onnx", Role: RoleModel, SHA256: "83526dc4eae3771d552be1741f498281a8b8fece5c9757e0e5f2fb7baa6c762b", SizeBytes: 67090310},
 				{RemotePath: "regional/iceland/birdnet-v3.0-preview3.1-iceland-labels-b1.txt", LocalName: "birdnet_v3.0_iceland_labels.txt", Role: RoleLabels, SHA256: "581c65f8dea9e3f069a79b2afd426b6a04dc2fd4d74b063771d8f8a6718b35a9", SizeBytes: 13259},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@iceland",
@@ -834,7 +834,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iceland/birdnet-v3.0-preview3.1-iceland-fp32-b1.onnx", LocalName: "birdnet_v3.0_iceland_fp32.onnx", Role: RoleModel, SHA256: "ad6053572e27fc952275601b59b8ec15e96e25d44c650c0497fe7c711def39af", SizeBytes: 133812509},
 				{RemotePath: "regional/iceland/birdnet-v3.0-preview3.1-iceland-labels-b1.txt", LocalName: "birdnet_v3.0_iceland_labels.txt", Role: RoleLabels, SHA256: "581c65f8dea9e3f069a79b2afd426b6a04dc2fd4d74b063771d8f8a6718b35a9", SizeBytes: 13259},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@indo-gangetic",
@@ -852,7 +852,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/indo-gangetic/birdnet-v3.0-preview3.1-indo-gangetic-fp16-b1.onnx", LocalName: "birdnet_v3.0_indo-gangetic_fp16.onnx", Role: RoleModel, SHA256: "68baac0935ceb27cdb776253d85fdc9fd338b90d255b51053523a052bd28d0f1", SizeBytes: 75107860},
 				{RemotePath: "regional/indo-gangetic/birdnet-v3.0-preview3.1-indo-gangetic-labels-b1.txt", LocalName: "birdnet_v3.0_indo-gangetic_labels.txt", Role: RoleLabels, SHA256: "127b2a4865b93320dc702c4566dcd9c673ea59751bcd0f8de3941446bd156f3a", SizeBytes: 31248},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@indo-gangetic",
@@ -870,7 +870,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/indo-gangetic/birdnet-v3.0-preview3.1-indo-gangetic-fp32-b1.onnx", LocalName: "birdnet_v3.0_indo-gangetic_fp32.onnx", Role: RoleModel, SHA256: "a25185b65ce62b0af1a799308bf923ebb6dff5245eea4c50b1dd36052ed32810", SizeBytes: 149847595},
 				{RemotePath: "regional/indo-gangetic/birdnet-v3.0-preview3.1-indo-gangetic-labels-b1.txt", LocalName: "birdnet_v3.0_indo-gangetic_labels.txt", Role: RoleLabels, SHA256: "127b2a4865b93320dc702c4566dcd9c673ea59751bcd0f8de3941446bd156f3a", SizeBytes: 31248},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@japan",
@@ -888,7 +888,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/japan/birdnet-v3.0-preview3.1-japan-fp16-b1.onnx", LocalName: "birdnet_v3.0_japan_fp16.onnx", Role: RoleModel, SHA256: "d80c1d858a0f0244551ad219bc607d98102aecaa56d0b0e1cb29d81ed8bf1e8d", SizeBytes: 70615762},
 				{RemotePath: "regional/japan/birdnet-v3.0-preview3.1-japan-labels-b1.txt", LocalName: "birdnet_v3.0_japan_labels.txt", Role: RoleLabels, SHA256: "73cec4e0b03f0726efe54f5706482b6b9b88af4789d10ce8275831fd802f25d1", SizeBytes: 21087},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@japan",
@@ -906,7 +906,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/japan/birdnet-v3.0-preview3.1-japan-fp32-b1.onnx", LocalName: "birdnet_v3.0_japan_fp32.onnx", Role: RoleModel, SHA256: "535664f50a9f4f916b44c6feefc4d7006d5f3f1cad2b392369901af22a6c85f8", SizeBytes: 140863399},
 				{RemotePath: "regional/japan/birdnet-v3.0-preview3.1-japan-labels-b1.txt", LocalName: "birdnet_v3.0_japan_labels.txt", Role: RoleLabels, SHA256: "73cec4e0b03f0726efe54f5706482b6b9b88af4789d10ce8275831fd802f25d1", SizeBytes: 21087},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@madeira",
@@ -924,7 +924,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/madeira/birdnet-v3.0-preview3.1-madeira-fp16-b1.onnx", LocalName: "birdnet_v3.0_madeira_fp16.onnx", Role: RoleModel, SHA256: "c6768116a2a83e464890e941602458d07ab51cb7e0356a26cfd9c500d031a275", SizeBytes: 64512566},
 				{RemotePath: "regional/madeira/birdnet-v3.0-preview3.1-madeira-labels-b1.txt", LocalName: "birdnet_v3.0_madeira_labels.txt", Role: RoleLabels, SHA256: "3928b68428185381cc798ea519f2031fba34ba135119e5f6d66fb59066ea50db", SizeBytes: 8721},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@madeira",
@@ -942,7 +942,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/madeira/birdnet-v3.0-preview3.1-madeira-fp32-b1.onnx", LocalName: "birdnet_v3.0_madeira_fp32.onnx", Role: RoleModel, SHA256: "823cbad416dd2ba0948985117fd1f416304adc2e7e00d05c7b0c79bcd8f828ae", SizeBytes: 128657013},
 				{RemotePath: "regional/madeira/birdnet-v3.0-preview3.1-madeira-labels-b1.txt", LocalName: "birdnet_v3.0_madeira_labels.txt", Role: RoleLabels, SHA256: "3928b68428185381cc798ea519f2031fba34ba135119e5f6d66fb59066ea50db", SizeBytes: 8721},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@mauritius",
@@ -960,7 +960,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/mauritius/birdnet-v3.0-preview3.1-mauritius-fp16-b1.onnx", LocalName: "birdnet_v3.0_mauritius_fp16.onnx", Role: RoleModel, SHA256: "0888ad754a47beebe4177420522e29577cc4abaa8fd916545f493cd376075e78", SizeBytes: 61043948},
 				{RemotePath: "regional/mauritius/birdnet-v3.0-preview3.1-mauritius-labels-b1.txt", LocalName: "birdnet_v3.0_mauritius_labels.txt", Role: RoleLabels, SHA256: "49cee32d57754bf939392bfadb66a0d96a8b07c12289a4d7292777c57d1ab445", SizeBytes: 2556},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@mauritius",
@@ -978,7 +978,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/mauritius/birdnet-v3.0-preview3.1-mauritius-fp32-b1.onnx", LocalName: "birdnet_v3.0_mauritius_fp32.onnx", Role: RoleModel, SHA256: "81c009f05d3222fc3a534fc82bf89d688cb4d71fa3d1a38b4bc984b058b26459", SizeBytes: 121719838},
 				{RemotePath: "regional/mauritius/birdnet-v3.0-preview3.1-mauritius-labels-b1.txt", LocalName: "birdnet_v3.0_mauritius_labels.txt", Role: RoleLabels, SHA256: "49cee32d57754bf939392bfadb66a0d96a8b07c12289a4d7292777c57d1ab445", SizeBytes: 2556},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@new-caledonia",
@@ -996,7 +996,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-caledonia/birdnet-v3.0-preview3.1-new-caledonia-fp16-b1.onnx", LocalName: "birdnet_v3.0_new-caledonia_fp16.onnx", Role: RoleModel, SHA256: "07b4eb1ebc4699bae5e6b51a52c3a689e56e6590b5c495ad750d157882d1944e", SizeBytes: 62863568},
 				{RemotePath: "regional/new-caledonia/birdnet-v3.0-preview3.1-new-caledonia-labels-b1.txt", LocalName: "birdnet_v3.0_new-caledonia_labels.txt", Role: RoleLabels, SHA256: "8ba9af0dc9b05a65950788869cbaf51558da424b557e9dc7c9e13cdef6445e5f", SizeBytes: 6249},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@new-caledonia",
@@ -1014,7 +1014,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-caledonia/birdnet-v3.0-preview3.1-new-caledonia-fp32-b1.onnx", LocalName: "birdnet_v3.0_new-caledonia_fp32.onnx", Role: RoleModel, SHA256: "116a70891ac4ae49ff8b7ef4dfce15146ccb44a7a23b9832323e71b7bacb8ed4", SizeBytes: 125359017},
 				{RemotePath: "regional/new-caledonia/birdnet-v3.0-preview3.1-new-caledonia-labels-b1.txt", LocalName: "birdnet_v3.0_new-caledonia_labels.txt", Role: RoleLabels, SHA256: "8ba9af0dc9b05a65950788869cbaf51558da424b557e9dc7c9e13cdef6445e5f", SizeBytes: 6249},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@new-zealand",
@@ -1032,7 +1032,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-zealand/birdnet-v3.0-preview3.1-new-zealand-fp16-b1.onnx", LocalName: "birdnet_v3.0_new-zealand_fp16.onnx", Role: RoleModel, SHA256: "0e373c0e427b058acd449d4e3693a71e560093c641f567ce217cd5bbf8755d54", SizeBytes: 64721060},
 				{RemotePath: "regional/new-zealand/birdnet-v3.0-preview3.1-new-zealand-labels-b1.txt", LocalName: "birdnet_v3.0_new-zealand_labels.txt", Role: RoleLabels, SHA256: "43ee1873405b3ebcee781e84c452add4764e033aaf2d36e02464575eefa66a63", SizeBytes: 9539},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@new-zealand",
@@ -1050,7 +1050,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-zealand/birdnet-v3.0-preview3.1-new-zealand-fp32-b1.onnx", LocalName: "birdnet_v3.0_new-zealand_fp32.onnx", Role: RoleModel, SHA256: "57e339971abd51b380dab3fcfc93184957f248f0cf78af15066667d90f9f067d", SizeBytes: 129074009},
 				{RemotePath: "regional/new-zealand/birdnet-v3.0-preview3.1-new-zealand-labels-b1.txt", LocalName: "birdnet_v3.0_new-zealand_labels.txt", Role: RoleLabels, SHA256: "43ee1873405b3ebcee781e84c452add4764e033aaf2d36e02464575eefa66a63", SizeBytes: 9539},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@nordic",
@@ -1072,7 +1072,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/nordic/birdnet-v3.0-preview3.1-nordic-fp16-b1.onnx", LocalName: "birdnet_v3.0_nordic_fp16.onnx", Role: RoleModel, SHA256: "1464b4bf169818f80ee0f60573f0daa6bba3b4c48c6194d5f844d5215532457d", SizeBytes: 67677884},
 				{RemotePath: "regional/nordic/birdnet-v3.0-preview3.1-nordic-labels-b1.txt", LocalName: "birdnet_v3.0_nordic_labels.txt", Role: RoleLabels, SHA256: "a72e25c14bf7480b9e88ca7f23aedf7dfb60415f2dbc4feed6db2ea73eb6bb33", SizeBytes: 14330},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@nordic",
@@ -1096,7 +1096,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/nordic/birdnet-v3.0-preview3.1-nordic-fp32-b1.onnx", LocalName: "birdnet_v3.0_nordic_fp32.onnx", Role: RoleModel, SHA256: "da3ce0df6100bdca7c09eefe13d229d207a25ba39fa4d1c71c4007c563a748e3", SizeBytes: 134987659},
 				{RemotePath: "regional/nordic/birdnet-v3.0-preview3.1-nordic-labels-b1.txt", LocalName: "birdnet_v3.0_nordic_labels.txt", Role: RoleLabels, SHA256: "a72e25c14bf7480b9e88ca7f23aedf7dfb60415f2dbc4feed6db2ea73eb6bb33", SizeBytes: 14330},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@north-america-east",
@@ -1114,7 +1114,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-east/birdnet-v3.0-preview3.1-north-america-east-fp16-b1.onnx", LocalName: "birdnet_v3.0_north-america-east_fp16.onnx", Role: RoleModel, SHA256: "921acf64827665e4bc0402a902c1040bb98fdce1e8fa7ef696248b9a6ceb75ed", SizeBytes: 74842504},
 				{RemotePath: "regional/north-america-east/birdnet-v3.0-preview3.1-north-america-east-labels-b1.txt", LocalName: "birdnet_v3.0_north-america-east_labels.txt", Role: RoleLabels, SHA256: "85b6357d5b29f7bc43c9db8682f07dfa70851a859fa9b229a8897d458662b195", SizeBytes: 29428},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@north-america-east",
@@ -1132,7 +1132,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-east/birdnet-v3.0-preview3.1-north-america-east-fp32-b1.onnx", LocalName: "birdnet_v3.0_north-america-east_fp32.onnx", Role: RoleModel, SHA256: "d578c1074ab6d1de07382019b9747d9e089f0e2a8a4da45b02e0a3944e9f877a", SizeBytes: 149316883},
 				{RemotePath: "regional/north-america-east/birdnet-v3.0-preview3.1-north-america-east-labels-b1.txt", LocalName: "birdnet_v3.0_north-america-east_labels.txt", Role: RoleLabels, SHA256: "85b6357d5b29f7bc43c9db8682f07dfa70851a859fa9b229a8897d458662b195", SizeBytes: 29428},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@north-america-west",
@@ -1150,7 +1150,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-west/birdnet-v3.0-preview3.1-north-america-west-fp16-b1.onnx", LocalName: "birdnet_v3.0_north-america-west_fp16.onnx", Role: RoleModel, SHA256: "dbb71cb2e637fc31e47440efea92a8190ab2f1e8fdf815b4fb241aea3aab03bb", SizeBytes: 74880412},
 				{RemotePath: "regional/north-america-west/birdnet-v3.0-preview3.1-north-america-west-labels-b1.txt", LocalName: "birdnet_v3.0_north-america-west_labels.txt", Role: RoleLabels, SHA256: "a15b31fe8c15000e382ebc1fa7f07795ddfe8afbc1960b782be3f8832f28ffaa", SizeBytes: 29310},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@north-america-west",
@@ -1168,7 +1168,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-west/birdnet-v3.0-preview3.1-north-america-west-fp32-b1.onnx", LocalName: "birdnet_v3.0_north-america-west_fp32.onnx", Role: RoleModel, SHA256: "c33fac902dbcbeae3498039ef4710b56d4db6e9070cf29efce8469c9a91c7c00", SizeBytes: 149392699},
 				{RemotePath: "regional/north-america-west/birdnet-v3.0-preview3.1-north-america-west-labels-b1.txt", LocalName: "birdnet_v3.0_north-america-west_labels.txt", Role: RoleLabels, SHA256: "a15b31fe8c15000e382ebc1fa7f07795ddfe8afbc1960b782be3f8832f28ffaa", SizeBytes: 29310},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@reunion",
@@ -1186,7 +1186,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/reunion/birdnet-v3.0-preview3.1-reunion-fp16-b1.onnx", LocalName: "birdnet_v3.0_reunion_fp16.onnx", Role: RoleModel, SHA256: "f7d0fc7de5bdb08bf5195fde825bec2678e5190198051ac662d8e480013e015e", SizeBytes: 61062902},
 				{RemotePath: "regional/reunion/birdnet-v3.0-preview3.1-reunion-labels-b1.txt", LocalName: "birdnet_v3.0_reunion_labels.txt", Role: RoleLabels, SHA256: "3a77cf322d658c0ceae4862d07825ac81007c2d0efda518aa6a304de500f1373", SizeBytes: 2592},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@reunion",
@@ -1204,7 +1204,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/reunion/birdnet-v3.0-preview3.1-reunion-fp32-b1.onnx", LocalName: "birdnet_v3.0_reunion_fp32.onnx", Role: RoleModel, SHA256: "9f72cc08ec893dc069e5dad115cd68cd880ea52f62ede2008c3fa6d2bf53fde4", SizeBytes: 121757746},
 				{RemotePath: "regional/reunion/birdnet-v3.0-preview3.1-reunion-labels-b1.txt", LocalName: "birdnet_v3.0_reunion_labels.txt", Role: RoleLabels, SHA256: "3a77cf322d658c0ceae4862d07825ac81007c2d0efda518aa6a304de500f1373", SizeBytes: 2592},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@sao-tome-principe",
@@ -1222,7 +1222,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/sao-tome-principe/birdnet-v3.0-preview3.1-sao-tome-principe-fp16-b1.onnx", LocalName: "birdnet_v3.0_sao-tome-principe_fp16.onnx", Role: RoleModel, SHA256: "c9888f67376ce91b5b744175df33be99606e0d3dbb8088e019944d9a24ba473a", SizeBytes: 61764200},
 				{RemotePath: "regional/sao-tome-principe/birdnet-v3.0-preview3.1-sao-tome-principe-labels-b1.txt", LocalName: "birdnet_v3.0_sao-tome-principe_labels.txt", Role: RoleLabels, SHA256: "514a713e208140ed2b9d1828f27e747c374c17a4036b98346b8dc490ee3dc95d", SizeBytes: 3868},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@sao-tome-principe",
@@ -1240,7 +1240,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/sao-tome-principe/birdnet-v3.0-preview3.1-sao-tome-principe-fp32-b1.onnx", LocalName: "birdnet_v3.0_sao-tome-principe_fp32.onnx", Role: RoleModel, SHA256: "8bec465df7d8fcb04141d1adbed267430d1cd216a0d1895c920ae93256724a1f", SizeBytes: 123160342},
 				{RemotePath: "regional/sao-tome-principe/birdnet-v3.0-preview3.1-sao-tome-principe-labels-b1.txt", LocalName: "birdnet_v3.0_sao-tome-principe_labels.txt", Role: RoleLabels, SHA256: "514a713e208140ed2b9d1828f27e747c374c17a4036b98346b8dc490ee3dc95d", SizeBytes: 3868},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@seychelles",
@@ -1258,7 +1258,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/seychelles/birdnet-v3.0-preview3.1-seychelles-fp16-b1.onnx", LocalName: "birdnet_v3.0_seychelles_fp16.onnx", Role: RoleModel, SHA256: "f071e2156f868578bc7c0bba23cbaf35999d25d229ab4479499bb11f2ab7fa6c", SizeBytes: 61858970},
 				{RemotePath: "regional/seychelles/birdnet-v3.0-preview3.1-seychelles-labels-b1.txt", LocalName: "birdnet_v3.0_seychelles_labels.txt", Role: RoleLabels, SHA256: "b7c6b287f78bfe86d7a1668590acb9239a84ed4998e4066c8b3db01b9b53584e", SizeBytes: 3996},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@seychelles",
@@ -1276,7 +1276,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/seychelles/birdnet-v3.0-preview3.1-seychelles-fp32-b1.onnx", LocalName: "birdnet_v3.0_seychelles_fp32.onnx", Role: RoleModel, SHA256: "a2fc5de5f458d1db812ec06b7543ba39b7d084481087f480a49512604d455182", SizeBytes: 123349882},
 				{RemotePath: "regional/seychelles/birdnet-v3.0-preview3.1-seychelles-labels-b1.txt", LocalName: "birdnet_v3.0_seychelles_labels.txt", Role: RoleLabels, SHA256: "b7c6b287f78bfe86d7a1668590acb9239a84ed4998e4066c8b3db01b9b53584e", SizeBytes: 3996},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@south-asia-peninsular",
@@ -1294,7 +1294,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/south-asia-peninsular/birdnet-v3.0-preview3.1-south-asia-peninsular-fp16-b1.onnx", LocalName: "birdnet_v3.0_south-asia-peninsular_fp16.onnx", Role: RoleModel, SHA256: "8daa7735329de10254051e6b2222f7476a7a61c99ac85d9659b969e293ed1d93", SizeBytes: 71885680},
 				{RemotePath: "regional/south-asia-peninsular/birdnet-v3.0-preview3.1-south-asia-peninsular-labels-b1.txt", LocalName: "birdnet_v3.0_south-asia-peninsular_labels.txt", Role: RoleLabels, SHA256: "73685f85e77cc6da5bcd3393c10c03c5bcbd7a6d3bd02d05c12bae8cabd5b57a", SizeBytes: 24116},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@south-asia-peninsular",
@@ -1312,7 +1312,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/south-asia-peninsular/birdnet-v3.0-preview3.1-south-asia-peninsular-fp32-b1.onnx", LocalName: "birdnet_v3.0_south-asia-peninsular_fp32.onnx", Role: RoleModel, SHA256: "1363e862a9aab8733a2ef4c1edf482a2fde10f3ac4a0aad46ffc21662d0d503f", SizeBytes: 143403235},
 				{RemotePath: "regional/south-asia-peninsular/birdnet-v3.0-preview3.1-south-asia-peninsular-labels-b1.txt", LocalName: "birdnet_v3.0_south-asia-peninsular_labels.txt", Role: RoleLabels, SHA256: "73685f85e77cc6da5bcd3393c10c03c5bcbd7a6d3bd02d05c12bae8cabd5b57a", SizeBytes: 24116},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@southern-africa",
@@ -1330,7 +1330,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-africa/birdnet-v3.0-preview3.1-southern-africa-fp16-b1.onnx", LocalName: "birdnet_v3.0_southern-africa_fp16.onnx", Role: RoleModel, SHA256: "58743f33f2cfdde65b7a461b34417e181057429fa6a2a1ef9af94a3fd59ebf4b", SizeBytes: 74880412},
 				{RemotePath: "regional/southern-africa/birdnet-v3.0-preview3.1-southern-africa-labels-b1.txt", LocalName: "birdnet_v3.0_southern-africa_labels.txt", Role: RoleLabels, SHA256: "b97af077f7c74f34b2d35c476ff78968daef4da475917cebde41e7c6fb9bfd76", SizeBytes: 30596},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@southern-africa",
@@ -1348,7 +1348,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-africa/birdnet-v3.0-preview3.1-southern-africa-fp32-b1.onnx", LocalName: "birdnet_v3.0_southern-africa_fp32.onnx", Role: RoleModel, SHA256: "dff4ede3d8e8d4e5c4950c006758dadead668987ff9c54d108b708ab8c5c429d", SizeBytes: 149392699},
 				{RemotePath: "regional/southern-africa/birdnet-v3.0-preview3.1-southern-africa-labels-b1.txt", LocalName: "birdnet_v3.0_southern-africa_labels.txt", Role: RoleLabels, SHA256: "b97af077f7c74f34b2d35c476ff78968daef4da475917cebde41e7c6fb9bfd76", SizeBytes: 30596},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@southern-cone",
@@ -1366,7 +1366,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-cone/birdnet-v3.0-preview3.1-southern-cone-fp16-b1.onnx", LocalName: "birdnet_v3.0_southern-cone_fp16.onnx", Role: RoleModel, SHA256: "809df610fdb9a76a2e7157d9c544db11e0e4004a7fba30d14dabe0209a255531", SizeBytes: 74975182},
 				{RemotePath: "regional/southern-cone/birdnet-v3.0-preview3.1-southern-cone-labels-b1.txt", LocalName: "birdnet_v3.0_southern-cone_labels.txt", Role: RoleLabels, SHA256: "5e7821cc1de892511bce5d70fdc68f4c753b2bd95777f20c8e2713302f7c64b3", SizeBytes: 32072},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@southern-cone",
@@ -1384,7 +1384,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-cone/birdnet-v3.0-preview3.1-southern-cone-fp32-b1.onnx", LocalName: "birdnet_v3.0_southern-cone_fp32.onnx", Role: RoleModel, SHA256: "8feb63df589804d925f2845e993882dae9e8b79592f349bfde8789b32a9dd60b", SizeBytes: 149582239},
 				{RemotePath: "regional/southern-cone/birdnet-v3.0-preview3.1-southern-cone-labels-b1.txt", LocalName: "birdnet_v3.0_southern-cone_labels.txt", Role: RoleLabels, SHA256: "5e7821cc1de892511bce5d70fdc68f4c753b2bd95777f20c8e2713302f7c64b3", SizeBytes: 32072},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@southern-europe",
@@ -1402,7 +1402,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-europe/birdnet-v3.0-preview3.1-southern-europe-fp16-b1.onnx", LocalName: "birdnet_v3.0_southern-europe_fp16.onnx", Role: RoleModel, SHA256: "4e2bc9a5171b59bbe2084f45e834edd0c5ef2d0537cda06e46a505678b1b56b5", SizeBytes: 71354968},
 				{RemotePath: "regional/southern-europe/birdnet-v3.0-preview3.1-southern-europe-labels-b1.txt", LocalName: "birdnet_v3.0_southern-europe_labels.txt", Role: RoleLabels, SHA256: "de97243787c36c96cea608c0d2867fce49e9aa1df4cb9db46023321f4a79a6f6", SizeBytes: 21752},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@southern-europe",
@@ -1420,7 +1420,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-europe/birdnet-v3.0-preview3.1-southern-europe-fp32-b1.onnx", LocalName: "birdnet_v3.0_southern-europe_fp32.onnx", Role: RoleModel, SHA256: "636d39e606b1aacb77349a170abfccd559274d941257c19de6584e1755d2a2d8", SizeBytes: 142341811},
 				{RemotePath: "regional/southern-europe/birdnet-v3.0-preview3.1-southern-europe-labels-b1.txt", LocalName: "birdnet_v3.0_southern-europe_labels.txt", Role: RoleLabels, SHA256: "de97243787c36c96cea608c0d2867fce49e9aa1df4cb9db46023321f4a79a6f6", SizeBytes: 21752},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@svalbard",
@@ -1438,7 +1438,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/svalbard/birdnet-v3.0-preview3.1-svalbard-fp16-b1.onnx", LocalName: "birdnet_v3.0_svalbard_fp16.onnx", Role: RoleModel, SHA256: "d8f0f71f9e407ee54e063d2e6450e7f8c60913628558d6bbadc1d530a0e8312e", SizeBytes: 64986416},
 				{RemotePath: "regional/svalbard/birdnet-v3.0-preview3.1-svalbard-labels-b1.txt", LocalName: "birdnet_v3.0_svalbard_labels.txt", Role: RoleLabels, SHA256: "68c09eee7ec017c77cea971fcb9020f0e34632c5f5f30fa98aec9464451723ae", SizeBytes: 9269},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@svalbard",
@@ -1456,7 +1456,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/svalbard/birdnet-v3.0-preview3.1-svalbard-fp32-b1.onnx", LocalName: "birdnet_v3.0_svalbard_fp32.onnx", Role: RoleModel, SHA256: "476f4ddc9d75f7d00a15835162408d7711141caf49a078d05db7d663432556b2", SizeBytes: 129604721},
 				{RemotePath: "regional/svalbard/birdnet-v3.0-preview3.1-svalbard-labels-b1.txt", LocalName: "birdnet_v3.0_svalbard_labels.txt", Role: RoleLabels, SHA256: "68c09eee7ec017c77cea971fcb9020f0e34632c5f5f30fa98aec9464451723ae", SizeBytes: 9269},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@tibet",
@@ -1474,7 +1474,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/birdnet-v3.0-preview3.1-tibet-fp16-b1.onnx", LocalName: "birdnet_v3.0_tibet_fp16.onnx", Role: RoleModel, SHA256: "1ab75674bf1457f3a883303f109d645d9e168a49c0714d0223525852b782130d", SizeBytes: 75050998},
 				{RemotePath: "regional/tibet/birdnet-v3.0-preview3.1-tibet-labels-b1.txt", LocalName: "birdnet_v3.0_tibet_labels.txt", Role: RoleLabels, SHA256: "fdd8e4865a418cdf0173d0f0f81e4c65e3fa5e464be2d0dba6b0bfa21bbe5f87", SizeBytes: 30993},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@tibet",
@@ -1492,7 +1492,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/birdnet-v3.0-preview3.1-tibet-fp32-b1.onnx", LocalName: "birdnet_v3.0_tibet_fp32.onnx", Role: RoleModel, SHA256: "a35a9bfe8947be244b3839655a55203f4712cfa770c359c17838bb07e50eaaa7", SizeBytes: 149733871},
 				{RemotePath: "regional/tibet/birdnet-v3.0-preview3.1-tibet-labels-b1.txt", LocalName: "birdnet_v3.0_tibet_labels.txt", Role: RoleLabels, SHA256: "fdd8e4865a418cdf0173d0f0f81e4c65e3fa5e464be2d0dba6b0bfa21bbe5f87", SizeBytes: 30993},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@west-africa",
@@ -1510,7 +1510,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-fp16-b1.onnx", LocalName: "birdnet_v3.0_west-africa_fp16.onnx", Role: RoleModel, SHA256: "7a6b6f2527bdd18815e962d5e3902a358664a752486c4d9703fb0345a98d9bea", SizeBytes: 78412172},
 				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-labels-b1.txt", LocalName: "birdnet_v3.0_west-africa_labels.txt", Role: RoleLabels, SHA256: "95e843ebda0c7db8a382eadff9b001ede053dbf2f822160c7bbb05eff0320b59", SizeBytes: 19384},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@west-africa",
@@ -1528,7 +1528,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-fp32-b1.onnx", LocalName: "birdnet_v3.0_west-africa_fp32.onnx", Role: RoleModel, SHA256: "e3facc454243ba6712ab3262d8ef845bc00c12137af3f08098827342ec6a8020", SizeBytes: 156671035},
 				{RemotePath: "regional/west-africa/birdnet-v3.0-preview3.1-west-africa-labels-b1.txt", LocalName: "birdnet_v3.0_west-africa_labels.txt", Role: RoleLabels, SHA256: "95e843ebda0c7db8a382eadff9b001ede053dbf2f822160c7bbb05eff0320b59", SizeBytes: 19384},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp16@western-palearctic",
@@ -1546,7 +1546,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/western-palearctic/birdnet-v3.0-preview3.1-western-palearctic-fp16-b1.onnx", LocalName: "birdnet_v3.0_western-palearctic_fp16.onnx", Role: RoleModel, SHA256: "ad7d514e5d9ce60e61a11264e549e1d29dbe38d7e7176a15429a24535c819611", SizeBytes: 74861458},
 				{RemotePath: "regional/western-palearctic/birdnet-v3.0-preview3.1-western-palearctic-labels-b1.txt", LocalName: "birdnet_v3.0_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "10a2fb277ce4dc981f6a68ac11bd073ff3c9e28f2c929c1bcf0ecb553aa56ff3", SizeBytes: 28565},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@western-palearctic",
@@ -1564,7 +1564,7 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/western-palearctic/birdnet-v3.0-preview3.1-western-palearctic-fp32-b1.onnx", LocalName: "birdnet_v3.0_western-palearctic_fp32.onnx", Role: RoleModel, SHA256: "b77eda5827064e1ca244ff16b4c4fc98040da1dc848ad0608683e6bda9f0e48c", SizeBytes: 149354791},
 				{RemotePath: "regional/western-palearctic/birdnet-v3.0-preview3.1-western-palearctic-labels-b1.txt", LocalName: "birdnet_v3.0_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "10a2fb277ce4dc981f6a68ac11bd073ff3c9e28f2c929c1bcf0ecb553aa56ff3", SizeBytes: 28565},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 	}
 }
@@ -1590,7 +1590,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_no_dft_fp32.onnx", LocalName: "perch_v2_amazonia_no_dft.onnx", Role: RoleModel, SHA256: "c09d8e946dc8393a78af9d4c81bc42f79bb6a6f0eff2c973385fff675005571e", SizeBytes: 132660858},
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_labels.txt", LocalName: "perch_v2_amazonia_labels.txt", Role: RoleLabels, SHA256: "cd2dd3763bcc9b0ce23f444714ac7d0134bc4420e158ca5285afa29c957a2303", SizeBytes: 68249},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@amazonia",
@@ -1607,7 +1607,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_int8_arm.onnx", LocalName: "perch_v2_amazonia_int8_arm.onnx", Role: RoleModel, SHA256: "b437370c33478d18cddb2bd0e5ca448b92c8daaa7248b62cca18dd48dc76416b", SizeBytes: 61492034},
 				{RemotePath: "regional/amazonia/perch_v2_amazonia_labels.txt", LocalName: "perch_v2_amazonia_labels.txt", Role: RoleLabels, SHA256: "cd2dd3763bcc9b0ce23f444714ac7d0134bc4420e158ca5285afa29c957a2303", SizeBytes: 68249},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@andes",
@@ -1626,7 +1626,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/andes/perch_v2_andes_no_dft_fp32.onnx", LocalName: "perch_v2_andes_no_dft.onnx", Role: RoleModel, SHA256: "b187ce10356600dedbdb46d1803b9d1999fef59b603cbf3335bb106c55e824c8", SizeBytes: 136276470},
 				{RemotePath: "regional/andes/perch_v2_andes_labels.txt", LocalName: "perch_v2_andes_labels.txt", Role: RoleLabels, SHA256: "49473b50116a9df66a785fb8dd47d8d2cc17fe7235160cdf3d41c04436290d89", SizeBytes: 71180},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@andes",
@@ -1643,7 +1643,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/andes/perch_v2_andes_int8_arm.onnx", LocalName: "perch_v2_andes_int8_arm.onnx", Role: RoleModel, SHA256: "b991348630b1513f704be6742fa0d83858b3bebaad4a35c1b293417f3fd0316b", SizeBytes: 62398142},
 				{RemotePath: "regional/andes/perch_v2_andes_labels.txt", LocalName: "perch_v2_andes_labels.txt", Role: RoleLabels, SHA256: "49473b50116a9df66a785fb8dd47d8d2cc17fe7235160cdf3d41c04436290d89", SizeBytes: 71180},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@australia-east",
@@ -1662,7 +1662,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_no_dft_fp32.onnx", LocalName: "perch_v2_australia-east_no_dft.onnx", Role: RoleModel, SHA256: "c6133316df9f1509705468524d9857629e6abf452b7d573319d93c3dba623ef5", SizeBytes: 72597424},
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_labels.txt", LocalName: "perch_v2_australia-east_labels.txt", Role: RoleLabels, SHA256: "53d4d6e75dbc168d40289314bade69666081f51a3be0cd956ecee3f4738a89b8", SizeBytes: 17304},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@australia-east",
@@ -1679,7 +1679,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_int8_arm.onnx", LocalName: "perch_v2_australia-east_int8_arm.onnx", Role: RoleModel, SHA256: "5ea3d89a79ec077ab45bdc0f5995998f1a866b6c034fccab1d8ba35382bc7a7e", SizeBytes: 46439545},
 				{RemotePath: "regional/australia-east/perch_v2_australia-east_labels.txt", LocalName: "perch_v2_australia-east_labels.txt", Role: RoleLabels, SHA256: "53d4d6e75dbc168d40289314bade69666081f51a3be0cd956ecee3f4738a89b8", SizeBytes: 17304},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@azores",
@@ -1698,7 +1698,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/azores/perch_v2_azores_no_dft_fp32.onnx", LocalName: "perch_v2_azores_no_dft.onnx", Role: RoleModel, SHA256: "de0651c03fc0874741b5bdd02595056684da2a14612357852e85715232531018", SizeBytes: 59807504},
 				{RemotePath: "regional/azores/perch_v2_azores_labels.txt", LocalName: "perch_v2_azores_labels.txt", Role: RoleLabels, SHA256: "e257c47585cf32cd9b288945a7778354c03d3cbe5ae57cc6b5bbe527b9b393a5", SizeBytes: 6559},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@azores",
@@ -1715,7 +1715,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/azores/perch_v2_azores_int8_arm.onnx", LocalName: "perch_v2_azores_int8_arm.onnx", Role: RoleModel, SHA256: "952c8408ab8eae9069c8e35fc714a30d07dc504e70c49e8e580a3cb89f6ebb10", SizeBytes: 43234264},
 				{RemotePath: "regional/azores/perch_v2_azores_labels.txt", LocalName: "perch_v2_azores_labels.txt", Role: RoleLabels, SHA256: "e257c47585cf32cd9b288945a7778354c03d3cbe5ae57cc6b5bbe527b9b393a5", SizeBytes: 6559},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@baltics",
@@ -1734,7 +1734,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/baltics/perch_v2_baltics_no_dft_fp32.onnx", LocalName: "perch_v2_baltics_no_dft.onnx", Role: RoleModel, SHA256: "959841211a94971025ddd3c6ecdd6b0d23a87a60645befc80127d51ba560c855", SizeBytes: 65439988},
 				{RemotePath: "regional/baltics/perch_v2_baltics_labels.txt", LocalName: "perch_v2_baltics_labels.txt", Role: RoleLabels, SHA256: "26503d5cde0bb41f0da3964d8de3f5c5094f41d5a5dd19e4d5e5c0cbefdb8745", SizeBytes: 10617},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@baltics",
@@ -1751,7 +1751,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/baltics/perch_v2_baltics_int8_arm.onnx", LocalName: "perch_v2_baltics_int8_arm.onnx", Role: RoleModel, SHA256: "dbeee9d02760f04efc50d6cb1198fc91c5c183149249dc3b17e451f9d7ec0b0a", SizeBytes: 44645820},
 				{RemotePath: "regional/baltics/perch_v2_baltics_labels.txt", LocalName: "perch_v2_baltics_labels.txt", Role: RoleLabels, SHA256: "26503d5cde0bb41f0da3964d8de3f5c5094f41d5a5dd19e4d5e5c0cbefdb8745", SizeBytes: 10617},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@british-isles",
@@ -1770,7 +1770,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_no_dft_fp32.onnx", LocalName: "perch_v2_british-isles_no_dft.onnx", Role: RoleModel, SHA256: "1281cece7d01319c6b010eb13b7ea5cbe8c1fcf4f15d6ad3e2ccd1bd1b2c53c1", SizeBytes: 68416104},
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_labels.txt", LocalName: "perch_v2_british-isles_labels.txt", Role: RoleLabels, SHA256: "ff4bff5fd55271fa062413ce33f686c3d54e269423890eeba6605a1ef7955f2a", SizeBytes: 12955},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@british-isles",
@@ -1787,7 +1787,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_int8_arm.onnx", LocalName: "perch_v2_british-isles_int8_arm.onnx", Role: RoleModel, SHA256: "03d4f63413299473397f57f829e14504e54978a9a95de83bf9d9cbc96cc063b1", SizeBytes: 45391664},
 				{RemotePath: "regional/british-isles/perch_v2_british-isles_labels.txt", LocalName: "perch_v2_british-isles_labels.txt", Role: RoleLabels, SHA256: "ff4bff5fd55271fa062413ce33f686c3d54e269423890eeba6605a1ef7955f2a", SizeBytes: 12955},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@canada-alaska",
@@ -1806,7 +1806,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_no_dft_fp32.onnx", LocalName: "perch_v2_canada-alaska_no_dft.onnx", Role: RoleModel, SHA256: "d0cb954c79fd6d1c130c4979c8aec72be09b22b3e7fd6056fbbde5d8ff869ebb", SizeBytes: 72990960},
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_labels.txt", LocalName: "perch_v2_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "2ff39da0058af4522081661e1cef1dbe985729a6a708c67d09ee5a91c29a67f0", SizeBytes: 16870},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@canada-alaska",
@@ -1823,7 +1823,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_int8_arm.onnx", LocalName: "perch_v2_canada-alaska_int8_arm.onnx", Role: RoleModel, SHA256: "4a7f3f9946ece497f906621f0383f589cf878595ea938099163ab71e069c2cf5", SizeBytes: 46538169},
 				{RemotePath: "regional/canada-alaska/perch_v2_canada-alaska_labels.txt", LocalName: "perch_v2_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "2ff39da0058af4522081661e1cef1dbe985729a6a708c67d09ee5a91c29a67f0", SizeBytes: 16870},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@canary-islands",
@@ -1842,7 +1842,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_no_dft_fp32.onnx", LocalName: "perch_v2_canary-islands_no_dft.onnx", Role: RoleModel, SHA256: "08938826166b4277fc8f948da1f273ace306b2369f65bb184cb2e1c54315f298", SizeBytes: 64038016},
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_labels.txt", LocalName: "perch_v2_canary-islands_labels.txt", Role: RoleLabels, SHA256: "b25ebc0c0e20f6eae828274e8f1c25162aaf07f8d49da073a72b70caa15f9f25", SizeBytes: 9753},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@canary-islands",
@@ -1859,7 +1859,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_int8_arm.onnx", LocalName: "perch_v2_canary-islands_int8_arm.onnx", Role: RoleModel, SHA256: "4db63a7b969324604280a1f915a4f9339791f1dd051d2dd78b04187dbfb73fd4", SizeBytes: 44294472},
 				{RemotePath: "regional/canary-islands/perch_v2_canary-islands_labels.txt", LocalName: "perch_v2_canary-islands_labels.txt", Role: RoleLabels, SHA256: "b25ebc0c0e20f6eae828274e8f1c25162aaf07f8d49da073a72b70caa15f9f25", SizeBytes: 9753},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@cape-verde",
@@ -1878,7 +1878,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_no_dft_fp32.onnx", LocalName: "perch_v2_cape-verde_no_dft.onnx", Role: RoleModel, SHA256: "bbddef61153b0e9a05639d221cb022878055622b892cc52b38af97592a765425", SizeBytes: 57839824},
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_labels.txt", LocalName: "perch_v2_cape-verde_labels.txt", Role: RoleLabels, SHA256: "7cb7ca2d60aa9c2dc80eca532ff85387fc62d8e6b7ca00d062565438a73eaeaf", SizeBytes: 5263},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@cape-verde",
@@ -1895,7 +1895,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_int8_arm.onnx", LocalName: "perch_v2_cape-verde_int8_arm.onnx", Role: RoleModel, SHA256: "03e10868fcdc90eb0b5215f202f0d3184a7e9c60814866a9385b92ca3317541a", SizeBytes: 42741144},
 				{RemotePath: "regional/cape-verde/perch_v2_cape-verde_labels.txt", LocalName: "perch_v2_cape-verde_labels.txt", Role: RoleLabels, SHA256: "7cb7ca2d60aa9c2dc80eca532ff85387fc62d8e6b7ca00d062565438a73eaeaf", SizeBytes: 5263},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@central-africa",
@@ -1914,7 +1914,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_no_dft_fp32.onnx", LocalName: "perch_v2_central-africa_no_dft.onnx", Role: RoleModel, SHA256: "d9f29b5cef3b9b7e54b454feb34fe8a7a6be9b3c375cbe670b017c48b7ed622c", SizeBytes: 95643878},
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_labels.txt", LocalName: "perch_v2_central-africa_labels.txt", Role: RoleLabels, SHA256: "b4fa7748e0bb842e08ac31f6ef2998625182ebe4ecb19b2b4cc7945fd9eb6bb1", SizeBytes: 35791},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@central-africa",
@@ -1931,7 +1931,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_int8_arm.onnx", LocalName: "perch_v2_central-africa_int8_arm.onnx", Role: RoleModel, SHA256: "245984e3f3188293cd8efcd3896d886edcd62a7438e646801c5c957ec28ef7b8", SizeBytes: 52215214},
 				{RemotePath: "regional/central-africa/perch_v2_central-africa_labels.txt", LocalName: "perch_v2_central-africa_labels.txt", Role: RoleLabels, SHA256: "b4fa7748e0bb842e08ac31f6ef2998625182ebe4ecb19b2b4cc7945fd9eb6bb1", SizeBytes: 35791},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@central-europe",
@@ -1950,7 +1950,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_no_dft_fp32.onnx", LocalName: "perch_v2_central-europe_no_dft.onnx", Role: RoleModel, SHA256: "8f2e40a11c89812fa61ea8d6faa1d6710ee3b6ae9a8292bc3f9429df1af6f4c3", SizeBytes: 70801916},
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_labels.txt", LocalName: "perch_v2_central-europe_labels.txt", Role: RoleLabels, SHA256: "ac7c30b45b85404bc67830e8341e53ea47ad0d899a30789454c072abc6828072", SizeBytes: 14787},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@central-europe",
@@ -1967,7 +1967,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_int8_arm.onnx", LocalName: "perch_v2_central-europe_int8_arm.onnx", Role: RoleModel, SHA256: "a5b7da4d147679b3ef0f2cde39bc4cacabfa7a9c462fed7adac4935c8781813e", SizeBytes: 45989572},
 				{RemotePath: "regional/central-europe/perch_v2_central-europe_labels.txt", LocalName: "perch_v2_central-europe_labels.txt", Role: RoleLabels, SHA256: "ac7c30b45b85404bc67830e8341e53ea47ad0d899a30789454c072abc6828072", SizeBytes: 14787},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@china-north-central",
@@ -1986,7 +1986,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_no_dft_fp32.onnx", LocalName: "perch_v2_china-north-central_no_dft.onnx", Role: RoleModel, SHA256: "adb89e88eb8d670cee4d6596388931267a63f861ae01c7147b19cd187f1af9ba", SizeBytes: 73335304},
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_labels.txt", LocalName: "perch_v2_china-north-central_labels.txt", Role: RoleLabels, SHA256: "80eecb6579f4f7534422c21460dc481fc213e69b80c6e994ef361fa9c969281b", SizeBytes: 17447},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@china-north-central",
@@ -2003,7 +2003,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_int8_arm.onnx", LocalName: "perch_v2_china-north-central_int8_arm.onnx", Role: RoleModel, SHA256: "dae3b0d45eb698662a2d544f53de20d53e5db71e11e4296547dd12526a8cb3b8", SizeBytes: 46624464},
 				{RemotePath: "regional/china-north-central/perch_v2_china-north-central_labels.txt", LocalName: "perch_v2_china-north-central_labels.txt", Role: RoleLabels, SHA256: "80eecb6579f4f7534422c21460dc481fc213e69b80c6e994ef361fa9c969281b", SizeBytes: 17447},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@china-northeast",
@@ -2022,7 +2022,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_no_dft_fp32.onnx", LocalName: "perch_v2_china-northeast_no_dft.onnx", Role: RoleModel, SHA256: "139385aadb17dcd0e0724a047c8e99c73bc516680fbed8d659297c80798c890b", SizeBytes: 70900300},
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_labels.txt", LocalName: "perch_v2_china-northeast_labels.txt", Role: RoleLabels, SHA256: "2cbd9b12a2f23f0813b3eadaeb367612b4ad70960612229b648c37912687ebfb", SizeBytes: 15253},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@china-northeast",
@@ -2039,7 +2039,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_int8_arm.onnx", LocalName: "perch_v2_china-northeast_int8_arm.onnx", Role: RoleModel, SHA256: "169c07f6004f8e5473170c8823ad2e84746c509115e0279425b8520972993d34", SizeBytes: 46014228},
 				{RemotePath: "regional/china-northeast/perch_v2_china-northeast_labels.txt", LocalName: "perch_v2_china-northeast_labels.txt", Role: RoleLabels, SHA256: "2cbd9b12a2f23f0813b3eadaeb367612b4ad70960612229b648c37912687ebfb", SizeBytes: 15253},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@china-southeast",
@@ -2058,7 +2058,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_no_dft_fp32.onnx", LocalName: "perch_v2_china-southeast_no_dft.onnx", Role: RoleModel, SHA256: "a9c4acf8b47b44ac3858d8afa12d5d1dec8278315e410dd75d53c2ad1e2ce854", SizeBytes: 83099918},
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_labels.txt", LocalName: "perch_v2_china-southeast_labels.txt", Role: RoleLabels, SHA256: "4d850c34ee5f3a7704e9a8cd60b2e88a504e6d63e2b7d5d311f9191c5f5b10f4", SizeBytes: 25436},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@china-southeast",
@@ -2075,7 +2075,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_int8_arm.onnx", LocalName: "perch_v2_china-southeast_int8_arm.onnx", Role: RoleModel, SHA256: "be17c31fae6974213a9f7ae525f27b4c65fa42a29f4e676b0773b7145464dca0", SizeBytes: 49071575},
 				{RemotePath: "regional/china-southeast/perch_v2_china-southeast_labels.txt", LocalName: "perch_v2_china-southeast_labels.txt", Role: RoleLabels, SHA256: "4d850c34ee5f3a7704e9a8cd60b2e88a504e6d63e2b7d5d311f9191c5f5b10f4", SizeBytes: 25436},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@china-southwest",
@@ -2094,7 +2094,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_no_dft_fp32.onnx", LocalName: "perch_v2_china-southwest_no_dft.onnx", Role: RoleModel, SHA256: "11292464054e8c2b6b7d309a6518fe8c81f43b19f98e151b0ef3cbd21261ed0f", SizeBytes: 83985374},
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_labels.txt", LocalName: "perch_v2_china-southwest_labels.txt", Role: RoleLabels, SHA256: "7adcce5853a92ba1bbe5ee05ffdb75bbad9d0d1604349beef19151e6731cc750", SizeBytes: 26299},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@china-southwest",
@@ -2111,7 +2111,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_int8_arm.onnx", LocalName: "perch_v2_china-southwest_int8_arm.onnx", Role: RoleModel, SHA256: "d214093463cc3fbf8c9dccbedd9c26e87575c87ed3839b19b3fda02085c4341d", SizeBytes: 49293479},
 				{RemotePath: "regional/china-southwest/perch_v2_china-southwest_labels.txt", LocalName: "perch_v2_china-southwest_labels.txt", Role: RoleLabels, SHA256: "7adcce5853a92ba1bbe5ee05ffdb75bbad9d0d1604349beef19151e6731cc750", SizeBytes: 26299},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@east-africa",
@@ -2130,7 +2130,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_no_dft_fp32.onnx", LocalName: "perch_v2_east-africa_no_dft.onnx", Role: RoleModel, SHA256: "e652c100096db2bced141215edc253c633706993e4c3e027f40959e59f6b169e", SizeBytes: 102432374},
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_labels.txt", LocalName: "perch_v2_east-africa_labels.txt", Role: RoleLabels, SHA256: "536daf97a9945d7f8bff0c55c60d26c15c6001f01f0e448a0548156d074cd329", SizeBytes: 41028},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@east-africa",
@@ -2147,7 +2147,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_int8_arm.onnx", LocalName: "perch_v2_east-africa_int8_arm.onnx", Role: RoleModel, SHA256: "4113d0a8c05368fd685b4c4dfbc6fa07a4cfbb979cdf43f5428bedcac3c03118", SizeBytes: 53916478},
 				{RemotePath: "regional/east-africa/perch_v2_east-africa_labels.txt", LocalName: "perch_v2_east-africa_labels.txt", Role: RoleLabels, SHA256: "536daf97a9945d7f8bff0c55c60d26c15c6001f01f0e448a0548156d074cd329", SizeBytes: 41028},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@eastern-brazil",
@@ -2166,7 +2166,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_no_dft_fp32.onnx", LocalName: "perch_v2_eastern-brazil_no_dft.onnx", Role: RoleModel, SHA256: "89008391609eb31f5ece4d66fbea557f4b1bdde09ff3d79994302062812901ed", SizeBytes: 103047274},
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt", LocalName: "perch_v2_eastern-brazil_labels.txt", Role: RoleLabels, SHA256: "84ebe24f0f0fd8efd4339bc5a5260fe8779fcd06b575aa5fe58eb62186bbdc7b", SizeBytes: 43185},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@eastern-brazil",
@@ -2183,7 +2183,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_int8_arm.onnx", LocalName: "perch_v2_eastern-brazil_int8_arm.onnx", Role: RoleModel, SHA256: "34736f02b138a64f9aef1e5bcffbe5d8bd6a9a5cb4226a052b9d2ff000c89cbc", SizeBytes: 54070578},
 				{RemotePath: "regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt", LocalName: "perch_v2_eastern-brazil_labels.txt", Role: RoleLabels, SHA256: "84ebe24f0f0fd8efd4339bc5a5260fe8779fcd06b575aa5fe58eb62186bbdc7b", SizeBytes: 43185},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@eastern-europe",
@@ -2202,7 +2202,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_no_dft_fp32.onnx", LocalName: "perch_v2_eastern-europe_no_dft.onnx", Role: RoleModel, SHA256: "d8a93f1ef28e26fddeda80833d865463656713471714c1f4cbf92dfb191e6b9b", SizeBytes: 67506052},
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_labels.txt", LocalName: "perch_v2_eastern-europe_labels.txt", Role: RoleLabels, SHA256: "88e92e524bf2a7875026fcfb4db40efd7d0bd74f2dc72157ce0cc76be5a620a1", SizeBytes: 12294},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@eastern-europe",
@@ -2219,7 +2219,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_int8_arm.onnx", LocalName: "perch_v2_eastern-europe_int8_arm.onnx", Role: RoleModel, SHA256: "5c06c2639b2080f84d93896f1528ebb20962ff19986c09908bd498c41ebaa007", SizeBytes: 45163596},
 				{RemotePath: "regional/eastern-europe/perch_v2_eastern-europe_labels.txt", LocalName: "perch_v2_eastern-europe_labels.txt", Role: RoleLabels, SHA256: "88e92e524bf2a7875026fcfb4db40efd7d0bd74f2dc72157ce0cc76be5a620a1", SizeBytes: 12294},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@galapagos",
@@ -2238,7 +2238,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_no_dft_fp32.onnx", LocalName: "perch_v2_galapagos_no_dft.onnx", Role: RoleModel, SHA256: "f80b3b91be5a589358609718acfa0d202c86d2b95c49cadb2d4f46e63ad8bff1", SizeBytes: 57593864},
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_labels.txt", LocalName: "perch_v2_galapagos_labels.txt", Role: RoleLabels, SHA256: "72af08800a5640949dbce00bb2ccb8190c32f8aab3f3584d4e3fefd583ededae", SizeBytes: 5068},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@galapagos",
@@ -2255,7 +2255,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_int8_arm.onnx", LocalName: "perch_v2_galapagos_int8_arm.onnx", Role: RoleModel, SHA256: "67ef0140c533e3e3658fe5d317ab64558d7d15353f1679650053397e91fbec73", SizeBytes: 42679502},
 				{RemotePath: "regional/galapagos/perch_v2_galapagos_labels.txt", LocalName: "perch_v2_galapagos_labels.txt", Role: RoleLabels, SHA256: "72af08800a5640949dbce00bb2ccb8190c32f8aab3f3584d4e3fefd583ededae", SizeBytes: 5068},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@hawaii",
@@ -2274,7 +2274,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_no_dft_fp32.onnx", LocalName: "perch_v2_hawaii_no_dft.onnx", Role: RoleModel, SHA256: "c39a3654096e705f1c8888cac2e9f431c8dee1b92b543680b81eede29deb66df", SizeBytes: 61086496},
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_labels.txt", LocalName: "perch_v2_hawaii_labels.txt", Role: RoleLabels, SHA256: "049c0a97c16f458119e734d11daf60a456cb6edd693a4eb3c507911eaded46a6", SizeBytes: 7694},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@hawaii",
@@ -2291,7 +2291,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_int8_arm.onnx", LocalName: "perch_v2_hawaii_int8_arm.onnx", Role: RoleModel, SHA256: "f14cf802633c1e1ff4f1d71046faf49763211352901fd49038b8365d4fd60403", SizeBytes: 43554792},
 				{RemotePath: "regional/hawaii/perch_v2_hawaii_labels.txt", LocalName: "perch_v2_hawaii_labels.txt", Role: RoleLabels, SHA256: "049c0a97c16f458119e734d11daf60a456cb6edd693a4eb3c507911eaded46a6", SizeBytes: 7694},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@himalaya",
@@ -2310,7 +2310,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_no_dft_fp32.onnx", LocalName: "perch_v2_himalaya_no_dft.onnx", Role: RoleModel, SHA256: "d30ee51f106712694f11940336a82621810789dd1237bcfed977d9095a102486", SizeBytes: 83936182},
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_labels.txt", LocalName: "perch_v2_himalaya_labels.txt", Role: RoleLabels, SHA256: "4790bca0d3e41872cb00b7bd0ce0427cda5e4d02c1d837c25c6437c596875206", SizeBytes: 26124},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@himalaya",
@@ -2327,7 +2327,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_int8_arm.onnx", LocalName: "perch_v2_himalaya_int8_arm.onnx", Role: RoleModel, SHA256: "3024a89395052e971f6f3dc14525020c174d964f53ebd43a5ad72cc8cf37da00", SizeBytes: 49281151},
 				{RemotePath: "regional/himalaya/perch_v2_himalaya_labels.txt", LocalName: "perch_v2_himalaya_labels.txt", Role: RoleLabels, SHA256: "4790bca0d3e41872cb00b7bd0ce0427cda5e4d02c1d837c25c6437c596875206", SizeBytes: 26124},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@iberia",
@@ -2346,7 +2346,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iberia/perch_v2_iberia_no_dft_fp32.onnx", LocalName: "perch_v2_iberia_no_dft.onnx", Role: RoleModel, SHA256: "0a1f5717b91ceac3bd48378cecbbad1946cdfd3ad0ff72e2fe608c561198a638", SizeBytes: 70383784},
 				{RemotePath: "regional/iberia/perch_v2_iberia_labels.txt", LocalName: "perch_v2_iberia_labels.txt", Role: RoleLabels, SHA256: "2e735ca086bfff35a2e6f308d476c324431003c98ac93e0a07373f5e3da058bd", SizeBytes: 14490},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@iberia",
@@ -2363,7 +2363,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iberia/perch_v2_iberia_int8_arm.onnx", LocalName: "perch_v2_iberia_int8_arm.onnx", Role: RoleModel, SHA256: "02e6756a3de2f661b7e612e1487800a3d8ac67dd1d10e21f3269547f4ecb21a5", SizeBytes: 45884784},
 				{RemotePath: "regional/iberia/perch_v2_iberia_labels.txt", LocalName: "perch_v2_iberia_labels.txt", Role: RoleLabels, SHA256: "2e735ca086bfff35a2e6f308d476c324431003c98ac93e0a07373f5e3da058bd", SizeBytes: 14490},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@iceland",
@@ -2382,7 +2382,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iceland/perch_v2_iceland_no_dft_fp32.onnx", LocalName: "perch_v2_iceland_no_dft.onnx", Role: RoleModel, SHA256: "d6c41558e362a69e9e7dba65ad900cf53becf8420d9302b1f164a1f45876fd45", SizeBytes: 63865844},
 				{RemotePath: "regional/iceland/perch_v2_iceland_labels.txt", LocalName: "perch_v2_iceland_labels.txt", Role: RoleLabels, SHA256: "4766fd47a89f837b4e46df8c27f5e4755e291311917ceb319420fbe2aa60f793", SizeBytes: 9560},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@iceland",
@@ -2399,7 +2399,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iceland/perch_v2_iceland_int8_arm.onnx", LocalName: "perch_v2_iceland_int8_arm.onnx", Role: RoleModel, SHA256: "6757c6aba4a4eb26ac9ccc6cb195ee298be00a35c0d2beb5aed06b57b3bf82a4", SizeBytes: 44251324},
 				{RemotePath: "regional/iceland/perch_v2_iceland_labels.txt", LocalName: "perch_v2_iceland_labels.txt", Role: RoleLabels, SHA256: "4766fd47a89f837b4e46df8c27f5e4755e291311917ceb319420fbe2aa60f793", SizeBytes: 9560},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@indo-gangetic",
@@ -2418,7 +2418,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_no_dft_fp32.onnx", LocalName: "perch_v2_indo-gangetic_no_dft.onnx", Role: RoleModel, SHA256: "e5a397ccfb8e803095147c239c5ee716065e3d8e5322b108f372dbde885d955f", SizeBytes: 83911586},
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_labels.txt", LocalName: "perch_v2_indo-gangetic_labels.txt", Role: RoleLabels, SHA256: "5e87bec2ac06853a9d00d7bee48bdb648beb487acd0ed6e88279f3fce4b353be", SizeBytes: 26076},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@indo-gangetic",
@@ -2435,7 +2435,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_int8_arm.onnx", LocalName: "perch_v2_indo-gangetic_int8_arm.onnx", Role: RoleModel, SHA256: "3391d6be6c98637847be9936aa00b00a01dc66bf5d6ee2419690f4321374afeb", SizeBytes: 49274987},
 				{RemotePath: "regional/indo-gangetic/perch_v2_indo-gangetic_labels.txt", LocalName: "perch_v2_indo-gangetic_labels.txt", Role: RoleLabels, SHA256: "5e87bec2ac06853a9d00d7bee48bdb648beb487acd0ed6e88279f3fce4b353be", SizeBytes: 26076},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@japan",
@@ -2454,7 +2454,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/japan/perch_v2_japan_no_dft_fp32.onnx", LocalName: "perch_v2_japan_no_dft.onnx", Role: RoleModel, SHA256: "740778772ace4d8d6889ec7b890073518e915b457ee66180fc09cad1caf329f7", SizeBytes: 68981812},
 				{RemotePath: "regional/japan/perch_v2_japan_labels.txt", LocalName: "perch_v2_japan_labels.txt", Role: RoleLabels, SHA256: "feb134cc8734fc521e4a91682a464336b3c72f31174cb9e027b52ba80142bf8d", SizeBytes: 13791},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@japan",
@@ -2471,7 +2471,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/japan/perch_v2_japan_int8_arm.onnx", LocalName: "perch_v2_japan_int8_arm.onnx", Role: RoleModel, SHA256: "5839117a9311d7ecf4772a262c8f5b2887debc7d13192d66f7d8d910990bcdeb", SizeBytes: 45533436},
 				{RemotePath: "regional/japan/perch_v2_japan_labels.txt", LocalName: "perch_v2_japan_labels.txt", Role: RoleLabels, SHA256: "feb134cc8734fc521e4a91682a464336b3c72f31174cb9e027b52ba80142bf8d", SizeBytes: 13791},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@madeira",
@@ -2490,7 +2490,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/madeira/perch_v2_madeira_no_dft_fp32.onnx", LocalName: "perch_v2_madeira_no_dft.onnx", Role: RoleModel, SHA256: "3b7f918d84f711485a6258b08dcfd216c727b99d7717b9b935d20a2e80a49ae2", SizeBytes: 60619172},
 				{RemotePath: "regional/madeira/perch_v2_madeira_labels.txt", LocalName: "perch_v2_madeira_labels.txt", Role: RoleLabels, SHA256: "ad1620ef0f51c8186f8a156f90f20114b494be71aedd61f4609b8bb0fd35c8a5", SizeBytes: 7176},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@madeira",
@@ -2507,7 +2507,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/madeira/perch_v2_madeira_int8_arm.onnx", LocalName: "perch_v2_madeira_int8_arm.onnx", Role: RoleModel, SHA256: "598e826eacc21a3cea1a27c8aec1eca733e308517c63c0a24bd81222cc7ab138", SizeBytes: 43437676},
 				{RemotePath: "regional/madeira/perch_v2_madeira_labels.txt", LocalName: "perch_v2_madeira_labels.txt", Role: RoleLabels, SHA256: "ad1620ef0f51c8186f8a156f90f20114b494be71aedd61f4609b8bb0fd35c8a5", SizeBytes: 7176},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@mauritius",
@@ -2526,7 +2526,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_no_dft_fp32.onnx", LocalName: "perch_v2_mauritius_no_dft.onnx", Role: RoleModel, SHA256: "03381abc5b75d2fb49c2f60fafa9c80e1f0e0ac0d9657b5842695f09baf1f4ca", SizeBytes: 56019720},
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_labels.txt", LocalName: "perch_v2_mauritius_labels.txt", Role: RoleLabels, SHA256: "a45703c5091d0b2b4eab83b69a7ea47286565faf9879a735f19a98db56a0b33e", SizeBytes: 3888},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@mauritius",
@@ -2543,7 +2543,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_int8_arm.onnx", LocalName: "perch_v2_mauritius_int8_arm.onnx", Role: RoleModel, SHA256: "0993bce471bfed702c56e808d8a1b8014b8e25a6905f9f79e0b5dbf2f27846e8", SizeBytes: 42285006},
 				{RemotePath: "regional/mauritius/perch_v2_mauritius_labels.txt", LocalName: "perch_v2_mauritius_labels.txt", Role: RoleLabels, SHA256: "a45703c5091d0b2b4eab83b69a7ea47286565faf9879a735f19a98db56a0b33e", SizeBytes: 3888},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@new-caledonia",
@@ -2562,7 +2562,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_no_dft_fp32.onnx", LocalName: "perch_v2_new-caledonia_no_dft.onnx", Role: RoleModel, SHA256: "c103abcf0699889a17464ba5276ee270688cbf3daf9e125bc4ce63301ea588c0", SizeBytes: 58602300},
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_labels.txt", LocalName: "perch_v2_new-caledonia_labels.txt", Role: RoleLabels, SHA256: "b565e7e9c0fd031ba84e8ea1555975a7e50293994c8f90679eb2c89e11f782c8", SizeBytes: 5962},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@new-caledonia",
@@ -2579,7 +2579,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_int8_arm.onnx", LocalName: "perch_v2_new-caledonia_int8_arm.onnx", Role: RoleModel, SHA256: "01787c1a20d7b0ebe1d1ec3e1c28803c97ab45fa2490f6ed8c5c338dde8b0751", SizeBytes: 42932228},
 				{RemotePath: "regional/new-caledonia/perch_v2_new-caledonia_labels.txt", LocalName: "perch_v2_new-caledonia_labels.txt", Role: RoleLabels, SHA256: "b565e7e9c0fd031ba84e8ea1555975a7e50293994c8f90679eb2c89e11f782c8", SizeBytes: 5962},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@new-zealand",
@@ -2598,7 +2598,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_no_dft_fp32.onnx", LocalName: "perch_v2_new-zealand_no_dft.onnx", Role: RoleModel, SHA256: "a82854470d31363d410b1744ccec6c7c5d97c44d5041622e2c31acebfe0f2403", SizeBytes: 61283264},
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_labels.txt", LocalName: "perch_v2_new-zealand_labels.txt", Role: RoleLabels, SHA256: "c7c3636e1d56dd4602a18f3b97d60b649790593dbbcdd22f1de218caaf4f2355", SizeBytes: 8006},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@new-zealand",
@@ -2615,7 +2615,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_int8_arm.onnx", LocalName: "perch_v2_new-zealand_int8_arm.onnx", Role: RoleModel, SHA256: "ebf3c3a7021c2f2c4ab53d1cd2caaf3f92e798483f7f86000e19f7f362e1ded5", SizeBytes: 43604104},
 				{RemotePath: "regional/new-zealand/perch_v2_new-zealand_labels.txt", LocalName: "perch_v2_new-zealand_labels.txt", Role: RoleLabels, SHA256: "c7c3636e1d56dd4602a18f3b97d60b649790593dbbcdd22f1de218caaf4f2355", SizeBytes: 8006},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@nordic",
@@ -2634,7 +2634,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/nordic/perch_v2_nordic_no_dft_fp32.onnx", LocalName: "perch_v2_nordic_no_dft.onnx", Role: RoleModel, SHA256: "14649846088e6156eb0b1d40d2e90362fcf60d466f9543b8834cdf0c78a15081", SizeBytes: 65021856},
 				{RemotePath: "regional/nordic/perch_v2_nordic_labels.txt", LocalName: "perch_v2_nordic_labels.txt", Role: RoleLabels, SHA256: "4de466ccab9c0abb50ffd24fb0262ad2bba1cf811dfce6d6c34699d17682a5d8", SizeBytes: 10348},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@nordic",
@@ -2651,7 +2651,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/nordic/perch_v2_nordic_int8_arm.onnx", LocalName: "perch_v2_nordic_int8_arm.onnx", Role: RoleModel, SHA256: "1048a9a73aaa9838a68927148768dfcb46a9a765ac3a97cf62030f4a45d3b3bb", SizeBytes: 44541032},
 				{RemotePath: "regional/nordic/perch_v2_nordic_labels.txt", LocalName: "perch_v2_nordic_labels.txt", Role: RoleLabels, SHA256: "4de466ccab9c0abb50ffd24fb0262ad2bba1cf811dfce6d6c34699d17682a5d8", SizeBytes: 10348},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@north-america-east",
@@ -2670,7 +2670,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_no_dft_fp32.onnx", LocalName: "perch_v2_north-america-east_no_dft.onnx", Role: RoleModel, SHA256: "80d640c44e0775a7ef68967e5d9f073970d918486c7686ac4a14c77f3bab5d71", SizeBytes: 73901012},
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_labels.txt", LocalName: "perch_v2_north-america-east_labels.txt", Role: RoleLabels, SHA256: "fc43269a24c11481b4bccd1564e80a9b1974f704601fa520ef467374fe71d71f", SizeBytes: 17860},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@north-america-east",
@@ -2687,7 +2687,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_int8_arm.onnx", LocalName: "perch_v2_north-america-east_int8_arm.onnx", Role: RoleModel, SHA256: "5a64e006e1617ac22bc3e1d35012435d8b8db2e9b8b3e8d3298c3d04827abaa0", SizeBytes: 46766237},
 				{RemotePath: "regional/north-america-east/perch_v2_north-america-east_labels.txt", LocalName: "perch_v2_north-america-east_labels.txt", Role: RoleLabels, SHA256: "fc43269a24c11481b4bccd1564e80a9b1974f704601fa520ef467374fe71d71f", SizeBytes: 17860},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@north-america-west",
@@ -2706,7 +2706,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_no_dft_fp32.onnx", LocalName: "perch_v2_north-america-west_no_dft.onnx", Role: RoleModel, SHA256: "50899fc74072a58d2da28c180e15d32282fef270982c21d67a04ebcd3f0b65f2", SizeBytes: 73974800},
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_labels.txt", LocalName: "perch_v2_north-america-west_labels.txt", Role: RoleLabels, SHA256: "9176dd2e04e07614f85fc14b35d572ad060d0c4632f818210bbec681700b2838", SizeBytes: 17852},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@north-america-west",
@@ -2723,7 +2723,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_int8_arm.onnx", LocalName: "perch_v2_north-america-west_int8_arm.onnx", Role: RoleModel, SHA256: "deabb5e7192a110838356021d2ac78f3800e25783f61b99e6fdcd491db910915", SizeBytes: 46784729},
 				{RemotePath: "regional/north-america-west/perch_v2_north-america-west_labels.txt", LocalName: "perch_v2_north-america-west_labels.txt", Role: RoleLabels, SHA256: "9176dd2e04e07614f85fc14b35d572ad060d0c4632f818210bbec681700b2838", SizeBytes: 17852},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@reunion",
@@ -2742,7 +2742,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/reunion/perch_v2_reunion_no_dft_fp32.onnx", LocalName: "perch_v2_reunion_no_dft.onnx", Role: RoleModel, SHA256: "cc0c2a3f511fb981a28a5d1d3515b5f98e7e42215a1bb6b32cfec1790b087857", SizeBytes: 56068912},
 				{RemotePath: "regional/reunion/perch_v2_reunion_labels.txt", LocalName: "perch_v2_reunion_labels.txt", Role: RoleLabels, SHA256: "efc819b560679d3fccf6af5fe8b3c0678fdddc48a6778f5d5d95f2efbd698ab6", SizeBytes: 3937},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@reunion",
@@ -2759,7 +2759,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/reunion/perch_v2_reunion_int8_arm.onnx", LocalName: "perch_v2_reunion_int8_arm.onnx", Role: RoleModel, SHA256: "2a9888cac580e55ec41771e5d27aae9c8a5766434569aa727264d5238525a4b5", SizeBytes: 42297334},
 				{RemotePath: "regional/reunion/perch_v2_reunion_labels.txt", LocalName: "perch_v2_reunion_labels.txt", Role: RoleLabels, SHA256: "efc819b560679d3fccf6af5fe8b3c0678fdddc48a6778f5d5d95f2efbd698ab6", SizeBytes: 3937},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@sao-tome-principe",
@@ -2778,7 +2778,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_no_dft_fp32.onnx", LocalName: "perch_v2_sao-tome-principe_no_dft.onnx", Role: RoleModel, SHA256: "e01153e0900fc9c1d971310ee25c7a0b9a0e6c4462670f43651cadc3cca4793d", SizeBytes: 57298712},
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_labels.txt", LocalName: "perch_v2_sao-tome-principe_labels.txt", Role: RoleLabels, SHA256: "4e7ae7e54da68b2dd801acb3e7eb1aedb1eb4d07f55810ea0ff2facb770ff42e", SizeBytes: 4792},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@sao-tome-principe",
@@ -2795,7 +2795,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_int8_arm.onnx", LocalName: "perch_v2_sao-tome-principe_int8_arm.onnx", Role: RoleModel, SHA256: "a9cd8bbe8ff608c97e38098349451766dd02f16acc7e9422a216c831970de99c", SizeBytes: 42605534},
 				{RemotePath: "regional/sao-tome-principe/perch_v2_sao-tome-principe_labels.txt", LocalName: "perch_v2_sao-tome-principe_labels.txt", Role: RoleLabels, SHA256: "4e7ae7e54da68b2dd801acb3e7eb1aedb1eb4d07f55810ea0ff2facb770ff42e", SizeBytes: 4792},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@seychelles",
@@ -2814,7 +2814,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_no_dft_fp32.onnx", LocalName: "perch_v2_seychelles_no_dft.onnx", Role: RoleModel, SHA256: "c50ea0af5c068ae34cde58f3fa342ffefee498a1d3a1ba357b5487a5786861d3", SizeBytes: 57151136},
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_labels.txt", LocalName: "perch_v2_seychelles_labels.txt", Role: RoleLabels, SHA256: "99ab268c4adce3de6d3a8b92004b55eec605054dc6a0480485314cc376903ead", SizeBytes: 4710},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@seychelles",
@@ -2831,7 +2831,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_int8_arm.onnx", LocalName: "perch_v2_seychelles_int8_arm.onnx", Role: RoleModel, SHA256: "543a734df159e86c50f112d83d7bdb9cb6143442ac540ed1796725adb0b9b843", SizeBytes: 42568550},
 				{RemotePath: "regional/seychelles/perch_v2_seychelles_labels.txt", LocalName: "perch_v2_seychelles_labels.txt", Role: RoleLabels, SHA256: "99ab268c4adce3de6d3a8b92004b55eec605054dc6a0480485314cc376903ead", SizeBytes: 4710},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@south-asia-peninsular",
@@ -2850,7 +2850,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_no_dft_fp32.onnx", LocalName: "perch_v2_south-asia-peninsular_no_dft.onnx", Role: RoleModel, SHA256: "1ab0884a4986dadbeb74a906a8f33568b2856d014f02fc4cf9175ef8e20a2390", SizeBytes: 70949492},
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_labels.txt", LocalName: "perch_v2_south-asia-peninsular_labels.txt", Role: RoleLabels, SHA256: "29b5c2a26ff857f7958710e1b047966e5c943943238dbffd182eda00967f7aa9", SizeBytes: 15505},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@south-asia-peninsular",
@@ -2867,7 +2867,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_int8_arm.onnx", LocalName: "perch_v2_south-asia-peninsular_int8_arm.onnx", Role: RoleModel, SHA256: "a84c872c56ddb5d5a76f6abb0c27926807b9da336de526c8bb91194c1c5bf4b9", SizeBytes: 46026556},
 				{RemotePath: "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_labels.txt", LocalName: "perch_v2_south-asia-peninsular_labels.txt", Role: RoleLabels, SHA256: "29b5c2a26ff857f7958710e1b047966e5c943943238dbffd182eda00967f7aa9", SizeBytes: 15505},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@southern-africa",
@@ -2886,7 +2886,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_no_dft_fp32.onnx", LocalName: "perch_v2_southern-africa_no_dft.onnx", Role: RoleModel, SHA256: "4053c167196575495dbf34cb56914d64600ee19b54153931182f4c613983930e", SizeBytes: 73974800},
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_labels.txt", LocalName: "perch_v2_southern-africa_labels.txt", Role: RoleLabels, SHA256: "0d8f8ed51cf7a474350a38d57a2737c950d21044d87a6e0ced843d43e9fc56d5", SizeBytes: 18157},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@southern-africa",
@@ -2903,7 +2903,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_int8_arm.onnx", LocalName: "perch_v2_southern-africa_int8_arm.onnx", Role: RoleModel, SHA256: "d2e6ae6d660d717a53f93d3cacfae2c851c907f8c873e99739181017e7e39a73", SizeBytes: 46784728},
 				{RemotePath: "regional/southern-africa/perch_v2_southern-africa_labels.txt", LocalName: "perch_v2_southern-africa_labels.txt", Role: RoleLabels, SHA256: "0d8f8ed51cf7a474350a38d57a2737c950d21044d87a6e0ced843d43e9fc56d5", SizeBytes: 18157},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@southern-cone",
@@ -2922,7 +2922,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_no_dft_fp32.onnx", LocalName: "perch_v2_southern-cone_no_dft.onnx", Role: RoleModel, SHA256: "d6f782b9ea06c80a78b58f928b9276c92eedb4fbb2a8a2d596cf835b7722606b", SizeBytes: 94955190},
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_labels.txt", LocalName: "perch_v2_southern-cone_labels.txt", Role: RoleLabels, SHA256: "2c2ba9ec2e4bda2cd81661fc4e9cb90c6ae7286b3ae83be4c44b62b551d37870", SizeBytes: 36197},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@southern-cone",
@@ -2939,7 +2939,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_int8_arm.onnx", LocalName: "perch_v2_southern-cone_int8_arm.onnx", Role: RoleModel, SHA256: "e8584ffa2c7cd23e8a6dc9af2f85a2af6b02b9fe181555abb6c3f9143e353c22", SizeBytes: 52042622},
 				{RemotePath: "regional/southern-cone/perch_v2_southern-cone_labels.txt", LocalName: "perch_v2_southern-cone_labels.txt", Role: RoleLabels, SHA256: "2c2ba9ec2e4bda2cd81661fc4e9cb90c6ae7286b3ae83be4c44b62b551d37870", SizeBytes: 36197},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@southern-europe",
@@ -2958,7 +2958,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_no_dft_fp32.onnx", LocalName: "perch_v2_southern-europe_no_dft.onnx", Role: RoleModel, SHA256: "9ba9cd864529efc506941c366c50e7dbf3f3a173adb3dce244e3a6e940ef9045", SizeBytes: 69965652},
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_labels.txt", LocalName: "perch_v2_southern-europe_labels.txt", Role: RoleLabels, SHA256: "0469015312dc9a34effd398e72c28b8dcd6da8bf8d783d4d14a5e39172578344", SizeBytes: 14163},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@southern-europe",
@@ -2975,7 +2975,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_int8_arm.onnx", LocalName: "perch_v2_southern-europe_int8_arm.onnx", Role: RoleModel, SHA256: "6957554e294967aa26d72f332f62b68e8a6aa08ed6766791a28f0b4ff10d880c", SizeBytes: 45779996},
 				{RemotePath: "regional/southern-europe/perch_v2_southern-europe_labels.txt", LocalName: "perch_v2_southern-europe_labels.txt", Role: RoleLabels, SHA256: "0469015312dc9a34effd398e72c28b8dcd6da8bf8d783d4d14a5e39172578344", SizeBytes: 14163},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@svalbard",
@@ -2994,7 +2994,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_no_dft_fp32.onnx", LocalName: "perch_v2_svalbard_no_dft.onnx", Role: RoleModel, SHA256: "01d30871ccf82c9f7a73aa3e5d7bbf61a6337fe8dd7584ebaa001cca30b7b563", SizeBytes: 61135688},
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_labels.txt", LocalName: "perch_v2_svalbard_labels.txt", Role: RoleLabels, SHA256: "0ec05815ecc36859dc06b8b0f3c9d592245834bba8cbe27ebb545767519554b2", SizeBytes: 7451},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@svalbard",
@@ -3011,7 +3011,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_int8_arm.onnx", LocalName: "perch_v2_svalbard_int8_arm.onnx", Role: RoleModel, SHA256: "eb98b17da3822b356b3b53d152e8a087a4bb6d9cf58e72fcd1ecc7190cf3819d", SizeBytes: 43567120},
 				{RemotePath: "regional/svalbard/perch_v2_svalbard_labels.txt", LocalName: "perch_v2_svalbard_labels.txt", Role: RoleLabels, SHA256: "0ec05815ecc36859dc06b8b0f3c9d592245834bba8cbe27ebb545767519554b2", SizeBytes: 7451},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@tibet",
@@ -3030,7 +3030,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/perch_v2_tibet_no_dft_fp32.onnx", LocalName: "perch_v2_tibet_no_dft.onnx", Role: RoleModel, SHA256: "d309474cdebccbd49c5d8c785e75058900060665e0ac624f9c7c67ab9ec3fb6e", SizeBytes: 83936182},
 				{RemotePath: "regional/tibet/perch_v2_tibet_labels.txt", LocalName: "perch_v2_tibet_labels.txt", Role: RoleLabels, SHA256: "41ab36a976dfea277181801d1329940201d777390a3269138cabe0fc6edb460b", SizeBytes: 26056},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@tibet",
@@ -3047,7 +3047,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/perch_v2_tibet_int8_arm.onnx", LocalName: "perch_v2_tibet_int8_arm.onnx", Role: RoleModel, SHA256: "78daa7110aa3dec88aa2d5cb1587c7af7c59ce3c70f4c74fc8cdd8ff98c053d9", SizeBytes: 49281151},
 				{RemotePath: "regional/tibet/perch_v2_tibet_labels.txt", LocalName: "perch_v2_tibet_labels.txt", Role: RoleLabels, SHA256: "41ab36a976dfea277181801d1329940201d777390a3269138cabe0fc6edb460b", SizeBytes: 26056},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@west-africa",
@@ -3066,7 +3066,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_no_dft_fp32.onnx", LocalName: "perch_v2_west-africa_no_dft.onnx", Role: RoleModel, SHA256: "4983b759cb77ce8a59d9fd6dcb853836195961a67b19bb09f23c4c9aa478a8ac", SizeBytes: 81525774},
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_labels.txt", LocalName: "perch_v2_west-africa_labels.txt", Role: RoleLabels, SHA256: "18eef8b461ee60892b4581a3484c8505d486ca6d6240423d4fc0e27f510d07dd", SizeBytes: 24127},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@west-africa",
@@ -3083,7 +3083,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_int8_arm.onnx", LocalName: "perch_v2_west-africa_int8_arm.onnx", Role: RoleModel, SHA256: "e88f50be2254a4f134d6cf8d896c1b4f47aecab27f7d89a2856c305735f62845", SizeBytes: 48677078},
 				{RemotePath: "regional/west-africa/perch_v2_west-africa_labels.txt", LocalName: "perch_v2_west-africa_labels.txt", Role: RoleLabels, SHA256: "18eef8b461ee60892b4581a3484c8505d486ca6d6240423d4fc0e27f510d07dd", SizeBytes: 24127},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "no-dft-fp32@western-palearctic",
@@ -3102,7 +3102,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_no_dft_fp32.onnx", LocalName: "perch_v2_western-palearctic_no_dft.onnx", Role: RoleModel, SHA256: "d3c329afbc2b614f17002dea45282698df879d3fb714cd070ab74cf4d7a13b67", SizeBytes: 88658614},
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_labels.txt", LocalName: "perch_v2_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "4e63079981649c4bffda95d1254c3c22689ade06dd2bc55ce08b14d03d8360b1", SizeBytes: 28913},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "int8-arm@western-palearctic",
@@ -3119,7 +3119,7 @@ func perchV2RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_int8_arm.onnx", LocalName: "perch_v2_western-palearctic_int8_arm.onnx", Role: RoleModel, SHA256: "5417cf33b6d7a195810e63c825e9108e73c30889a12da72130616297255c4154", SizeBytes: 50464638},
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_labels.txt", LocalName: "perch_v2_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "4e63079981649c4bffda95d1254c3c22689ade06dd2bc55ce08b14d03d8360b1", SizeBytes: 28913},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 	}
 }
@@ -3144,7 +3144,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/amazonia/birdnet-plus-v3.0-amazonia-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_amazonia_fp32.onnx", Role: RoleModel, SHA256: "2a80212a03684e5662e46253356461c1589581029428fea595903df6b9f5bf3a", SizeBytes: 176989563},
 				{RemotePath: "regional/amazonia/birdnet-plus-v3.0-amazonia-labels-b1.txt", LocalName: "birdnet_plus_v3.0_amazonia_labels.txt", Role: RoleLabels, SHA256: "f7e880941f764d5e253708d1f3ca4dd6e32e5a2d7694accbb05f491b7ff16ffb", SizeBytes: 130096},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@andes",
@@ -3162,7 +3162,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/andes/birdnet-plus-v3.0-andes-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_andes_fp32.onnx", Role: RoleModel, SHA256: "430d4b3f979d14d5096a86bebb2bf2ac674eae87fd1ab22e3f190e1b33c953b7", SizeBytes: 179830731},
 				{RemotePath: "regional/andes/birdnet-plus-v3.0-andes-labels-b1.txt", LocalName: "birdnet_plus_v3.0_andes_labels.txt", Role: RoleLabels, SHA256: "f683ed1308ce0844e85bf6bcbd3ab8b2cfbf0bcb734d76b7a0c635635c305b9d", SizeBytes: 135244},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@australia-east",
@@ -3180,7 +3180,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/australia-east/birdnet-plus-v3.0-australia-east-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_australia-east_fp32.onnx", Role: RoleModel, SHA256: "4cecd57a9cefe63c97e445d649c8fccb94ba59351ec2885c6fb455f7cf119ebf", SizeBytes: 124793863},
 				{RemotePath: "regional/australia-east/birdnet-plus-v3.0-australia-east-labels-b1.txt", LocalName: "birdnet_plus_v3.0_australia-east_labels.txt", Role: RoleLabels, SHA256: "4069aa1b22ea3edaa564ec25b78ae8680f57907af0bfa8b3a8f8ad462bc3c752", SizeBytes: 28332},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@azores",
@@ -3198,7 +3198,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/azores/birdnet-plus-v3.0-azores-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_azores_fp32.onnx", Role: RoleModel, SHA256: "d1eaa1865011ec903223cf82ae1778366c34e0f8e8adfd438c0f2807842dea07", SizeBytes: 113708993},
 				{RemotePath: "regional/azores/birdnet-plus-v3.0-azores-labels-b1.txt", LocalName: "birdnet_plus_v3.0_azores_labels.txt", Role: RoleLabels, SHA256: "52425d3d0f17367c16dbcdd2165e636cb5937e66e655112e5522fbb80eb07370", SizeBytes: 7882},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@baltics",
@@ -3216,7 +3216,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/baltics/birdnet-plus-v3.0-baltics-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_baltics_fp32.onnx", Role: RoleModel, SHA256: "f8cc11cb0a8a9fdbf0a7800516922ae230153823f489a007be401b55f1c8aa5f", SizeBytes: 118401227},
 				{RemotePath: "regional/baltics/birdnet-plus-v3.0-baltics-labels-b1.txt", LocalName: "birdnet_plus_v3.0_baltics_labels.txt", Role: RoleLabels, SHA256: "86489bc09aac2cac320b8a04f6483dd202b00ce026242943c2a46d6c64b2e3c4", SizeBytes: 15409},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@british-isles",
@@ -3234,7 +3234,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/british-isles/birdnet-plus-v3.0-british-isles-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_british-isles_fp32.onnx", Role: RoleModel, SHA256: "8d2812ec3e2c5f2e96bafe7f1b32d9634fbd34b294c3f458295960c9da12a034", SizeBytes: 120962591},
 				{RemotePath: "regional/british-isles/birdnet-plus-v3.0-british-isles-labels-b1.txt", LocalName: "birdnet_plus_v3.0_british-isles_labels.txt", Role: RoleLabels, SHA256: "a0c031e08a13fed442218dc37de1b3c450fb191c688259ee79813a3461ae3d4e", SizeBytes: 19692},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@canada-alaska",
@@ -3252,7 +3252,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canada-alaska/birdnet-plus-v3.0-canada-alaska-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_canada-alaska_fp32.onnx", Role: RoleModel, SHA256: "9cb4b010deedc3de86b7eeb1e4a0cd291d2d930173765e7566e76f2b3523e642", SizeBytes: 125224343},
 				{RemotePath: "regional/canada-alaska/birdnet-plus-v3.0-canada-alaska-labels-b1.txt", LocalName: "birdnet_plus_v3.0_canada-alaska_labels.txt", Role: RoleLabels, SHA256: "bcfab1adc60e3b91e1c549643c56d22774e13422c26bdb939156ff4f79e140a0", SizeBytes: 27652},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@canary-islands",
@@ -3270,7 +3270,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/canary-islands/birdnet-plus-v3.0-canary-islands-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_canary-islands_fp32.onnx", Role: RoleModel, SHA256: "c7135797763d589d7527ddb1f30150d4a90ecb9eca3790ff75baaf0c62bf743a", SizeBytes: 117368075},
 				{RemotePath: "regional/canary-islands/birdnet-plus-v3.0-canary-islands-labels-b1.txt", LocalName: "birdnet_plus_v3.0_canary-islands_labels.txt", Role: RoleLabels, SHA256: "399ddce57ff80e9fbe92e24bd4e09f47b10930c9ef430f6779a6afc887c084a1", SizeBytes: 14086},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@cape-verde",
@@ -3288,7 +3288,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/cape-verde/birdnet-plus-v3.0-cape-verde-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_cape-verde_fp32.onnx", Role: RoleModel, SHA256: "ec3408e80e2ea34cdd5ce9d3d1bcc3c87582ef26c88878adf0cc0cd0e05cfb65", SizeBytes: 111987073},
 				{RemotePath: "regional/cape-verde/birdnet-plus-v3.0-cape-verde-labels-b1.txt", LocalName: "birdnet_plus_v3.0_cape-verde_labels.txt", Role: RoleLabels, SHA256: "9bb28b59a206e8d55dc962a7c99c8e48372053f5293886045b66bc898336a39d", SizeBytes: 5459},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@central-africa",
@@ -3306,7 +3306,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-africa/birdnet-plus-v3.0-central-africa-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_central-africa_fp32.onnx", Role: RoleModel, SHA256: "cded103e0512846395597d24f718ac64f3c2bbefc19c128fa30e614cf8862bc2", SizeBytes: 141582583},
 				{RemotePath: "regional/central-africa/birdnet-plus-v3.0-central-africa-labels-b1.txt", LocalName: "birdnet_plus_v3.0_central-africa_labels.txt", Role: RoleLabels, SHA256: "492e16e8d407f5003ee47f4b56f10d64dc51993b1d7a37f73b0ef378fed6bb99", SizeBytes: 59936},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@central-europe",
@@ -3324,7 +3324,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/central-europe/birdnet-plus-v3.0-central-europe-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_central-europe_fp32.onnx", Role: RoleModel, SHA256: "702cac31bb8a9aa6680b8ab1a5021d6e9545b9c2c58a16d176c5269a81cb9fec", SizeBytes: 122856703},
 				{RemotePath: "regional/central-europe/birdnet-plus-v3.0-central-europe-labels-b1.txt", LocalName: "birdnet_plus_v3.0_central-europe_labels.txt", Role: RoleLabels, SHA256: "df61211c6ef0b9388473fa1e8774cd5234d9c9677ff1216cc18dfa9ae9f7e5bb", SizeBytes: 23024},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-north-central",
@@ -3342,7 +3342,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-north-central/birdnet-plus-v3.0-china-north-central-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_china-north-central_fp32.onnx", Role: RoleModel, SHA256: "b4eb827e58dc794e8e02bba3559712bebda57002d1fff7ca3c565381b7add82c", SizeBytes: 125525679},
 				{RemotePath: "regional/china-north-central/birdnet-plus-v3.0-china-north-central-labels-b1.txt", LocalName: "birdnet_plus_v3.0_china-north-central_labels.txt", Role: RoleLabels, SHA256: "52526c82348b6540c278f4eb9e28cddf69125812c17a0671066d19b7446c746d", SizeBytes: 29363},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-northeast",
@@ -3360,7 +3360,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-northeast/birdnet-plus-v3.0-china-northeast-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_china-northeast_fp32.onnx", Role: RoleModel, SHA256: "f42d163110d26371229d633a2b7e73b33e0e1ce8d313a93af9a8eeb28f466d87", SizeBytes: 123308707},
 				{RemotePath: "regional/china-northeast/birdnet-plus-v3.0-china-northeast-labels-b1.txt", LocalName: "birdnet_plus_v3.0_china-northeast_labels.txt", Role: RoleLabels, SHA256: "6281c60acb10d9fd4ba3361a0fc25c0adcebab814e47e97bf2a623d05abe18e9", SizeBytes: 24768},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-southeast",
@@ -3378,7 +3378,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southeast/birdnet-plus-v3.0-china-southeast-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_china-southeast_fp32.onnx", Role: RoleModel, SHA256: "2638b68bc5aaf94929d711af785b535539969d14f0c39270f4df957b9dc3d58b", SizeBytes: 133855467},
 				{RemotePath: "regional/china-southeast/birdnet-plus-v3.0-china-southeast-labels-b1.txt", LocalName: "birdnet_plus_v3.0_china-southeast_labels.txt", Role: RoleLabels, SHA256: "f48dcb0e5fb507db291a91924e677284eff33869cdb432802e25ef597db3e288", SizeBytes: 45168},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@china-southwest",
@@ -3396,7 +3396,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/china-southwest/birdnet-plus-v3.0-china-southwest-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_china-southwest_fp32.onnx", Role: RoleModel, SHA256: "8b4bd23fc484c53287b3c065cda013777a675329f1707bb1219ce5ffeb98677b", SizeBytes: 134931667},
 				{RemotePath: "regional/china-southwest/birdnet-plus-v3.0-china-southwest-labels-b1.txt", LocalName: "birdnet_plus_v3.0_china-southwest_labels.txt", Role: RoleLabels, SHA256: "d06bcd3fde7d1462ffd0c994084428a7314a624a724de7f7df0a7c23f8180d8d", SizeBytes: 47552},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@east-africa",
@@ -3414,7 +3414,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/east-africa/birdnet-plus-v3.0-east-africa-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_east-africa_fp32.onnx", Role: RoleModel, SHA256: "9adfad927a3ddb5a77fe291a009afcdc1bbd7c914134e46b8d3ec36721ecfbb3", SizeBytes: 147759971},
 				{RemotePath: "regional/east-africa/birdnet-plus-v3.0-east-africa-labels-b1.txt", LocalName: "birdnet_plus_v3.0_east-africa_labels.txt", Role: RoleLabels, SHA256: "149541f3c4e55571e07c79aed737faeb7bfd2164d9ccadeeb396a7329182d582", SizeBytes: 70379},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@eastern-brazil",
@@ -3432,7 +3432,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-brazil/birdnet-plus-v3.0-eastern-brazil-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_eastern-brazil_fp32.onnx", Role: RoleModel, SHA256: "65d455648451d6e045e2cc4e1aa3d4841ed96607cf27f35a9e285bf16009b154", SizeBytes: 150945523},
 				{RemotePath: "regional/eastern-brazil/birdnet-plus-v3.0-eastern-brazil-labels-b1.txt", LocalName: "birdnet_plus_v3.0_eastern-brazil_labels.txt", Role: RoleLabels, SHA256: "1570576223b4bce58f0daca34e51aa3657e018b006e82c477f844e74d734228d", SizeBytes: 79835},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@eastern-europe",
@@ -3450,7 +3450,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/eastern-europe/birdnet-plus-v3.0-eastern-europe-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_eastern-europe_fp32.onnx", Role: RoleModel, SHA256: "99c8d641a0067557ab08a90d70ea84868b32bc41cb78a41b579e01dcf3d628e3", SizeBytes: 120123155},
 				{RemotePath: "regional/eastern-europe/birdnet-plus-v3.0-eastern-europe-labels-b1.txt", LocalName: "birdnet_plus_v3.0_eastern-europe_labels.txt", Role: RoleLabels, SHA256: "800061e876ce4712e03f0c71d7a98e9eae1f16ac98fab82785b1021fcedc5683", SizeBytes: 18574},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@galapagos",
@@ -3468,7 +3468,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/galapagos/birdnet-plus-v3.0-galapagos-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_galapagos_fp32.onnx", Role: RoleModel, SHA256: "b955a650b4f70787229406a144a59bb36b8370209a235fc24547c07003cfd59f", SizeBytes: 111857929},
 				{RemotePath: "regional/galapagos/birdnet-plus-v3.0-galapagos-labels-b1.txt", LocalName: "birdnet_plus_v3.0_galapagos_labels.txt", Role: RoleLabels, SHA256: "3ce55f514fcb6bc981bdeb7b0878612d5361cf603d6a5faff31ced1d72b33979", SizeBytes: 5248},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@hawaii",
@@ -3486,7 +3486,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/hawaii/birdnet-plus-v3.0-hawaii-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_hawaii_fp32.onnx", Role: RoleModel, SHA256: "6cf02e0119f0c7d286b8d8e99d72d8864430cb697a0a513cc000f222b4b7448b", SizeBytes: 114828241},
 				{RemotePath: "regional/hawaii/birdnet-plus-v3.0-hawaii-labels-b1.txt", LocalName: "birdnet_plus_v3.0_hawaii_labels.txt", Role: RoleLabels, SHA256: "37689f29ace9021cb12e4134137fa1b065ced35856d2f163ddcc49d3ef125add", SizeBytes: 9940},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@himalaya",
@@ -3504,7 +3504,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/himalaya/birdnet-plus-v3.0-himalaya-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_himalaya_fp32.onnx", Role: RoleModel, SHA256: "fae9d181ac3e7a494459b44770f67bb8b4861a197ea472d98356f3e3c0824502", SizeBytes: 134888619},
 				{RemotePath: "regional/himalaya/birdnet-plus-v3.0-himalaya-labels-b1.txt", LocalName: "birdnet_plus_v3.0_himalaya_labels.txt", Role: RoleLabels, SHA256: "a2e0ffb54ecbdbbf86b35b685c673459045459a7de805ae97cee22567390caa3", SizeBytes: 46901},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@iberia",
@@ -3522,7 +3522,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iberia/birdnet-plus-v3.0-iberia-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_iberia_fp32.onnx", Role: RoleModel, SHA256: "23bce0c96034d39dcc4f05eb59ac68b1e427f170e6cc171176a6d26595fb4bc7", SizeBytes: 122469271},
 				{RemotePath: "regional/iberia/birdnet-plus-v3.0-iberia-labels-b1.txt", LocalName: "birdnet_plus_v3.0_iberia_labels.txt", Role: RoleLabels, SHA256: "d723a8948b5ba6ca840f314db65ea9b11353a4c81adedc1b88979377b4a079ff", SizeBytes: 22499},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@iceland",
@@ -3540,7 +3540,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/iceland/birdnet-plus-v3.0-iceland-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_iceland_fp32.onnx", Role: RoleModel, SHA256: "160d89dfea64236f2245c15c831d213b1477c92e79221ba130fee8dcc42f45fd", SizeBytes: 117303501},
 				{RemotePath: "regional/iceland/birdnet-plus-v3.0-iceland-labels-b1.txt", LocalName: "birdnet_plus_v3.0_iceland_labels.txt", Role: RoleLabels, SHA256: "00e00b07ee00cecba5bbf51027b3919fa7836c84a4edefca41303a470df39951", SizeBytes: 13626},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@indo-gangetic",
@@ -3558,7 +3558,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/indo-gangetic/birdnet-plus-v3.0-indo-gangetic-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_indo-gangetic_fp32.onnx", Role: RoleModel, SHA256: "729a19f75e500fec4d1da619f34279aecee3c3763166410cc4b1a3694a9e4249", SizeBytes: 134307471},
 				{RemotePath: "regional/indo-gangetic/birdnet-plus-v3.0-indo-gangetic-labels-b1.txt", LocalName: "birdnet_plus_v3.0_indo-gangetic_labels.txt", Role: RoleLabels, SHA256: "8493e9571b87d195c87f4dda19792374b13594c1267f95b98290d4ed95e8ed96", SizeBytes: 45645},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@japan",
@@ -3576,7 +3576,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/japan/birdnet-plus-v3.0-japan-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_japan_fp32.onnx", Role: RoleModel, SHA256: "0c87c90bf44a89176a60d829f69ec1a245a2fbf249664937c47f2febdd20a2f1", SizeBytes: 121608311},
 				{RemotePath: "regional/japan/birdnet-plus-v3.0-japan-labels-b1.txt", LocalName: "birdnet_plus_v3.0_japan_labels.txt", Role: RoleLabels, SHA256: "49f7c7a1dc65201f1d654570b9cc0cca18dbf7d95fbd1296f9eba55b2987822e", SizeBytes: 21951},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@madeira",
@@ -3594,7 +3594,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/madeira/birdnet-plus-v3.0-madeira-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_madeira_fp32.onnx", Role: RoleModel, SHA256: "a272d3b7c919010702c8f520a06b70305faf76b51b75b477d698ed2684f359f4", SizeBytes: 114397761},
 				{RemotePath: "regional/madeira/birdnet-plus-v3.0-madeira-labels-b1.txt", LocalName: "birdnet_plus_v3.0_madeira_labels.txt", Role: RoleLabels, SHA256: "481b6320fbffd0e7f5abda553cefe4d30ec13cf8b7f5079c56558dbca15db172", SizeBytes: 9097},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@mauritius",
@@ -3612,7 +3612,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/mauritius/birdnet-plus-v3.0-mauritius-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_mauritius_fp32.onnx", Role: RoleModel, SHA256: "5c12eb07c4a19bb88c0b2f722c4d20246eb29fbf10fad013c5f438dd1b58a9f6", SizeBytes: 110437334},
 				{RemotePath: "regional/mauritius/birdnet-plus-v3.0-mauritius-labels-b1.txt", LocalName: "birdnet_plus_v3.0_mauritius_labels.txt", Role: RoleLabels, SHA256: "ff166184cf00fcfcae44c020f2a65275c34b29922433e8b8fb6c36627d744822", SizeBytes: 2864},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@new-caledonia",
@@ -3630,7 +3630,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-caledonia/birdnet-plus-v3.0-new-caledonia-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_new-caledonia_fp32.onnx", Role: RoleModel, SHA256: "59c263d01ead46b1947b01230c574ceafc3884d33dd56d2641496766b55ea60d", SizeBytes: 112589745},
 				{RemotePath: "regional/new-caledonia/birdnet-plus-v3.0-new-caledonia-labels-b1.txt", LocalName: "birdnet_plus_v3.0_new-caledonia_labels.txt", Role: RoleLabels, SHA256: "5eac0593d7f91a6b5a4b42779d177a506c8702668ccea03431d52fd94053b2c3", SizeBytes: 6766},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@new-zealand",
@@ -3648,7 +3648,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/new-zealand/birdnet-plus-v3.0-new-zealand-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_new-zealand_fp32.onnx", Role: RoleModel, SHA256: "494b70f3688931216fa45d4f0b297a2cb505577c6e37675a121e7d5aecc37ebd", SizeBytes: 114720621},
 				{RemotePath: "regional/new-zealand/birdnet-plus-v3.0-new-zealand-labels-b1.txt", LocalName: "birdnet_plus_v3.0_new-zealand_labels.txt", Role: RoleLabels, SHA256: "500a4e2c2c55ee45d3f694da6b926d900fe01435948a0372feef4b56e4961a31", SizeBytes: 10101},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@nordic",
@@ -3670,7 +3670,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/nordic/birdnet-plus-v3.0-nordic-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_nordic_fp32.onnx", Role: RoleModel, SHA256: "a3255880a52bb2ff963ffe9a86d144a3368bf4df8c1dd72fee66c11129db9a9f", SizeBytes: 118035319},
 				{RemotePath: "regional/nordic/birdnet-plus-v3.0-nordic-labels-b1.txt", LocalName: "birdnet_plus_v3.0_nordic_labels.txt", Role: RoleLabels, SHA256: "64cf30aa5e2b5f1b84a47ab8c5e651953e753b59344a5b6f82efeb063ca67db2", SizeBytes: 14748},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@north-america-east",
@@ -3688,7 +3688,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-east/birdnet-plus-v3.0-north-america-east-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_north-america-east_fp32.onnx", Role: RoleModel, SHA256: "e1c5367748f25e1424fa6cf3c65e3fd242cf2587f5d06887585d317729a62509", SizeBytes: 126106827},
 				{RemotePath: "regional/north-america-east/birdnet-plus-v3.0-north-america-east-labels-b1.txt", LocalName: "birdnet_plus_v3.0_north-america-east_labels.txt", Role: RoleLabels, SHA256: "a03348efa5a64d338f481748a587d790c3ba6158b068e1f4617c7f2fc1f60f39", SizeBytes: 29846},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@north-america-west",
@@ -3706,7 +3706,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/north-america-west/birdnet-plus-v3.0-north-america-west-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_north-america-west_fp32.onnx", Role: RoleModel, SHA256: "33491c5cd58f2f4ef9da98a6a97d0eadaaf2b13118e5e612d5401449f342516c", SizeBytes: 126171399},
 				{RemotePath: "regional/north-america-west/birdnet-plus-v3.0-north-america-west-labels-b1.txt", LocalName: "birdnet_plus_v3.0_north-america-west_labels.txt", Role: RoleLabels, SHA256: "00fb77754ee1ede69e15f2794fb198fb3ab6d1aec6ec409b968ad70022844c1a", SizeBytes: 29862},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@reunion",
@@ -3724,7 +3724,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/reunion/birdnet-plus-v3.0-reunion-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_reunion_fp32.onnx", Role: RoleModel, SHA256: "e53ad402d5e983de726a42606a8bc1d0dfe4f23c70084cb6693b2a6cdc805b39", SizeBytes: 110480382},
 				{RemotePath: "regional/reunion/birdnet-plus-v3.0-reunion-labels-b1.txt", LocalName: "birdnet_plus_v3.0_reunion_labels.txt", Role: RoleLabels, SHA256: "d6c96af53dc1b0b0848706a58854849c5b2d89a21f9c02f18de8361b737f08f9", SizeBytes: 2942},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@sao-tome-principe",
@@ -3742,7 +3742,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/sao-tome-principe/birdnet-plus-v3.0-sao-tome-principe-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_sao-tome-principe_fp32.onnx", Role: RoleModel, SHA256: "357a1a91e833547662f77d12328f7250b7497c450525cb96d8f8600145c01a6b", SizeBytes: 111362877},
 				{RemotePath: "regional/sao-tome-principe/birdnet-plus-v3.0-sao-tome-principe-labels-b1.txt", LocalName: "birdnet_plus_v3.0_sao-tome-principe_labels.txt", Role: RoleLabels, SHA256: "99accb3b223c60d07497933303c30fcd47757b4cb5c48c07836acd3edb45085e", SizeBytes: 4378},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@seychelles",
@@ -3760,7 +3760,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/seychelles/birdnet-plus-v3.0-seychelles-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_seychelles_fp32.onnx", Role: RoleModel, SHA256: "433e60225ce157d4ac51f331b24a42cd859814561e9afc724443c45e3064b1cc", SizeBytes: 111448973},
 				{RemotePath: "regional/seychelles/birdnet-plus-v3.0-seychelles-labels-b1.txt", LocalName: "birdnet_plus_v3.0_seychelles_labels.txt", Role: RoleLabels, SHA256: "1e6af4bf4540296628335499aac76b74ed077df072f417a0b4328ab3fe07095c", SizeBytes: 4488},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@south-asia-peninsular",
@@ -3778,7 +3778,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/south-asia-peninsular/birdnet-plus-v3.0-south-asia-peninsular-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_south-asia-peninsular_fp32.onnx", Role: RoleModel, SHA256: "ba175b0280f56a4168ae04ca34acf5967552e57af68e79f9a3797846371bde1a", SizeBytes: 122942799},
 				{RemotePath: "regional/south-asia-peninsular/birdnet-plus-v3.0-south-asia-peninsular-labels-b1.txt", LocalName: "birdnet_plus_v3.0_south-asia-peninsular_labels.txt", Role: RoleLabels, SHA256: "7ee32d1f752a69eb75f71d12caeffcb2be1cb3d61f3460bf73ad1866b0896195", SizeBytes: 24758},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@southern-africa",
@@ -3796,7 +3796,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-africa/birdnet-plus-v3.0-southern-africa-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_southern-africa_fp32.onnx", Role: RoleModel, SHA256: "f23388cd5e9ab9ec8099ec37fac0d20e01c524cbe8a477610070d32a4a6484c9", SizeBytes: 126149875},
 				{RemotePath: "regional/southern-africa/birdnet-plus-v3.0-southern-africa-labels-b1.txt", LocalName: "birdnet_plus_v3.0_southern-africa_labels.txt", Role: RoleLabels, SHA256: "c99d513d5fd0aa1be37f74f5b601c9d88fe91041454ac90b17897da282ae0023", SizeBytes: 30842},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@southern-cone",
@@ -3814,7 +3814,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-cone/birdnet-plus-v3.0-southern-cone-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_southern-cone_fp32.onnx", Role: RoleModel, SHA256: "696ffd3c62ad078f322d74f32a4f004f65339c5dbb6c91f0cf9e505d1204f50b", SizeBytes: 143778031},
 				{RemotePath: "regional/southern-cone/birdnet-plus-v3.0-southern-cone-labels-b1.txt", LocalName: "birdnet_plus_v3.0_southern-cone_labels.txt", Role: RoleLabels, SHA256: "63f03d60d3c8c9bb8862ef14e9cf852ccbdb8a69a10351a78f0e114d263ec065", SizeBytes: 65353},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@southern-europe",
@@ -3832,7 +3832,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/southern-europe/birdnet-plus-v3.0-southern-europe-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_southern-europe_fp32.onnx", Role: RoleModel, SHA256: "87bd23db3c1364eef574997366fb5dccf2fc072a93fddf5213b6255985467772", SizeBytes: 122232507},
 				{RemotePath: "regional/southern-europe/birdnet-plus-v3.0-southern-europe-labels-b1.txt", LocalName: "birdnet_plus_v3.0_southern-europe_labels.txt", Role: RoleLabels, SHA256: "21f4705778b5bc7857319e3c1525f504f43340f3d3bd8306954c8a05ad8365d1", SizeBytes: 22214},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@svalbard",
@@ -3850,7 +3850,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/svalbard/birdnet-plus-v3.0-svalbard-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_svalbard_fp32.onnx", Role: RoleModel, SHA256: "baa91020cdfa409489b3917d18a5662734e296625ed67fd5ff90d9475c0a25a3", SizeBytes: 114914337},
 				{RemotePath: "regional/svalbard/birdnet-plus-v3.0-svalbard-labels-b1.txt", LocalName: "birdnet_plus_v3.0_svalbard_labels.txt", Role: RoleLabels, SHA256: "6cd4bffca55556f10119d6b4d4cdd9fbb03046bf1ccc9382826bd6b2fae60b26", SizeBytes: 9583},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@tibet",
@@ -3868,7 +3868,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/tibet/birdnet-plus-v3.0-tibet-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_tibet_fp32.onnx", Role: RoleModel, SHA256: "03f80b54a00042a8fe99bb5f5639df4506f10baad361c69d9033c31f6b1d1ae9", SizeBytes: 134888619},
 				{RemotePath: "regional/tibet/birdnet-plus-v3.0-tibet-labels-b1.txt", LocalName: "birdnet_plus_v3.0_tibet_labels.txt", Role: RoleLabels, SHA256: "ce12fdcdad369d1ae2042071b883c6d5a0f234f82a7f43cee962cfa517a973bb", SizeBytes: 46733},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@west-africa",
@@ -3886,7 +3886,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/west-africa/birdnet-plus-v3.0-west-africa-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_west-africa_fp32.onnx", Role: RoleModel, SHA256: "1ec3f8a5739a08741312ab8ca9130ae7c373fa4ce0160dd9934149d7f7dc13e1", SizeBytes: 130605343},
 				{RemotePath: "regional/west-africa/birdnet-plus-v3.0-west-africa-labels-b1.txt", LocalName: "birdnet_plus_v3.0_west-africa_labels.txt", Role: RoleLabels, SHA256: "920c77682bd8cad285665bc3a489001b2163ed3e0229ef7223a7e48c1ef0ff18", SizeBytes: 39429},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 		{
 			ID:           "fp32@western-palearctic",
@@ -3904,7 +3904,7 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 			Files: slices.Concat([]CatalogFile{
 				{RemotePath: "regional/western-palearctic/birdnet-plus-v3.0-western-palearctic-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_western-palearctic_fp32.onnx", Role: RoleModel, SHA256: "168c4af2d9be6bc3e1df89c9363d020d49981bd3df8a3e690dc46c25e228d731", SizeBytes: 139021227},
 				{RemotePath: "regional/western-palearctic/birdnet-plus-v3.0-western-palearctic-labels-b1.txt", LocalName: "birdnet_plus_v3.0_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "0b3374bf19148e3c4e6d99c750ea85ecce436ea30928d3dac46a7a4044a595bc", SizeBytes: 51767},
-			}, geomodelFiles(), taxonomyFiles()),
+			}, taxonomyFiles()),
 		},
 	}
 }
