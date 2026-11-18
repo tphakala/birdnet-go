@@ -33,8 +33,9 @@ const (
 	loadFlagsBareName = windows.LOAD_LIBRARY_SEARCH_DEFAULT_DIRS
 
 	// moduleNotFoundText is the fixed English text reported when the DLL or one
-	// of its dependencies cannot be found. It is the text isLibraryAbsent
-	// (internal/classifier) matches, independent of the Windows display language.
+	// of its dependencies cannot be found. It is the text that isLibraryAbsent
+	// (internal/classifier) matches, independent of the Windows display
+	// language.
 	moduleNotFoundText = "the specified module could not be found"
 
 	// packageRepositoryKey lists the installed MSIX packages. Its subkeys are

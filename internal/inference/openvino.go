@@ -24,8 +24,9 @@ var (
 //
 //nolint:gochecknoglobals // test seams
 var (
-	ovInit          = ov.InitOV
-	ovLoadedLibrary = ov.LoadedLibraryPath
+	ovInit             = ov.InitOV
+	ovLoadedLibrary    = ov.LoadedLibraryPath
+	ovLoadedConfigured = ov.LoadedLibraryConfigured
 )
 
 // ovActiveClassifiers counts OpenVINO classifiers currently serving inference.
@@ -285,7 +286,8 @@ func (e *openvinoEmbeddingExtractor) Close() {
 // process-global core). Safe to call repeatedly; retries after failure for
 // hot-reload recovery. Mirrors InitONNXRuntime. On success it records the
 // library path the loader actually used (which, with no configured path, may
-// have been discovered) for the probes, and logs it once.
+// have been discovered) for the probes, and logs it once together with whether
+// the bound library came from configuration.
 func InitOpenVINO(libraryPath string) error {
 	ovInitMu.Lock()
 	defer ovInitMu.Unlock()
@@ -304,7 +306,7 @@ func InitOpenVINO(libraryPath string) error {
 	ovInitPath = loaded
 	logger.Global().Module("inference").Info("OpenVINO runtime loaded",
 		logger.String("library_path", loaded),
-		logger.Bool("configured", libraryPath != ""))
+		logger.Bool("configured", ovLoadedConfigured()))
 	return nil
 }
 

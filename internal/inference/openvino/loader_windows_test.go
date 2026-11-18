@@ -16,8 +16,8 @@ const (
 	systemLibrary = "kernel32.dll"
 	// knownExport is an export of systemLibrary.
 	knownExport = "GetCurrentProcessId"
-	// absentText is the text isLibraryAbsent (internal/classifier) matches for a
-	// missing runtime, spelled out here so a change to moduleNotFoundText that
+	// absentText is the text that isLibraryAbsent (internal/classifier) matches
+	// for a missing runtime, spelled out here so a change to moduleNotFoundText that
 	// breaks that match fails this package's tests.
 	absentText = "the specified module could not be found"
 	// missingExport is not exported by any system DLL.

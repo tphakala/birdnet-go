@@ -294,4 +294,8 @@ func TestCompareVersionedNames(t *testing.T) {
 	assert.Negative(t, compareVersionedNames("openvino_2026.3", "openvino_2026.3.1"))
 	assert.Zero(t, compareVersionedNames("openvino_2026.3.0", "openvino_2026.3.0"))
 	assert.NotZero(t, compareVersionedNames("openvino_a2026.3.0", "openvino_b2026.3.0"), "ties break by name")
+	assert.Positive(t, compareVersionedNames(
+		"Intel.OpenVINOToolkit.2026.3.0_2026.3.0.10_x64__aqcv7fbxf4wm4",
+		"Intel.OpenVINOToolkit.2026.3.0_2026.3.0.9_x64__aqcv7fbxf4wm4"),
+		"the MSIX package revision compares numerically")
 }

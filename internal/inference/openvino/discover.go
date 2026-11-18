@@ -55,7 +55,12 @@ const (
 
 // versionPattern matches the first dotted numeric run in a directory or package
 // name, such as 2026.3.0 in Intel.OpenVINOToolkit.2026.3.0_2026.3.0.0_x64__x.
-var versionPattern = regexp.MustCompile(`\d+(?:\.\d+)*`)
+// versionFieldPattern matches a whole underscore-separated field that is a
+// version, such as the MSIX package version 2026.3.0.0 in the same name.
+var (
+	versionPattern      = regexp.MustCompile(`\d+(?:\.\d+)*`)
+	versionFieldPattern = regexp.MustCompile(`^\d+(?:\.\d+)*$`)
+)
 
 // installRoot is one candidate install: the directory or package name that
 // carries its version, and the root directory of the runtime tree.
@@ -241,10 +246,17 @@ func compareVersionedNames(a, b string) int {
 	return cmp.Compare(a, b)
 }
 
-// parseVersion extracts the first dotted numeric run of name as numbers. A name
-// without one yields nil; a component too large for uint64 yields 0 for it.
+// parseVersion extracts the version of name as numbers: the field after the
+// first underscore when that whole field is a dotted numeric version (the MSIX
+// package version), otherwise the first dotted numeric run. A name without one
+// yields nil; a component too large for uint64 yields 0 for it.
 func parseVersion(name string) []uint64 {
 	run := versionPattern.FindString(name)
+	// An MSIX full name carries the complete package version, revision
+	// included, in the field after the first underscore; prefer it.
+	if fields := strings.SplitN(name, "_", 3); len(fields) > 1 && versionFieldPattern.MatchString(fields[1]) {
+		run = fields[1]
+	}
 	if run == "" {
 		return nil
 	}
