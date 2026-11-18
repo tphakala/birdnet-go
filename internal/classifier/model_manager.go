@@ -1588,8 +1588,8 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 		if reloadErr := mm.orchestrator.ReloadForVariantSwap(entry.RegistryID); reloadErr != nil {
 			return mm.rollbackVariant(log, entry, old, newVariantID, reloadErr, false, progress)
 		}
-		// A target that brings a geomodel (inline for Perch, BirdNET v3.0 and BirdNET+ v3.0, or through a
-		// dependency) had its range filter re-pointed in step 3 (see
+		// A target that brings a geomodel (through its birdnet-geomodel-v3 dependency, or inline
+		// in a hand-edited catalog) had its range filter re-pointed in step 3 (see
 		// rangeFilterReplaceableByGeomodel); reload it, exactly as hotLoadAfterInstall does after an install. The v2.4
 		// anchor reloads its own range filter inside reloadEntry; that is separate from the
 		// geomodel reload here, which only runs for a target that supplies a geomodel.
