@@ -2,28 +2,26 @@
 
 // This file holds the real OpenVINO backend, compiled only under the "openvino"
 // build tag. It ports the validated Phase 0 cgo spike, swapping the spike's
-// link-time linking for a runtime dlopen + dlsym of libopenvino_c. The package
-// links against -ldl only: linking -lopenvino_c at build time would make ld.so
-// abort the process before main() when the library is absent, which would
-// defeat the graceful fallback to the ONNX Runtime backend that this feature
-// depends on. Every OpenVINO function is therefore resolved through a process
-// global symbol table (OVB) and called via fixed-arity static C wrappers so
-// that cgo never calls a C function pointer (or a C variadic function) directly
-// with Go arguments.
+// link-time linking for a runtime load of libopenvino_c. The OS-specific load,
+// symbol lookup and close primitives live in loader_unix.go (openLibrary,
+// lookupSymbol, closeLibrary); linking -lopenvino_c at build time would make the
+// dynamic loader abort the process before main() when the library is absent,
+// which would defeat the graceful fallback to the ONNX Runtime backend that this
+// feature depends on. Go resolves every symbol, then installs the addresses in
+// one C call into a process-global table (OVB). Every OpenVINO function is
+// called via fixed-arity static C wrappers so that cgo never calls a C function
+// pointer (or a C variadic function) directly with Go arguments.
 
 package openvino
 
 /*
-#cgo LDFLAGS: -ldl
+#include <stdint.h>
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <dlfcn.h>
 #include <openvino/c/openvino.h>
 
 // Function-pointer typedefs for every OpenVINO C entry point we call. The C
 // header declares these symbols, but we never reference them by name at link
-// time; we resolve each one with dlsym so the binary keeps loading when
+// time; Go resolves each one at runtime so the binary keeps loading when
 // libopenvino_c is absent.
 typedef ov_status_e (*fn_core_create)(ov_core_t**);
 typedef void        (*fn_core_free)(ov_core_t*);
@@ -55,121 +53,84 @@ typedef ov_status_e (*fn_const_port_get_shape)(const ov_output_const_port_t*, ov
 typedef ov_status_e (*fn_core_get_available_devices)(const ov_core_t*, ov_available_devices_t*);
 typedef void        (*fn_available_devices_free)(ov_available_devices_t*);
 
+// OVBIND_SYMBOLS lists every OpenVINO C entry point the backend calls, once.
+// Each field is stored as fn_<field> in the table and resolved under the
+// exported name ov_<field>. The table struct, the name list and the installer
+// all expand from this one list, so the symbol order Go resolves in cannot
+// drift from the struct fields.
+#define OVBIND_SYMBOLS(X) \
+    X(core_create) \
+    X(core_free) \
+    X(core_read_model) \
+    X(core_compile_model) \
+    X(model_free) \
+    X(model_const_input) \
+    X(port_get_partial_shape) \
+    X(output_const_port_free) \
+    X(partial_shape_create) \
+    X(model_reshape_single_input) \
+    X(partial_shape_free) \
+    X(compiled_model_create_infer_request) \
+    X(compiled_model_free) \
+    X(shape_create) \
+    X(shape_free) \
+    X(tensor_create_from_host_ptr) \
+    X(tensor_get_size) \
+    X(tensor_data) \
+    X(tensor_free) \
+    X(infer_request_set_input_tensor_by_index) \
+    X(infer_request_infer) \
+    X(infer_request_get_output_tensor_by_index) \
+    X(infer_request_free) \
+    X(get_last_err_msg) \
+    X(compiled_model_outputs_size) \
+    X(compiled_model_output_by_index) \
+    X(const_port_get_shape) \
+    X(core_get_available_devices) \
+    X(available_devices_free)
+
 // ovbind_t is the process-global table of resolved OpenVINO symbols, filled by
-// ovbind_load(path).
+// ovbind_install once Go has resolved every address.
 typedef struct {
     void* handle;
-    fn_core_create                              core_create;
-    fn_core_free                                core_free;
-    fn_core_read_model                          core_read_model;
-    fn_core_compile_model                       core_compile_model;
-    fn_model_free                               model_free;
-    fn_model_const_input                        model_const_input;
-    fn_port_get_partial_shape                   port_get_partial_shape;
-    fn_output_const_port_free                   output_const_port_free;
-    fn_partial_shape_create                     partial_shape_create;
-    fn_model_reshape_single_input               model_reshape_single_input;
-    fn_partial_shape_free                       partial_shape_free;
-    fn_compiled_model_create_infer_request      compiled_model_create_infer_request;
-    fn_compiled_model_free                      compiled_model_free;
-    fn_shape_create                             shape_create;
-    fn_shape_free                               shape_free;
-    fn_tensor_create_from_host_ptr              tensor_create_from_host_ptr;
-    fn_tensor_get_size                          tensor_get_size;
-    fn_tensor_data                              tensor_data;
-    fn_tensor_free                              tensor_free;
-    fn_infer_request_set_input_tensor_by_index  infer_request_set_input_tensor_by_index;
-    fn_infer_request_infer                      infer_request_infer;
-    fn_infer_request_get_output_tensor_by_index infer_request_get_output_tensor_by_index;
-    fn_infer_request_free                       infer_request_free;
-    fn_get_last_err_msg                         get_last_err_msg;
-    fn_compiled_model_outputs_size              compiled_model_outputs_size;
-    fn_compiled_model_output_by_index           compiled_model_output_by_index;
-    fn_const_port_get_shape                     const_port_get_shape;
-    fn_core_get_available_devices               core_get_available_devices;
-    fn_available_devices_free                   available_devices_free;
+#define OVBIND_FIELD(f) fn_##f f;
+    OVBIND_SYMBOLS(OVBIND_FIELD)
+#undef OVBIND_FIELD
 } ovbind_t;
 
 static ovbind_t OVB; // process-global resolved symbol table
 
-// _ovbind_errbuf holds a COPY of the dlsym failure message. dlerror() returns a
-// pointer into libdl's own static buffer, which dlclose() overwrites, so the
-// macro copies the string bytes here before dlclose and returns this buffer.
-// memset of OVB does not touch it. It is process-static and written only on the
-// single-threaded InitOV failure path under ovMu, so it needs no locking.
-static char _ovbind_errbuf[256];
+// ovbind_is_loaded reports whether a complete symbol table is installed.
+static int ovbind_is_loaded(void) {
+    return OVB.handle != NULL;
+}
 
-// OVBIND_RESOLVE resolves one symbol into OVB. On failure it COPIES the
-// dlerror() string into _ovbind_errbuf FIRST (the pointer dlerror returns is
-// into libdl's static buffer, which dlclose overwrites), then dlcloses the
-// handle and zeroes the ENTIRE OVB table so that OVB.handle is non-NULL if and
-// only if every symbol is resolved. Without this, a partial resolution (e.g. an
-// older libopenvino_c missing a newer symbol) would leave OVB.handle set, and a
-// later InitOV retry would see the handle, skip re-resolution, and later call a
-// NULL function pointer. Returns the copied error string from ovbind_load.
-#define OVBIND_RESOLVE(field, type, name)                                     \
-    do {                                                                      \
-        OVB.field = (type)dlsym(OVB.handle, name);                            \
-        if (!OVB.field) {                                                     \
-            const char* _e = dlerror();                                       \
-            snprintf(_ovbind_errbuf, sizeof(_ovbind_errbuf), "%s",            \
-                     _e ? _e : "dlsym failed");                               \
-            dlclose(OVB.handle);                                              \
-            memset(&OVB, 0, sizeof(OVB));                                     \
-            return _ovbind_errbuf;                                            \
-        }                                                                     \
-    } while (0)
+static const char* const ovbind_symbol_names[] = {
+#define OVBIND_NAME(f) "ov_" #f,
+    OVBIND_SYMBOLS(OVBIND_NAME)
+#undef OVBIND_NAME
+};
 
-// ovbind_load dlopens libopenvino_c from path (or by soname when empty) with
-// RTLD_NOW | RTLD_GLOBAL. RTLD_GLOBAL lets the OpenVINO core find its plugin
-// shared objects (CPU plugin, tbb) through the standard loader search, exactly
-// as the Python wheel and the spike's LD_LIBRARY_PATH arrangement do. It then
-// resolves every symbol the backend calls. Returns NULL on success, or the
-// first dlerror() string on failure.
-static const char* ovbind_load(const char* path) {
-    if (OVB.handle) {
-        return NULL; // already loaded
-    }
-    OVB.handle = dlopen(path && path[0] ? path : "libopenvino_c.so", RTLD_NOW | RTLD_GLOBAL);
-    if (!OVB.handle) {
-        // POSIX allows dlerror() to return NULL; copy into the static buffer
-        // with a non-NULL fallback so the Go caller never sees a nil message
-        // and mistakes failure for success (which would call a NULL pointer).
-        const char* e = dlerror();
-        snprintf(_ovbind_errbuf, sizeof(_ovbind_errbuf), "%s",
-                 (e != NULL) ? e : "dlopen failed (no dlerror message)");
-        return _ovbind_errbuf;
-    }
-    OVBIND_RESOLVE(core_create,                              fn_core_create,                              "ov_core_create");
-    OVBIND_RESOLVE(core_free,                                fn_core_free,                                "ov_core_free");
-    OVBIND_RESOLVE(core_read_model,                          fn_core_read_model,                          "ov_core_read_model");
-    OVBIND_RESOLVE(core_compile_model,                       fn_core_compile_model,                       "ov_core_compile_model");
-    OVBIND_RESOLVE(model_free,                               fn_model_free,                               "ov_model_free");
-    OVBIND_RESOLVE(model_const_input,                        fn_model_const_input,                        "ov_model_const_input");
-    OVBIND_RESOLVE(port_get_partial_shape,                   fn_port_get_partial_shape,                   "ov_port_get_partial_shape");
-    OVBIND_RESOLVE(output_const_port_free,                   fn_output_const_port_free,                   "ov_output_const_port_free");
-    OVBIND_RESOLVE(partial_shape_create,                     fn_partial_shape_create,                     "ov_partial_shape_create");
-    OVBIND_RESOLVE(model_reshape_single_input,               fn_model_reshape_single_input,               "ov_model_reshape_single_input");
-    OVBIND_RESOLVE(partial_shape_free,                       fn_partial_shape_free,                       "ov_partial_shape_free");
-    OVBIND_RESOLVE(compiled_model_create_infer_request,      fn_compiled_model_create_infer_request,      "ov_compiled_model_create_infer_request");
-    OVBIND_RESOLVE(compiled_model_free,                      fn_compiled_model_free,                      "ov_compiled_model_free");
-    OVBIND_RESOLVE(shape_create,                             fn_shape_create,                             "ov_shape_create");
-    OVBIND_RESOLVE(shape_free,                               fn_shape_free,                               "ov_shape_free");
-    OVBIND_RESOLVE(tensor_create_from_host_ptr,              fn_tensor_create_from_host_ptr,              "ov_tensor_create_from_host_ptr");
-    OVBIND_RESOLVE(tensor_get_size,                          fn_tensor_get_size,                          "ov_tensor_get_size");
-    OVBIND_RESOLVE(tensor_data,                              fn_tensor_data,                              "ov_tensor_data");
-    OVBIND_RESOLVE(tensor_free,                              fn_tensor_free,                              "ov_tensor_free");
-    OVBIND_RESOLVE(infer_request_set_input_tensor_by_index,  fn_infer_request_set_input_tensor_by_index,  "ov_infer_request_set_input_tensor_by_index");
-    OVBIND_RESOLVE(infer_request_infer,                      fn_infer_request_infer,                      "ov_infer_request_infer");
-    OVBIND_RESOLVE(infer_request_get_output_tensor_by_index, fn_infer_request_get_output_tensor_by_index, "ov_infer_request_get_output_tensor_by_index");
-    OVBIND_RESOLVE(infer_request_free,                       fn_infer_request_free,                       "ov_infer_request_free");
-    OVBIND_RESOLVE(get_last_err_msg,                         fn_get_last_err_msg,                         "ov_get_last_err_msg");
-    OVBIND_RESOLVE(compiled_model_outputs_size,              fn_compiled_model_outputs_size,              "ov_compiled_model_outputs_size");
-    OVBIND_RESOLVE(compiled_model_output_by_index,           fn_compiled_model_output_by_index,           "ov_compiled_model_output_by_index");
-    OVBIND_RESOLVE(const_port_get_shape,                     fn_const_port_get_shape,                     "ov_const_port_get_shape");
-    OVBIND_RESOLVE(core_get_available_devices,               fn_core_get_available_devices,               "ov_core_get_available_devices");
-    OVBIND_RESOLVE(available_devices_free,                   fn_available_devices_free,                   "ov_available_devices_free");
-    return NULL;
+// ovbind_symbol_count returns the number of symbols in OVBIND_SYMBOLS.
+static size_t ovbind_symbol_count(void) {
+    return sizeof(ovbind_symbol_names) / sizeof(ovbind_symbol_names[0]);
+}
+
+// ovbind_symbol_name returns the exported name of symbol i, in list order.
+static const char* ovbind_symbol_name(size_t i) {
+    return ovbind_symbol_names[i];
+}
+
+// ovbind_install fills the table from addrs (one address per symbol, in
+// OVBIND_SYMBOLS order) and sets handle last, so OVB.handle is non-NULL if and
+// only if every symbol is installed. Go calls it only after every symbol
+// resolved; a failed load never reaches it and leaves the table untouched.
+static void ovbind_install(uintptr_t handle, const uintptr_t* addrs) {
+    size_t i = 0;
+#define OVBIND_SET(f) OVB.f = (fn_##f)addrs[i++];
+    OVBIND_SYMBOLS(OVBIND_SET)
+#undef OVBIND_SET
+    OVB.handle = (void*)handle;
 }
 
 // Fixed-arity static wrappers. Go calls these, never an OVB.<fn> pointer
@@ -429,15 +390,15 @@ import (
 // True here (built under the "openvino" tag); false in stub_noopenvino.go.
 const Supported = true
 
-// loadedLibraryPath records the path handed to the dlopen that bound
-// libopenvino_c, set once by the first successful load. ovbind_load keeps its
-// handle for the process lifetime and reuses it on later InitOV calls, so a
+// loadedLibraryPath records the path handed to the loader that bound
+// libopenvino_c, set once by the first successful load. The bound handle is kept
+// for the process lifetime and reused on later InitOV calls, so a
 // later InitOV with a different path (after ov_core_create failed once) does
 // not change which library is in use. Never guarded by ovMu, so a reader cannot
 // block behind a model compile.
 var loadedLibraryPath atomic.Pointer[string]
 
-// LoadedLibraryPath reports the library path passed to the dlopen that bound
+// LoadedLibraryPath reports the library path passed to the loader that bound
 // libopenvino_c; "" means the default soname (DefaultLibraryName). loaded is
 // false until a load has succeeded. It is an atomic read and never waits on a
 // model compile.
@@ -490,13 +451,13 @@ func lastErr(op string, status C.ov_status_e, scrubPaths ...string) error {
 	return errors.Newf("openvino: %s failed: status=%d: %s", op, int(status), msg).Build()
 }
 
-// InitOV dlopens libopenvino_c (libraryPath, or by soname when empty) and
-// creates the process-global core. It is idempotent and safe to retry after a
-// failure so hot-reload recovery can re-attempt with a corrected path. It
-// mirrors inference.InitONNXRuntime semantics. The core is freed only by
-// DestroyOV, never on a model reload.
+// InitOV loads libopenvino_c (libraryPath, or by soname when empty), binds its
+// symbols and creates the process-global core. It is idempotent and safe to
+// retry after a failure so hot-reload recovery can re-attempt with a corrected
+// path. It mirrors inference.InitONNXRuntime semantics. The core is freed only
+// by DestroyOV, never on a model reload.
 func InitOV(libraryPath string) error {
-	// Pin to one OS thread so the dlopen/create call and any ov_get_last_err_msg
+	// Pin to one OS thread so the load/create call and any ov_get_last_err_msg
 	// fetch (C thread-local storage) run on the same thread.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -507,19 +468,20 @@ func InitOV(libraryPath string) error {
 		return nil
 	}
 
-	cPath := C.CString(libraryPath)
-	defer C.free(unsafe.Pointer(cPath))
-	if msg := C.ovbind_load(cPath); msg != nil {
-		errMsg := C.GoString(msg)
-		if libraryPath != "" {
-			errMsg = strings.ReplaceAll(errMsg, libraryPath, "<path>")
+	if C.ovbind_is_loaded() == 0 {
+		err := bindLibrary(libraryPath)
+		if err != nil {
+			errMsg := err.Error()
+			if libraryPath != "" {
+				errMsg = strings.ReplaceAll(errMsg, libraryPath, "<path>")
+			}
+			return errors.Newf("openvino: failed to load libopenvino_c: %s", errMsg).Build()
 		}
-		return errors.Newf("openvino: failed to load libopenvino_c: %s", errMsg).Build()
+		// Only the first success loads the library; later ones reuse the
+		// handle (see loadedLibraryPath).
+		loaded := libraryPath
+		loadedLibraryPath.CompareAndSwap(nil, &loaded)
 	}
-	// ovbind_load returned success, so the handle is bound. Only the first
-	// success ran dlopen; later ones reuse the handle (see loadedLibraryPath).
-	loaded := libraryPath
-	loadedLibraryPath.CompareAndSwap(nil, &loaded)
 
 	var core *C.ov_core_t
 	if st := C.ovbind_core_create(&core); !ovOK(st) {
@@ -527,6 +489,30 @@ func InitOV(libraryPath string) error {
 	}
 	ovCore = core
 	ovLoaded = true
+	return nil
+}
+
+// bindLibrary loads the library, resolves every symbol in OVBIND_SYMBOLS order
+// and installs the table in one C call. The table is installed if and only if
+// every symbol resolved: on any failure the library is closed and the table is
+// left untouched, so a later InitOV can retry with another path. The error text
+// is the loader's own message.
+func bindLibrary(libraryPath string) error {
+	handle, err := openLibrary(libraryPath)
+	if err != nil {
+		return err
+	}
+	count := int(C.ovbind_symbol_count())
+	addrs := make([]C.uintptr_t, count)
+	for i := range addrs {
+		addr, err := lookupSymbol(handle, C.GoString(C.ovbind_symbol_name(C.size_t(i))))
+		if err != nil {
+			closeLibrary(handle)
+			return err
+		}
+		addrs[i] = C.uintptr_t(addr)
+	}
+	C.ovbind_install(C.uintptr_t(handle), &addrs[0])
 	return nil
 }
 
@@ -545,9 +531,9 @@ func DestroyOV() error {
 		ovCore = nil
 	}
 	ovLoaded = false
-	// The dlopen handle (OVB.handle) is intentionally NOT dlclosed here: it is
+	// The library handle (OVB.handle) is intentionally NOT closed here: it is
 	// kept open for the process lifetime so the resolved symbol table is reused
-	// if InitOV runs again. Do not add a dlclose here; that would reintroduce a
+	// if InitOV runs again. Do not close it here; that would reintroduce a
 	// partial-state inconsistency and break the load invariant.
 	return nil
 }
