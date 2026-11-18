@@ -649,7 +649,7 @@ func render(v *genVariant) string {
 		v.modelRemote, v.modelLocalName, v.modelSHA256, v.modelSize)
 	fmt.Fprintf(&b, "{RemotePath: %q, LocalName: %q, Role: RoleLabels, SHA256: %q, SizeBytes: %d},\n",
 		v.labelsRemote, v.labelsLocal, v.labelsSHA256, v.labelsSize)
-	b.WriteString("}, geomodelFiles(), taxonomyFiles()),\n")
+	b.WriteString("}, taxonomyFiles()),\n")
 
 	b.WriteString("},\n")
 	return b.String()

@@ -207,7 +207,7 @@ func TestBirdNETV3_CatalogEntry(t *testing.T) {
 	}
 	assert.Equal(t, 1, roles[RoleModel], "one model file")
 	assert.Equal(t, 1, roles[RoleLabels], "one labels file")
-	assert.True(t, HasGeomodelFiles(&entry), "v3.0 pairs with the v3 geomodel range filter")
+	assert.True(t, ProvidesGeomodel(&entry, ""), "v3.0 pairs with the v3 geomodel range filter")
 	assert.True(t, HasTaxonomyFiles(&entry), "v3.0 ships the shared taxonomy companion")
 }
 

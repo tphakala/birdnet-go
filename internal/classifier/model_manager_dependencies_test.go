@@ -715,3 +715,77 @@ func TestPrimarySwap_FailureKeepsRefetchedFileTheCurrentVariantUses(t *testing.T
 	assert.FileExists(t, geo, "a failed swap keeps a refetched file the still-installed variant uses")
 	assert.Equal(t, depVariantDFT, installedSnapshot(h.mm)[depIDP].VariantID, "the previous variant stays installed")
 }
+
+func TestEmbeddedCatalog_InstallRegistersGeomodelDependency(t *testing.T) {
+	plus, ok := GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok)
+	require.NotEmpty(t, plus.Variants)
+	regionalVariant := plus.Variants[len(plus.Variants)-1].ID
+
+	cases := []struct{ id, variant string }{
+		{"birdnet-plus-v3.0", ""},
+		{"birdnet-plus-v3.0", regionalVariant},
+		{"perch-v2", ""},
+		{"birdnet-v3.0", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.id+"/"+tc.variant, func(t *testing.T) {
+			h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
+
+			require.NoError(t, h.install(tc.id, tc.variant))
+
+			got := installedSnapshot(h.mm)
+			require.Contains(t, got, geomodelV3CatalogID)
+			assert.Equal(t, h.shared(conf.GeomodelONNXLocalName), got[geomodelV3CatalogID].ModelPath)
+			assert.Equal(t, h.shared(conf.GeomodelLabelsLocalName), got[geomodelV3CatalogID].LabelsPath)
+			rf := conf.GetSettings().RangeFilterConfig()
+			assert.Equal(t, "v3", rf.Model)
+			assert.Equal(t, h.shared(conf.GeomodelONNXLocalName), rf.ModelPath)
+			assert.Equal(t, h.shared(conf.GeomodelLabelsLocalName), rf.LabelsPath)
+			assert.Equal(t, 1, h.reloads)
+			h.assertDependencyInvariants(t, "after install")
+		})
+	}
+}
+
+func TestEmbeddedCatalog_GeomodelOutlivesItsDependents(t *testing.T) {
+	h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
+	require.NoError(t, h.install("birdnet-plus-v3.0", ""))
+	require.NoError(t, h.install("perch-v2", ""))
+	rfBefore := *conf.GetSettings().RangeFilterConfig()
+	h.assertDependencyInvariants(t, "after both installs")
+
+	// The geomodel cannot be removed while a dependent is installed.
+	requireDependents(t, h.mm.Uninstall(geomodelV3CatalogID), geomodelV3CatalogID, "birdnet-plus-v3.0", "perch-v2")
+	h.assertDependencyInvariants(t, "after refused geomodel uninstall")
+
+	// Removing one dependent keeps the taxonomy the other still carries.
+	h.reloads = 0
+	require.NoError(t, h.mm.Uninstall("birdnet-plus-v3.0"))
+	assert.FileExists(t, h.shared("taxonomy.csv"))
+	h.assertDependencyInvariants(t, "after first dependent uninstall")
+
+	// A restart keeps the picture.
+	h.rescan()
+	h.assertDependencyInvariants(t, "after restart")
+
+	// Removing the last dependent leaves the geomodel installed and active.
+	require.NoError(t, h.mm.Uninstall("perch-v2"))
+	assert.Contains(t, installedSnapshot(h.mm), geomodelV3CatalogID)
+	assert.FileExists(t, h.shared(conf.GeomodelONNXLocalName))
+	assert.FileExists(t, h.shared(conf.GeomodelLabelsLocalName))
+	assert.NoFileExists(t, h.shared("taxonomy.csv"))
+	assert.Equal(t, rfBefore, *conf.GetSettings().RangeFilterConfig())
+	assert.Zero(t, h.reloads)
+	h.assertDependencyInvariants(t, "after last dependent uninstall")
+
+	// With no dependent left the geomodel can go, and the range filter is cleared.
+	require.NoError(t, h.mm.Uninstall(geomodelV3CatalogID))
+	assert.NoFileExists(t, h.shared(conf.GeomodelONNXLocalName))
+	assert.NoFileExists(t, h.shared(conf.GeomodelLabelsLocalName))
+	rf := conf.GetSettings().RangeFilterConfig()
+	assert.Empty(t, rf.Model)
+	assert.Empty(t, rf.ModelPath)
+	assert.Empty(t, rf.LabelsPath)
+	assert.Equal(t, 1, h.reloads)
+}

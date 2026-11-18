@@ -245,10 +245,11 @@ func TestEnsureGeomodelConfig_OrphanSelfHeal(t *testing.T) {
 		settings.BirdNET.RangeFilter.LabelsPath = labelsPath
 		conf.StoreSettings(settings)
 
-		// perch-v2 is a real catalog entry with geomodel files whose LocalNames
-		// match the shared geomodel files created above.
+		// birdnet-geomodel-v3 is the catalog entry that owns the geomodel files
+		// (a scan registers it when the shared files exist); its LocalNames match
+		// the shared geomodel files created above.
 		mm := newSelfHealManager(t, modelsDir)
-		mm.ensureGeomodelConfig(GetLogger(), []string{"perch-v2"})
+		mm.ensureGeomodelConfig(GetLogger(), []string{"birdnet-geomodel-v3"})
 
 		current := conf.GetSettings()
 		assert.Equal(t, "v3", current.BirdNET.RangeFilter.Model, "installed-model promote must still apply")

@@ -754,8 +754,8 @@ func TestIsPermanentEntry(t *testing.T) {
 // TestEmbeddedCatalog_GlobalVariantResolution verifies the multi-variant global
 // entries (Perch v2, BirdNET v3.0, BirdNET+ v3.0) resolve their default variant into entry.Files
 // with the model and labels LocalName + checksum unchanged from the pre-variant flat
-// entries (so existing installs are undisturbed), carry the shared geomodel + taxonomy
-// companions, and declare exactly one Default variant, which is never Legacy (an
+// entries (so existing installs are undisturbed), carry the taxonomy companion (the
+// geomodel comes from the entry's DependsOn), and declare exactly one Default variant, which is never Legacy (an
 // empty install request resolves to it). The only Legacy global variant is Perch's
 // withdrawn int8-arm build, which names no-dft-fp32 as its successor.
 func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
@@ -831,15 +831,13 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 
 			// Resolved Files: default model + labels LocalName/sha unchanged, companions present.
 			var model, labels *CatalogFile
-			hasGeomodel, hasTaxonomy := false, false
+			hasTaxonomy := false
 			for i := range entry.Files {
 				switch entry.Files[i].Role {
 				case RoleModel:
 					model = &entry.Files[i]
 				case RoleLabels:
 					labels = &entry.Files[i]
-				case RoleGeomodelModel, RoleGeomodelLabels:
-					hasGeomodel = true
 				case RoleTaxonomy:
 					hasTaxonomy = true
 				}
@@ -850,7 +848,6 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 			assert.Equalf(t, tc.modelSHA, model.SHA256, "%s default model checksum", tc.id)
 			assert.Equalf(t, tc.labelsLocal, labels.LocalName, "%s labels LocalName", tc.id)
 			assert.Equalf(t, tc.labelsSHA, labels.SHA256, "%s labels checksum", tc.id)
-			assert.Truef(t, hasGeomodel, "%s resolved Files must carry the geomodel companion", tc.id)
 			assert.Truef(t, hasTaxonomy, "%s resolved Files must carry the taxonomy companion", tc.id)
 		})
 	}
@@ -868,10 +865,10 @@ func fileRoles(files []CatalogFile) map[string]bool {
 // TestEmbeddedCatalog_VariantFilesSelfContained verifies that EVERY variant (not
 // just the resolved default) carries the companions it needs. resolveVariantDefaults
 // sets entry.Files = variant.Files without merging, so a variant that omits the
-// geomodel/taxonomy companion would silently break the range-filter wiring once a
-// variant selector installs it. Perch v2, BirdNET v3.0 and BirdNET+ v3.0 variants must each carry
-// model + labels + geomodel + taxonomy; BirdNET v2.4 variants deliberately carry only
-// the model (embedded labels, no geomodel).
+// taxonomy companion would silently lose it once a variant selector installs it.
+// Perch v2, BirdNET v3.0 and BirdNET+ v3.0 variants must each carry model + labels +
+// taxonomy; the geomodel is not inline, it is the entry's dependency. BirdNET v2.4
+// variants deliberately carry only the model (embedded labels, no geomodel).
 func TestEmbeddedCatalog_VariantFilesSelfContained(t *testing.T) {
 	t.Parallel()
 
@@ -898,8 +895,8 @@ func TestEmbeddedCatalog_VariantFilesSelfContained(t *testing.T) {
 			assert.Truef(t, roles[RoleModel], "%s/%s must carry a model file", entry.ID, v.ID)
 			if wantCompanions {
 				assert.Truef(t, roles[RoleLabels], "%s/%s must carry a labels file", entry.ID, v.ID)
-				assert.Truef(t, roles[RoleGeomodelModel], "%s/%s must carry the geomodel model companion", entry.ID, v.ID)
-				assert.Truef(t, roles[RoleGeomodelLabels], "%s/%s must carry the geomodel labels companion", entry.ID, v.ID)
+				assert.Falsef(t, roles[RoleGeomodelModel], "%s/%s must not carry the geomodel model (it is the entry's dependency)", entry.ID, v.ID)
+				assert.Falsef(t, roles[RoleGeomodelLabels], "%s/%s must not carry the geomodel labels (it is the entry's dependency)", entry.ID, v.ID)
 				assert.Truef(t, roles[RoleTaxonomy], "%s/%s must carry the taxonomy companion", entry.ID, v.ID)
 			}
 			if wantModelOnly {

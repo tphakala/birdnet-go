@@ -399,9 +399,9 @@ func TestEntryDocuments(t *testing.T) {
 		wantRequired []string // repos of the agreement documents
 		wantNone     bool     // EntryDocuments must return nil
 	}{
-		{name: "BirdNET+ v3.0 has its own policy and the inline Geomodel files add no document", entry: lookup(t, "birdnet-plus-v3.0"), wantRequired: []string{"tphakala/BirdNET-Plus-V3.0"}},
-		{name: "Perch v2 has no agreement document though it downloads Geomodel files", entry: lookup(t, "perch-v2")},
-		{name: "BirdNET v3.0 has no agreement document though it downloads Geomodel files", entry: lookup(t, "birdnet-v3.0")},
+		{name: "BirdNET+ v3.0 has its own policy and the Geomodel dependency adds no document", entry: lookup(t, "birdnet-plus-v3.0"), wantRequired: []string{"tphakala/BirdNET-Plus-V3.0"}},
+		{name: "Perch v2 has no agreement document though it depends on the Geomodel", entry: lookup(t, "perch-v2")},
+		{name: "BirdNET v3.0 has no agreement document though it depends on the Geomodel", entry: lookup(t, "birdnet-v3.0")},
 		{name: "standalone Geomodel has its own", entry: lookup(t, "birdnet-geomodel-v3"), wantRequired: []string{"tphakala/BirdNET-Geomodel"}},
 		{name: "an entry depending on a gated entry has none", entry: &CatalogEntry{ID: "fixture", HuggingFaceRepo: "example/ungated", DependsOn: []string{"birdnet-plus-v3.0", "birdnet-geomodel-v3"}}, wantNone: true},
 		{name: "repo casing and a trailing slash still match", entry: &CatalogEntry{ID: "edited", HuggingFaceRepo: " TPHAKALA/birdnet-plus-v3.0/ "}, wantRequired: []string{"tphakala/BirdNET-Plus-V3.0"}},
