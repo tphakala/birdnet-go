@@ -185,7 +185,9 @@ type OpenVINOStatus struct {
 	Supported bool
 	// Active reports that at least one classifier is currently running on it.
 	Active bool
-	// Devices lists the OpenVINO device names available ("CPU", "GPU").
+	// Devices lists the OpenVINO request names ("CPU", "GPU") that
+	// inference.OpenVINOHasDevice reports available. A GPU request matches any
+	// enumerated GPU or GPU.<n>.
 	Devices []string
 }
 
