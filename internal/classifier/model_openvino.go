@@ -277,8 +277,10 @@ func (h *ovHostFacts) cpuAllowed(devicePref string) bool {
 }
 
 // openVINOGPUAvailable reports whether an OpenVINO GPU device (Intel iGPU/dGPU via
-// the Intel GPU plugin) is present. It loads the OpenVINO core first (InitOpenVINO
-// is idempotent and fast on repeat); a load failure means no usable OV at all.
+// the Intel GPU plugin) is present, under either the bare "GPU" name or an indexed
+// "GPU.<n>" name (hosts with several GPUs list only the indexed ones). It loads
+// the OpenVINO core first (InitOpenVINO is idempotent and fast on repeat); a load
+// failure means no usable OV at all.
 func openVINOGPUAvailable(libraryPath string) bool {
 	if err := inference.InitOpenVINO(libraryPath); err != nil {
 		// A merely-absent OpenVINO library is the expected CPU-only case, not a
@@ -313,7 +315,7 @@ func openVINOGPUAvailable(libraryPath string) bool {
 			logger.Error(err))
 		return false
 	}
-	return slices.Contains(devices, inference.OVDeviceGPU)
+	return slices.ContainsFunc(devices, inference.OpenVINOIsGPUDevice)
 }
 
 // isLibraryAbsent reports whether err indicates the OpenVINO shared library is

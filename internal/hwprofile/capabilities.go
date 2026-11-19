@@ -47,8 +47,10 @@ const (
 // audio pipeline on the boards this runs on.
 const lowRAMThresholdBytes int64 = 2 * 1024 * 1024 * 1024
 
-// deviceGPU is the OpenVINO device name for a GPU, as returned by the runtime's
-// device enumeration.
+// deviceGPU is the OpenVINO request name for a GPU. The runtime lists several
+// GPUs only as GPU.0, GPU.1 and so on, so inference.OpenVINOHasDevice answers
+// availability by device class, and OpenVINOStatus.Devices holds request names
+// such as this one, never enumerated names.
 const deviceGPU = "GPU"
 
 // RAMUpperBound returns the tightest known upper bound on the memory ceiling:

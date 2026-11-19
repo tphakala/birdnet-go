@@ -40,6 +40,14 @@ func TestOVProbeHelperProcess(t *testing.T) {
 		fmt.Println("OVPROBE_DEVICE=GPU")
 		fmt.Println("OVPROBE_OK")
 		os.Exit(0)
+	case "multi-gpu":
+		// A host with an iGPU and a discrete card: OpenVINO lists only the
+		// indexed GPU names and no bare "GPU".
+		fmt.Println("OVPROBE_DEVICE=CPU")
+		fmt.Println("OVPROBE_DEVICE=GPU.0")
+		fmt.Println("OVPROBE_DEVICE=GPU.1")
+		fmt.Println("OVPROBE_OK")
+		os.Exit(0)
 	case "crash":
 		// Stands in for the driver-stack abort: marker lines already written,
 		// then the child dies without the completion marker.
@@ -221,6 +229,23 @@ func TestRunOVProbeTimeoutIsTransient(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, cacheable, "a timeout is not a child verdict and must not be cached")
 	assert.Contains(t, err.Error(), "timed out")
+}
+
+// TestOpenVINOHasDeviceMatchesGPUByClass pins that a multi-GPU host, which lists
+// only GPU.0 and GPU.1, still reports a GPU: the capability gate must not look for
+// the literal "GPU".
+func TestOpenVINOHasDeviceMatchesGPUByClass(t *testing.T) {
+	fakeOVProbeChild(t, "multi-gpu")
+	if !ov.Supported {
+		t.Skip("probe needs the openvino build tag")
+	}
+
+	_, err := OpenVINOProbeDevices("libopenvino_c.so")
+	require.NoError(t, err)
+
+	assert.True(t, OpenVINOHasDevice(OVDeviceGPU), "indexed GPUs satisfy a GPU request")
+	assert.True(t, OpenVINOHasDevice("GPU.1"), "a concrete name still matches exactly")
+	assert.False(t, OpenVINOHasDevice("GPU.2"))
 }
 
 func TestOpenVINOProbeDevicesCachesResult(t *testing.T) {

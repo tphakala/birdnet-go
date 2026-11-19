@@ -179,13 +179,16 @@ type BackendStatus struct {
 	Version string
 }
 
-// OpenVINOStatus is the OpenVINO backend status plus the devices it enumerates.
+// OpenVINOStatus is the OpenVINO backend status plus the device request names
+// that the runtime reports available.
 type OpenVINOStatus struct {
 	// Supported reports that this binary links the OpenVINO backend.
 	Supported bool
 	// Active reports that at least one classifier is currently running on it.
 	Active bool
-	// Devices lists the OpenVINO device names available ("CPU", "GPU").
+	// Devices lists the OpenVINO request names ("CPU", "GPU") that
+	// inference.OpenVINOHasDevice reports available. A GPU request matches any
+	// enumerated GPU or GPU.<n>.
 	Devices []string
 }
 

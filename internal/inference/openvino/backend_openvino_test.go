@@ -79,7 +79,7 @@ func TestOpenVINOPerchRoundTrip(t *testing.T) {
 	if device == DeviceGPU {
 		devs, err := AvailableDevices()
 		require.NoError(t, err)
-		if !slices.Contains(devs, DeviceGPU) {
+		if !slices.ContainsFunc(devs, IsGPUDevice) {
 			t.Skipf("no GPU device enumerated (have %v)", devs)
 		}
 	}

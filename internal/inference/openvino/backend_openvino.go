@@ -835,10 +835,11 @@ func (c *classifier) Close() error {
 }
 
 // AvailableDevices returns the OpenVINO device names visible to the loaded core
-// (e.g. "CPU", "GPU"). "GPU" appears only when the Intel GPU plugin and a
-// supported iGPU/dGPU are present. InitOV must have succeeded first; otherwise
-// it returns ErrOpenVINOUnavailable. Used to gate the GPU path on Intel GPU
-// presence before falling back to the CPU device or ORT.
+// (e.g. "CPU", "GPU"). A GPU appears only when the Intel GPU plugin and a
+// supported iGPU/dGPU are present, as "GPU" for a single adapter or as "GPU.0",
+// "GPU.1" and so on when the host has several (see IsGPUDevice). InitOV must have
+// succeeded first; otherwise it returns ErrOpenVINOUnavailable. Used to gate the
+// GPU path on Intel GPU presence before falling back to the CPU device or ORT.
 func AvailableDevices() ([]string, error) {
 	// Pin to one OS thread so the query and any ov_get_last_err_msg fetch
 	// (C thread-local storage) run on the same thread.
