@@ -249,17 +249,20 @@ describe('AudioSettingsPage clip denoise', () => {
       { enabled: false, denoise: { enabled: false, strength: 'light' } },
       true,
     ],
-  ])('strength dropdown is disabled and dimmed with %s', async (_name, overrides, disabled) => {
-    await renderProcessingTab(overrides);
+  ])(
+    'strength dropdown dims exactly when it is disabled, with %s',
+    async (_name, overrides, disabled) => {
+      await renderProcessingTab(overrides);
 
-    const control = await screen.findByLabelText(STRENGTH_LABEL);
-    expect((control as HTMLButtonElement).disabled).toBe(disabled);
-    // The whole field fades once, label included, not only the trigger button:
-    // a fade of its own must not stack on the recording-off fade around it.
-    const label = document.getElementById(`${control.id}-label`);
-    if (!label) throw new Error('strength dropdown has no label element');
-    expect(dimmedAncestors(label)).toBe(disabled ? 1 : 0);
-  });
+      const control = await screen.findByLabelText(STRENGTH_LABEL);
+      expect((control as HTMLButtonElement).disabled).toBe(disabled);
+      // The whole field fades once, label included, not only the trigger button:
+      // a fade of its own must not stack on the recording-off fade around it.
+      const label = document.getElementById(`${control.id}-label`);
+      if (!label) throw new Error('strength dropdown has no label element');
+      expect(dimmedAncestors(label)).toBe(disabled ? 1 : 0);
+    }
+  );
 
   it.each([
     ['normalization off', { normalization: { enabled: false } }, true],
