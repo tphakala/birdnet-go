@@ -2493,7 +2493,6 @@
       "loadFailed": "Nepodařilo se načíst nastavení",
       "saveFailed": "Nepodařilo se uložit nastavení",
       "changedElsewhere": "Nastavení bylo změněno jinde. Zkontrolujte je a uložte znovu.",
-      "databaseStatsFailed": "Nepodařilo se načíst statistiky databáze",
       "csvDownloadFailed": "Nepodařilo se stáhnout CSV"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "Název databáze MySQL"
             }
           },
-          "stats": {
-            "title": "Statistiky databáze",
-            "description": "Informace o vaší databázi za běhu",
-            "loading": "Načítají se statistiky databáze...",
-            "retry": "Zkusit znovu",
-            "refresh": "Obnovit",
-            "noData": "Nejsou k dispozici žádné statistiky databáze.",
-            "type": "Typ",
-            "status": "Stav",
-            "size": "Velikost",
-            "totalDetections": "Detekcí celkem",
-            "location": "Umístění",
-            "connected": "Připojeno",
-            "disconnected": "Odpojeno"
-          },
           "errors": {
             "backupStartFailed": "Nepodařilo se spustit zálohování",
             "backupStatusFailed": "Nepodařilo se získat stav zálohování",
             "backupFailed": "Zálohování selhalo",
             "backupDownloadFailed": "Nepodařilo se stáhnout zálohu"
+          },
+          "statsMoved": {
+            "text": "Statistiky databáze byly přesunuty do sekce Systém.",
+            "link": "Otevřít Systém > Databáze"
           }
         },
         "interface": {

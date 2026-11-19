@@ -2493,7 +2493,6 @@
       "loadFailed": "A beállítások betöltése sikertelen",
       "saveFailed": "A beállítások mentése sikertelen",
       "changedElsewhere": "A beállításokat máshol módosították. Ellenőrizze őket, és mentse újra.",
-      "databaseStatsFailed": "Az adatbázis statisztikák betöltése sikertelen",
       "csvDownloadFailed": "A CSV letöltése sikertelen"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL adatbázis név"
             }
           },
-          "stats": {
-            "title": "Adatbázis statisztikák",
-            "description": "Az adatbázis futásidejű információi",
-            "loading": "Adatbázis statisztikák betöltése...",
-            "retry": "Újra",
-            "refresh": "Frissítés",
-            "noData": "Nem érhető el adatbázis statisztika.",
-            "type": "Típus",
-            "status": "Állapot",
-            "size": "Méret",
-            "totalDetections": "Összes észlelés",
-            "location": "Helyszín",
-            "connected": "Csatlakoztatva",
-            "disconnected": "Leválasztva"
-          },
           "errors": {
             "backupStartFailed": "A mentés indítása sikertelen",
             "backupStatusFailed": "A mentés állapotának lekérése sikertelen",
             "backupFailed": "A mentés sikertelen",
             "backupDownloadFailed": "A mentés letöltése sikertelen"
+          },
+          "statsMoved": {
+            "text": "Az adatbázis statisztikái átkerültek a Rendszer részbe.",
+            "link": "Rendszer > Adatbázis megnyitása"
           }
         },
         "interface": {

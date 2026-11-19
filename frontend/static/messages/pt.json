@@ -2493,7 +2493,6 @@
       "loadFailed": "Falha ao carregar as configurações",
       "saveFailed": "Falha ao salvar as configurações",
       "changedElsewhere": "As configurações foram alteradas noutro local. Reveja-as e guarde novamente.",
-      "databaseStatsFailed": "Falha ao carregar as estatísticas do banco de dados",
       "csvDownloadFailed": "Falha ao baixar o CSV"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "Nome do banco de dados MySQL"
             }
           },
-          "stats": {
-            "title": "Estatísticas da base de dados",
-            "description": "Informações de tempo de execução sobre sua base de dados",
-            "loading": "Carregando estatísticas da base de dados...",
-            "retry": "Tentar novamente",
-            "refresh": "Atualizar",
-            "noData": "Nenhuma estatística de base de dados disponível.",
-            "type": "Tipo",
-            "status": "Estado",
-            "size": "Tamanho",
-            "totalDetections": "Detecções totais",
-            "location": "Localização",
-            "connected": "Conectado",
-            "disconnected": "Desconectado"
-          },
           "errors": {
             "backupStartFailed": "Falha ao iniciar o backup",
             "backupStatusFailed": "Falha ao obter o status do backup",
             "backupFailed": "Backup falhou",
             "backupDownloadFailed": "Falha ao baixar o backup"
+          },
+          "statsMoved": {
+            "text": "As estatísticas da base de dados foram movidas para a seção Sistema.",
+            "link": "Abrir Sistema > Base de dados"
           }
         },
         "interface": {

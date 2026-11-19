@@ -2493,7 +2493,6 @@
       "loadFailed": "Kunne ikke indlæse indstillinger",
       "saveFailed": "Kunne ikke gemme indstillinger",
       "changedElsewhere": "Indstillingerne blev ændret et andet sted. Gennemgå dem, og gem igen.",
-      "databaseStatsFailed": "Kunne ikke indlæse databasestatistik",
       "csvDownloadFailed": "Kunne ikke downloade CSV"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL-databasenavn"
             }
           },
-          "stats": {
-            "title": "Databasestatistik",
-            "description": "Kørselsinformation om din database",
-            "loading": "Indlæser databasestatistik...",
-            "retry": "Prøv igen",
-            "refresh": "Opdater",
-            "noData": "Ingen databasestatistik tilgængelig.",
-            "type": "Type",
-            "status": "Status",
-            "size": "Størrelse",
-            "totalDetections": "Detektioner i alt",
-            "location": "Placering",
-            "connected": "Forbundet",
-            "disconnected": "Afbrudt"
-          },
           "errors": {
             "backupStartFailed": "Kunne ikke starte backup",
             "backupStatusFailed": "Kunne ikke hente backupstatus",
             "backupFailed": "Backup mislykkedes",
             "backupDownloadFailed": "Kunne ikke downloade backup"
+          },
+          "statsMoved": {
+            "text": "Databasestatistikken er flyttet til sektionen System.",
+            "link": "Åbn System > Database"
           }
         },
         "interface": {

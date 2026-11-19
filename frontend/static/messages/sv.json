@@ -2493,7 +2493,6 @@
       "loadFailed": "Kunde inte ladda inställningar",
       "saveFailed": "Kunde inte spara inställningar",
       "changedElsewhere": "Inställningarna ändrades på annat håll. Granska dem och spara igen.",
-      "databaseStatsFailed": "Kunde inte ladda databasstatistik",
       "csvDownloadFailed": "Kunde inte ladda ner CSV"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL-databasnamn"
             }
           },
-          "stats": {
-            "title": "Databasstatistik",
-            "description": "Körningsinformation om din databas",
-            "loading": "Laddar databasstatistik...",
-            "retry": "Försök igen",
-            "refresh": "Uppdatera",
-            "noData": "Ingen databasstatistik tillgänglig.",
-            "type": "Typ",
-            "status": "Status",
-            "size": "Storlek",
-            "totalDetections": "Totalt antal detektioner",
-            "location": "Plats",
-            "connected": "Ansluten",
-            "disconnected": "Frånkopplad"
-          },
           "errors": {
             "backupStartFailed": "Kunde inte starta säkerhetskopiering",
             "backupStatusFailed": "Kunde inte hämta status för säkerhetskopiering",
             "backupFailed": "Säkerhetskopieringen misslyckades",
             "backupDownloadFailed": "Kunde inte ladda ner säkerhetskopia"
+          },
+          "statsMoved": {
+            "text": "Databasstatistiken har flyttats till sektionen System.",
+            "link": "Öppna System > Databas"
           }
         },
         "interface": {

@@ -2493,7 +2493,6 @@
       "loadFailed": "Instellingen konden niet worden geladen",
       "saveFailed": "Instellingen konden niet worden opgeslagen",
       "changedElsewhere": "De instellingen zijn elders gewijzigd. Controleer ze en sla opnieuw op.",
-      "databaseStatsFailed": "Databasestatistieken konden niet worden geladen",
       "csvDownloadFailed": "CSV-download mislukt"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL database naam"
             }
           },
-          "stats": {
-            "title": "Databasestatistieken",
-            "description": "Runtime-informatie over uw database",
-            "loading": "Databasestatistieken laden...",
-            "retry": "Opnieuw proberen",
-            "refresh": "Vernieuwen",
-            "noData": "Geen databasestatistieken beschikbaar.",
-            "type": "Type",
-            "status": "Status",
-            "size": "Grootte",
-            "totalDetections": "Totaal detecties",
-            "location": "Locatie",
-            "connected": "Verbonden",
-            "disconnected": "Niet verbonden"
-          },
           "errors": {
             "backupStartFailed": "Back-up starten mislukt",
             "backupStatusFailed": "Back-upstatus ophalen mislukt",
             "backupFailed": "Back-up mislukt",
             "backupDownloadFailed": "Back-up downloaden mislukt"
+          },
+          "statsMoved": {
+            "text": "De databasestatistieken zijn verplaatst naar de sectie Systeem.",
+            "link": "Systeem > Database openen"
           }
         },
         "interface": {

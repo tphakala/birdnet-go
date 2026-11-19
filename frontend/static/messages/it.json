@@ -2493,7 +2493,6 @@
       "loadFailed": "Caricamento delle impostazioni non riuscito",
       "saveFailed": "Salvataggio delle impostazioni non riuscito",
       "changedElsewhere": "Le impostazioni sono state modificate altrove. Controllale e salva di nuovo.",
-      "databaseStatsFailed": "Caricamento delle statistiche del database non riuscito",
       "csvDownloadFailed": "Download del CSV non riuscito"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "Nome database MySQL"
             }
           },
-          "stats": {
-            "title": "Statistiche Database",
-            "description": "Informazioni runtime sul tuo database",
-            "loading": "Caricamento statistiche database...",
-            "retry": "Riprova",
-            "refresh": "Aggiorna",
-            "noData": "Nessuna statistica database disponibile.",
-            "type": "Tipo",
-            "status": "Stato",
-            "size": "Dimensione",
-            "totalDetections": "Rilevamenti Totali",
-            "location": "Posizione",
-            "connected": "Connesso",
-            "disconnected": "Disconnesso"
-          },
           "errors": {
             "backupStartFailed": "Avvio del backup non riuscito",
             "backupStatusFailed": "Recupero dello stato del backup non riuscito",
             "backupFailed": "Backup non riuscito",
             "backupDownloadFailed": "Download del backup non riuscito"
+          },
+          "statsMoved": {
+            "text": "Le statistiche del database sono state spostate nella sezione Sistema.",
+            "link": "Apri Sistema > Database"
           }
         },
         "interface": {

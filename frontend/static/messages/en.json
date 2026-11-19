@@ -2493,7 +2493,6 @@
       "loadFailed": "Failed to load settings",
       "saveFailed": "Failed to save settings",
       "changedElsewhere": "Settings were changed elsewhere. Review them and save again.",
-      "databaseStatsFailed": "Failed to load database statistics",
       "csvDownloadFailed": "Failed to download CSV"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL database name"
             }
           },
-          "stats": {
-            "title": "Database Statistics",
-            "description": "Runtime information about your database",
-            "loading": "Loading database statistics...",
-            "retry": "Retry",
-            "refresh": "Refresh",
-            "noData": "No database statistics available.",
-            "type": "Type",
-            "status": "Status",
-            "size": "Size",
-            "totalDetections": "Total Detections",
-            "location": "Location",
-            "connected": "Connected",
-            "disconnected": "Disconnected"
-          },
           "errors": {
             "backupStartFailed": "Failed to start backup",
             "backupStatusFailed": "Failed to get backup status",
             "backupFailed": "Backup failed",
             "backupDownloadFailed": "Failed to download backup"
+          },
+          "statsMoved": {
+            "text": "Database statistics have moved to the System section.",
+            "link": "Open System > Database"
           }
         },
         "interface": {
