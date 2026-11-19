@@ -6169,10 +6169,19 @@
       "device": {
         "label": "OpenVINO-laite",
         "helpText": "Käytetään malleille, jotka suoritetaan OpenVINO:ssa.",
+        "helpTextMultipleGpus": "Käytetään malleille, jotka suoritetaan OpenVINO:ssa. Tässä laitteessa on useampi kuin yksi GPU, joten valitse se, jolla mallit suoritetaan.",
+        "notDetectedHint": "Valittua GPU:ta ei löydy. Mallit suoritetaan ONNX Runtimella, kunnes valitaan toinen laite.",
         "options": {
           "auto": "Automaattinen",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "OpenVINOn oletus: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (ei löydy)"
+        },
+        "gpuTypes": {
+          "integrated": "integroitu",
+          "discrete": "erillinen"
         }
       },
       "reloadNote": "Taustajärjestelmän tai laitteen vaihtaminen lataa mallit uudelleen, joten tunnistus keskeytyy muutamaksi sekunniksi.",

@@ -4541,9 +4541,16 @@ export type TranslationKey =
   | 'analysis.inference.backend.options.openvino'
   | 'analysis.inference.device.label'
   | 'analysis.inference.device.helpText'
+  | 'analysis.inference.device.helpTextMultipleGpus'
+  | 'analysis.inference.device.notDetectedHint'
   | 'analysis.inference.device.options.auto'
   | 'analysis.inference.device.options.cpu'
   | 'analysis.inference.device.options.gpu'
+  | 'analysis.inference.device.options.gpuDefault' // params: name
+  | 'analysis.inference.device.options.gpuNamed' // params: name, type
+  | 'analysis.inference.device.options.notDetected' // params: id
+  | 'analysis.inference.device.gpuTypes.integrated'
+  | 'analysis.inference.device.gpuTypes.discrete'
   | 'analysis.inference.reloadNote'
   | 'analysis.inference.backendsLoading'
   | 'analysis.inference.backendsUnavailable'
@@ -5361,6 +5368,9 @@ export type TranslationParams = {
   'analysis.gallery.agreement.intro': { name: string | number };
   'analysis.gallery.agreement.agree': { document: string | number };
   'analysis.thresholds.shared.usedBy': { models: string | number };
+  'analysis.inference.device.options.gpuDefault': { name: string | number };
+  'analysis.inference.device.options.gpuNamed': { name: string | number; type: string | number };
+  'analysis.inference.device.options.notDetected': { id: string | number };
   'analysis.scope.rangeFilter.appliesTo': { models: string | number };
   'analysis.scope.rangeFilter.notApplied': { models: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };

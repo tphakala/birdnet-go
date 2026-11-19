@@ -6169,10 +6169,19 @@
       "device": {
         "label": "OpenVINO eszköz",
         "helpText": "Az OpenVINO-n futó modellekhez használatos.",
+        "helpTextMultipleGpus": "Az OpenVINO-n futó modellekhez használatos. Ebben az eszközben több GPU is van, válaszd ki, melyiken fussanak a modellek.",
+        "notDetectedHint": "A kiválasztott GPU nem észlelhető. A modellek az ONNX Runtime-on futnak, amíg másik eszközt nem választasz.",
         "options": {
           "auto": "Automatikus",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "OpenVINO alapértelmezés: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (nem észlelhető)"
+        },
+        "gpuTypes": {
+          "integrated": "integrált",
+          "discrete": "dedikált"
         }
       },
       "reloadNote": "A háttérrendszer vagy az eszköz módosítása újratölti a modelleket, így az észlelés néhány másodpercre szünetel.",

@@ -6169,10 +6169,19 @@
       "device": {
         "label": "Dispositivo OpenVINO",
         "helpText": "Se usa para los modelos que se ejecutan en OpenVINO.",
+        "helpTextMultipleGpus": "Se usa para los modelos que se ejecutan en OpenVINO. Este dispositivo tiene más de una GPU, así que elige en cuál se ejecutan los modelos.",
+        "notDetectedHint": "No se detecta la GPU seleccionada. Los modelos se ejecutan en ONNX Runtime hasta que se elija otro dispositivo.",
         "options": {
           "auto": "Automático",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "Predeterminada de OpenVINO: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (no detectada)"
+        },
+        "gpuTypes": {
+          "integrated": "integrada",
+          "discrete": "dedicada"
         }
       },
       "reloadNote": "Cambiar el backend o el dispositivo recarga los modelos, por lo que la detección se pausa unos segundos.",

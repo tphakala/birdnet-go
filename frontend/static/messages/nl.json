@@ -6169,10 +6169,19 @@
       "device": {
         "label": "OpenVINO-apparaat",
         "helpText": "Gebruikt voor modellen die op OpenVINO draaien.",
+        "helpTextMultipleGpus": "Gebruikt voor modellen die op OpenVINO draaien. Dit apparaat heeft meer dan één GPU, dus kies de GPU waarop de modellen draaien.",
+        "notDetectedHint": "De gekozen GPU wordt niet gevonden. De modellen draaien op ONNX Runtime tot een ander apparaat wordt gekozen.",
         "options": {
           "auto": "Automatisch",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "OpenVINO-standaard: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (niet gevonden)"
+        },
+        "gpuTypes": {
+          "integrated": "geïntegreerd",
+          "discrete": "dedicated"
         }
       },
       "reloadNote": "Het wijzigen van de backend of het apparaat laadt de modellen opnieuw, waardoor de detectie enkele seconden pauzeert.",

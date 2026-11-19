@@ -6169,10 +6169,19 @@
       "device": {
         "label": "OpenVINO-Gerät",
         "helpText": "Wird für Modelle verwendet, die auf OpenVINO laufen.",
+        "helpTextMultipleGpus": "Wird für Modelle verwendet, die auf OpenVINO laufen. Dieses Gerät hat mehr als eine GPU, wähle die aus, auf der die Modelle laufen sollen.",
+        "notDetectedHint": "Die ausgewählte GPU wurde nicht erkannt. Die Modelle laufen mit ONNX Runtime, bis ein anderes Gerät gewählt wird.",
         "options": {
           "auto": "Automatisch",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "OpenVINO-Standard: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (nicht erkannt)"
+        },
+        "gpuTypes": {
+          "integrated": "integriert",
+          "discrete": "dediziert"
         }
       },
       "reloadNote": "Beim Ändern des Backends oder Geräts werden die Modelle neu geladen, sodass die Erkennung für einige Sekunden pausiert.",
