@@ -50,6 +50,7 @@
     type StreamConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { cn } from '$lib/utils/cn';
   import { commitSetting, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
@@ -847,6 +848,10 @@
 
           <SelectDropdown
             value={exportDenoise.strength}
+            className={cn(
+              'transition-opacity duration-200',
+              settings.audio.export.enabled && !exportDenoise.enabled && 'opacity-50'
+            )}
             label={t('settings.audio.exportDenoise.strengthLabel')}
             helpText={settings.audio.export.enabled && !exportDenoise.enabled
               ? t('settings.audio.exportDenoise.strengthDisabledHelp')
@@ -968,9 +973,10 @@
             </span>
             <div
               class="space-y-4 transition-opacity duration-200"
-              class:opacity-50={!settings.audio.export.normalization.enabled}
+              class:opacity-50={settings.audio.export.enabled &&
+                !settings.audio.export.normalization.enabled}
             >
-              <div class="settings-form-grid">
+              <div class="settings-form-grid settings-form-grid-cols-2">
                 <!-- Target LUFS -->
                 <NumberField
                   label={t('settings.audio.audioNormalization.targetLUFSLabel')}
