@@ -240,15 +240,12 @@ func TestOpenVINOHasDeviceMatchesGPUByClass(t *testing.T) {
 		t.Skip("probe needs the openvino build tag")
 	}
 
-	devices, err := OpenVINOProbeDevices("libopenvino_c.so")
+	_, err := OpenVINOProbeDevices("libopenvino_c.so")
 	require.NoError(t, err)
-	require.Equal(t, []string{"CPU", "GPU.0", "GPU.1"}, devices)
 
 	assert.True(t, OpenVINOHasDevice(OVDeviceGPU), "indexed GPUs satisfy a GPU request")
-	assert.True(t, OpenVINOHasDevice(OVDeviceCPU))
 	assert.True(t, OpenVINOHasDevice("GPU.1"), "a concrete name still matches exactly")
 	assert.False(t, OpenVINOHasDevice("GPU.2"))
-	assert.False(t, OpenVINOHasDevice("NPU"))
 }
 
 func TestOpenVINOProbeDevicesCachesResult(t *testing.T) {

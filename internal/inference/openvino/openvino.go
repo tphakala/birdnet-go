@@ -27,19 +27,16 @@ const (
 	DeviceGPU = "GPU"
 )
 
-// gpuDevicePrefix starts every concrete GPU device name. OpenVINO enumerates a
-// lone GPU as "GPU" and, once a host has more than one (an iGPU plus a discrete
-// card), as "GPU.0", "GPU.1" and so on, with no bare "GPU" entry.
-const gpuDevicePrefix = DeviceGPU + "."
-
 // IsGPUDevice reports whether name is an OpenVINO GPU device: the bare "GPU"
-// alias or a concrete "GPU.<n>" with a decimal index. Comparing the device class
-// instead of the literal DeviceGPU keeps multi-GPU hosts from losing the GPU.
+// alias or a concrete "GPU.<n>" with a decimal index. OpenVINO enumerates a lone
+// GPU as "GPU" and, once a host has more than one (an iGPU plus a discrete card),
+// as "GPU.0", "GPU.1" and so on with no bare "GPU" entry, so gates compare the
+// device class instead of the literal DeviceGPU.
 func IsGPUDevice(name string) bool {
 	if name == DeviceGPU {
 		return true
 	}
-	index, found := strings.CutPrefix(name, gpuDevicePrefix)
+	index, found := strings.CutPrefix(name, DeviceGPU+".")
 	if !found || index == "" {
 		return false
 	}

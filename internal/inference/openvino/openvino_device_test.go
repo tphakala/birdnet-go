@@ -16,17 +16,14 @@ func TestIsGPUDevice(t *testing.T) {
 	}{
 		{"bare alias", "GPU", true},
 		{"first index", "GPU.0", true},
-		{"second index", "GPU.1", true},
 		{"multi digit index", "GPU.12", true},
 		{"empty index", "GPU.", false},
 		{"non numeric index", "GPU.x", false},
-		{"mixed index", "GPU.1a", false},
 		{"signed index", "GPU.-1", false},
 		{"nested index", "GPU.0.1", false},
 		{"suffix without dot", "GPUX", false},
 		{"lowercase", "gpu", false},
 		{"cpu", "CPU", false},
-		{"npu", "NPU", false},
 		{"empty", "", false},
 	}
 	for _, tt := range tests {

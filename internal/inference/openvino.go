@@ -105,8 +105,9 @@ func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Cl
 // OpenVINOHasDevice reports whether the named OpenVINO device (e.g. ov.DeviceGPU)
 // is available. A GPU request matches by class: any enumerated "GPU" or "GPU.<n>"
 // satisfies it, because a host with several GPUs lists only the indexed names.
-// Other names must match exactly. It returns false on any error (backend not compiled in, core not
-// initialized, or query failure), so callers can use it as a plain gate.
+// Other names must match exactly. It returns false on any error (backend not
+// compiled in, core not initialized, or query failure), so callers can use it as
+// a plain gate.
 //
 // It never enumerates devices in-process: ov_core_get_available_devices walks
 // the vendor driver stack, and a fault there aborts the whole process (issue
