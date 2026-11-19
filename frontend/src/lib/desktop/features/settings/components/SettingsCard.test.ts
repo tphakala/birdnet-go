@@ -6,7 +6,7 @@ import {
   createComponentTestFactory,
   mockDOMAPIs,
 } from '../../../../../test/render-helpers';
-import SettingsCard from './SettingsCard.svelte';
+import SettingsCard, { SETTINGS_CARD_HEADER_CLASSES } from './SettingsCard.svelte';
 import SettingsCardWrapper from './test-helpers/SettingsCardWrapper.test.svelte';
 
 // Mock i18n translations
@@ -62,7 +62,11 @@ describe('SettingsCard', () => {
     });
 
     it('renders custom header snippet', () => {
+      // A title and description would otherwise produce the default header,
+      // so this checks that the snippet takes its place.
       wrapperFactory.render({
+        title: 'Card Title',
+        description: 'Card description',
         showCustomHeader: true,
         headerContent: 'Custom Header',
       });
@@ -163,6 +167,10 @@ describe('SettingsCard', () => {
       const heading = screen.getByRole('heading', { level: 3 });
       expect(header).toContainElement(heading);
       expect(heading).toHaveTextContent('Title Only');
+      // The divider under the header, in the footer's border token
+      expect(header).toHaveClass('border-b', 'border-[var(--color-base-200)]');
+      // Loading skeletons reuse these classes to keep the card's height
+      expect(header).toHaveClass(...SETTINGS_CARD_HEADER_CLASSES.split(/\s+/));
     });
 
     it('renders header section with only description', () => {
