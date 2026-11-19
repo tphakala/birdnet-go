@@ -63,6 +63,7 @@
   } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import { SETTINGS_CARD_HEADER_CLASSES } from '$lib/desktop/features/settings/components/SettingsCard.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -1206,9 +1207,9 @@
             class="space-y-4 transition-opacity duration-200"
             class:opacity-50={!settings.audio.export.enabled}
           >
-            <h4 class="text-sm font-medium text-[var(--color-base-content)]">
+            <SettingsGroupLabel>
               {t('settings.audio.clipRecording.captureSettings')}
-            </h4>
+            </SettingsGroupLabel>
             <div class="settings-form-grid">
               <!-- Capture Length -->
               <InlineSlider

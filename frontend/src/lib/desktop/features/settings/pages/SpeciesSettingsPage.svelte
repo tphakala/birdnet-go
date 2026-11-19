@@ -45,6 +45,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesSettings } from '$lib/stores/settings';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
@@ -1640,9 +1641,9 @@
         <div class="p-1.5 rounded-lg bg-violet-500/10">
           <ArrowLeftRight class="w-4 h-4 text-violet-500" />
         </div>
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
+        <SettingsGroupLabel as="h3">
           {t('settings.species.synonyms.tabLabel')}
-        </h3>
+        </SettingsGroupLabel>
         {#if synonymCount > 0}
           <span
             class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
@@ -2014,9 +2015,9 @@
 
             <!-- Season Definitions -->
             <div class="mt-6">
-              <h4 class="font-medium text-sm mb-2">
+              <SettingsGroupLabel divided class="mb-2">
                 {t('settings.species.tracking.seasonal.seasons.title')}
-              </h4>
+              </SettingsGroupLabel>
               <p class="text-xs text-muted mb-4">
                 {t('settings.species.tracking.seasonal.seasons.description')}
               </p>

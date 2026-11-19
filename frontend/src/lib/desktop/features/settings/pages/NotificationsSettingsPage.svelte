@@ -28,6 +28,7 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
@@ -2118,9 +2119,9 @@
           <!-- Providers List -->
           <div class="space-y-3">
             <div class="flex items-center justify-between">
-              <h3 class="font-semibold text-sm">
+              <SettingsGroupLabel as="h3">
                 {t('settings.notifications.push.providers.title')}
-              </h3>
+              </SettingsGroupLabel>
               {#if !showProviderForm}
                 <button
                   type="button"

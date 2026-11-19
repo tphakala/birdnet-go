@@ -32,6 +32,7 @@
   import { DENOISE_LOSSY_MIN_BITRATE_KBPS, isLosslessExportFormat } from './audioExportFormat';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
@@ -533,9 +534,9 @@
       <div class="space-y-6">
         <!-- Bird Images Section -->
         <div class="space-y-4">
-          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
+          <SettingsGroupLabel>
             {t('settings.main.sections.userInterface.dashboard.birdImages.title')}
-          </h4>
+          </SettingsGroupLabel>
 
           <Checkbox
             checked={settings.dashboard.thumbnails.summary}
@@ -617,9 +618,9 @@
 
         <!-- Spectrograms Section -->
         <div class="space-y-4">
-          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
+          <SettingsGroupLabel>
             {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
-          </h4>
+          </SettingsGroupLabel>
 
           <!-- Generation Mode with contextual note -->
           <div class="space-y-3">

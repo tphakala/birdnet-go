@@ -43,6 +43,7 @@
   import { resolveSpeciesDisplayNames, type SpeciesNameMaps } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+  import SettingsGroupLabel from './SettingsGroupLabel.svelte';
   import {
     toLocalizedPredictions,
     filterLocalizedPredictions,
@@ -342,7 +343,7 @@
       <div class="p-1.5 rounded-lg {colors.bg}">
         <Icon class="w-4 h-4 {colors.text}" />
       </div>
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h3>
+      <SettingsGroupLabel as="h3">{title}</SettingsGroupLabel>
       <span
         class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
       >
@@ -443,10 +444,7 @@
 
   <!-- Add Species Input -->
   <div class="px-4 py-3 border-t border-[var(--border-100)]">
-    <label
-      for={inputId}
-      class="text-xs font-semibold uppercase tracking-wider text-muted mb-2 block"
-    >
+    <label for={inputId} class="label-text mb-2 block">
       {inputLabel}
     </label>
     <div class="relative">

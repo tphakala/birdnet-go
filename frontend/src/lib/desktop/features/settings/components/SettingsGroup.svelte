@@ -14,6 +14,9 @@
   - required: Marks the labelled control as required
   - heading: Replaces the title text (for example a disclosure button)
   - class: Additional CSS classes (default spacing: space-y-3)
+  - titleVariant: 'group' shows a heading title as a group label (default: 'field').
+    A labelFor title and a heading snippet are not affected; style snippet content
+    with SETTINGS_GROUP_LABEL_CLASSES
   - children: The controls
 
   @component
@@ -23,6 +26,7 @@
   import { cn } from '$lib/utils/cn';
   import { autoSaveStatus } from '$lib/stores/settingsAutoSave.svelte';
   import AutoSaveStatus from './AutoSaveStatus.svelte';
+  import { SETTINGS_GROUP_LABEL_CLASSES } from './SettingsGroupLabel.svelte';
 
   interface Props {
     title?: string;
@@ -33,6 +37,7 @@
     required?: boolean;
     heading?: Snippet;
     class?: string;
+    titleVariant?: 'field' | 'group';
     children?: Snippet;
   }
 
@@ -45,6 +50,7 @@
     required = false,
     heading,
     class: className,
+    titleVariant = 'field',
     children,
   }: Props = $props();
 
@@ -69,7 +75,12 @@
         {/if}
       </label>
     {:else}
-      <h4 id={headingId} class={TITLE_CLASS}>{title}</h4>
+      <h4
+        id={headingId}
+        class={titleVariant === 'group' ? SETTINGS_GROUP_LABEL_CLASSES : TITLE_CLASS}
+      >
+        {title}
+      </h4>
     {/if}
     {#if field}
       <AutoSaveStatus {field} id={statusId} />

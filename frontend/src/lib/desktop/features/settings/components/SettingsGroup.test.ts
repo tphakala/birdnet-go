@@ -21,11 +21,12 @@ vi.mock('$lib/stores/settings', async importOriginal => {
 
 import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
 import SettingsGroup from './SettingsGroup.svelte';
+import { SETTINGS_GROUP_LABEL_CLASSES } from './SettingsGroupLabel.svelte';
 
 const FIELD = 'audio:sources:r:gain';
 const STATUS_ID = 'gain-status';
 
-function renderGroup() {
+function renderGroup(overrides: { titleVariant?: 'field' | 'group' } = {}) {
   return renderTyped(SettingsGroup, {
     props: {
       title: 'Level',
@@ -33,6 +34,7 @@ function renderGroup() {
       statusId: STATUS_ID,
       headingId: 'gain-heading',
       children: createRawSnippet(() => ({ render: () => '<p>controls</p>' })),
+      ...overrides,
     },
   });
 }
@@ -72,5 +74,20 @@ describe('SettingsGroup', () => {
       )
     );
     expect(document.getElementById(STATUS_ID)).toHaveTextContent('settings.autoSave.failed');
+  });
+
+  it('shows a heading title as a group label with titleVariant group', () => {
+    renderGroup({ titleVariant: 'group' });
+
+    const heading = screen.getByRole('heading', { level: 4, name: 'Level' });
+    expect(heading).toHaveClass(...SETTINGS_GROUP_LABEL_CLASSES.split(' '));
+    expect(heading).toHaveAttribute('id', 'gain-heading');
+    expect(screen.getByRole('region', { name: 'Level' })).toBeInTheDocument();
+  });
+
+  it('keeps the field title style by default', () => {
+    renderGroup();
+
+    expect(screen.getByRole('heading', { level: 4, name: 'Level' })).not.toHaveClass('uppercase');
   });
 });

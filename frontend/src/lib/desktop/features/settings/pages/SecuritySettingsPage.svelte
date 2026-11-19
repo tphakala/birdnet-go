@@ -38,6 +38,7 @@
   import NetworkAddressListInput from '$lib/desktop/components/forms/NetworkAddressListInput.svelte';
   import ReverseProxySection from '$lib/desktop/features/settings/components/ReverseProxySection.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -862,7 +863,7 @@
       />
 
       <div class="border-t border-[var(--border-100)] pt-4 mt-4">
-        <h4 class="text-lg font-medium mb-2">{t('settings.security.tls.title')}</h4>
+        <SettingsGroupLabel class="mb-2">{t('settings.security.tls.title')}</SettingsGroupLabel>
         <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
           {t('settings.security.tls.description')}
         </p>

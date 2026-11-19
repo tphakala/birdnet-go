@@ -37,6 +37,7 @@
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { formatDateTime } from '$lib/utils/formatters';
   import SettingsNote from './SettingsNote.svelte';
+  import SettingsGroupLabel from './SettingsGroupLabel.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
@@ -354,9 +355,9 @@
         <div class="p-1.5 rounded-lg bg-violet-500/10">
           <Activity class="w-4 h-4 text-violet-500" />
         </div>
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
+        <SettingsGroupLabel as="h3">
           {t('settings.species.dynamicThreshold.header.species')}
-        </h3>
+        </SettingsGroupLabel>
         <span
           class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
         >

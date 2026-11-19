@@ -157,6 +157,15 @@ each section a Lucide `icon` that the card shows before the title. The one
 exception is the bat card, which uses `BatIcon` (`$lib/components/icons/`), a
 temporary stand-in until Lucide ships a bat icon; do not add other local icons.
 
+Label a subgroup of fields inside a card with `SettingsGroupLabel`
+(`components/SettingsGroupLabel.svelte`), not with hand-written heading classes.
+Choose the element with `as` so the heading level fits the page outline (default
+`h4`; `div` or `span` when the label is not a heading) and pass `divided` for a
+hairline above it. A `SettingsGroup` shows its title this way with
+`titleVariant="group"`, and a `heading` snippet (a disclosure button) takes
+`SETTINGS_GROUP_LABEL_CLASSES` from the same file. The label of a single control
+stays a normal field label.
+
 ## Types
 
 Do not use `as any` or other casts to get past settings typing problems. If a
