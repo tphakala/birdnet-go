@@ -4,7 +4,11 @@
 // get stubs that report ErrOpenVINOUnavailable so callers degrade to ORT.
 package openvino
 
-import "github.com/tphakala/birdnet-go/internal/errors"
+import (
+	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
+)
 
 // DefaultPrecisionHint is the OpenVINO INFERENCE_PRECISION_HINT used for the
 // f16 acceleration path on ARMv8.2 CPUs and the Intel iGPU.
@@ -22,6 +26,30 @@ const (
 	// supports f16 natively and offloads inference from the CPU cores.
 	DeviceGPU = "GPU"
 )
+
+// gpuDevicePrefix starts every concrete GPU device name. OpenVINO enumerates a
+// lone GPU as "GPU" and, once a host has more than one (an iGPU plus a discrete
+// card), as "GPU.0", "GPU.1" and so on, with no bare "GPU" entry.
+const gpuDevicePrefix = DeviceGPU + "."
+
+// IsGPUDevice reports whether name is an OpenVINO GPU device: the bare "GPU"
+// alias or a concrete "GPU.<n>" with a decimal index. Comparing the device class
+// instead of the literal DeviceGPU keeps multi-GPU hosts from losing the GPU.
+func IsGPUDevice(name string) bool {
+	if name == DeviceGPU {
+		return true
+	}
+	index, found := strings.CutPrefix(name, gpuDevicePrefix)
+	if !found || index == "" {
+		return false
+	}
+	for _, r := range index {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // ErrOpenVINOUnavailable is returned when the OpenVINO backend is not compiled
 // in (no "openvino" build tag) or libopenvino_c cannot be loaded at runtime.
