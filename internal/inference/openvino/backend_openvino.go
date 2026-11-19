@@ -659,7 +659,7 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		device = DeviceCPU
 	}
 	if device != DeviceCPU && !IsGPUDevice(device) {
-		return nil, errors.Newf("openvino: unsupported device %q (want %q, %q or %q<n>)", device, DeviceCPU, DeviceGPU, DeviceGPU+".").
+		return nil, errors.Newf("openvino: unsupported device %q (want %q, %q or %q)", device, DeviceCPU, DeviceGPU, DeviceGPU+".<n>").
 			Category(errors.CategoryModelInit).Build()
 	}
 	if opts.OutputIndex < 0 {

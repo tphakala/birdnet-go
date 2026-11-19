@@ -157,6 +157,7 @@ func TestOpenVINONewClassifierDeviceNames(t *testing.T) {
 		_, err := NewClassifier("/nonexistent/model.onnx", Options{Device: device})
 		require.Errorf(t, err, "device %q", device)
 		assert.Containsf(t, err.Error(), unsupported, "device %q must be rejected", device)
+		assert.Containsf(t, err.Error(), `"GPU.<n>"`, "device %q: the message must show the accepted indexed form", device)
 	}
 }
 
