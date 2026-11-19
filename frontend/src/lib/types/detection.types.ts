@@ -200,6 +200,7 @@ export interface DailySpeciesSummary {
   is_new_species?: boolean; // True if first seen within tracking window (persistent from API)
   days_since_first_seen?: number; // Days since species was first detected
   days_since_last_seen?: number; // Days since the previous detection before this return (absence gap)
+  is_infrequent?: boolean; // Returning after an absence longer than the infrequent-tracking threshold
   // Multi-period tracking metadata
   is_new_this_year?: boolean; // First time this year
   is_new_this_season?: boolean; // First time this season
