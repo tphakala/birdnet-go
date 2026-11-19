@@ -26,6 +26,7 @@
   import HighPassIcon from '$lib/desktop/components/ui/HighPassIcon.svelte';
   import BandRejectIcon from '$lib/desktop/components/ui/BandRejectIcon.svelte';
   import FilterResponseGraph from './FilterResponseGraph.svelte';
+  import SettingsGroupLabel from './SettingsGroupLabel.svelte';
   import EqualizerNumberInput, {
     eqLabelClasses,
     EQ_PARAMETER_CELL_CLASS,
@@ -586,9 +587,9 @@
   {#if equalizerSettings.enabled && !loadingConfig}
     <!-- Filter Response Visualization - Always visible to show current state -->
     <div class="mb-6">
-      <h3 class="text-sm font-medium mb-2">
+      <SettingsGroupLabel as="h3" class="mb-3">
         {t('settings.audio.audioFilters.frequencyResponse')}
-      </h3>
+      </SettingsGroupLabel>
       <FilterResponseGraph
         equalizer={{
           enabled: equalizerSettings.enabled,

@@ -33,6 +33,7 @@
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -1313,9 +1314,9 @@
 
                 <!-- Certificate Management -->
                 <div class="border-t border-[var(--border-200)] pt-4 mt-2">
-                  <h3 class="text-sm font-medium mb-2">
+                  <SettingsGroupLabel as="h3" class="mb-2">
                     {t('settings.integration.mqtt.tls.certificates.title')}
-                  </h3>
+                  </SettingsGroupLabel>
                   <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
                     {t('settings.integration.mqtt.tls.certificates.description')}
                   </p>
@@ -1436,9 +1437,9 @@
 
             <!-- Authentication Section -->
             <div class="border-t border-[var(--border-200)] pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">
+              <SettingsGroupLabel as="h3" class="mb-3">
                 {t('settings.integration.mqtt.authentication.title')}
-              </h3>
+              </SettingsGroupLabel>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextInput
@@ -1464,9 +1465,9 @@
 
             <!-- Home Assistant Integration Section -->
             <div class="border-t border-[var(--border-200)] pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">
+              <SettingsGroupLabel as="h3" class="mb-3">
                 {t('settings.integration.mqtt.homeAssistant.title')}
-              </h3>
+              </SettingsGroupLabel>
 
               <Checkbox
                 checked={settings.mqtt.homeAssistant?.enabled ?? false}

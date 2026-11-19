@@ -97,6 +97,7 @@
     type CadenceReadoutRow,
   } from '$lib/desktop/features/settings/utils/fpCadence';
   import ModelCardGrid from '$lib/desktop/features/settings/components/ModelCardGrid.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import type {
     ModelCardAction,
     ModelCardMode,
@@ -3488,39 +3489,33 @@
       <!-- Acoustic Classifiers section -->
       {#if availableWildlife.length > 0 || availableBirds.length > 0 || availableBats.length > 0}
         <div class="space-y-4">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
+          <SettingsGroupLabel as="h2">
             {t('analysis.gallery.sections.acoustic')}
-          </h2>
+          </SettingsGroupLabel>
 
           {#if availableWildlife.length > 0}
             <div>
-              <h3
-                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-              >
+              <SettingsGroupLabel as="h3" class="mb-3">
                 {t('analysis.gallery.categories.wildlife')}
-              </h3>
+              </SettingsGroupLabel>
               {@render galleryGrid(availableWildlife, 'available')}
             </div>
           {/if}
 
           {#if availableBirds.length > 0}
             <div>
-              <h3
-                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-              >
+              <SettingsGroupLabel as="h3" class="mb-3">
                 {t('analysis.gallery.categories.bird')}
-              </h3>
+              </SettingsGroupLabel>
               {@render galleryGrid(availableBirds, 'available')}
             </div>
           {/if}
 
           {#if availableBats.length > 0}
             <div>
-              <h3
-                class="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--color-base-content)]/80"
-              >
+              <SettingsGroupLabel as="h3" class="mb-3">
                 {t('analysis.gallery.categories.bat')}
-              </h3>
+              </SettingsGroupLabel>
               {@render galleryGrid(availableBats, 'available')}
             </div>
           {/if}
@@ -3530,9 +3525,9 @@
       <!-- Geomodels section -->
       {#if availableGeomodels.length > 0}
         <div class="space-y-4">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-[var(--color-base-content)]">
+          <SettingsGroupLabel as="h2">
             {t('analysis.gallery.sections.geomodel')}
-          </h2>
+          </SettingsGroupLabel>
           {@render galleryGrid(availableGeomodels, 'available')}
         </div>
       {/if}

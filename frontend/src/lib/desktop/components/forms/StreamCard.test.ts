@@ -340,6 +340,35 @@ describe('StreamCard delete and groups', () => {
     expect(trigger).toHaveAccessibleDescription('common.loading');
   });
 
+  it('shows body group titles as group labels and single-control titles as field labels', () => {
+    renderCard();
+
+    for (const name of [
+      'settings.audio.streams.connectionTitle',
+      'settings.audio.soundCards.modelLabel',
+      'settings.audio.quietHours.title',
+    ]) {
+      expect(screen.getByRole('heading', { level: 4, name })).toHaveClass('uppercase');
+    }
+    for (const name of [
+      'settings.audio.audioFilters.title',
+      'settings.audio.streams.diagnostics.title',
+    ]) {
+      expect(screen.getByRole('button', { name })).toHaveClass(
+        'uppercase',
+        'flex',
+        'items-center',
+        'gap-2'
+      );
+    }
+    expect(
+      screen.getByRole('heading', { level: 4, name: 'settings.audio.soundCards.levelTitle' })
+    ).not.toHaveClass('uppercase');
+    expect(
+      screen.getByText('settings.audio.streams.nameLabel', { selector: 'label' })
+    ).not.toHaveClass('uppercase');
+  });
+
   it('names the audio filters region after its disclosure button', () => {
     renderCard();
 

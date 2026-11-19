@@ -69,6 +69,7 @@
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
   import SourceCard from '$lib/desktop/features/settings/components/SourceCard.svelte';
   import SettingsGroup from '$lib/desktop/features/settings/components/SettingsGroup.svelte';
+  import { SETTINGS_GROUP_DISCLOSURE_CLASSES } from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import CommitTextField from '$lib/desktop/features/settings/components/CommitTextField.svelte';
   import ScopedApplyGroup from '$lib/desktop/features/settings/components/ScopedApplyGroup.svelte';
   import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
@@ -386,6 +387,7 @@
     field={field('capture')}
     statusId={statusId('capture')}
     class="py-4"
+    titleVariant="group"
   >
     <ScopedApplyGroup
       draft={capture}
@@ -446,6 +448,7 @@
     field={field('models')}
     statusId={statusId('models')}
     class="py-4"
+    titleVariant="group"
   >
     <ModelToggleList
       models={availableModels}
@@ -469,7 +472,7 @@
       <button
         id={equalizerHeadingId}
         type="button"
-        class="flex items-center gap-2 rounded text-sm font-semibold text-[var(--color-base-content)] transition-colors hover:text-[var(--text-primary)]"
+        class={SETTINGS_GROUP_DISCLOSURE_CLASSES}
         aria-expanded={showEqualizer}
         onclick={() => (showEqualizer = !showEqualizer)}
       >
@@ -510,6 +513,7 @@
     field={field('quietHours')}
     statusId={statusId('quietHours')}
     class="py-4"
+    titleVariant="group"
   >
     <QuietHoursEditor
       config={quietHours}
