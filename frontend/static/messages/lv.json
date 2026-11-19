@@ -2493,7 +2493,6 @@
       "loadFailed": "Neizdevās ielādēt iestatījumus",
       "saveFailed": "Neizdevās saglabāt iestatījumus",
       "changedElsewhere": "Iestatījumi tika mainīti citur. Pārskatiet tos un saglabājiet vēlreiz.",
-      "databaseStatsFailed": "Neizdevās ielādēt datubāzes statistiku",
       "csvDownloadFailed": "Neizdevās lejupielādēt CSV"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL datubāzes nosaukums"
             }
           },
-          "stats": {
-            "title": "Datubāzes statistika",
-            "description": "Izpildlaika informācija par jūsu datubāzi",
-            "loading": "Ielādē datubāzes statistiku...",
-            "retry": "Mēģināt vēlreiz",
-            "refresh": "Atsvaidzināt",
-            "noData": "Datubāzes statistika nav pieejama.",
-            "type": "Tips",
-            "status": "Statuss",
-            "size": "Izmērs",
-            "totalDetections": "Kopējās noteikšanas",
-            "location": "Atrašanās vieta",
-            "connected": "Savienots",
-            "disconnected": "Atvienots"
-          },
           "errors": {
             "backupStartFailed": "Neizdevās sākt dublējumu",
             "backupStatusFailed": "Neizdevās iegūt dublējuma statusu",
             "backupFailed": "Dublēšana neizdevās",
             "backupDownloadFailed": "Neizdevās lejupielādēt dublējumu"
+          },
+          "statsMoved": {
+            "text": "Datubāzes statistika ir pārvietota uz sadaļu Sistēma.",
+            "link": "Atvērt Sistēma > Datubāze"
           }
         },
         "interface": {

@@ -2493,7 +2493,6 @@
       "loadFailed": "Innlasting av innstillinger mislyktes",
       "saveFailed": "Lagring av innstillinger mislyktes",
       "changedElsewhere": "Innstillingene ble endret et annet sted. Gå gjennom dem og lagre på nytt.",
-      "databaseStatsFailed": "Innlasting av databasestatistikk mislyktes",
       "csvDownloadFailed": "Nedlasting av CSV mislyktes"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL-databasenavn"
             }
           },
-          "stats": {
-            "title": "Databasestatistikk",
-            "description": "Kjøretidsinformasjon om databasen din",
-            "loading": "Laster databasestatistikk...",
-            "retry": "Prøv igjen",
-            "refresh": "Oppdater",
-            "noData": "Ingen databasestatistikk tilgjengelig.",
-            "type": "Type",
-            "status": "Status",
-            "size": "Størrelse",
-            "totalDetections": "Totalt registreringer",
-            "location": "Plassering",
-            "connected": "Tilkoblet",
-            "disconnected": "Frakoblet"
-          },
           "errors": {
             "backupStartFailed": "Oppstart av sikkerhetskopi mislyktes",
             "backupStatusFailed": "Henting av sikkerhetskopistatus mislyktes",
             "backupFailed": "Sikkerhetskopi mislyktes",
             "backupDownloadFailed": "Nedlasting av sikkerhetskopi mislyktes"
+          },
+          "statsMoved": {
+            "text": "Databasestatistikken er flyttet til seksjonen System.",
+            "link": "Åpne System > Database"
           }
         },
         "interface": {

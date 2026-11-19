@@ -2493,7 +2493,6 @@
       "loadFailed": "Asetusten lataaminen epäonnistui",
       "saveFailed": "Asetusten tallentaminen epäonnistui",
       "changedElsewhere": "Asetuksia muutettiin muualla. Tarkista ne ja tallenna uudelleen.",
-      "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
       "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
     },
     "card": {
@@ -2700,26 +2699,15 @@
               "helpText": "MySQL-tietokannan nimi"
             }
           },
-          "stats": {
-            "title": "Tietokantatilastot",
-            "description": "Ajonaikaiset tiedot tietokannastasi",
-            "loading": "Ladataan tietokantatilastoja...",
-            "retry": "Yritä uudelleen",
-            "refresh": "Päivitä",
-            "noData": "Tietokantatilastoja ei saatavilla.",
-            "type": "Tyyppi",
-            "status": "Tila",
-            "size": "Koko",
-            "totalDetections": "Havaintoja yhteensä",
-            "location": "Sijainti",
-            "connected": "Yhdistetty",
-            "disconnected": "Ei yhteyttä"
-          },
           "errors": {
             "backupStartFailed": "Varmuuskopioinnin käynnistäminen epäonnistui",
             "backupStatusFailed": "Varmuuskopioinnin tilan hakeminen epäonnistui",
             "backupFailed": "Varmuuskopiointi epäonnistui",
             "backupDownloadFailed": "Varmuuskopion lataaminen epäonnistui"
+          },
+          "statsMoved": {
+            "text": "Tietokantatilastot on siirretty Järjestelmä-osioon.",
+            "link": "Avaa Järjestelmä > Tietokanta"
           }
         },
         "interface": {
