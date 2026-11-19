@@ -40,7 +40,6 @@
     Pencil,
     Trash2,
     ExternalLink,
-    History,
     Zap,
     Shield,
     Play,
@@ -54,6 +53,8 @@
     Globe,
     Clock,
     Wifi,
+    FileText,
+    RotateCcwClock,
   } from '@lucide/svelte';
   import StatusBanner from '$lib/desktop/components/ui/StatusBanner.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
@@ -456,7 +457,7 @@
     {
       id: 'history',
       label: t('settings.notifications.tabs.history'),
-      icon: History,
+      icon: RotateCcwClock,
       content: historyContent,
       hasChanges: false,
     },
@@ -1439,6 +1440,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.notifications.tabs.channels')}
+      icon={Send}
       description={t('settings.notifications.push.description')}
       defaultOpen={true}
     >
@@ -2247,6 +2249,7 @@
     <!-- Templates Section (collapsible) -->
     <SettingsSection
       title={t('settings.notifications.templates.title')}
+      icon={FileText}
       description={t('settings.notifications.templates.description')}
       defaultOpen={false}
     >
@@ -2631,6 +2634,7 @@
   {@render ruleStatusBanner()}
   <SettingsSection
     title={t('settings.alerts.sections.history.title')}
+    icon={RotateCcwClock}
     description={t('settings.alerts.sections.history.description')}
     defaultOpen={true}
   >

@@ -104,6 +104,7 @@
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import BatIcon from '$lib/components/icons/BatIcon.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
@@ -181,6 +182,14 @@
     Gauge,
     Moon,
     Settings as SettingsIcon,
+    Target,
+    TrendingUp,
+    Tag,
+    ShieldCheck,
+    Map as MapIcon,
+    AudioLines,
+    LayoutGrid,
+    Wrench,
   } from '@lucide/svelte';
 
   const logger = loggers.settings;
@@ -2411,6 +2420,7 @@
     <!-- Detection thresholds: one row per enabled classifier -->
     <SettingsSection
       title={t('analysis.thresholds.title')}
+      icon={Target}
       description={t('analysis.thresholds.description')}
       defaultOpen={true}
       originalData={thresholdsChange.original}
@@ -2507,6 +2517,7 @@
     <!-- Dynamic threshold -->
     <SettingsSection
       title={t('settings.main.sections.dynamicThreshold.title')}
+      icon={TrendingUp}
       description={t('settings.main.sections.dynamicThreshold.description')}
       originalData={dynamicThresholdChange.original}
       currentData={dynamicThresholdChange.current}
@@ -2571,6 +2582,7 @@
     <!-- Species names -->
     <SettingsSection
       title={t('analysis.speciesNames.title')}
+      icon={Tag}
       description={t('analysis.speciesNames.description')}
       originalData={speciesNamesChange.original}
       currentData={speciesNamesChange.current}
@@ -2632,6 +2644,7 @@
     <!-- False positive filter: every classifier except bats -->
     <SettingsSection
       title={t('settings.main.sections.falsePositiveFilter.title')}
+      icon={ShieldCheck}
       description={t('settings.main.sections.falsePositiveFilter.description')}
       defaultOpen={true}
       originalData={falsePositiveChange.original}
@@ -2732,6 +2745,7 @@
     <!-- Range filter -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
+      icon={MapIcon}
       description={t('settings.main.sections.rangeFilter.description')}
       originalData={rangeFilterChange.original}
       currentData={rangeFilterChange.current}
@@ -2954,6 +2968,7 @@
     <!-- Bat detection -->
     <SettingsSection
       title={t('analysis.bat.title')}
+      icon={BatIcon}
       description={t('analysis.bat.description')}
       defaultOpen={true}
       originalData={batChange.original}
@@ -3055,6 +3070,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('analysis.inference.runtime.title')}
+      icon={Cpu}
       description={t('analysis.inference.runtime.description')}
       originalData={inferenceChange.original}
       currentData={inferenceChange.current}
@@ -3123,6 +3139,7 @@
 
     <SettingsSection
       title={t('analysis.inference.running.title')}
+      icon={AudioLines}
       description={t('analysis.inference.running.description')}
     >
       <ul class="divide-y divide-[var(--border-100)]" data-testid="inference-running-list">
@@ -3157,6 +3174,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('analysis.gallery.title')}
+      icon={LayoutGrid}
       description={t('analysis.gallery.description')}
       defaultOpen={true}
       originalData={modelRegionChange.original}
@@ -3309,6 +3327,7 @@
 
     <SettingsSection
       title={t('analysis.downloadSource.title')}
+      icon={Download}
       description={t('analysis.downloadSource.description')}
       originalData={downloadSourceChange.original}
       currentData={downloadSourceChange.current}
@@ -3357,6 +3376,7 @@
     <!-- Advanced -->
     <SettingsSection
       title={t('analysis.advanced.title')}
+      icon={Wrench}
       description={t('analysis.advanced.description')}
       defaultOpen={false}
       originalData={advancedChange.original}

@@ -43,7 +43,7 @@
   interface SpeciesListResponse {
     species?: Array<{ label: string; commonName?: string; scientificName?: string }>;
   }
-  import { Filter, ShieldCheck } from '@lucide/svelte';
+  import { Filter, ShieldCheck, EyeOff, Sun } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { normalizeForLookup } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
@@ -293,6 +293,7 @@
     <!-- Privacy Filter Section -->
     <SettingsSection
       title={t('settings.filters.privacyFiltering.title')}
+      icon={EyeOff}
       description={t('settings.filters.privacyFiltering.description')}
       defaultOpen={true}
       hasChanges={privacyFilterHasChanges}
@@ -375,6 +376,7 @@
     <!-- Dog Bark Filter Section -->
     <SettingsSection
       title={t('settings.filters.falsePositivePrevention.title')}
+      icon={ShieldCheck}
       description={t('settings.filters.falsePositivePrevention.description')}
       defaultOpen={true}
       hasChanges={dogBarkFilterHasChanges}
@@ -452,6 +454,7 @@
     <!-- Daylight Filter Section -->
     <SettingsSection
       title={t('settings.filters.daylightFilter.title')}
+      icon={Sun}
       description={t('settings.filters.daylightFilter.description')}
       defaultOpen={true}
       hasChanges={daylightFilterHasChanges}

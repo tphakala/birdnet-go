@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { Mic } from '@lucide/svelte';
 import {
   screen,
   createI18nMock,
@@ -69,6 +70,8 @@ describe('SettingsCard', () => {
       expect(screen.getByTestId('custom-header')).toHaveTextContent('Custom Header');
       // Should not render default title
       expect(screen.queryByRole('heading', { level: 3 })).not.toBeInTheDocument();
+      // Nor the default header with its divider
+      expect(screen.queryByTestId('settings-card-header')).not.toBeInTheDocument();
     });
 
     it('renders footer snippet', () => {
@@ -148,9 +151,7 @@ describe('SettingsCard', () => {
     it('does not render header section when no title, description, or header provided', () => {
       testFactory.render();
 
-      // Check that header container doesn't exist
-      const headerContainer = screen.getByTestId('settings-card').querySelector('.px-6.py-4');
-      expect(headerContainer).not.toBeInTheDocument();
+      expect(screen.queryByTestId('settings-card-header')).not.toBeInTheDocument();
     });
 
     it('renders header section with only title', () => {
@@ -158,9 +159,10 @@ describe('SettingsCard', () => {
         title: 'Title Only',
       });
 
-      const headerContainer = screen.getByTestId('settings-card').querySelector('.px-6.py-4');
-      expect(headerContainer).toBeInTheDocument();
-      expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Title Only');
+      const header = screen.getByTestId('settings-card-header');
+      const heading = screen.getByRole('heading', { level: 3 });
+      expect(header).toContainElement(heading);
+      expect(heading).toHaveTextContent('Title Only');
     });
 
     it('renders header section with only description', () => {
@@ -168,9 +170,39 @@ describe('SettingsCard', () => {
         description: 'Description Only',
       });
 
-      const headerContainer = screen.getByTestId('settings-card').querySelector('.px-6.py-4');
-      expect(headerContainer).toBeInTheDocument();
-      expect(screen.getByText('Description Only')).toBeInTheDocument();
+      expect(screen.getByTestId('settings-card-header')).toContainElement(
+        screen.getByText('Description Only')
+      );
+    });
+
+    it('renders header section with only the changed badge', () => {
+      testFactory.render({
+        hasChanges: true,
+      });
+
+      expect(screen.getByTestId('settings-card-header')).toContainElement(
+        screen.getByRole('status', { name: 'Settings changed' })
+      );
+    });
+
+    it('renders the icon inside the heading, hidden from assistive technology', () => {
+      testFactory.render({
+        title: 'Test Card',
+        icon: Mic,
+      });
+
+      const heading = screen.getByRole('heading', { level: 3, name: 'Test Card' });
+      const icon = heading.querySelector('svg');
+      expect(icon).toBeInTheDocument();
+      expect(icon).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('renders no icon element when the icon prop is absent', () => {
+      testFactory.render({
+        title: 'Test Card',
+      });
+
+      expect(screen.getByRole('heading', { level: 3 }).querySelector('svg')).toBeNull();
     });
 
     it('does not render body when no children provided', () => {
@@ -219,21 +251,19 @@ describe('SettingsCard', () => {
       });
 
       // Header should be shown
-      expect(screen.getByTestId('settings-card').querySelector('.px-6.py-4')).toBeInTheDocument();
+      expect(screen.getByTestId('settings-card-header')).toBeInTheDocument();
 
       // Update to remove title - explicitly set to undefined to properly remove header
       await rerender({ title: undefined });
 
       // Header should be hidden
-      expect(
-        screen.getByTestId('settings-card').querySelector('.px-6.py-4')
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('settings-card-header')).not.toBeInTheDocument();
 
       // Add description
       await rerender({ description: 'New description' });
 
       // Header should be shown again
-      expect(screen.getByTestId('settings-card').querySelector('.px-6.py-4')).toBeInTheDocument();
+      expect(screen.getByTestId('settings-card-header')).toBeInTheDocument();
     });
 
     it('uses memoized CSS classes', async () => {

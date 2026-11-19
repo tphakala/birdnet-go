@@ -20,6 +20,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import { ArrowLeftRight } from '@lucide/svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ConnectionCheckPanel from '$lib/desktop/features/settings/components/ConnectionCheckPanel.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
@@ -167,6 +168,7 @@
 >
   <SettingsSection
     title={t('settings.security.reverseProxy.title')}
+    icon={ArrowLeftRight}
     description={t('settings.security.reverseProxy.description')}
     {hasChanges}
   >
