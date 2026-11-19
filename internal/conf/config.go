@@ -1350,7 +1350,7 @@ type BirdNETConfig struct {
 	ONNXRuntimePath     string              `yaml:"onnxruntimepath,omitempty" json:"onnxRuntimePath,omitempty"`         // path to ONNX Runtime shared library (required for ONNX models)
 	OpenVINOPath        string              `yaml:"openvinopath,omitempty" json:"openVinoPath,omitempty"`               // path to the OpenVINO C runtime (libopenvino_c.so, or openvino_c.dll on Windows); empty uses the default library name, and on Windows first searches the known install locations
 	Backend             string              `yaml:"backend,omitempty" json:"backend,omitempty"`                         // inference backend preference: "auto" (default), "onnx", or "openvino"
-	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
+	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", "gpu", or a concrete GPU such as "GPU.1" on a host with several GPUs
 	HuggingFaceEndpoint string              `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"` // model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co
 	ModelRegion         string              `yaml:"modelregion,omitempty" json:"modelRegion,omitempty"`                 // regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto"
 
@@ -1371,11 +1371,14 @@ const (
 )
 
 // OpenVINO device preferences for BirdNET.OpenVINODevice. "auto" picks the GPU
-// (Intel iGPU) when present for eligible models. On arm64 the auto backend keeps
+// (Intel iGPU) when present for eligible models. Besides these three keywords
+// the setting accepts a concrete OpenVINO GPU name "GPU.<n>" (see
+// IsOVGPUDeviceName), which selects that adapter by its index on a host with
+// several GPUs; "gpu" keeps meaning OpenVINO's own GPU alias, the first GPU. On arm64 the auto backend keeps
 // models on ONNX Runtime unless birdnet.backend is openvino (or, for BirdNET
 // v2.4, ONNX Runtime is unavailable), and then uses the CPU device on an
 // ARMv8.2+ CPU with native f16 (the precision is per model; see
-// classifier.openVINOPrecisionFor); "cpu" and "gpu" force a device, and "cpu" is
+// classifier.openVINOPrecisionFor); "cpu", "gpu" and "GPU.<n>" force a device, and "cpu" is
 // also an opt-in to the OpenVINO CPU on arm64 under the auto backend (INT8 or
 // unrecognized weights additionally need birdnet.backend openvino). An empty
 // string is treated as "auto".
@@ -1384,6 +1387,20 @@ const (
 	OVDeviceCPU  = "cpu"
 	OVDeviceGPU  = "gpu"
 )
+
+// ovGPUDevicePattern matches a concrete OpenVINO GPU device name: "GPU." and a
+// decimal index, case-sensitive like the names OpenVINO enumerates. It mirrors
+// the indexed form accepted by the inference package's OpenVINOIsGPUDevice,
+// kept as an independent pattern so this foundational config package stays free
+// of an inference dependency; a drift-guard test in the classifier package
+// asserts the two agree.
+var ovGPUDevicePattern = regexp.MustCompile(`^GPU\.\d+$`)
+
+// IsOVGPUDeviceName reports whether s is a concrete OpenVINO GPU device name
+// ("GPU.0", "GPU.12"), the form BirdNET.OpenVINODevice accepts to select one
+// adapter on a host with several GPUs. The bare "GPU" is the OVDeviceGPU keyword
+// ("gpu") in its OpenVINO spelling and is not matched.
+func IsOVGPUDeviceName(s string) bool { return ovGPUDevicePattern.MatchString(s) }
 
 // Model region preferences for BirdNET.ModelRegion. "auto" resolves the regional
 // model from the configured coordinates and falls back to the global model when

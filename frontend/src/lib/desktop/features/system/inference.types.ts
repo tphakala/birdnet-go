@@ -92,11 +92,28 @@ export interface BackendStatus {
   version?: string;
 }
 
+/**
+ * One GPU the OpenVINO device probe enumerated. `id` is the OpenVINO device name
+ * ("GPU" on a single-GPU host, "GPU.0", "GPU.1" with several). With several GPUs
+ * it is the value `birdnet.openVinoDevice` stores to select this adapter; the
+ * lone "GPU" is selected with the keyword "gpu", since "GPU" is not a valid value.
+ */
+export interface OpenVINOGPU {
+  id: string;
+  /** Adapter name (FULL_DEVICE_NAME); absent when the probe could not read it. */
+  name?: string;
+  /** DEVICE_TYPE, "integrated" or "discrete" for Intel GPUs; absent or any other value means unknown. */
+  type?: string;
+}
+
 /** OpenVINO backend status, including the devices it can target. */
 export interface OpenVINOBackendStatus {
   supported: boolean;
   active: boolean;
+  /** Device classes the host can target ("CPU", "GPU"); several GPUs still give one "GPU". */
   devices?: string[];
+  /** Each enumerated GPU; absent without a GPU, before the probe completes, or when it failed. */
+  gpus?: OpenVINOGPU[];
 }
 
 /** Status for each supported inference backend. */
@@ -193,7 +210,7 @@ export interface InferenceModel {
   sources: ModelSource[];
   metricKeys: ModelMetricKeys;
   lastDetection?: InferenceLastDetection;
-  /** Compute device the model's inference runs on ("CPU", "GPU", "NPU", or "Unknown"). */
+  /** Compute device the model's inference runs on ("CPU", "GPU", a concrete "GPU.<n>", "NPU", or "Unknown"). */
   device?: string;
   /** True when the model is currently paused by a schedule (e.g. bat night schedule). */
   paused?: boolean;

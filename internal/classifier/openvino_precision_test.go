@@ -47,6 +47,27 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 			device:  inference.OVDeviceGPU,
 			want:    inference.OVPrecisionF32,
 		},
+		// A concrete GPU name is the same device class: the Arc A380 NaN failure
+		// shows up on whichever index the discrete card has, so the policy must
+		// not compare against the bare "GPU" alias.
+		{
+			name:    "perch v2 on GPU.0 is forced to f32",
+			modelID: RegistryIDPerchV2,
+			device:  "GPU.0",
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "perch v2 on GPU.1 is forced to f32",
+			modelID: RegistryIDPerchV2,
+			device:  "GPU.1",
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "birdnet v2.4 on GPU.1 is forced to f32",
+			modelID: DefaultModelVersion,
+			device:  "GPU.1",
+			want:    inference.OVPrecisionF32,
+		},
 		{
 			name:    "perch v2 on CPU keeps the f16 default",
 			modelID: RegistryIDPerchV2,

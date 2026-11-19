@@ -52,6 +52,8 @@ typedef ov_status_e (*fn_compiled_model_output_by_index)(const ov_compiled_model
 typedef ov_status_e (*fn_const_port_get_shape)(const ov_output_const_port_t*, ov_shape_t*);
 typedef ov_status_e (*fn_core_get_available_devices)(const ov_core_t*, ov_available_devices_t*);
 typedef void        (*fn_available_devices_free)(ov_available_devices_t*);
+typedef ov_status_e (*fn_core_get_property)(const ov_core_t*, const char*, const char*, char**);
+typedef void        (*fn_free)(const char*);
 
 // OVBIND_SYMBOLS lists every OpenVINO C entry point the backend calls, once.
 // Each field is stored as fn_<field> in the table and resolved under the
@@ -87,7 +89,9 @@ typedef void        (*fn_available_devices_free)(ov_available_devices_t*);
     X(compiled_model_output_by_index) \
     X(const_port_get_shape) \
     X(core_get_available_devices) \
-    X(available_devices_free)
+    X(available_devices_free) \
+    X(core_get_property) \
+    X(free)
 
 // ovbind_t is the process-global table of resolved OpenVINO symbols, filled by
 // ovbind_install once Go has resolved every address.
@@ -358,6 +362,20 @@ static void ovbind_free_available_devices(ov_available_devices_t* devices) {
     OVB.available_devices_free(devices);
 }
 
+// ovbind_get_device_property reads the string property key of device into *value.
+// The value is allocated by OpenVINO and must be released with
+// ovbind_release_ov_string, never with C.free.
+static ov_status_e ovbind_get_device_property(const ov_core_t* core, const char* device,
+                                              const char* key, char** value) {
+    return OVB.core_get_property(core, device, key, value);
+}
+
+// ovbind_release_ov_string releases a string returned by an OpenVINO call using
+// OpenVINO's own deallocator (ov_free), which is not the C library free.
+static void ovbind_release_ov_string(const char* value) {
+    OVB.free(value);
+}
+
 static size_t ovbind_devices_count(const ov_available_devices_t* devices) {
     // Guard against a NULL array with a nonzero size. The OpenVINO C API does not
     // promise this combination when the status is OK, but treat it as "no devices"
@@ -608,7 +626,7 @@ func reshapeToStaticBatch1(model *C.ov_model_t, modelPath string) (int, error) {
 	return 0, lastErr("ov_model_reshape_single_input", st, modelPath)
 }
 
-// NewClassifier reads modelPath, compiles it for opts.Device (CPU or GPU) at
+// NewClassifier reads modelPath, compiles it for opts.Device (CPU, GPU or GPU.<n>) at
 // opts.PrecisionHint, creates one infer request, binds a C-owned input tensor
 // sized to the model's input shape, and reads the element count of the selected
 // output port (opts.OutputIndex) from the compiled model so NumClasses reflects
@@ -640,8 +658,8 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	if device == "" {
 		device = DeviceCPU
 	}
-	if device != DeviceCPU && device != DeviceGPU {
-		return nil, errors.Newf("openvino: unsupported device %q (want %q or %q)", device, DeviceCPU, DeviceGPU).
+	if device != DeviceCPU && !IsGPUDevice(device) {
+		return nil, errors.Newf("openvino: unsupported device %q (want %q, %q or %q<n>)", device, DeviceCPU, DeviceGPU, DeviceGPU+".").
 			Category(errors.CategoryModelInit).Build()
 	}
 	if opts.OutputIndex < 0 {
@@ -870,4 +888,40 @@ func AvailableDevices() ([]string, error) {
 		devices = append(devices, C.GoString(cName))
 	}
 	return devices, nil
+}
+
+// DeviceProperty reads the string property key (for example "FULL_DEVICE_NAME")
+// of the named device from the loaded core. A device that does not support the
+// property returns an error, which callers treat as "unknown". InitOV must have
+// succeeded. Like AvailableDevices it queries the vendor driver stack, so it is
+// meant for the probe child only, never for an in-process planning path (issue
+// #4236).
+func DeviceProperty(device, key string) (string, error) {
+	// Pin to one OS thread so the query and any ov_get_last_err_msg fetch
+	// (C thread-local storage) run on the same thread.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Hold ovMu for the whole core-using section so a concurrent DestroyOV cannot
+	// free ovCore mid-query.
+	ovMu.Lock()
+	defer ovMu.Unlock()
+	if !ovLoaded || ovCore == nil {
+		return "", ErrOpenVINOUnavailable
+	}
+
+	cDevice := C.CString(device)
+	defer C.free(unsafe.Pointer(cDevice))
+	cKey := C.CString(key)
+	defer C.free(unsafe.Pointer(cKey))
+
+	var value *C.char
+	if st := C.ovbind_get_device_property(ovCore, cDevice, cKey, &value); !ovOK(st) {
+		return "", lastErr("ov_core_get_property", st)
+	}
+	if value == nil {
+		return "", nil
+	}
+	defer C.ovbind_release_ov_string(value)
+	return C.GoString(value), nil
 }

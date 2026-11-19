@@ -20,6 +20,11 @@ func AvailableDevices() ([]string, error) {
 	return nil, ErrOpenVINOUnavailable
 }
 
+// DeviceProperty always fails without the openvino build tag.
+func DeviceProperty(_, _ string) (string, error) {
+	return "", ErrOpenVINOUnavailable
+}
+
 // InitOV always fails without the openvino build tag.
 func InitOV(_ string) error { return ErrOpenVINOUnavailable }
 

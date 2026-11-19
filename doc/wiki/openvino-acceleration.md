@@ -34,16 +34,17 @@ OpenVINO is applied per model, only where it is known to be correct. Everything 
 
 Two settings control OpenVINO. Both default to `auto`, which is almost always the right choice.
 
-| Setting                  | Values                               | Meaning                                                                                                                                                                                                                                                    |
-| ------------------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `birdnet.backend`        | `auto` (default), `onnx`, `openvino` | `auto` tries OpenVINO where eligible (the Intel GPU; on arm64 with the default device, only when ONNX Runtime is unavailable) and falls back to ORT. `openvino` tries OpenVINO where eligible, including the arm64 CPU. `onnx` disables OpenVINO entirely. |
-| `birdnet.openvinodevice` | `auto` (default), `cpu`, `gpu`       | Which OpenVINO device to target.                                                                                                                                                                                                                           |
+| Setting                  | Values                                    | Meaning                                                                                                                                                                                                                                                    |
+| ------------------------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `birdnet.backend`        | `auto` (default), `onnx`, `openvino`      | `auto` tries OpenVINO where eligible (the Intel GPU; on arm64 with the default device, only when ONNX Runtime is unavailable) and falls back to ORT. `openvino` tries OpenVINO where eligible, including the arm64 CPU. `onnx` disables OpenVINO entirely. |
+| `birdnet.openvinodevice` | `auto` (default), `cpu`, `gpu`, `GPU.<n>` | Which OpenVINO device to target. `GPU.<n>` selects one GPU by its index, for hosts with more than one.                                                                                                                                                     |
 
 Device resolution:
 
-- **`gpu`** - use an Intel GPU (iGPU/dGPU via the Intel GPU plugin). Requires the OpenCL/compute driver and `/dev/dri`. If no GPU is available, OpenVINO is declined and inference falls back to ORT.
+- **`gpu`** - use an Intel GPU (iGPU/dGPU via the Intel GPU plugin). Requires the OpenCL/compute driver and `/dev/dri`. On a host with several GPUs this is OpenVINO's own `GPU` alias, the first one (`GPU.0`). If no GPU is available, OpenVINO is declined and inference falls back to ORT.
+- **`GPU.<n>`** (for example `GPU.1`) - use that exact GPU. The Analysis settings page lists each detected GPU by name, and the same list is in `backends.openvino.gpus` of the inference status API. The index is OpenVINO's enumeration order, so it can change when hardware changes. A value that no detected GPU matches (for example `GPU.1` after the second GPU was removed) is not replaced by another device: OpenVINO is declined, a warning names the configured device and the GPUs found, and inference falls back to ORT until you choose another device.
 - **`cpu`** - use the OpenVINO CPU device. It is supported only on ARMv8.2+/A76 (native f16); on a 4 GB Pi 5 it was no faster than ORT in measurements and used more memory. On amd64 an explicit `cpu` is allowed (for benchmarking) but is not selected by `auto`, because the x86 CPU path has no f16 advantage over ORT. Setting `cpu` explicitly also opts an arm64 host into the OpenVINO CPU under `birdnet.backend: auto` for models with eligible weights (INT8 or unrecognized weights additionally need `birdnet.backend: openvino`).
-- **`auto`** (default) - prefer the GPU when one is available, otherwise use the CPU device when it is supported (A76) and you opted in with `birdnet.backend: openvino`, or ONNX Runtime is missing (BirdNET v2.4 only); otherwise fall back to ORT. On arm64 with `birdnet.backend: auto`, this setting does not load OpenVINO while ONNX Runtime is usable.
+- **`auto`** (default) - prefer the GPU (the first one, as with `gpu`) when one is available, otherwise use the CPU device when it is supported (A76) and you opted in with `birdnet.backend: openvino`, or ONNX Runtime is missing (BirdNET v2.4 only); otherwise fall back to ORT. On arm64 with `birdnet.backend: auto`, this setting does not load OpenVINO while ONNX Runtime is usable.
 
 In practice:
 
@@ -207,9 +208,10 @@ curl -s http://localhost:8080/api/v2/system/inference | jq '.backends.openvino, 
 ```
 
 - `backends.openvino.supported: true` means the binary has the OpenVINO backend built in.
-- `backends.openvino.devices` lists the OpenVINO devices detected. `["CPU","GPU"]` means the iGPU is visible; if `GPU` is missing, the driver/device passthrough is not working. On arm64 with `birdnet.backend: auto`, `birdnet.openvinodevice: auto` and ONNX Runtime installed, OpenVINO is not loaded, so this list is empty. With `birdnet.openvinodevice: gpu` OpenVINO is loaded to probe the GPU, and once loaded it stays loaded until the service restarts, so do not infer the library state from these settings alone.
+- `backends.openvino.devices` lists the OpenVINO devices detected. `["CPU","GPU"]` means a GPU is visible (a host with several still lists the single class `GPU` here; see `gpus` below); if `GPU` is missing, the driver/device passthrough is not working. On arm64 with `birdnet.backend: auto`, `birdnet.openvinodevice: auto` and ONNX Runtime installed, OpenVINO is not loaded, so this list is empty. With `birdnet.openvinodevice: gpu` OpenVINO is loaded to probe the GPU, and once loaded it stays loaded until the service restarts, so do not infer the library state from these settings alone.
 - `backends.openvino.active: true` means at least one model is currently running on OpenVINO.
-- Each model reports a live `device` (`CPU` or `GPU`) and `backend` (`OpenVINO` when running there).
+- `backends.openvino.gpus` lists each GPU the probe found with its `id` (`GPU` on a single-GPU host, `GPU.0`, `GPU.1` and so on with several), adapter `name` and `type` (`integrated` or `discrete`). With several GPUs, put the `id` in `birdnet.openvinodevice`; a lone `GPU` is selected with `gpu`.
+- Each model reports a live `device` (`CPU`, `GPU` or a concrete `GPU.<n>`) and `backend` (`OpenVINO` when running there). The startup log line for each model also carries `device_name` with the adapter name.
 
 ### 2. The Web UI
 
@@ -229,6 +231,20 @@ sudo intel_gpu_top
 ```
 
 With Perch v2 or BirdNET v2.4 on the iGPU you will see the **Render/3D** (or **Compute**) engine ramp up and the GPU frequency rise during detections.
+
+## Choosing a GPU
+
+With one GPU there is nothing to choose: `auto` or `gpu` uses it. With several (typically an integrated and a discrete Intel GPU), BirdNET-Go does not rank them. `auto` and `gpu` use the first one, and `birdnet.openvinodevice: GPU.<n>` runs on a specific one. The right pick depends on the hardware, so compare before settling: switch the device, let the models reload, and read the per-model latency on the **System** page.
+
+As one data point, a desktop with an i5-12400 (UHD Graphics 730, `GPU.0`) and an Arc A750 (`GPU.1`), OpenVINO 2026.3, one inference per second per model at f32:
+
+| Model         | OpenVINO CPU | `GPU.0` (iGPU) | `GPU.1` (Arc A750) |
+| ------------- | -----------: | -------------: | -----------------: |
+| BirdNET v2.4  |      11.3 ms |        45.4 ms |             7.4 ms |
+| Perch v2      |      39.2 ms |       134.2 ms |            18.3 ms |
+| BirdNET+ v3.0 |      46.2 ms |       234.0 ms |            50.4 ms |
+
+Here the discrete card was the fastest GPU by a wide margin, and the small iGPU was slower than the CPU for every model. Another host, such as one with a stronger integrated GPU, can rank differently.
 
 ## Performance Expectations
 

@@ -68,11 +68,13 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 			fmt.Sprintf("BirdNET backend '%s' is not recognised; must be 'auto', 'onnx', or 'openvino' - will use 'auto'", cfg.Backend))
 	}
 
-	// OpenVINODevice must be one of the known device strings when non-empty.
-	// Unknown values fall back safely to auto, so this is a warning, not an error.
-	if cfg.OpenVINODevice != "" && cfg.OpenVINODevice != OVDeviceAuto && cfg.OpenVINODevice != OVDeviceCPU && cfg.OpenVINODevice != OVDeviceGPU {
+	// OpenVINODevice must be one of the known device strings or a concrete GPU
+	// name ("GPU.<n>") when non-empty. Unknown values fall back safely to auto,
+	// so this is a warning, not an error.
+	if cfg.OpenVINODevice != "" && cfg.OpenVINODevice != OVDeviceAuto && cfg.OpenVINODevice != OVDeviceCPU &&
+		cfg.OpenVINODevice != OVDeviceGPU && !IsOVGPUDeviceName(cfg.OpenVINODevice) {
 		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("BirdNET openvinodevice '%s' is not recognised; must be 'auto', 'cpu', or 'gpu' - will use 'auto'", cfg.OpenVINODevice))
+			fmt.Sprintf("BirdNET openvinodevice '%s' is not recognised; must be 'auto', 'cpu', 'gpu', or a GPU name such as 'GPU.1' - will use 'auto'", cfg.OpenVINODevice))
 	}
 
 	// ModelRegion must be "auto", "global", or a well-formed region slug when

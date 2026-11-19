@@ -22,7 +22,8 @@ const PrecisionF32 = "f32"
 const (
 	// DeviceCPU is the OpenVINO CPU device. ARMv8.2 f16 acceleration runs here.
 	DeviceCPU = "CPU"
-	// DeviceGPU is the OpenVINO GPU device (Intel iGPU via intel_gpu_plugin). It
+	// DeviceGPU is OpenVINO's alias for the first GPU (Intel GPUs via
+	// intel_gpu_plugin; a host with several GPUs also enumerates "GPU.<n>"). It
 	// supports f16 natively and offloads inference from the CPU cores.
 	DeviceGPU = "GPU"
 )
@@ -77,8 +78,9 @@ type Options struct {
 	// Threads sets INFERENCE_NUM_THREADS (CPU device only; ignored for GPU).
 	// 0 lets OpenVINO auto-tune.
 	Threads int
-	// Device is the OpenVINO device to compile for: DeviceCPU (default) or
-	// DeviceGPU. An empty string is treated as DeviceCPU.
+	// Device is the OpenVINO device to compile for: DeviceCPU (default), DeviceGPU
+	// (OpenVINO's alias for the first GPU) or a concrete "GPU.<n>" name as
+	// enumerated by the probe. An empty string is treated as DeviceCPU.
 	Device string
 	// OutputIndex is the index of the logits output port to read. 0 (default)
 	// for single-output models like BirdNET v2.4; 3 for the Perch v2 multi-output

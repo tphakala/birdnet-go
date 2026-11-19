@@ -504,7 +504,7 @@
         },
         "openvinodevice": {
           "type": "string",
-          "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", or \"gpu\""
+          "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", \"gpu\", or a concrete GPU such as \"GPU.1\" on a host with several GPUs"
         },
         "huggingfaceendpoint": {
           "type": "string",

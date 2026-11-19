@@ -38,7 +38,8 @@ var (
 var ovActiveClassifiers atomic.Int64
 
 // OpenVINO device names accepted by OpenVINOClassifierOptions.Device. They are
-// the device strings the OpenVINO backend expects ("CPU", "GPU").
+// the device strings the OpenVINO backend expects ("CPU", "GPU"); a concrete
+// "GPU.<n>" name (see OpenVINOIsGPUDevice) is accepted as well.
 const (
 	OVDeviceCPU = ov.DeviceCPU
 	OVDeviceGPU = ov.DeviceGPU
@@ -57,7 +58,7 @@ type OpenVINOClassifierOptions struct {
 	Labels        []string // species labels; required (validated against model output)
 	Threads       int      // INFERENCE_NUM_THREADS; 0 = OpenVINO auto-tune (CPU only)
 	PrecisionHint string   // INFERENCE_PRECISION_HINT; "" defaults to f16
-	Device        string   // ov.DeviceCPU (default) or ov.DeviceGPU
+	Device        string   // ov.DeviceCPU (default), ov.DeviceGPU or a concrete "GPU.<n>"
 	OutputIndex   int      // logits output port index; 0 default, 3 for Perch v2
 }
 
@@ -199,7 +200,7 @@ func (c *openvinoClassifier) Close() {
 type OpenVINOEmbeddingExtractorOptions struct {
 	Threads       int    // INFERENCE_NUM_THREADS; 0 = OpenVINO auto-tune (CPU only)
 	PrecisionHint string // INFERENCE_PRECISION_HINT; "" defaults to f16
-	Device        string // ov.DeviceCPU (default) or ov.DeviceGPU
+	Device        string // ov.DeviceCPU (default), ov.DeviceGPU or a concrete "GPU.<n>"
 	OutputIndex   int    // embedding output port index (e.g. 1 for birdnet-v24-embeddings)
 	ExpectedDim   int    // required embedding element count; validated against the model
 }
