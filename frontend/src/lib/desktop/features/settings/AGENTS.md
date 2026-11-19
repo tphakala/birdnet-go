@@ -162,8 +162,8 @@ Label a subgroup of fields inside a card with `SettingsGroupLabel`
 Choose the element with `as` so the heading level fits the page outline (default
 `h4`; `div` or `span` when the label is not a heading) and pass `divided` for a
 hairline above it. A `SettingsGroup` shows its title this way with
-`titleVariant="group"`, and a `heading` snippet (a disclosure button) takes
-`SETTINGS_GROUP_LABEL_CLASSES` from the same file. The label of a single control
+`titleVariant="group"`, and a disclosure button in its `heading` snippet takes
+`SETTINGS_GROUP_DISCLOSURE_CLASSES` from the same file. The label of a single control
 stays a normal field label.
 
 ## Types

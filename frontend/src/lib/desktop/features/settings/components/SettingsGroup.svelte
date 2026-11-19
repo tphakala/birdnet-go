@@ -15,8 +15,8 @@
   - heading: Replaces the title text (for example a disclosure button)
   - class: Additional CSS classes (default spacing: space-y-3)
   - titleVariant: 'group' shows a heading title as a group label (default: 'field').
-    A labelFor title and a heading snippet are not affected; style snippet content
-    with SETTINGS_GROUP_LABEL_CLASSES
+    A labelFor title and a heading snippet are not affected; a disclosure button in
+    the snippet takes SETTINGS_GROUP_DISCLOSURE_CLASSES from SettingsGroupLabel
   - children: The controls
 
   @component

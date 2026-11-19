@@ -18,10 +18,13 @@
 <script lang="ts" module>
   /**
    * Typography of a settings group label. Exported for elements the component
-   * cannot render, such as a disclosure button in a SettingsGroup heading snippet.
+   * cannot render, such as the title of SettingsGroup with titleVariant 'group'.
    */
   export const SETTINGS_GROUP_LABEL_CLASSES =
     'text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/70';
+
+  /** A disclosure button that names a group: the label look plus its icon row and hover. */
+  export const SETTINGS_GROUP_DISCLOSURE_CLASSES = `${SETTINGS_GROUP_LABEL_CLASSES} flex items-center gap-2 rounded transition-colors hover:text-[var(--text-primary)]`;
 
   /** Elements a settings group label can render as. */
   export type SettingsGroupLabelElement = 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'div' | 'span';

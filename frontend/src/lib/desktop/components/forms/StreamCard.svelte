@@ -69,7 +69,7 @@
   import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
   import SourceCard from '$lib/desktop/features/settings/components/SourceCard.svelte';
   import SettingsGroup from '$lib/desktop/features/settings/components/SettingsGroup.svelte';
-  import { SETTINGS_GROUP_LABEL_CLASSES } from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
+  import { SETTINGS_GROUP_DISCLOSURE_CLASSES } from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import CommitTextField from '$lib/desktop/features/settings/components/CommitTextField.svelte';
   import ScopedApplyGroup from '$lib/desktop/features/settings/components/ScopedApplyGroup.svelte';
   import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
@@ -324,10 +324,6 @@
   let showTransport = $derived(streamHasTransport(stream.type) && Boolean(stream.transport));
 
   const BADGE_CLASS = 'px-2 py-0.5 rounded text-xs font-semibold';
-  const DISCLOSURE_LABEL_CLASS = cn(
-    SETTINGS_GROUP_LABEL_CLASSES,
-    'flex items-center gap-2 rounded transition-colors hover:text-[var(--text-primary)]'
-  );
   const INFO_BADGE_CLASS = 'bg-[var(--color-info)]/15 text-[var(--text-info)]';
   const NEUTRAL_BADGE_CLASS = 'bg-[var(--color-base-300)] text-[var(--color-base-content)]';
 
@@ -786,7 +782,7 @@
       <button
         id={equalizerHeadingId}
         type="button"
-        class={DISCLOSURE_LABEL_CLASS}
+        class={SETTINGS_GROUP_DISCLOSURE_CLASSES}
         aria-expanded={showEqualizer}
         onclick={() => (showEqualizer = !showEqualizer)}
       >
@@ -846,7 +842,7 @@
     {#snippet heading()}
       <button
         type="button"
-        class={DISCLOSURE_LABEL_CLASS}
+        class={SETTINGS_GROUP_DISCLOSURE_CLASSES}
         aria-expanded={showDiagnostics}
         aria-controls={diagnosticsId}
         onclick={() => (showDiagnostics = !showDiagnostics)}
