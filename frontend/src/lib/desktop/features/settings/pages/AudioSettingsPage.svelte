@@ -850,7 +850,7 @@
             value={exportDenoise.strength}
             className={cn(
               'transition-opacity duration-200',
-              !exportDenoise.enabled && 'opacity-50'
+              settings.audio.export.enabled && !exportDenoise.enabled && 'opacity-50'
             )}
             label={t('settings.audio.exportDenoise.strengthLabel')}
             helpText={settings.audio.export.enabled && !exportDenoise.enabled
@@ -973,7 +973,8 @@
             </span>
             <div
               class="space-y-4 transition-opacity duration-200"
-              class:opacity-50={!settings.audio.export.normalization.enabled}
+              class:opacity-50={settings.audio.export.enabled &&
+                !settings.audio.export.normalization.enabled}
             >
               <div class="settings-form-grid settings-form-grid-cols-2">
                 <!-- Target LUFS -->

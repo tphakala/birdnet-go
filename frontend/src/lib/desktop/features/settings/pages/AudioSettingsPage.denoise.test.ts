@@ -15,6 +15,16 @@ const STRENGTH_LABEL = 'settings.audio.exportDenoise.strengthLabel';
 const STRENGTH_HELP = 'settings.audio.exportDenoise.strengthHelp';
 const STRENGTH_DISABLED_HELP = 'settings.audio.exportDenoise.strengthDisabledHelp';
 const REQUIRES_RECORDING = 'settings.audio.exportDenoise.requiresRecording';
+const TARGET_LUFS_LABEL = 'settings.audio.audioNormalization.targetLUFSLabel';
+
+/** Number of ancestors of `el` that fade it with `opacity-50`. */
+function dimmedAncestors(el: Element): number {
+  let count = 0;
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    if (node.classList.contains('opacity-50')) count++;
+  }
+  return count;
+}
 
 // Text of every element an aria-describedby attribute points at.
 function describedText(control: HTMLElement): string {
@@ -63,7 +73,12 @@ vi.mock('$lib/stores/settings', async () => {
   };
 });
 
-type ExportOverrides = { enabled?: boolean; type?: string; denoise?: unknown };
+type ExportOverrides = {
+  enabled?: boolean;
+  type?: string;
+  denoise?: unknown;
+  normalization?: unknown;
+};
 
 async function renderProcessingTab(exportOverrides: ExportOverrides) {
   // The module is mocked above with writable stores; the real types are readable.
@@ -229,14 +244,43 @@ describe('AudioSettingsPage clip denoise', () => {
     ['denoise off', { denoise: { enabled: false, strength: 'light-medium' } }, true],
     ['denoise on', { denoise: { enabled: true, strength: 'light-medium' } }, false],
     ['recording off', { enabled: false, denoise: { enabled: true, strength: 'light' } }, true],
+    [
+      'recording and denoise off',
+      { enabled: false, denoise: { enabled: false, strength: 'light' } },
+      true,
+    ],
   ])('strength dropdown is disabled and dimmed with %s', async (_name, overrides, disabled) => {
     await renderProcessingTab(overrides);
 
     const control = await screen.findByLabelText(STRENGTH_LABEL);
     expect((control as HTMLButtonElement).disabled).toBe(disabled);
-    // The whole field fades, label included, not only the trigger button.
+    // The whole field fades once, label included, not only the trigger button:
+    // a fade of its own must not stack on the recording-off fade around it.
     const label = document.getElementById(`${control.id}-label`);
     if (!label) throw new Error('strength dropdown has no label element');
-    expect(label.closest('.opacity-50') !== null).toBe(disabled);
+    expect(dimmedAncestors(label)).toBe(disabled ? 1 : 0);
   });
+
+  it.each([
+    ['normalization off', { normalization: { enabled: false } }, true],
+    ['normalization on', { normalization: { enabled: true } }, false],
+    ['recording off', { enabled: false, normalization: { enabled: true } }, true],
+    [
+      'recording and normalization off',
+      { enabled: false, normalization: { enabled: false } },
+      true,
+    ],
+  ])(
+    'normalization fields fade once when disabled, with %s',
+    async (_name, overrides, disabled) => {
+      const { normalization, ...rest } = overrides;
+      await renderProcessingTab({
+        ...rest,
+        normalization: { targetLUFS: -23, loudnessRange: 7, truePeak: -2, ...normalization },
+      });
+
+      const input = await screen.findByLabelText(TARGET_LUFS_LABEL);
+      expect(dimmedAncestors(input)).toBe(disabled ? 1 : 0);
+    }
+  );
 });
