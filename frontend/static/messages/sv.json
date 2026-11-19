@@ -6169,10 +6169,19 @@
       "device": {
         "label": "OpenVINO-enhet",
         "helpText": "Används för modeller som körs på OpenVINO.",
+        "helpTextMultipleGpus": "Används för modeller som körs på OpenVINO. Den här enheten har mer än en GPU, så välj den som modellerna ska köras på.",
+        "notDetectedHint": "Den valda GPU:n hittades inte. Modellerna körs på ONNX Runtime tills en annan enhet väljs.",
         "options": {
           "auto": "Automatiskt",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "OpenVINO-standard: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (hittades inte)"
+        },
+        "gpuTypes": {
+          "integrated": "integrerad",
+          "discrete": "dedikerad"
         }
       },
       "reloadNote": "Byte av backend eller enhet laddar om modellerna, så detekteringen pausar i några sekunder.",

@@ -37,10 +37,18 @@ func TestValidateOpenVINODevice(t *testing.T) {
 		return false
 	}
 
-	for _, dev := range []string{"", OVDeviceAuto, OVDeviceCPU, OVDeviceGPU} {
+	for _, dev := range []string{"", OVDeviceAuto, OVDeviceCPU, OVDeviceGPU, "GPU.0", "GPU.1", "GPU.12"} {
 		cfg := &BirdNETConfig{OpenVINODevice: dev}
 		assert.Falsef(t, hasDeviceWarning(ValidateBirdNETSettings(cfg)),
 			"device %q must be accepted without a warning", dev)
+	}
+
+	// Near misses of the concrete GPU name are unknown values: the planner would
+	// treat them as "auto", so they must warn instead of passing silently.
+	for _, dev := range []string{"GPU.", "GPU.x", "GPU.1x", "GPU.-1", "gpu.1", "GPU1", "NPU"} {
+		cfg := &BirdNETConfig{OpenVINODevice: dev}
+		assert.Truef(t, hasDeviceWarning(ValidateBirdNETSettings(cfg)),
+			"device %q must warn", dev)
 	}
 
 	cfg := &BirdNETConfig{OpenVINODevice: "tpu"}

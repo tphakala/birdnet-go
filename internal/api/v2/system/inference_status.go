@@ -189,9 +189,43 @@ type BackendStatus struct {
 
 // OpenVINOBackendStatus extends BackendStatus with OpenVINO-specific device info.
 type OpenVINOBackendStatus struct {
-	Supported bool     `json:"supported"`
-	Active    bool     `json:"active"`
-	Devices   []string `json:"devices,omitempty"`
+	Supported bool `json:"supported"`
+	Active    bool `json:"active"`
+	// Devices lists the device classes the host can target ("CPU", "GPU"); a host
+	// with several GPUs still reports the single class "GPU" here. The concrete
+	// adapters are in GPUs.
+	Devices []string `json:"devices,omitempty"`
+	// GPUs lists each GPU the last device probe enumerated, so a client can offer
+	// a concrete adapter. Empty (omitted) on a host without a GPU, before the
+	// probe has completed, and when it failed.
+	GPUs []OpenVINOGPUStatus `json:"gpus,omitempty"`
+}
+
+// OpenVINOGPUStatus describes one GPU the OpenVINO device probe enumerated.
+type OpenVINOGPUStatus struct {
+	// ID is the OpenVINO device name ("GPU" on a single-GPU host, "GPU.0",
+	// "GPU.1" with several). With several GPUs it is the value
+	// birdnet.openvinodevice stores to select this adapter; the lone "GPU" is
+	// selected with the keyword "gpu", since "GPU" itself is not a valid value.
+	ID string `json:"id"`
+	// Name is the adapter name (OpenVINO FULL_DEVICE_NAME), empty when the probe
+	// could not read it.
+	Name string `json:"name,omitempty"`
+	// Type is the OpenVINO DEVICE_TYPE, "integrated" or "discrete" for Intel
+	// GPUs; any other or empty value means the type is unknown.
+	Type string `json:"type,omitempty"`
+}
+
+// openVINOGPUStatuses maps the probe's GPU devices to the API shape.
+func openVINOGPUStatuses(devices []inference.OpenVINODevice) []OpenVINOGPUStatus {
+	if len(devices) == 0 {
+		return nil
+	}
+	gpus := make([]OpenVINOGPUStatus, 0, len(devices))
+	for _, d := range devices {
+		gpus = append(gpus, OpenVINOGPUStatus{ID: d.Name, Name: d.FullName, Type: d.Type})
+	}
+	return gpus
 }
 
 // InferenceModelStatus describes one loaded model and its runtime statistics.
@@ -204,8 +238,9 @@ type InferenceModelStatus struct {
 	Quantization     string `json:"quantization,omitempty"`
 	IsStock          bool   `json:"isStock"`
 	// Device is the compute device (execution provider) this model's inference
-	// runs on, resolved from the live runtime binding ("CPU", "GPU", or "Unknown"
-	// when the model is not loaded). Never inferred from the backend string.
+	// runs on, resolved from the live runtime binding ("CPU", "GPU", a concrete
+	// "GPU.<n>" when the user selected one, or "Unknown" when the model is not
+	// loaded). Never inferred from the backend string.
 	Device string `json:"device"`
 	// Paused is true when the model is currently prevented from running inference
 	// by a schedule (e.g. the bat model outside its nighttime window).
@@ -538,6 +573,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 				resp.Backends.OpenVINO.Devices = append(resp.Backends.OpenVINO.Devices, d)
 			}
 		}
+		resp.Backends.OpenVINO.GPUs = openVINOGPUStatuses(inference.OpenVINOGPUs())
 	}
 
 	// Hardware. The backends probed just above are the authoritative ones: they

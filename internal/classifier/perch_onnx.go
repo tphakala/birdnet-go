@@ -35,7 +35,7 @@ type Perch struct {
 	info       ModelInfo
 	mu         sync.Mutex
 	// device is the compute device the classifier bound to: the OpenVINO device
-	// (CPU/GPU) when the OV path succeeds, otherwise deviceCPU for the ONNX
+	// (CPU, GPU or GPU.<n>) when the OV path succeeds, otherwise deviceCPU for the ONNX
 	// Runtime CPU EP. Set once at construction; reported via RuntimeInfo().
 	device string
 	// backend is the live execution backend (BackendOpenVINO on the OV path, else
@@ -71,7 +71,7 @@ type PerchConfig struct {
 	// (ARM A76 f16 CPU or Intel iGPU); any failure falls back to ORT.
 	Backend        string // BirdNET.Backend ("auto"/"onnx"/"openvino")
 	OpenVINOPath   string // BirdNET.OpenVINOPath (libopenvino_c location)
-	OpenVINODevice string // BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu")
+	OpenVINODevice string // BirdNET.OpenVINODevice ("auto", "cpu", "gpu" or "GPU.<n>")
 }
 
 // NewPerch creates a new Perch v2 model instance.
@@ -200,7 +200,7 @@ func logPerchCalibration(log logger.Logger, c perchCalibrationLookup, labelCount
 // tryPerchOpenVINO attempts to build an OpenVINO classifier for Perch v2. It
 // returns (classifier, device, precisionHint, true) on success or
 // (nil, "", "", false) to fall back to ORT, where device is the concrete OpenVINO
-// device the classifier bound to (inference.OVDeviceCPU/OVDeviceGPU) and
+// device the classifier bound to (CPU, GPU or a concrete GPU.<n>) and
 // precisionHint is the INFERENCE_PRECISION_HINT the model was compiled with
 // ("" = backend f16 default). Any failure (ineligible model, gate
 // denied, init/compile/validation error) is logged and swallowed: OpenVINO must
@@ -242,11 +242,10 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.C
 		return nil, "", "", false
 	}
 
-	log.Info("Perch v2 model using OpenVINO backend",
-		logger.String("device", plan.device),
+	log.Info("Perch v2 model using OpenVINO backend", append(openVINODeviceFields(plan),
 		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
-		logger.String("init_time", time.Since(start).String()))
+		logger.String("init_time", time.Since(start).String()))...)
 	return classifier, plan.device, plan.precision, true
 }
 

@@ -94,7 +94,7 @@ export interface BirdNetSettings {
   threads: number;
   /** Inference backend preference: 'auto' (default), 'onnx' or 'openvino'. '' and absent mean 'auto'. */
   backend?: string;
-  /** OpenVINO device preference: 'auto' (default), 'cpu' or 'gpu'. '' and absent mean 'auto'. */
+  /** OpenVINO device preference: 'auto' (default), 'cpu', 'gpu' or a concrete 'GPU.<n>'. '' and absent mean 'auto'. */
   openVinoDevice?: string;
   latitude: number;
   longitude: number;

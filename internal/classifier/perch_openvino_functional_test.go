@@ -19,7 +19,7 @@ const perchInputSampleCount = 160000
 // Perch v2 classifier on the OpenVINO backend through the same tryPerchOpenVINO
 // path NewPerch uses, then runs one inference. Set OV_TEST_PERCH_MODEL (a
 // perch_v2_no_dft ONNX) and OV_TEST_PERCH_LABELS to run it; OV_TEST_DEVICE picks
-// "auto" (default), "cpu", or "gpu", and OV_TEST_LIB optionally points at
+// "auto" (default), "cpu", "gpu", or a concrete "GPU.<n>", and OV_TEST_LIB optionally points at
 // libopenvino_c. It is skipped otherwise so normal CI stays green.
 //
 // It proves the end-to-end Perch OV path: the no_dft gate, device selection, the
@@ -55,7 +55,7 @@ func TestPerchOpenVINO_Functional(t *testing.T) {
 	c, boundDevice, precisionHint, ok := tryPerchOpenVINO(&cfg, labels)
 	require.True(t, ok, "Perch OpenVINO classifier must be created for the no_dft model")
 	require.NotNil(t, c)
-	if boundDevice == inference.OVDeviceGPU {
+	if inference.OpenVINOIsGPUDevice(boundDevice) {
 		assert.Equal(t, inference.OVPrecisionF32, precisionHint,
 			"Perch on the GPU must compile at f32 (f16 returns NaN logits on Intel Arc)")
 	}

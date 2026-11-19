@@ -6169,10 +6169,19 @@
       "device": {
         "label": "Zařízení OpenVINO",
         "helpText": "Používá se pro modely běžící na OpenVINO.",
+        "helpTextMultipleGpus": "Používá se pro modely běžící na OpenVINO. Toto zařízení má více než jednu GPU, vyberte tu, na které mají modely běžet.",
+        "notDetectedHint": "Vybraná GPU nebyla nalezena. Modely běží na ONNX Runtime, dokud nevyberete jiné zařízení.",
         "options": {
           "auto": "Automaticky",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "Výchozí OpenVINO: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (nenalezeno)"
+        },
+        "gpuTypes": {
+          "integrated": "integrovaná",
+          "discrete": "dedikovaná"
         }
       },
       "reloadNote": "Změna backendu nebo zařízení znovu načte modely, takže se detekce na několik sekund pozastaví.",

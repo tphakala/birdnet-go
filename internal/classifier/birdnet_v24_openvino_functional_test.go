@@ -52,7 +52,7 @@ const (
 //   - OV_V24_WINDOWS: raw little-endian float32 PCM, a whole number of 144000-sample
 //     (48 kHz, 3 s) windows. Use low-frequency-heavy windows; clean ones pass at f16.
 //   - OV_V24_LABELS:  optional label file (embedded English labels when unset).
-//   - OV_V24_DEVICE:  "", "cpu" or "gpu" (BirdNET.OpenVINODevice; "" = auto, which
+//   - OV_V24_DEVICE:  "", "cpu", "gpu" or a concrete "GPU.<n>" (BirdNET.OpenVINODevice; "" = auto, which
 //     probes for a GPU through openvino_probe_child_test.go).
 //   - OV_V24_LIB / OV_V24_ORT_LIB: optional libopenvino_c / libonnxruntime paths.
 //   - OV_V24_MAX_CONF_DIFF: allowed confidence change (default 0.02).

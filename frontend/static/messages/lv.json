@@ -6169,10 +6169,19 @@
       "device": {
         "label": "OpenVINO ierīce",
         "helpText": "Izmanto modeļiem, kas darbojas ar OpenVINO.",
+        "helpTextMultipleGpus": "Izmanto modeļiem, kas darbojas ar OpenVINO. Šajā ierīcē ir vairāk nekā viens GPU, tāpēc izvēlieties, uz kura darbināt modeļus.",
+        "notDetectedHint": "Izvēlētais GPU nav atrasts. Modeļi darbojas ar ONNX Runtime, līdz tiek izvēlēta cita ierīce.",
         "options": {
           "auto": "Automātiski",
           "cpu": "CPU",
-          "gpu": "GPU"
+          "gpu": "GPU",
+          "gpuDefault": "OpenVINO noklusējums: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (nav atrasts)"
+        },
+        "gpuTypes": {
+          "integrated": "integrēts",
+          "discrete": "atsevišķs"
         }
       },
       "reloadNote": "Aizmugursistēmas vai ierīces maiņa pārlādē modeļus, tāpēc noteikšana tiek apturēta uz dažām sekundēm.",

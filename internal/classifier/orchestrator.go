@@ -646,7 +646,7 @@ func (o *Orchestrator) instanceFor(modelID string) ModelInstance {
 // returns the triplet from one consistent snapshot, the status card never
 // observes a mixed-generation triplet when a reload completes mid-read.
 //
-// device is the live execution provider ("CPU"/"GPU"), falling back to
+// device is the live execution provider ("CPU", "GPU" or a concrete "GPU.<n>"), falling back to
 // deviceUnknown when the model is not loaded or its instance has been torn down.
 // backend (BackendTFLite/BackendONNX/BackendOpenVINO) and precision
 // ("INT8"/"FP16"/"FP32") come from the loaded instance, so an ONNX model executed

@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -954,4 +955,32 @@ func TestModelHealthInfo_JSONFieldNames(t *testing.T) {
 	raw, err = json.Marshal(InferenceModelStatus{ID: "m", Health: &ModelHealthInfo{State: modelHealthIdle}})
 	require.NoError(t, err)
 	assert.Contains(t, string(raw), `"health":{"state":"idle"`)
+}
+
+// TestOpenVINOGPUStatuses pins the wire shape of backends.openvino.gpus: the id
+// is the enumerated OpenVINO name, the name and type are the probe's best-effort
+// values, and a host without GPUs omits the field.
+func TestOpenVINOGPUStatuses(t *testing.T) {
+	t.Parallel()
+
+	assert.Nil(t, openVINOGPUStatuses(nil))
+
+	got := openVINOGPUStatuses([]inference.OpenVINODevice{
+		{Name: "GPU.0", Type: "integrated", FullName: "Intel(R) UHD Graphics 730 (iGPU)"},
+		{Name: "GPU.1"},
+	})
+	assert.Equal(t, []OpenVINOGPUStatus{
+		{ID: "GPU.0", Name: "Intel(R) UHD Graphics 730 (iGPU)", Type: "integrated"},
+		{ID: "GPU.1"},
+	}, got)
+
+	raw, err := json.Marshal(OpenVINOBackendStatus{Supported: true, GPUs: got})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"supported":true,"active":false,"gpus":[`+
+		`{"id":"GPU.0","name":"Intel(R) UHD Graphics 730 (iGPU)","type":"integrated"},`+
+		`{"id":"GPU.1"}]}`, string(raw))
+
+	raw, err = json.Marshal(OpenVINOBackendStatus{Supported: true})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"supported":true,"active":false}`, string(raw), "no gpus key without GPUs")
 }
