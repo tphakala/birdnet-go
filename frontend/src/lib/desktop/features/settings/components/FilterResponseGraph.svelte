@@ -686,7 +686,8 @@
     </div>
 
     <!-- One reserved line holds the status and the clipped-peak caption, so the
-         editor below does not shift when the caption appears or goes. -->
+         editor below does not shift when the caption appears or goes, as long as
+         the text fits on one line. -->
     <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
       {#if graphState.status === 'loading' && graphState.previous}
         <span data-testid="eq-graph-updating" aria-hidden="true">

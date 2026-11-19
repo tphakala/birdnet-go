@@ -746,8 +746,8 @@ describe('FilterResponseGraph', () => {
     expect(screen.getByTestId('eq-graph-clipped')).toHaveTextContent(CLIPPED_KEY);
     expect(t).toHaveBeenCalledWith(CLIPPED_KEY, { peak: 80 });
     // The caption shares the reserved status line with the sample rate, so the
-    // editor below does not shift when it appears or goes, and the status
-    // region announces it.
+    // editor below does not shift when it appears or goes (while the text fits
+    // on one line), and the status region announces it.
     const statusLine = screen.getByTestId('eq-graph-clipped').parentElement;
     if (!statusLine) throw new Error('clipped caption has no parent');
     expect(statusLine).toHaveClass('min-h-5');
