@@ -23,6 +23,8 @@ func TestUpdateSpeciesComprehensive(t *testing.T) {
 	// BG-17: InitFromDatabase requires notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -125,6 +127,8 @@ func TestBuildSpeciesStatusLocked(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase requires notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
@@ -342,6 +346,8 @@ func TestConcurrentBatchOperations(t *testing.T) {
 	// BG-17: InitFromDatabase requires notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 
@@ -395,6 +401,8 @@ func TestNotificationSuppressionEdgeCases(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	// BG-17: InitFromDatabase now loads notification history
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	// BG-17: RecordNotificationSent saves to database (called in subtests)
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -457,6 +465,8 @@ func TestCleanupOldNotificationRecordsLocked(t *testing.T) {
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("SaveNotificationHistory", mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
@@ -485,7 +495,7 @@ func TestCleanupOldNotificationRecordsLocked(t *testing.T) {
 	tracker.notificationLastSent["Recent"] = now.Add(-10 * time.Hour)
 
 	// Clean up
-	cleaned := tracker.cleanupOldNotificationRecordsLocked(now)
+	cleaned := tracker.cleanupOldNotificationRecordsLocked(tracker.notificationLastSent, now, tracker.notificationSuppressionWindow)
 	tracker.mu.Unlock()
 
 	assert.Equal(t, 2, cleaned, "Should clean 2 old records")
@@ -510,6 +520,8 @@ func TestEmptySeasonMap(t *testing.T) {
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()
 	ds.On("GetActiveNotificationHistory", mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).Maybe()
+	ds.On("GetActiveNotificationHistoryByType", mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
 		Return([]datastore.NotificationHistory{}, nil).Maybe()
 	ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
 		Return([]datastore.NewSpeciesData{}, nil).Maybe()

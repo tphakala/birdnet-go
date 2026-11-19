@@ -26,6 +26,7 @@ const (
 	EventStreamError        = "stream.error"
 
 	EventDetectionNewSpecies        = "detection.new_species"
+	EventDetectionLifer             = "detection.lifer"
 	EventDetectionInfrequentSpecies = "detection.infrequent_species"
 	EventDetectionOccurred          = "detection.occurred"
 
@@ -87,6 +88,7 @@ const (
 	PropertyNoveltyEpisodeDays  = events.DetectionMetadataNoveltyEpisodeDays
 	PropertyNoveltyEpisodeStart = events.DetectionMetadataNoveltyEpisodeStart
 	PropertyIsNewSpecies        = "is_new_species"
+	PropertyIsLifer             = events.DetectionMetadataIsLifer
 	PropertyIsInfrequent        = "is_infrequent"
 )
 
@@ -102,6 +104,8 @@ const (
 const (
 	RuleKeyNewSpeciesName  = "settings.alerts.builtInRules.newSpecies.name"
 	RuleKeyNewSpeciesDesc  = "settings.alerts.builtInRules.newSpecies.description"
+	RuleKeyLiferName       = "settings.alerts.builtInRules.lifer.name"
+	RuleKeyLiferDesc       = "settings.alerts.builtInRules.lifer.description"
 	RuleKeyInfrequentName  = "settings.alerts.builtInRules.infrequentSpecies.name"
 	RuleKeyInfrequentDesc  = "settings.alerts.builtInRules.infrequentSpecies.description"
 	RuleKeyStreamDiscName  = "settings.alerts.builtInRules.streamDisconnected.name"

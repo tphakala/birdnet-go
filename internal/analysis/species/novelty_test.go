@@ -228,6 +228,10 @@ func (d *noveltyHistoryDatastore) GetActiveNotificationHistory(context.Context, 
 	return nil, nil
 }
 
+func (d *noveltyHistoryDatastore) GetActiveNotificationHistoryByType(context.Context, string, time.Time) ([]datastore.NotificationHistory, error) {
+	return nil, nil
+}
+
 func (d *noveltyHistoryDatastore) SaveNotificationHistory(context.Context, *datastore.NotificationHistory) error {
 	return nil
 }
