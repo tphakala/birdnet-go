@@ -16,7 +16,8 @@
   - Loading, updating, error (with Retry) and skipped-filter states, each with
     visible text; loading, updating and skipped are announced through a polite
     status region, errors through an alert region (both always rendered)
-  - Caption with the sample rate the curve was calculated for
+  - Caption with the sample rate the curve was calculated for; the clipped-peak
+    caption shares its reserved line
 
   Props:
   - equalizer: Equalizer configuration ({ enabled, filters }) to preview
@@ -631,7 +632,7 @@
 </script>
 
 <!-- Centered container with proper spacing -->
-<div class="w-full flex justify-center py-4" bind:this={containerElement}>
+<div class="w-full flex justify-center pt-4" bind:this={containerElement}>
   <div
     class="flex flex-col gap-3 focus:outline-none"
     style:width="{canvasWidth}px"
@@ -685,6 +686,8 @@
       {/if}
     </div>
 
+    <!-- One reserved line holds the status and the clipped-peak caption, so the
+         editor below does not shift when the caption appears or goes. -->
     <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
       {#if graphState.status === 'loading' && graphState.previous}
         <span data-testid="eq-graph-updating" aria-hidden="true">
@@ -697,9 +700,6 @@
           })}
         </span>
       {/if}
-    </p>
-
-    <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
       {#if clippedText}
         <span data-testid="eq-graph-clipped" aria-hidden="true">{clippedText}</span>
       {/if}

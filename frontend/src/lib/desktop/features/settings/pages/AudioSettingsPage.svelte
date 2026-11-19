@@ -845,31 +845,33 @@
             onchange={checked => updateExportDenoise({ enabled: checked })}
           />
 
-          <SelectDropdown
-            value={exportDenoise.strength}
-            label={t('settings.audio.exportDenoise.strengthLabel')}
-            helpText={settings.audio.export.enabled && !exportDenoise.enabled
-              ? t('settings.audio.exportDenoise.strengthDisabledHelp')
-              : t('settings.audio.exportDenoise.strengthHelp')}
-            options={denoiseStrengthOptions}
-            aria-describedby={settings.audio.export.enabled
-              ? undefined
-              : 'denoise-requires-recording'}
-            disabled={!exportDenoise.enabled ||
-              !settings.audio.export.enabled ||
-              store.isLoading ||
-              store.isSaving}
-            onChange={value => {
-              const candidate = Array.isArray(value) ? value[0] : value;
-              if (isDenoisePresetId(candidate)) {
-                updateExportDenoise({ strength: candidate });
-              } else {
-                logger.warn('Ignoring unknown denoise strength candidate', { candidate });
-              }
-            }}
-            groupBy={false}
-            menuSize="sm"
-          />
+          <div class="transition-opacity duration-200" class:opacity-50={!exportDenoise.enabled}>
+            <SelectDropdown
+              value={exportDenoise.strength}
+              label={t('settings.audio.exportDenoise.strengthLabel')}
+              helpText={settings.audio.export.enabled && !exportDenoise.enabled
+                ? t('settings.audio.exportDenoise.strengthDisabledHelp')
+                : t('settings.audio.exportDenoise.strengthHelp')}
+              options={denoiseStrengthOptions}
+              aria-describedby={settings.audio.export.enabled
+                ? undefined
+                : 'denoise-requires-recording'}
+              disabled={!exportDenoise.enabled ||
+                !settings.audio.export.enabled ||
+                store.isLoading ||
+                store.isSaving}
+              onChange={value => {
+                const candidate = Array.isArray(value) ? value[0] : value;
+                if (isDenoisePresetId(candidate)) {
+                  updateExportDenoise({ strength: candidate });
+                } else {
+                  logger.warn('Ignoring unknown denoise strength candidate', { candidate });
+                }
+              }}
+              groupBy={false}
+              menuSize="sm"
+            />
+          </div>
 
           {#if exportDenoise.enabled}
             <SettingsNote>
@@ -970,7 +972,7 @@
               class="space-y-4 transition-opacity duration-200"
               class:opacity-50={!settings.audio.export.normalization.enabled}
             >
-              <div class="settings-form-grid">
+              <div class="settings-form-grid settings-form-grid-cols-2">
                 <!-- Target LUFS -->
                 <NumberField
                   label={t('settings.audio.audioNormalization.targetLUFSLabel')}

@@ -586,18 +586,16 @@
 
   {#if equalizerSettings.enabled && !loadingConfig}
     <!-- Filter Response Visualization - Always visible to show current state -->
-    <div class="mb-6">
-      <SettingsGroupLabel as="h3" class="mb-3">
-        {t('settings.audio.audioFilters.frequencyResponse')}
-      </SettingsGroupLabel>
-      <FilterResponseGraph
-        equalizer={{
-          enabled: equalizerSettings.enabled,
-          filters: equalizerSettings.filters ?? [],
-        }}
-        {sampleRate}
-      />
-    </div>
+    <SettingsGroupLabel as="h3" class="mb-3">
+      {t('settings.audio.audioFilters.frequencyResponse')}
+    </SettingsGroupLabel>
+    <FilterResponseGraph
+      equalizer={{
+        enabled: equalizerSettings.enabled,
+        filters: equalizerSettings.filters ?? [],
+      }}
+      {sampleRate}
+    />
 
     <!-- One parameter cell of a filter row: a number input, or the attenuation dropdown -->
     {#snippet parameterCell(

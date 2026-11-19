@@ -164,6 +164,7 @@ function labelsInLastDraw(ctx: ReturnType<typeof createContextMock>): unknown[] 
 
 const FLAT_LABEL = 'settings.audio.audioFilters.graph.flatResponse';
 const CLIPPED_KEY = 'settings.audio.audioFilters.graph.clipped';
+const SAMPLE_RATE_KEY = 'settings.audio.audioFilters.graph.sampleRate';
 
 /** A response whose only drawn points are the given gains, spread over the audible range. */
 function peakBody(...gains: number[]): Record<string, unknown> {
@@ -744,16 +745,24 @@ describe('FilterResponseGraph', () => {
     expect(dbLabelsInLastDraw(ctx).at(-1)).toBe(`${MAX_TOP_DB}dB`);
     expect(screen.getByTestId('eq-graph-clipped')).toHaveTextContent(CLIPPED_KEY);
     expect(t).toHaveBeenCalledWith(CLIPPED_KEY, { peak: 80 });
-    // The caption row is always rendered so the editor below does not shift, and
-    // the status region announces it.
-    expect(screen.getByTestId('eq-graph-clipped').parentElement).toHaveClass('min-h-5');
+    // The caption shares the reserved status line with the sample rate, so the
+    // editor below does not shift when it appears or goes, and the status
+    // region announces it.
+    const statusLine = screen.getByTestId('eq-graph-clipped').parentElement;
+    if (!statusLine) throw new Error('clipped caption has no parent');
+    expect(statusLine).toHaveClass('min-h-5');
+    expect(screen.getByTestId('eq-graph-sample-rate').parentElement).toBe(statusLine);
+    expect(statusLine).toHaveTextContent(`${SAMPLE_RATE_KEY} ${CLIPPED_KEY}`);
+    expect(view.container.querySelectorAll('.min-h-5')).toHaveLength(1);
     expect(screen.getByRole('status')).toHaveTextContent(CLIPPED_KEY);
 
-    // The caption goes on a later response below the cap.
+    // The caption goes on a later response below the cap; the line stays.
     apiPost.mockResolvedValueOnce(peakBody(0, 20, 0));
     await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS] } });
     await settle();
     expect(screen.queryByTestId('eq-graph-clipped')).not.toBeInTheDocument();
+    expect(view.container.querySelectorAll('.min-h-5')).toHaveLength(1);
+    expect(screen.getByTestId('eq-graph-sample-rate').parentElement).toBe(statusLine);
   });
 
   it('returns to the +12 axis without a caption when a request fails after a clipped response', async () => {
