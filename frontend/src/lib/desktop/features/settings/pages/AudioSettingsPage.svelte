@@ -50,6 +50,7 @@
     type StreamConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { cn } from '$lib/utils/cn';
   import { commitSetting, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
@@ -845,33 +846,35 @@
             onchange={checked => updateExportDenoise({ enabled: checked })}
           />
 
-          <div class="transition-opacity duration-200" class:opacity-50={!exportDenoise.enabled}>
-            <SelectDropdown
-              value={exportDenoise.strength}
-              label={t('settings.audio.exportDenoise.strengthLabel')}
-              helpText={settings.audio.export.enabled && !exportDenoise.enabled
-                ? t('settings.audio.exportDenoise.strengthDisabledHelp')
-                : t('settings.audio.exportDenoise.strengthHelp')}
-              options={denoiseStrengthOptions}
-              aria-describedby={settings.audio.export.enabled
-                ? undefined
-                : 'denoise-requires-recording'}
-              disabled={!exportDenoise.enabled ||
-                !settings.audio.export.enabled ||
-                store.isLoading ||
-                store.isSaving}
-              onChange={value => {
-                const candidate = Array.isArray(value) ? value[0] : value;
-                if (isDenoisePresetId(candidate)) {
-                  updateExportDenoise({ strength: candidate });
-                } else {
-                  logger.warn('Ignoring unknown denoise strength candidate', { candidate });
-                }
-              }}
-              groupBy={false}
-              menuSize="sm"
-            />
-          </div>
+          <SelectDropdown
+            value={exportDenoise.strength}
+            className={cn(
+              'transition-opacity duration-200',
+              !exportDenoise.enabled && 'opacity-50'
+            )}
+            label={t('settings.audio.exportDenoise.strengthLabel')}
+            helpText={settings.audio.export.enabled && !exportDenoise.enabled
+              ? t('settings.audio.exportDenoise.strengthDisabledHelp')
+              : t('settings.audio.exportDenoise.strengthHelp')}
+            options={denoiseStrengthOptions}
+            aria-describedby={settings.audio.export.enabled
+              ? undefined
+              : 'denoise-requires-recording'}
+            disabled={!exportDenoise.enabled ||
+              !settings.audio.export.enabled ||
+              store.isLoading ||
+              store.isSaving}
+            onChange={value => {
+              const candidate = Array.isArray(value) ? value[0] : value;
+              if (isDenoisePresetId(candidate)) {
+                updateExportDenoise({ strength: candidate });
+              } else {
+                logger.warn('Ignoring unknown denoise strength candidate', { candidate });
+              }
+            }}
+            groupBy={false}
+            menuSize="sm"
+          />
 
           {#if exportDenoise.enabled}
             <SettingsNote>

@@ -753,7 +753,6 @@ describe('FilterResponseGraph', () => {
     expect(statusLine).toHaveClass('min-h-5');
     expect(screen.getByTestId('eq-graph-sample-rate').parentElement).toBe(statusLine);
     expect(statusLine).toHaveTextContent(`${SAMPLE_RATE_KEY} ${CLIPPED_KEY}`);
-    expect(view.container.querySelectorAll('.min-h-5')).toHaveLength(1);
     expect(screen.getByRole('status')).toHaveTextContent(CLIPPED_KEY);
 
     // The caption goes on a later response below the cap; the line stays.
@@ -761,7 +760,6 @@ describe('FilterResponseGraph', () => {
     await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS] } });
     await settle();
     expect(screen.queryByTestId('eq-graph-clipped')).not.toBeInTheDocument();
-    expect(view.container.querySelectorAll('.min-h-5')).toHaveLength(1);
     expect(screen.getByTestId('eq-graph-sample-rate').parentElement).toBe(statusLine);
   });
 

@@ -16,8 +16,7 @@
   - Loading, updating, error (with Retry) and skipped-filter states, each with
     visible text; loading, updating and skipped are announced through a polite
     status region, errors through an alert region (both always rendered)
-  - Caption with the sample rate the curve was calculated for; the clipped-peak
-    caption shares its reserved line
+  - Caption with the sample rate the curve was calculated for
 
   Props:
   - equalizer: Equalizer configuration ({ enabled, filters }) to preview
