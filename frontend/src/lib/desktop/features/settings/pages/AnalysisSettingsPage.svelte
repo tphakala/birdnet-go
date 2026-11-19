@@ -71,6 +71,7 @@
     type ThresholdRow,
     type ThresholdSectionValues,
   } from './analysisThresholds';
+  import { openVinoDeviceField } from './openVinoDeviceOptions';
   import { wizardState } from '$lib/desktop/features/wizard/wizardState.svelte';
   import type { InstalledModelContext } from '$lib/desktop/features/wizard/types';
   import {
@@ -390,8 +391,6 @@
   const INFERENCE_AUTO = 'auto';
   const BACKEND_ONNX = 'onnx';
   const BACKEND_OPENVINO = 'openvino';
-  const DEVICE_CPU = 'cpu';
-  const DEVICE_GPU = 'gpu';
   const INFERENCE_STATUS_ENDPOINT = '/api/v2/system/inference';
   // The line that says why the runtime selects are disabled: loading, or the failure warning.
   const INFERENCE_STATUS_ID = generateId('inference-status');
@@ -672,11 +671,7 @@
   // A choice the host lacks stays offered while it is selected or saved, so picking another
   // one keeps the way back to the saved choice.
   const keptBackends = $derived(new Set([selectedBackend, savedBackend]));
-  const keptDevices = $derived(new Set([selectedDevice, savedDevice]));
   const openVinoSupported = $derived(inferenceBackends?.openvino.supported ?? false);
-  const hostHasGpu = $derived(
-    inferenceBackends?.openvino.devices?.some(d => d.toLowerCase().startsWith(DEVICE_GPU)) ?? false
-  );
 
   const backendOptions: SelectOption[] = $derived([
     { value: INFERENCE_AUTO, label: t('analysis.inference.backend.options.auto') },
@@ -687,13 +682,12 @@
       ? [{ value: BACKEND_OPENVINO, label: t('analysis.inference.backend.options.openvino') }]
       : []),
   ]);
-  const deviceOptions: SelectOption[] = $derived([
-    { value: INFERENCE_AUTO, label: t('analysis.inference.device.options.auto') },
-    { value: DEVICE_CPU, label: t('analysis.inference.device.options.cpu') },
-    ...(hostHasGpu || keptDevices.has(DEVICE_GPU)
-      ? [{ value: DEVICE_GPU, label: t('analysis.inference.device.options.gpu') }]
-      : []),
-  ]);
+  const deviceField = $derived(
+    openVinoDeviceField(
+      { status: inferenceBackends?.openvino, selected: selectedDevice, saved: savedDevice },
+      t
+    )
+  );
   // The device applies only to models that OpenVINO runs.
   const showDeviceField = $derived(
     (openVinoSupported || selectedDevice !== INFERENCE_AUTO || savedDevice !== INFERENCE_AUTO) &&
@@ -3099,10 +3093,10 @@
         />
         {#if showDeviceField}
           <SelectDropdown
-            options={deviceOptions}
+            options={deviceField.options}
             value={selectedDevice}
             label={t('analysis.inference.device.label')}
-            helpText={t('analysis.inference.device.helpText')}
+            helpText={deviceField.helpText}
             disabled={store.isLoading || store.isSaving || !inferenceBackends}
             aria-describedby={inferenceBackends ? undefined : INFERENCE_STATUS_ID}
             variant="select"

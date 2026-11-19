@@ -4,6 +4,7 @@ import { tick } from 'svelte';
 import userEvent from '@testing-library/user-event';
 import type { CatalogEntry } from '$lib/types/models';
 import type { BackendModel } from '$lib/stores/models.svelte';
+import type { OpenVINOGPU } from '$lib/desktop/features/system/inference.types';
 
 // The Analysis page tabs show an unsaved-change dot when any card badge on the tab would.
 // These tests pin which edits light which tab, using the same accessible description the
@@ -730,12 +731,17 @@ describe('AnalysisSettingsPage inference runtime', () => {
   const DEVICE_LABEL = 'analysis.inference.device.label';
 
   /** A runtime status as GET /api/v2/system/inference reports it. */
-  function runtimeStatus({ onnx = true, openvino = true, devices = ['CPU'] } = {}) {
+  function runtimeStatus({
+    onnx = true,
+    openvino = true,
+    devices = ['CPU'],
+    gpus,
+  }: { onnx?: boolean; openvino?: boolean; devices?: string[]; gpus?: OpenVINOGPU[] } = {}) {
     return {
       backends: {
         tflite: { available: true },
         onnx: { available: onnx },
-        openvino: { supported: openvino, active: false, devices },
+        openvino: { supported: openvino, active: false, devices, gpus },
       },
     };
   }
@@ -927,12 +933,83 @@ describe('AnalysisSettingsPage inference runtime', () => {
     expect(await optionLabels(shown)).toContain('analysis.inference.device.options.gpu');
   });
 
+  it('says models fall back to ONNX Runtime for a selected GPU the host lacks, until another device is picked', async () => {
+    seedSection('birdnet', { ...BASE_BIRDNET, openVinoDevice: 'GPU.5' });
+    mockRuntime(async () =>
+      runtimeStatus({ devices: ['CPU', 'GPU'], gpus: [{ id: 'GPU.0' }, { id: 'GPU.1' }] })
+    );
+    applyUpdatesToForm();
+    render(AnalysisSettingsPage);
+    const device = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+    await waitFor(() => expect(device).toBeEnabled());
+    expect(device).toHaveAccessibleDescription('analysis.inference.device.notDetectedHint');
+
+    await pick(device, 'analysis.inference.device.options.cpu');
+
+    expect(device).toHaveAccessibleDescription('analysis.inference.device.helpTextMultipleGpus');
+    // The saved GPU stays offered, so the way back to it is kept.
+    expect(await optionLabels(device)).toContain('analysis.inference.device.options.notDetected');
+  });
+
+  it('renders the device field for a multi-GPU host, also after leaving the tab and coming back', async () => {
+    // GET /api/v2/system/inference from a host with an integrated and a discrete Intel GPU.
+    const multiGpuStatus = {
+      backends: {
+        tflite: { available: false },
+        onnx: { available: true, initialized: true, version: '1.32.0' },
+        openvino: {
+          supported: true,
+          active: true,
+          devices: ['CPU', 'GPU'],
+          gpus: [
+            { id: 'GPU.0', name: 'Intel(R) UHD Graphics 730 (iGPU)', type: 'integrated' },
+            { id: 'GPU.1', name: 'Intel(R) Arc(TM) A750 Graphics (dGPU)', type: 'discrete' },
+          ],
+        },
+      },
+    };
+    // A render error is logged, not thrown, so any console error fails the test.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const windowErrors: unknown[] = [];
+    const onError = (event: ErrorEvent) => windowErrors.push(event.error);
+    window.addEventListener('error', onError);
+    try {
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: 'openvino' });
+      mockRuntime(async () => multiGpuStatus);
+      applyUpdatesToForm();
+      render(AnalysisSettingsPage);
+      const device = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+      await waitFor(() => expect(device).toBeEnabled());
+      expect(device).toHaveAccessibleDescription('analysis.inference.device.helpTextMultipleGpus');
+
+      const user = userEvent.setup();
+      await user.click(tab('models'));
+      await user.click(tab('inference'));
+
+      expect(await screen.findByText('analysis.inference.runtime.title')).toBeInTheDocument();
+      const again = await screen.findByRole('combobox', { name: DEVICE_LABEL });
+      await waitFor(() => expect(again).toBeEnabled());
+      // Each GPU option's text is its label followed by its id.
+      const gpuOptions = (await optionLabels(again)).filter(label =>
+        label.startsWith('analysis.inference.device.options.gpuNamed')
+      );
+      expect(gpuOptions).toHaveLength(2);
+      expect(consoleError).not.toHaveBeenCalled();
+      expect(windowErrors).toEqual([]);
+    } finally {
+      window.removeEventListener('error', onError);
+      consoleError.mockRestore();
+    }
+  });
+
   it('offers GPU only when the host has one or it is saved', async () => {
     mockRuntime(async () => runtimeStatus({ devices: ['CPU'] }));
     render(AnalysisSettingsPage);
     const device = await screen.findByRole('combobox', { name: DEVICE_LABEL });
     await waitFor(() => expect(device).toBeEnabled());
-    expect(await optionLabels(device)).not.toContain('analysis.inference.device.options.gpu');
+    const labels = await optionLabels(device);
+    expect(labels).not.toContain('analysis.inference.device.options.gpu');
+    expect(labels).not.toContain('analysis.inference.device.options.notDetected');
 
     resetPage('inference');
     seedSection('birdnet', { ...BASE_BIRDNET, openVinoDevice: 'gpu' });
@@ -940,7 +1017,8 @@ describe('AnalysisSettingsPage inference runtime', () => {
     render(AnalysisSettingsPage);
     const savedGpu = await screen.findByRole('combobox', { name: DEVICE_LABEL });
     await waitFor(() => expect(savedGpu).toBeEnabled());
-    expect(await optionLabels(savedGpu)).toContain('analysis.inference.device.options.gpu');
+    // The probe found no GPU, so the saved GPU stays offered, marked as not detected.
+    expect(await optionLabels(savedGpu)).toContain('analysis.inference.device.options.notDetected');
 
     resetPage('inference');
     mockRuntime(async () => runtimeStatus({ devices: ['CPU', 'GPU.0'] }));
