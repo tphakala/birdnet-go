@@ -63,6 +63,7 @@
   } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import { SETTINGS_CARD_HEADER_CLASSES } from '$lib/desktop/features/settings/components/SettingsCard.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
@@ -87,6 +88,14 @@
     Clock,
     RefreshCw,
     Info,
+    Mic,
+    WandSparkles,
+    Gauge,
+    SlidersVertical,
+    FileVolume,
+    Timer,
+    FolderCog,
+    Archive,
   } from '@lucide/svelte';
   import { api } from '$lib/utils/api';
   import { type AudioDevice } from '$lib/utils/audioDevices';
@@ -723,7 +732,7 @@
     {:else if !devicesLoadedOnce && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
       <!-- First load: a skeleton of the section with its summary bar and two source cards -->
       <div class="card bg-[var(--color-base-100)] shadow-2xs">
-        <div class="space-y-2 px-6 py-4">
+        <div class="space-y-2 {SETTINGS_CARD_HEADER_CLASSES}">
           <Skeleton className="h-6 w-56" />
           <SkeletonStatus label={t('settings.audio.loading')} class="block text-sm" />
         </div>
@@ -765,6 +774,7 @@
       <!-- Sound Card Source Manager -->
       <SettingsSection
         title={t('settings.audio.audioCapture.title')}
+        icon={Mic}
         description={t('settings.audio.sources.autoSaveHelp')}
       >
         <SoundCardManager
@@ -785,6 +795,7 @@
     <!-- RTSP Stream Configuration -->
     <SettingsSection
       title={t('settings.audio.rtspStreams.title')}
+      icon={Radio}
       description={t('settings.audio.streams.autoSaveHelp')}
     >
       <StreamManager
@@ -801,6 +812,7 @@
     <!-- Clip denoise (applies to saved clips, before they are written) -->
     <SettingsSection
       title={t('settings.audio.exportDenoise.title')}
+      icon={WandSparkles}
       description={t('settings.audio.exportDenoise.description')}
       originalData={store.originalData.realtime?.audio?.export?.denoise}
       currentData={store.formData.realtime?.audio?.export?.denoise}
@@ -891,6 +903,7 @@
     <!-- Audio Normalization (applies to saved clips) -->
     <SettingsSection
       title={t('settings.audio.audioNormalization.title')}
+      icon={Gauge}
       description={t('settings.audio.audioNormalization.description')}
       originalData={store.originalData.realtime?.audio?.export?.normalization}
       currentData={store.formData.realtime?.audio?.export?.normalization}
@@ -1041,6 +1054,7 @@
     <!-- Audio Equalizer -->
     <SettingsSection
       title={t('settings.audio.audioFilters.title')}
+      icon={SlidersVertical}
       description={t('settings.audio.audioFilters.description')}
       originalData={store.originalData.realtime?.audio?.equalizer}
       currentData={store.formData.realtime?.audio?.equalizer}
@@ -1055,6 +1069,7 @@
     <!-- Sound Level Monitoring -->
     <SettingsSection
       title={t('settings.audio.soundLevelMonitoring.title')}
+      icon={Volume2}
       description={t('settings.audio.soundLevelMonitoring.description')}
       originalData={store.originalData.realtime?.audio?.soundLevel}
       currentData={store.formData.realtime?.audio?.soundLevel}
@@ -1152,6 +1167,7 @@
     <!-- Card 1: Clip Recording Settings -->
     <SettingsSection
       title={t('settings.audio.clipRecording.title')}
+      icon={FileVolume}
       description={t('settings.audio.clipRecording.description')}
       originalData={{
         enabled: store.originalData.realtime?.audio?.export?.enabled,
@@ -1282,6 +1298,7 @@
     <!-- Card 2: Extended Capture Settings -->
     <SettingsSection
       title={t('settings.audio.extendedCapture.title')}
+      icon={Timer}
       description={t('settings.audio.extendedCapture.description')}
       originalData={store.originalData.realtime?.extendedCapture}
       currentData={store.formData.realtime?.extendedCapture}
@@ -1365,6 +1382,7 @@
     <!-- Card 3: File Settings -->
     <SettingsSection
       title={t('settings.audio.fileSettings.title')}
+      icon={FolderCog}
       description={t('settings.audio.fileSettings.description')}
       originalData={{
         path: store.originalData.realtime?.audio?.export?.path,
@@ -1505,6 +1523,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.audio.audioClipRetention.title')}
+      icon={Archive}
       description={t('settings.audio.audioClipRetention.description')}
       originalData={store.originalData.realtime?.audio?.export?.retention}
       currentData={store.formData.realtime?.audio?.export?.retention}

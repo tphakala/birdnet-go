@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Mic } from '@lucide/svelte';
 import {
   screen,
   createI18nMock,
@@ -52,6 +53,15 @@ describe('SettingsSection', () => {
 
       expect(screen.getByRole('heading', { level: 3 })).toHaveTextContent('Test Section');
       expect(screen.getByText('Test description')).toBeInTheDocument();
+    });
+
+    it('forwards the icon to the card heading', () => {
+      testFactory.render({
+        title: 'Section',
+        icon: Mic,
+      });
+
+      expect(screen.getByRole('heading', { level: 3 }).querySelector('svg')).toBeInTheDocument();
     });
 
     it('renders children content', () => {

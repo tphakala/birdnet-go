@@ -40,7 +40,7 @@
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
-  import { Bird, Radio, Activity, Binoculars } from '@lucide/svelte';
+  import { Bird, Radio, Activity, Binoculars, Network, ChartLine } from '@lucide/svelte';
   import {
     integrationSettings,
     realtimeSettings,
@@ -1154,6 +1154,7 @@
     <!-- BirdWeather Settings Card -->
     <SettingsSection
       title={t('settings.integration.birdweather.title')}
+      icon={Bird}
       description={t('settings.integration.birdweather.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.birdweather}
       currentData={(store.formData as SettingsFormData)?.realtime?.birdweather}
@@ -1256,6 +1257,7 @@
     <!-- MQTT Settings Card -->
     <SettingsSection
       title={t('settings.integration.mqtt.title')}
+      icon={Network}
       description={t('settings.integration.mqtt.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.mqtt}
       currentData={(store.formData as SettingsFormData)?.realtime?.mqtt}
@@ -1599,6 +1601,7 @@
     <!-- Observability Settings Card -->
     <SettingsSection
       title={t('settings.integration.observability.title')}
+      icon={ChartLine}
       description={t('settings.integration.observability.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.telemetry}
       currentData={(store.formData as SettingsFormData)?.realtime?.telemetry}
@@ -1645,6 +1648,7 @@
     <!-- eBird Settings Card -->
     <SettingsSection
       title={t('settings.integration.ebird.title')}
+      icon={Bird}
       description={t('settings.integration.ebird.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.ebird}
       currentData={(store.formData as SettingsFormData)?.realtime?.ebird}

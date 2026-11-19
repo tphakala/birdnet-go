@@ -51,7 +51,17 @@
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { formatNumber } from '$lib/utils/formatters';
-  import { Settings, MapPin, Database, XCircle, RefreshCw } from '@lucide/svelte';
+  import {
+    Settings,
+    MapPin,
+    Database,
+    XCircle,
+    RefreshCw,
+    SlidersHorizontal,
+    Activity,
+    CloudSun,
+    ChartBar,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
@@ -527,6 +537,7 @@
     <!-- Node Identity Card -->
     <SettingsSection
       title={t('settings.main.sections.main.title')}
+      icon={SlidersHorizontal}
       description={t('settings.main.sections.main.description')}
       originalData={store.originalData.main}
       currentData={store.formData.main}
@@ -545,6 +556,7 @@
     <!-- Privacy & Telemetry Card -->
     <SettingsSection
       title={t('settings.support.sections.telemetry.title')}
+      icon={Activity}
       description={t('settings.support.sections.telemetry.description')}
       originalData={store.originalData.sentry}
       currentData={store.formData.sentry}
@@ -581,6 +593,7 @@
     <!-- Station Location Card -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.stationLocation.label')}
+      icon={MapPin}
       description={t('settings.main.sections.rangeFilter.stationLocation.helpText')}
       originalData={{
         latitude: store.originalData.birdnet?.latitude,
@@ -648,6 +661,7 @@
     <!-- Weather Provider Card -->
     <SettingsSection
       title={t('settings.integration.weather.title')}
+      icon={CloudSun}
       description={t('settings.integration.weather.description')}
       originalData={store.originalData.realtime?.weather}
       currentData={store.formData.realtime?.weather}
@@ -850,6 +864,7 @@
     <!-- Database Settings Card -->
     <SettingsSection
       title={t('settings.main.sections.database.title')}
+      icon={Database}
       description={t('settings.main.sections.database.description')}
       originalData={store.originalData.output}
       currentData={store.formData.output}
@@ -966,6 +981,7 @@
     <!-- Database Statistics Section -->
     <SettingsSection
       title={t('settings.main.sections.database.stats.title')}
+      icon={ChartBar}
       description={t('settings.main.sections.database.stats.description')}
     >
       <div class="space-y-4">

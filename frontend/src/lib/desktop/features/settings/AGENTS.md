@@ -152,7 +152,10 @@ value is then written twice, and the store update in the callback is the one
 that counts.
 
 Wrap each group in `SettingsSection` (`components/SettingsSection.svelte`) and
-pass its `hasChanges` flag so the section shows an unsaved-changes badge.
+pass its `hasChanges` flag so the section shows an unsaved-changes badge. Give
+each section a Lucide `icon` that the card shows before the title. The one
+exception is the bat card, which uses `BatIcon` (`$lib/components/icons/`), a
+temporary stand-in until Lucide ships a bat icon; do not add other local icons.
 
 ## Types
 

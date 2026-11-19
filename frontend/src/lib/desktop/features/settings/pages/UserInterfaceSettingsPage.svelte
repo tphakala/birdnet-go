@@ -43,7 +43,7 @@
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
-  import { Palette, Globe, Image, Volume2, Info } from '@lucide/svelte';
+  import { Palette, Globe, Image, Volume2, Info, Languages, Headphones } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
 
@@ -334,6 +334,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.appearance.title')}
+      icon={Palette}
       description={t('settings.userInterface.appearance.description')}
       originalData={{
         colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
@@ -355,6 +356,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.language.title')}
+      icon={Languages}
       description={t('settings.userInterface.language.description')}
       originalData={{
         locale: store.originalData.realtime?.dashboard?.locale,
@@ -426,6 +428,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.audioPlayback.title')}
+      icon={Headphones}
       description={t('settings.userInterface.audioPlayback.description')}
       originalData={{
         defaultAudioGain: store.originalData.realtime?.dashboard?.defaultAudioGain,
@@ -516,6 +519,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.visualContent.title')}
+      icon={Image}
       description={t('settings.userInterface.visualContent.description')}
       originalData={{
         thumbnails: store.originalData.realtime?.dashboard?.thumbnails,

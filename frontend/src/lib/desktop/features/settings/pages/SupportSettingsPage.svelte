@@ -17,7 +17,7 @@
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
-  import { Wrench } from '@lucide/svelte';
+  import { Wrench, Stethoscope } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SupportDumpCard from '$lib/desktop/components/ui/SupportDumpCard.svelte';
 
@@ -38,6 +38,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.support.sections.diagnostics.title')}
+      icon={Stethoscope}
       description={t('settings.support.sections.diagnostics.description')}
       defaultOpen={true}
     >

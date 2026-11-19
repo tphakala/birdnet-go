@@ -63,7 +63,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
-  import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, TriangleAlert } from '@lucide/svelte';
+  import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, TriangleAlert, LogIn, ShieldOff, SquareTerminal } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import { onDestroy, type Component } from 'svelte';
@@ -814,6 +814,7 @@
     <!-- Server Configuration Card -->
     <SettingsSection
       title={t('settings.security.serverConfiguration.title')}
+      icon={Server}
       description={t('settings.security.serverConfiguration.description')}
       originalData={{
         baseUrl: store.originalData.security?.baseUrl,
@@ -1112,6 +1113,7 @@
     <!-- Basic Authentication Card -->
     <SettingsSection
       title={t('settings.security.basicAuthentication.title')}
+      icon={KeyRound}
       description={t('settings.security.basicAuthentication.description')}
       originalData={store.originalData.security?.basicAuth}
       currentData={store.formData.security?.basicAuth}
@@ -1162,6 +1164,7 @@
     <!-- OAuth2 Social Authentication Card -->
     <SettingsSection
       title={t('settings.security.oauth.title')}
+      icon={LogIn}
       description={t('settings.security.oauth.description')}
       originalData={store.originalData.security?.oauthProviders}
       currentData={store.formData.security?.oauthProviders}
@@ -1482,6 +1485,7 @@
     <!-- Bypass Authentication Card -->
     <SettingsSection
       title={t('settings.security.bypassAuthentication.title')}
+      icon={ShieldOff}
       description={t('settings.security.bypassAuthentication.description')}
       originalData={store.originalData.security?.allowSubnetBypass}
       currentData={store.formData.security?.allowSubnetBypass}
@@ -1556,6 +1560,7 @@
     <!-- Public Access section -->
     <SettingsSection
       title={t('settings.security.publicAccess.title')}
+      icon={Globe}
       description={t('settings.security.publicAccess.description')}
       originalData={store.originalData.security?.publicAccess}
       currentData={store.formData.security?.publicAccess}
@@ -1592,7 +1597,7 @@
 
 {#snippet terminalTabContent()}
   <div class="space-y-6">
-    <SettingsSection title={t('settings.security.terminal.title')}>
+    <SettingsSection title={t('settings.security.terminal.title')} icon={SquareTerminal}>
       <ErrorAlert type="warning" className="mb-4">
         {#snippet children()}
           {t('settings.security.terminal.securityWarning')}

@@ -97,6 +97,10 @@
     CalendarClock,
     Activity,
     TriangleAlert,
+    ListChecks,
+    CalendarDays,
+    Leaf,
+    Sparkles,
   } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
 
@@ -1728,6 +1732,7 @@
     <!-- Main Tracking Settings -->
     <SettingsSection
       title={t('settings.species.tracking.title')}
+      icon={ListChecks}
       description={t('settings.species.tracking.description')}
       defaultOpen={true}
       originalData={store.originalData.realtime?.speciesTracking}
@@ -1852,6 +1857,7 @@
       <!-- Yearly Tracking Settings -->
       <SettingsSection
         title={t('settings.species.tracking.yearly.title')}
+        icon={CalendarDays}
         description={t('settings.species.tracking.yearly.description')}
         defaultOpen={false}
       >
@@ -1958,6 +1964,7 @@
       <!-- Seasonal Tracking Settings -->
       <SettingsSection
         title={t('settings.species.tracking.seasonal.title')}
+        icon={Leaf}
         description={t('settings.species.tracking.seasonal.description')}
         defaultOpen={false}
       >
@@ -2083,6 +2090,7 @@
       <!-- Infrequent Tracking Settings -->
       <SettingsSection
         title={t('settings.species.tracking.infrequent.title')}
+        icon={Sparkles}
         description={t('settings.species.tracking.infrequent.description')}
         defaultOpen={false}
       >

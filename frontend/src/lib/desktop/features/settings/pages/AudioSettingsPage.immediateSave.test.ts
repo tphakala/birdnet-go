@@ -9,6 +9,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import type { Writable } from 'svelte/store';
 import { api } from '$lib/utils/api';
 import AudioSettingsPage from './AudioSettingsPage.svelte';
+import { SETTINGS_CARD_HEADER_CLASSES } from '../components/SettingsCard.svelte';
 
 const TAB_STORAGE_KEY = 'birdnet-audio-settings-active-tab';
 const SAVE_KEY = 'settings.actions.save';
@@ -179,6 +180,9 @@ describe('AudioSettingsPage source tabs save immediately', () => {
     vi.mocked(api.get).mockReturnValueOnce(new Promise(() => {}));
     await renderTab('soundcard', []);
 
-    expect(await screen.findByText('settings.audio.loading')).toBeInTheDocument();
+    const status = await screen.findByText('settings.audio.loading');
+    expect(status).toBeInTheDocument();
+    // The skeleton header keeps the loaded card's header spacing and divider
+    expect(status.parentElement).toHaveClass(...SETTINGS_CARD_HEADER_CLASSES.split(/\s+/));
   });
 });
