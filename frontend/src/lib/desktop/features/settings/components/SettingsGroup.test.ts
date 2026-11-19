@@ -21,7 +21,6 @@ vi.mock('$lib/stores/settings', async importOriginal => {
 
 import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
 import SettingsGroup from './SettingsGroup.svelte';
-import { SETTINGS_GROUP_LABEL_CLASSES } from './SettingsGroupLabel.svelte';
 
 const FIELD = 'audio:sources:r:gain';
 const STATUS_ID = 'gain-status';
@@ -80,7 +79,7 @@ describe('SettingsGroup', () => {
     renderGroup({ titleVariant: 'group' });
 
     const heading = screen.getByRole('heading', { level: 4, name: 'Level' });
-    expect(heading).toHaveClass(...SETTINGS_GROUP_LABEL_CLASSES.split(' '));
+    expect(heading).toHaveClass('text-xs', 'font-semibold', 'uppercase', 'tracking-wider');
     expect(heading).toHaveAttribute('id', 'gain-heading');
     expect(screen.getByRole('region', { name: 'Level' })).toBeInTheDocument();
   });

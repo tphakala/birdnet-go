@@ -6,12 +6,16 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { cleanup, screen } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 import { renderTyped } from '../../../../../test/render-helpers';
-import SettingsGroupLabel, {
-  SETTINGS_GROUP_LABEL_CLASSES,
-  type SettingsGroupLabelElement,
-} from './SettingsGroupLabel.svelte';
+import SettingsGroupLabel, { type SettingsGroupLabelElement } from './SettingsGroupLabel.svelte';
 
-const BASE_CLASSES = SETTINGS_GROUP_LABEL_CLASSES.split(' ');
+// The label look, written out so a change to the shared class string fails here.
+const BASE_CLASSES = [
+  'text-xs',
+  'font-semibold',
+  'uppercase',
+  'tracking-wider',
+  'text-[var(--color-base-content)]/70',
+];
 
 function renderLabel(props: {
   as?: SettingsGroupLabelElement;
