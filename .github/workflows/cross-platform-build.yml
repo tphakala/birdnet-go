@@ -5,7 +5,8 @@ name: cross-platform-build
 # every package including *_test.go files via `go vet`, for the platforms that
 # can be CGO-cross-compiled from Linux (windows/amd64 via mingw, linux/arm64).
 # darwin/arm64 cannot CGO-cross-compile from Linux without an osxcross
-# toolchain; its compile coverage comes from the native macos-test workflow.
+# toolchain; its compile coverage comes from the native macos-test workflow,
+# which runs weekly and on PRs labelled `full-ci`.
 
 on:
   workflow_dispatch:

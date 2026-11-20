@@ -11,16 +11,10 @@ name: windows-test
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - '**/*.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Taskfile.yml'
-      - '.github/workflows/windows-test.yml'
-      - '.github/actions/**'
+  # Weekly instead of on every push to main: the job is advisory with known
+  # failures, so a per-merge run cost runner time without blocking anything.
+  schedule:
+    - cron: '11 4 * * 1'
   pull_request:
     # Include labeled/unlabeled so adding or removing the `full-ci` label
     # re-evaluates the job gate immediately instead of waiting for the next push.
@@ -36,9 +30,8 @@ on:
 permissions:
   contents: read
 
-# Only superseded pull request runs are cancelled. A run on main or a manual run
-# gets its own group per commit, so a burst of merges cannot cancel the run that
-# is the authoritative check of main.
+# Only superseded pull request runs are cancelled. A scheduled or manual run gets
+# its own group per commit.
 concurrency:
   group: windows-test-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -47,9 +40,9 @@ jobs:
   unit-tests-windows:
     name: unit-tests (windows-amd64)
     # Demoted off the per-commit PR critical path: this native run is slow (~25m)
-    # and already advisory (continue-on-error). It still runs on every push to
-    # main and on workflow_dispatch; on a PR it runs only when the `full-ci`
-    # label is present. A skipped job reports as success, so adding it as a
+    # and already advisory (continue-on-error). It runs weekly and on
+    # workflow_dispatch; on a PR it runs only when the `full-ci` label is
+    # present. A skipped job reports as success, so adding it as a
     # required check later will not deadlock label-less PRs.
     if: >-
       github.event_name != 'pull_request' ||
