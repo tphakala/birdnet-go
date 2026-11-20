@@ -267,6 +267,11 @@ const (
 	MsgModelSupersededTitle   = "notifications.content.modelSuperseded.title"
 	MsgModelSupersededMessage = "notifications.content.modelSuperseded.message"
 
+	// Model update notifications (an installed build of a model has a newer release
+	// in the model gallery; recommend-only, never swaps a model by itself)
+	MsgModelUpdateTitle   = "notifications.content.modelUpdate.title"
+	MsgModelUpdateMessage = "notifications.content.modelUpdate.message"
+
 	// Inference failure notice: a loaded model failed its last analyses in a row.
 	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"
 	MsgInferenceFailingMessage          = "notifications.content.inferenceFailing.message"

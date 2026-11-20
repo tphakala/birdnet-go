@@ -1885,9 +1885,11 @@
     }
   }
 
-  function openLicenseDialog(entry: CatalogEntry) {
+  // `variantId` preselects a variant (the Update action preselects the successor build); without
+  // it the dialog starts from the smart default.
+  function openLicenseDialog(entry: CatalogEntry, variantId: string | null = null) {
     licenseModel = entry;
-    chosenVariantId = null;
+    chosenVariantId = variantId;
     licenseViewedSha = null;
     licenseDialogRef?.showModal();
   }
@@ -2217,12 +2219,16 @@
     startReinstall(entry.id, entry.name);
   }
 
-  // A card's action button was used. Install and the Optimize swap both go through the
-  // license dialog, which picks the variant.
+  // A card's action button was used. Install, the Optimize swap and Update all go through the
+  // license dialog, which picks the variant; Update preselects the successor of the installed
+  // build.
   function handleCardAction(action: ModelCardAction, entry: CatalogEntry) {
     switch (action) {
       case 'install':
         openLicenseDialog(entry);
+        break;
+      case 'update':
+        openLicenseDialog(entry, entry.update?.variantId ?? null);
         break;
       case 'reinstall':
         handleReinstall(entry);

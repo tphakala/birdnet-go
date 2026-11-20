@@ -507,6 +507,10 @@
         "title": "{count, plural, one {Un modèle installé a une version plus récente} other {# modèles installés ont une version plus récente}}",
         "message": "Un modèle installé est une version d'aperçu, et sa version finale est maintenant disponible : {models}. Ouvrez Paramètres > Analyse > Modèles, installez la version finale et supprimez la version d'aperçu."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {Un modèle installé dispose d'une version plus récente} other {# modèles installés disposent de versions plus récentes}}",
+        "message": "Une version plus récente remplace celle qui est installée pour : {models}. La version installée continue de fonctionner jusqu'à ce que vous changiez. Ouvrez Paramètres > Analyse > Modèles et choisissez Mettre à jour."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Remplacé par {name}. Utilisez plutôt le modèle plus récent.",
         "dialogNotice": "Ce modèle a été remplacé par {name}. Envisagez d'installer {name} à la place."
+      },
+      "update": {
+        "cardNotice": "Une version plus récente ({to}) remplace la version installée {from}.",
+        "action": "Mettre à jour",
+        "applying": "Mise à jour..."
       },
       "entryIncompatible": "Ce modèle n'est pas disponible sur ce système.",
       "regionGlobal": "Global",

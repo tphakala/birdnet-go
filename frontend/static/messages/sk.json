@@ -507,6 +507,10 @@
         "title": "{count, plural, one {Nainštalovaný model má novšie vydanie} few {# nainštalované modely majú novšie vydania} many {# nainštalovaného modelu má novšie vydania} other {# nainštalovaných modelov má novšie vydania}}",
         "message": "Nainštalovaný model je náhľadová verzia a jeho finálne vydanie je teraz k dispozícii: {models}. Otvorte Nastavenia > Analýza > Modely, nainštalujte finálne vydanie a odstráňte náhľadovú verziu."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {Nainštalovaný model má novšie zostavenie} few {# nainštalované modely majú novšie zostavenia} many {# nainštalovaného modelu má novšie zostavenia} other {# nainštalovaných modelov má novšie zostavenia}}",
+        "message": "Novšie zostavenie nahrádza nainštalované pre: {models}. Nainštalované zostavenie funguje, kým neprepnete. Otvorte Nastavenia > Analýza > Modely a zvoľte Aktualizovať."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Nahradený modelom {name}. Namiesto neho používajte novší model.",
         "dialogNotice": "Tento model bol nahradený modelom {name}. Zvážte inštaláciu modelu {name}."
+      },
+      "update": {
+        "cardNotice": "Novšie zostavenie ({to}) nahrádza nainštalované zostavenie {from}.",
+        "action": "Aktualizovať",
+        "applying": "Aktualizuje sa..."
       },
       "entryIncompatible": "Tento model nie je v tomto systéme k dispozícii.",
       "regionGlobal": "Globálny",

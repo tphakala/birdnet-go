@@ -751,6 +751,60 @@ func TestIsPermanentEntry(t *testing.T) {
 	assert.False(t, IsPermanentEntry(nil), "nil is not permanent")
 }
 
+// TestVariantUpdate pins when a Legacy variant counts as an update to a newer
+// release: only a Legacy variant whose live successor is of a different release.
+// A withdrawn build of the same release (Perch int8-arm) is not an update.
+func TestVariantUpdate(t *testing.T) {
+	t.Parallel()
+
+	entry := &CatalogEntry{
+		ID:      "m",
+		Version: "2.0",
+		Variants: []CatalogVariant{
+			{ID: "live", Default: true},
+			{ID: "old", Legacy: true, SupersededBy: "live", Version: "1.0"},
+			{ID: "withdrawn", Legacy: true, SupersededBy: "live"},
+			{ID: "dangling", Legacy: true, SupersededBy: "missing", Version: "1.0"},
+			{ID: "chained", Legacy: true, SupersededBy: "old", Version: "0.9"},
+			{ID: "unlinked", Legacy: true, Version: "1.0"},
+		},
+	}
+	tests := []struct {
+		name      string
+		variantID string
+		wantOK    bool
+	}{
+		{name: "older release with a live successor", variantID: "old", wantOK: true},
+		{name: "live variant", variantID: "live"},
+		{name: "withdrawn build of the same release", variantID: "withdrawn"},
+		{name: "successor missing from the entry", variantID: "dangling"},
+		{name: "successor is itself Legacy", variantID: "chained"},
+		{name: "Legacy variant naming no successor", variantID: "unlinked"},
+		{name: "unknown variant", variantID: "nope"},
+		{name: "empty variant id", variantID: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			successor, ok := VariantUpdate(entry, tt.variantID)
+			assert.Equal(t, tt.wantOK, ok)
+			if tt.wantOK {
+				require.NotNil(t, successor)
+				assert.Equal(t, "live", successor.ID)
+			} else {
+				assert.Nil(t, successor)
+			}
+		})
+	}
+
+	_, ok := VariantUpdate(nil, "old")
+	assert.False(t, ok, "a nil entry has no update")
+
+	assert.Equal(t, "1.0", VariantVersion(entry, "old"), "a variant's own release wins")
+	assert.Equal(t, "2.0", VariantVersion(entry, "withdrawn"), "a variant without a release takes the entry's")
+	assert.Equal(t, "2.0", VariantVersion(entry, "nope"), "an unknown variant takes the entry's")
+}
+
 // TestEmbeddedCatalog_GlobalVariantResolution verifies the multi-variant global
 // entries (Perch v2, BirdNET v3.0, BirdNET+ v3.0) resolve their default variant into entry.Files
 // with the model and labels LocalName + checksum unchanged from the pre-variant flat

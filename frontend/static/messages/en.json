@@ -507,6 +507,10 @@
         "title": "{count, plural, one {An installed model has a newer release} other {# installed models have newer releases}}",
         "message": "An installed model is a preview version, and its final release is now available: {models}. Open Settings > Analysis > Models, install the final release and remove the preview."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {An installed model has a newer build} other {# installed models have newer builds}}",
+        "message": "A newer build replaces the installed one for: {models}. The installed build keeps working until you switch. Open Settings > Analysis > Models and choose Update."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Superseded by {name}. Use the newer model instead.",
         "dialogNotice": "This model has been superseded by {name}. Consider installing {name} instead."
+      },
+      "update": {
+        "cardNotice": "A newer build ({to}) replaces the installed {from} build.",
+        "action": "Update",
+        "applying": "Updating..."
       },
       "entryIncompatible": "This model is not available on this system.",
       "regionGlobal": "Global",
