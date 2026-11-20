@@ -127,8 +127,8 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 					regionHasLive[v.Region] = true
 					liveIDs[v.ID] = true
 					assert.Emptyf(t, v.SupersededBy, "live variant %q must not name a successor", v.ID)
-					// The two first-match walks over the variants (installed scan and
-					// gallery path resolution) rely on a live build coming first.
+					// A region lists its live builds before its Legacy ones, as the
+					// generator sorts them.
 					assert.Falsef(t, regionSawLegacy[v.Region], "live variant %q must precede its region's Legacy variants", v.ID)
 				}
 				assert.Truef(t, allowedRegionalPrecisions[v.Precision], "variant %q precision %q unexpected", v.ID, v.Precision)

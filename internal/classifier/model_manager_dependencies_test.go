@@ -719,7 +719,7 @@ func TestPrimarySwap_FailureKeepsRefetchedFileTheCurrentVariantUses(t *testing.T
 func TestEmbeddedCatalog_InstallRegistersGeomodelDependency(t *testing.T) {
 	plus, ok := GetCatalogEntry("birdnet-plus-v3.0")
 	require.True(t, ok)
-	// The last regional tile the gallery offers: a Legacy tile is not installable.
+	// The last regional tile the gallery offers: a Legacy tile is not offered to a new install.
 	offered := -1
 	for i := range plus.Variants {
 		if !plus.Variants[i].Legacy && plus.Variants[i].Region != "" {
