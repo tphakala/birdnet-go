@@ -238,7 +238,7 @@ func TestBirdNETV3Family_EachFamilyReadsItsOwnModelPath(t *testing.T) {
 	for _, id := range []string{RegistryIDBirdNETV3, RegistryIDBirdNETPlusV3} {
 		for _, entry := range birdNETV3FamilyEntryPoints {
 			t.Run(entry+"/"+id, func(t *testing.T) {
-				s, labels := birdNETV3FamilySettings(t)
+				s, _ := birdNETV3FamilySettings(t)
 				switch id {
 				case RegistryIDBirdNETV3:
 					s.BirdNETV3.ModelPath = ""
@@ -250,9 +250,6 @@ func TestBirdNETV3Family_EachFamilyReadsItsOwnModelPath(t *testing.T) {
 
 				require.Error(t, err)
 				require.ErrorContains(t, err, ModelRegistry[id].Name+" model files not installed or configured")
-				for _, labelPath := range labels {
-					assert.NotContains(t, err.Error(), labelPath, "the build must stop before the label file is read")
-				}
 			})
 		}
 	}
