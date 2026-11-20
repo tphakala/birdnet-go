@@ -183,7 +183,7 @@ The same sensitive data always produces the same anonymized identifier, allowing
 
 ### Q: How do I disable telemetry?
 
-**A:** Go to Settings → General, General tab, and turn off the "Enable Error Tracking" switch. Changes take effect immediately.
+**A:** Go to Settings → General, General tab, turn off the "Enable Error Tracking" switch, and click **Save Changes**. The change takes effect without a restart.
 
 ### Q: Where is the data sent?
 
@@ -228,7 +228,7 @@ BirdNET-Go is provided as free, open-source software maintained by volunteers. W
 - **Response times** may vary significantly during busy periods
 - **No warranties** - software provided "as is"
 
-For immediate privacy protection, simply disable telemetry in Settings → General (General tab).
+For immediate privacy protection, turn off telemetry in Settings → General (General tab) and click **Save Changes**.
 
 ---
 

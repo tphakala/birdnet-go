@@ -21,7 +21,7 @@ Before enabling telemetry, please review:
 ### Step 3: Enable Telemetry
 
 1. Turn on the **"Enable Error Tracking (Opt-in)"** switch
-2. Click **Save Settings** at the bottom of the page
+2. Click **Save Changes** at the bottom of the page
 3. You'll see a confirmation message that telemetry is now active
 
 ### Step 4: Verification
@@ -90,7 +90,7 @@ The web interface automatically manages the configuration:
 
 - **Enable/Disable**: Switch on the General tab of Settings → General
 - **Status**: Visual indicators show current state
-- **Changes**: Take effect immediately without restart
+- **Changes**: Take effect once you save them, without a restart
 
 ## Advanced Information
 
@@ -228,7 +228,7 @@ You can test the system by temporarily causing a harmless error:
 
 ### Q: Do I need to restart BirdNET-Go after enabling telemetry?
 
-**A:** No. Changes take effect immediately.
+**A:** No. Changes take effect once you save them.
 
 ### Q: Can I see what data is being sent?
 
@@ -248,7 +248,7 @@ You can test the system by temporarily causing a harmless error:
 
 ### Q: How do I disable telemetry temporarily?
 
-**A:** Go to Settings → General, General tab, and turn off the "Enable Error Tracking" switch. Changes take effect immediately.
+**A:** Go to Settings → General, General tab, turn off the "Enable Error Tracking" switch, and click **Save Changes**. The change takes effect without a restart.
 
 ## Troubleshooting
 
