@@ -117,7 +117,7 @@ describe('SecuritySettingsPage reverse proxy wiring', () => {
       '10.0.0.0/8',
     ]);
     expect(
-      screen.getByRole<HTMLInputElement>('checkbox', {
+      screen.getByRole<HTMLInputElement>('switch', {
         name: 'settings.security.reverseProxy.cloudflareLabel',
       }).checked
     ).toBe(true);

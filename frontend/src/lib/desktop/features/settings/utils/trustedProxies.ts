@@ -3,7 +3,7 @@
  *
  * security.trustedProxies is a string array that mixes proxy addresses with the
  * reserved `cloudflare` preset token (conf.TrustedProxyCloudflarePreset). The
- * address list editor shows only the addresses and a checkbox owns the token, so
+ * address list editor shows only the addresses and a switch owns the token, so
  * the form has to split the array and put it back together. The backend treats
  * the token's position and spelling as irrelevant, but the page compares the
  * saved and edited arrays by order and value, so every helper here returns the
@@ -74,7 +74,7 @@ export function recombineTrustedProxies(
   savedList: readonly string[]
 ): string[] {
   const saved = partitionTrustedProxies(savedList);
-  // The checkbox alone decides whether the token is stored, so a token in the rows is
+  // The switch alone decides whether the token is stored, so a token in the rows is
   // dropped, and blank entries are not rows.
   const rows = entries.filter(entry => !isCloudflarePreset(entry) && trimGoSpace(entry) !== '');
   if (hasCloudflare === saved.hasCloudflare && deepEqual(rows, saved.entries)) {
