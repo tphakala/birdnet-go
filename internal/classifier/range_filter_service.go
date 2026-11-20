@@ -124,7 +124,7 @@ type rangeFilterBackendKind string
 
 const (
 	// rfKindNone means no range-filter backend is loaded (no geomodel and no v2.4
-	// MData): filtering is off and, with a location configured, health is Critical.
+	// MData): filtering is off.
 	rfKindNone rangeFilterBackendKind = "none"
 	// rfKindGeomodelV3 is the universal mapped BirdNET geomodel v3, applied to every
 	// participant regardless of which acoustic classifier is loaded.
@@ -192,8 +192,8 @@ type rangeFilterState struct {
 	generation uint64
 	// kind names which range-filter backend this state holds (geomodel_v3, mdata_v2,
 	// mdata_v1, or none). Surfaced on the status/health API so a mixed set is honest
-	// about which backend is filtering, and drives the "install the geomodel" health
-	// hint when no backend is loaded.
+	// about which backend is filtering, and decides whether the geomodel serves the
+	// loaded models (RangeFilterStatus).
 	kind rangeFilterBackendKind
 	// coveredLabels is the classifier-side label space the backend maps onto: BirdNET
 	// v2.4's labels when v2.4 is loaded (byte-identical to the pre-decouple behavior),

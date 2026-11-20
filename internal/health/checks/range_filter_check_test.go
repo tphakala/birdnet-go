@@ -11,11 +11,12 @@ import (
 const installGuidance = "BirdNET Geomodel v3.0 from the models list (Settings > Analysis > Models)"
 
 // TestRangeFilterCheck covers the range-filter health states from the #852 fix plan:
-// a silent fail-open (no filter active while a location is configured) must be flagged
-// critical; a fallback to the embedded TFLite filter or a geomodel that matched zero
-// species must warn; and the no-location and fully-healthy cases must stay healthy.
-// It also covers the missing-geomodel diagnosis: Perch or BirdNET v3.0 loaded without the
-// BirdNET Geomodel is never healthy. The "active embedded filter is healthy" row documents
+// a silent fail-open of the embedded filter (no filter active while a location is
+// configured) must be flagged critical; a fallback to the embedded TFLite filter or a
+// geomodel that matched zero species must warn; and the no-location and fully-healthy
+// cases must stay healthy. It also covers the missing-geomodel diagnosis: Perch, BirdNET
+// v3.0 or BirdNET+ v3.0 loaded without the BirdNET Geomodel always warns, never healthy
+// and never critical. The "active embedded filter is healthy" row documents
 // that a v2.4-only install on the MData backend stays healthy.
 func TestRangeFilterCheck(t *testing.T) {
 	t.Parallel()
@@ -68,13 +69,13 @@ func TestRangeFilterCheck(t *testing.T) {
 			wantStatus: health.StatusHealthy,
 		},
 		{
-			name: "geomodel not installed with location and no backend is critical",
+			name: "geomodel not installed with location and no backend warns",
 			info: RangeFilterStatusInfo{
 				Available: true, ParticipantsLoaded: true, LocationConfigured: true,
-				GeomodelIssue: GeomodelIssueNotInstalled, UncoveredModels: []string{"Google Perch v2"},
+				GeomodelIssue: GeomodelIssueNotInstalled, UncoveredModels: []string{"BirdNET+ v3.0"},
 			},
-			wantStatus:   health.StatusCritical,
-			wantContains: []string{rangeFilterInactivePrefix, installGuidance, "Google Perch v2"},
+			wantStatus:   health.StatusWarning,
+			wantContains: []string{rangeFilterInactivePrefix, installGuidance, "BirdNET+ v3.0"},
 		},
 		{
 			name: "geomodel installed but not selected warns without install guidance",
@@ -102,7 +103,7 @@ func TestRangeFilterCheck(t *testing.T) {
 				Available: true, ParticipantsLoaded: true, LocationConfigured: true,
 				GeomodelIssue: GeomodelIssueNotInstalled,
 			},
-			wantStatus:   health.StatusCritical,
+			wantStatus:   health.StatusWarning,
 			wantContains: []string{rangeFilterFallbackModels},
 		},
 		{
@@ -156,7 +157,7 @@ func TestRangeFilterCheck(t *testing.T) {
 
 // TestRangeFilterCheck_GeomodelIssueIsNeverHealthy pins the maintainer's invariant over
 // the whole grid: whenever a model needing the BirdNET Geomodel runs without it, the check
-// is Critical when a location is set and no backend is active, and Warning otherwise.
+// is a Warning, whatever the location, backend or fallback state.
 func TestRangeFilterCheck_GeomodelIssueIsNeverHealthy(t *testing.T) {
 	t.Parallel()
 
@@ -169,12 +170,8 @@ func TestRangeFilterCheck_GeomodelIssueIsNeverHealthy(t *testing.T) {
 						Available: true, ParticipantsLoaded: true, LocationConfigured: location,
 						Active: active, FellBack: fellBack, GeomodelIssue: issue,
 					}
-					want := health.StatusWarning
-					if location && !active {
-						want = health.StatusCritical
-					}
 					result := NewRangeFilterCheck(func() RangeFilterStatusInfo { return info }).Run(t.Context())
-					assert.Equal(t, want, result.Status, "issue=%s location=%t active=%t fellBack=%t", issue, location, active, fellBack)
+					assert.Equal(t, health.StatusWarning, result.Status, "issue=%s location=%t active=%t fellBack=%t", issue, location, active, fellBack)
 				}
 			}
 		}

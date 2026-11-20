@@ -31,22 +31,25 @@ describe('rangeFilterBanner', () => {
     ['load_failed', 'geomodelLoadFailed', true],
   ];
 
-  it.each(issues)('%s: severity follows location and activity', (issue, key, link) => {
-    const make = (over: Partial<RangeFilterStatusSummary>) =>
-      rangeFilterBanner({ ...base, geomodelIssue: issue, ...over });
+  it.each(issues)(
+    '%s: always a warning, whatever the location or backend state',
+    (issue, key, link) => {
+      const make = (over: Partial<RangeFilterStatusSummary>) =>
+        rangeFilterBanner({ ...base, geomodelIssue: issue, ...over });
 
-    expect(make({ active: false })).toEqual({
-      level: 'error',
-      key,
-      models: 'Google Perch v2',
-      showModelsLink: link,
-    });
-    expect(make({ active: true })?.level).toBe('warning');
-    expect(make({ active: false, locationConfigured: false })).toMatchObject({
-      level: 'warning',
-      key,
-    });
-  });
+      expect(make({ active: false })).toEqual({
+        level: 'warning',
+        key,
+        models: 'Google Perch v2',
+        showModelsLink: link,
+      });
+      expect(make({ active: true })?.level).toBe('warning');
+      expect(make({ active: false, locationConfigured: false })).toMatchObject({
+        level: 'warning',
+        key,
+      });
+    }
+  );
 
   it('reload failure with an active backend warns even without a location', () => {
     expect(rangeFilterBanner({ ...base, reloadFailed: true, locationConfigured: false })).toEqual({

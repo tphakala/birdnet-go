@@ -58,7 +58,7 @@ export function rangeFilterBanner(
 
   if (status.geomodelIssue !== 'none') {
     return {
-      level: status.locationConfigured && !status.active ? 'error' : 'warning',
+      level: 'warning',
       key: ISSUE_KEYS[status.geomodelIssue],
       models: status.classifiers
         .filter(c => !c.coveredByBackend)
