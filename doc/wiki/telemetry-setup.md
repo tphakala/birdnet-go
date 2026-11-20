@@ -20,7 +20,7 @@ Before enabling telemetry, please review:
 
 ### Step 3: Enable Telemetry
 
-1. Check the box **"Enable Error Tracking (Opt-in)"**
+1. Turn on the **"Enable Error Tracking (Opt-in)"** switch
 2. Click **Save Settings** at the bottom of the page
 3. You'll see a confirmation message that telemetry is now active
 
@@ -50,7 +50,7 @@ The Support settings page contains several sections:
 
 #### Enable/Disable Toggle
 
-- **Control**: Single checkbox to turn telemetry on/off
+- **Control**: Single switch to turn telemetry on/off
 - **Default**: Disabled (opt-in required)
 - **Effect**: Immediate - no restart needed
 
@@ -88,7 +88,7 @@ sentry:
 
 The web interface automatically manages the configuration:
 
-- **Enable/Disable**: Checkbox in Settings → Support
+- **Enable/Disable**: Switch on the General tab of Main Settings
 - **Status**: Visual indicators show current state
 - **Changes**: Take effect immediately without restart
 
@@ -248,7 +248,7 @@ You can test the system by temporarily causing a harmless error:
 
 ### Q: How do I disable telemetry temporarily?
 
-**A:** Go to Settings → Support and uncheck "Enable Error Tracking". Changes take effect immediately.
+**A:** Go to Main Settings, General tab, and turn off the "Enable Error Tracking" switch. Changes take effect immediately.
 
 ## Troubleshooting
 

@@ -63,7 +63,7 @@ This folder contains **shared components** used across the application. Feature-
 
 ## Forms
 
-- `Checkbox.svelte` - Checkbox input with label (`labelClassName` replaces the label's default `py-1`; its base classes `flex items-center justify-start cursor-pointer` always stay and are not merged with conflicting utilities)
+- `Checkbox.svelte` - Checkbox input with label, for acknowledgements, row selection and multi-select lists (boolean settings use `ToggleField`) (`labelClassName` replaces the label's default `py-1`; its base classes `flex items-center justify-start cursor-pointer` always stay and are not merged with conflicting utilities)
 - `DateRangePicker.svelte` - Date range selection
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts
