@@ -7,13 +7,14 @@
   @component
 -->
 <script lang="ts">
-  import { ChevronRight, Check } from '@lucide/svelte';
+  import { ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
   import EditorCard from './editor/EditorCard.svelte';
   import EditorTextField from './editor/EditorTextField.svelte';
   import EditorSlider from './editor/EditorSlider.svelte';
   import EditorFooter from './editor/EditorFooter.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import EditorSpeciesInput from './editor/EditorSpeciesInput.svelte';
   import { toLocalizedPredictions, matchTypedToCanonical } from '$lib/utils/speciesPredictions';
   import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
@@ -294,26 +295,15 @@
         </div>
       </div>
 
-      <!-- Execute defaults checkbox -->
-      <label class="flex items-center gap-2 cursor-pointer">
-        <span class="relative inline-flex items-center justify-center w-4 h-4">
-          <input
-            type="checkbox"
-            bind:checked={actionExecuteDefaults}
-            disabled={disabled || saving}
-            class="peer appearance-none w-4 h-4 border-2 border-[var(--color-base-300)] rounded bg-[var(--color-base-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
-          />
-          <Check
-            class="absolute w-2.5 h-2.5 text-[var(--color-primary-content)] pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity"
-          />
-        </span>
-        <span class="text-xs text-[var(--color-base-content)]/60">
-          {t('settings.species.actionsModal.executeDefaults.label')}
-        </span>
-      </label>
-      <span class="text-xs text-[var(--color-base-content)]/40 block">
-        {t('settings.species.actionsModal.executeDefaults.helpText')}
-      </span>
+      <!-- Execute defaults switch -->
+      <ToggleField
+        variant="inline"
+        label={t('settings.species.actionsModal.executeDefaults.label')}
+        description={t('settings.species.actionsModal.executeDefaults.helpText')}
+        value={actionExecuteDefaults}
+        disabled={disabled || saving}
+        onUpdate={value => (actionExecuteDefaults = value)}
+      />
     </div>
   {/if}
 
