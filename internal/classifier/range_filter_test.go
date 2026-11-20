@@ -180,13 +180,15 @@ func TestBuildRangeFilter_PassUnmappedSpecies(t *testing.T) {
 	}
 }
 
-// TestBuildRangeFilter_SecondaryOnly_FailsOpenNoBackend is the regression guard for the
+// TestBuildRangeFilter_NoV24NoGeomodel_FailsOpenNoBackend is the regression guard for the
 // fail-CLOSED bug the range-filter decoupling fixes: before this change the whole range
-// filter was gated on BirdNET v2.4 being loaded, so a Perch-only or v3.0-only install
-// with a location set published an EMPTY inclusion list and processor.shouldFilterDetection
-// dropped every detection. After decoupling, such an install must fail OPEN over its own
-// participant labels, and the status must report it without a v2.4 gate.
-func TestBuildRangeFilter_SecondaryOnly_FailsOpenNoBackend(t *testing.T) {
+// filter was gated on BirdNET v2.4 being loaded, so an install running Perch v2, BirdNET
+// v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded, with a location set, published an
+// EMPTY inclusion list and processor.shouldFilterDetection dropped every detection. After
+// decoupling, such an install must fail OPEN over its own participant labels, and the
+// status must report it without a v2.4 gate. The fixture loads Perch v2 with no geomodel:
+// a flawed state, not a supported mode, for which failing open is the degraded path.
+func TestBuildRangeFilter_NoV24NoGeomodel_FailsOpenNoBackend(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.Latitude = 60.0
 	settings.BirdNET.Longitude = 25.0
@@ -300,10 +302,11 @@ func TestBuildRangeFilter_UniversalInferenceError_FailsOpen(t *testing.T) {
 
 // TestReload_GeomodelBuildFailure_NoBackend_PublishesCoveredLabels guards the fail-open
 // publish on a FAILED reload: when a configured geomodel cannot be built and no backend is
-// currently loaded (a fresh Perch-only or v3.0-only install), reload must still publish the
-// covered participant labels with no backend, so the later fail-open path scores over them
-// instead of leaving coveredLabels nil and dropping every detection. Reproduces the
-// reload-early-return finding on PR #4385.
+// currently loaded (an install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without
+// BirdNET v2.4 loaded, in the flawed state of having no working geomodel), reload must
+// still publish the covered participant labels with no backend, so the later fail-open
+// path scores over them instead of leaving coveredLabels nil and dropping every
+// detection. Reproduces the reload-early-return finding on PR #4385.
 func TestReload_GeomodelBuildFailure_NoBackend_PublishesCoveredLabels(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.Latitude = 60.0
@@ -349,9 +352,10 @@ func TestReload_GeomodelBuildFailure_NoBackend_PublishesCoveredLabels(t *testing
 
 // TestFailOpenScores_ResolvesOverridesAgainstCoveredLabels guards that fail-open user
 // overrides resolve against the covered participant labels, not settings.BirdNET.Labels
-// (empty on a Perch-only or v3.0-only install). A species that is force-included AND
-// excluded must be restored as its canonical covered label, not the raw user entry.
-// Reproduces the fail-open override finding on PR #4385.
+// (empty on an install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without BirdNET
+// v2.4 loaded). A species that is force-included AND excluded must be restored as its
+// canonical covered label, not the raw user entry. Reproduces the fail-open override
+// finding on PR #4385.
 func TestFailOpenScores_ResolvesOverridesAgainstCoveredLabels(t *testing.T) {
 	settings := conftest.GetTestSettings()
 	settings.BirdNET.Labels = nil // Perch-only: no v2.4 classifier label set

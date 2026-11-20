@@ -639,16 +639,19 @@ func zeroScoresForAllLabels(labels []string, excl excludeMatcher) []SpeciesScore
 // score 0, minus excludes, plus the user include-overrides. Applying overrides here
 // (they were previously only applied on the scored paths) keeps a force-included
 // species that is not a classifier label admitted even when there is no backend, and
-// keeps the inclusion list non-empty over the loaded participant union so a
-// Perch-only or v3.0-only install with a location set does not drop every detection.
+// keeps the inclusion list non-empty over the loaded participant union so an install
+// running Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded, with a
+// location set but no backend, does not drop every detection. That combination is a
+// flawed state, not a supported mode; failing open is its degraded path.
 func failOpenScores(coveredLabels []string, excluder excludeMatcher, settings *conf.Settings, debug debugFunc) []SpeciesScore {
 	scores := zeroScoresForAllLabels(coveredLabels, excluder)
 	// Resolve overrides against coveredLabels (the participant classifier label space this
 	// fail-open list is built over), NOT nil. canonicalOverrideLabels' classifier fallback
-	// is settings.BirdNET.Labels, which is empty on a Perch-only or v3.0-only install, so
-	// passing nil would leave an override for a participant species unresolved; if that
-	// species is also excluded, zeroScoresForAllLabels dropped its canonical label and the
-	// override must restore it as the canonical covered label rather than the raw entry.
+	// is settings.BirdNET.Labels, which is empty on an install running Perch v2, BirdNET
+	// v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded, so passing nil would leave an
+	// override for a participant species unresolved; if that species is also excluded,
+	// zeroScoresForAllLabels dropped its canonical label and the override must restore it
+	// as the canonical covered label rather than the raw entry.
 	// There is no loaded geomodel on the fail-open path, so coveredLabels is the right
 	// preferred match source here.
 	addUserOverrideSpeciesScores(debug, &scores, settings, coveredLabels)
