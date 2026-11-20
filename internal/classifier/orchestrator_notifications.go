@@ -140,9 +140,9 @@ const (
 
 	// English fallbacks for the geomodel notice. They equal the notifications.content.geomodel
 	// strings in frontend/static/messages/en.json, with %s in place of {models}.
-	geomodelNotInstalledTitle   = "BirdNET Geomodel v3.0 is not installed"
+	geomodelNotInstalledTitle   = "Geomodel not installed"
 	geomodelNotInstalledMessage = "These models need BirdNET Geomodel v3.0 to filter detections by location: %s. Install BirdNET Geomodel v3.0 from the model gallery in Settings > Analysis > Models."
-	geomodelLoadFailedTitle     = "BirdNET Geomodel v3.0 could not be loaded"
+	geomodelLoadFailedTitle     = "Geomodel failed to load"
 	geomodelLoadFailedMessage   = "BirdNET Geomodel v3.0 could not be loaded, so these models are not filtered by location: %s. Check the application log, then install or reinstall BirdNET Geomodel v3.0 from the model gallery in Settings > Analysis > Models."
 )
 

@@ -494,9 +494,9 @@
         "loadFailedMessage": "Povolený akustický model se nepodařilo načíst, takže zvuk je zachycován, ale není analyzován. Zkontrolujte model na stránce Systém > Modely AI."
       },
       "geomodel": {
-        "notInstalledTitle": "BirdNET Geomodel v3.0 není nainstalován",
+        "notInstalledTitle": "Geomodel není nainstalován",
         "notInstalledMessage": "Tyto modely potřebují BirdNET Geomodel v3.0 k filtrování detekcí podle polohy: {models}. Nainstalujte BirdNET Geomodel v3.0 z galerie modelů v Nastavení > Analýza > Modely.",
-        "loadFailedTitle": "BirdNET Geomodel v3.0 se nepodařilo načíst",
+        "loadFailedTitle": "Geomodel se nepodařilo načíst",
         "loadFailedMessage": "BirdNET Geomodel v3.0 se nepodařilo načíst, proto tyto modely nejsou filtrovány podle polohy: {models}. Zkontrolujte log aplikace a poté nainstalujte nebo přeinstalujte BirdNET Geomodel v3.0 z galerie modelů v Nastavení > Analýza > Modely."
       },
       "modelOptimize": {

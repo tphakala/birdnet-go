@@ -494,9 +494,9 @@
         "loadFailedMessage": "En aktiverad akustisk modell kunde inte läsas in, så ljud spelas in men analyseras inte. Kontrollera modellen på sidan System > AI-modeller."
       },
       "geomodel": {
-        "notInstalledTitle": "BirdNET Geomodel v3.0 är inte installerad",
+        "notInstalledTitle": "Geomodel är inte installerad",
         "notInstalledMessage": "Dessa modeller behöver BirdNET Geomodel v3.0 för att filtrera detekteringar efter plats: {models}. Installera BirdNET Geomodel v3.0 från modellgalleriet i Inställningar > Analys > Modeller.",
-        "loadFailedTitle": "BirdNET Geomodel v3.0 kunde inte läsas in",
+        "loadFailedTitle": "Geomodel kunde inte läsas in",
         "loadFailedMessage": "BirdNET Geomodel v3.0 kunde inte läsas in, så dessa modeller filtreras inte efter plats: {models}. Kontrollera programloggen och installera eller installera om BirdNET Geomodel v3.0 från modellgalleriet i Inställningar > Analys > Modeller."
       },
       "modelOptimize": {

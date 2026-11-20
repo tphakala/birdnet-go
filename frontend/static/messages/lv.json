@@ -494,9 +494,9 @@
         "loadFailedMessage": "Iespējoto akustisko modeli neizdevās ielādēt, tāpēc audio tiek ierakstīts, bet netiek analizēts. Pārbaudiet modeli lapā Sistēma > MI Modeļi."
       },
       "geomodel": {
-        "notInstalledTitle": "BirdNET Geomodel v3.0 nav instalēts",
+        "notInstalledTitle": "Geomodel nav instalēts",
         "notInstalledMessage": "Šiem modeļiem ir vajadzīgs BirdNET Geomodel v3.0, lai filtrētu atpazīšanas rezultātus pēc atrašanās vietas: {models}. Instalējiet BirdNET Geomodel v3.0 no modeļu galerijas sadaļā Iestatījumi > Analīze > Modeļi.",
-        "loadFailedTitle": "BirdNET Geomodel v3.0 neizdevās ielādēt",
+        "loadFailedTitle": "Geomodel neizdevās ielādēt",
         "loadFailedMessage": "BirdNET Geomodel v3.0 neizdevās ielādēt, tāpēc šie modeļi netiek filtrēti pēc atrašanās vietas: {models}. Pārbaudiet lietotnes žurnālu un instalējiet vai pārinstalējiet BirdNET Geomodel v3.0 no modeļu galerijas sadaļā Iestatījumi > Analīze > Modeļi."
       },
       "modelOptimize": {

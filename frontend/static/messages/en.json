@@ -494,9 +494,9 @@
         "loadFailedMessage": "An enabled acoustic model failed to load, so audio is captured but not analyzed. Check the model on the System > AI Models page."
       },
       "geomodel": {
-        "notInstalledTitle": "BirdNET Geomodel v3.0 is not installed",
+        "notInstalledTitle": "Geomodel not installed",
         "notInstalledMessage": "These models need BirdNET Geomodel v3.0 to filter detections by location: {models}. Install BirdNET Geomodel v3.0 from the model gallery in Settings > Analysis > Models.",
-        "loadFailedTitle": "BirdNET Geomodel v3.0 could not be loaded",
+        "loadFailedTitle": "Geomodel failed to load",
         "loadFailedMessage": "BirdNET Geomodel v3.0 could not be loaded, so these models are not filtered by location: {models}. Check the application log, then install or reinstall BirdNET Geomodel v3.0 from the model gallery in Settings > Analysis > Models."
       },
       "modelOptimize": {
