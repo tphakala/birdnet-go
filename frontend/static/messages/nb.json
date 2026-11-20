@@ -493,6 +493,12 @@
         "loadFailedTitle": "Akustisk modell kunne ikke lastes inn",
         "loadFailedMessage": "En aktivert akustisk modell kunne ikke lastes inn, så lyd tas opp, men analyseres ikke. Sjekk modellen på siden System > AI-modeller."
       },
+      "geomodel": {
+        "notInstalledTitle": "Geomodel er ikke installert",
+        "notInstalledMessage": "BirdNET Geomodel v3.0 trengs for å filtrere registreringer etter posisjon for: {models}. Installer BirdNET Geomodel v3.0 fra modellgalleriet i Innstillinger > Analyse > Modeller.",
+        "loadFailedTitle": "Geomodel kunne ikke lastes",
+        "loadFailedMessage": "BirdNET Geomodel v3.0 kunne ikke lastes, så filtrering etter posisjon er av for: {models}. Sjekk applikasjonsloggen, og installer eller installer BirdNET Geomodel v3.0 på nytt fra modellgalleriet i Innstillinger > Analyse > Modeller."
+      },
       "modelOptimize": {
         "title": "{count, plural, one {# modell har en bedre versjon for dette systemet} other {# modeller har bedre versjoner for dette systemet}}",
         "message": "En versjon som passer bedre til systemets maskinvare eller plassering, er tilgjengelig for: {models}. Åpne Innstillinger > Analyse > Modeller og velg Optimer for å bytte."

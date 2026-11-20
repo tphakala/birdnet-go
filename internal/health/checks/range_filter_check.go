@@ -102,9 +102,10 @@ func (c *RangeFilterCheck) Name() string { return rangeFilterCheckName }
 // Category returns the analysis category.
 func (c *RangeFilterCheck) Category() health.Category { return health.CategoryAnalysis }
 
-// geomodelIssueResult maps a geomodel issue to a status and message. It is Critical when
-// a location is set and no backend filters (fail-open), otherwise Warning.
-func geomodelIssueResult(s *RangeFilterStatusInfo) (status health.Status, message string) {
+// geomodelIssueMessage builds the message for a geomodel issue. The caller reports every
+// geomodel issue as a Warning; the message says nothing is filtered when a location is set
+// and no backend is loaded.
+func geomodelIssueMessage(s *RangeFilterStatusInfo) string {
 	models := rangeFilterFallbackModels
 	if len(s.UncoveredModels) > 0 {
 		models = strings.Join(s.UncoveredModels, ", ")
@@ -118,11 +119,11 @@ func geomodelIssueResult(s *RangeFilterStatusInfo) (status health.Status, messag
 	default:
 		format = rangeFilterNotInstalledFmt
 	}
-	message = fmt.Sprintf(format, models)
+	message := fmt.Sprintf(format, models)
 	if s.LocationConfigured && !s.Active {
-		return health.StatusCritical, rangeFilterInactivePrefix + message
+		return rangeFilterInactivePrefix + message
 	}
-	return health.StatusWarning, message
+	return message
 }
 
 // reloadFailedMessage builds the retained-backend reload failure message.
@@ -135,7 +136,8 @@ func reloadFailedMessage(uncovered []string) string {
 }
 
 // Run evaluates range-filter health. A loaded model that needs the BirdNET Geomodel
-// without it is evaluated before the no-location case, so it is never reported healthy.
+// without it is evaluated before the no-location case and reported as a Warning, so it is
+// never reported healthy.
 func (c *RangeFilterCheck) Run(_ context.Context) health.Result {
 	start := time.Now()
 
@@ -157,7 +159,9 @@ func (c *RangeFilterCheck) Run(_ context.Context) health.Result {
 		// a fault. Checked before Active so this does not report a spurious Critical.
 		message = rangeFilterNoParticipant
 	case s.GeomodelIssue != "":
-		status, message = geomodelIssueResult(&s)
+		// A geomodel issue is always a Warning, whatever the location or backend state.
+		status = health.StatusWarning
+		message = geomodelIssueMessage(&s)
 	case s.ReloadFailed && s.Active:
 		status = health.StatusWarning
 		message = reloadFailedMessage(s.UncoveredModels)

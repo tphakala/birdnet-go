@@ -124,7 +124,7 @@ type rangeFilterBackendKind string
 
 const (
 	// rfKindNone means no range-filter backend is loaded (no geomodel and no v2.4
-	// MData): filtering is off and, with a location configured, health is Critical.
+	// MData): filtering is off.
 	rfKindNone rangeFilterBackendKind = "none"
 	// rfKindGeomodelV3 is the universal mapped BirdNET geomodel v3, applied to every
 	// participant regardless of which acoustic classifier is loaded.
@@ -192,8 +192,8 @@ type rangeFilterState struct {
 	generation uint64
 	// kind names which range-filter backend this state holds (geomodel_v3, mdata_v2,
 	// mdata_v1, or none). Surfaced on the status/health API so a mixed set is honest
-	// about which backend is filtering, and drives the "install the geomodel" health
-	// hint when no backend is loaded.
+	// about which backend is filtering, and decides whether the geomodel serves the
+	// loaded models (RangeFilterStatus).
 	kind rangeFilterBackendKind
 	// coveredLabels is the classifier-side label space the backend maps onto: BirdNET
 	// v2.4's labels when v2.4 is loaded (byte-identical to the pre-decouple behavior),
@@ -250,6 +250,11 @@ type rangeFilterService struct {
 	// debug gates debug log lines like BirdNET.Debug (on the globally published
 	// settings). May be nil in tests; use the Debug helper.
 	debug debugFunc
+
+	// afterReload, when set, runs after every reload returns (success, failure or the
+	// closed early return) and after buildMu is released, so it may read the status that
+	// takes locks reload holds. Set once before the service is shared; may be nil.
+	afterReload func()
 }
 
 // newRangeFilterService returns a service with an empty (no-backend) state.
@@ -310,7 +315,13 @@ func (rfs *rangeFilterService) backendKind() rangeFilterBackendKind {
 // build failure with NO backend loaded, the fresh participant covered labels are
 // published with kind none so the service fails open (see the error branch below).
 // The species cache is cleared on a successful swap because the backend changed.
+// Every return path, including the already-closed one, runs afterReload once buildMu
+// is released.
 func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() rangeFilterView) error {
+	// Registered before the buildMu defer below so it runs after the unlock.
+	if rfs.afterReload != nil {
+		defer rfs.afterReload()
+	}
 	// Serialize reloads: concurrent build+swap from the monitor and API goroutines
 	// would otherwise race the atomic swap (late-writer-wins) and double-Close.
 	rfs.buildMu.Lock()
