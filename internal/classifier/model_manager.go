@@ -370,8 +370,7 @@ func (mm *ModelManager) ScanInstalled() {
 		// Startup loading is complete and the notification service is up by now, so evaluate
 		// the persistent "no acoustic model" and "BirdNET Geomodel missing" notices.
 		// NewOrchestrator's earlier syncs latched nothing if the notification service was not
-		// yet initialized at construction, and the geomodel notice also needs the models
-		// directory NewModelManager sets after construction.
+		// yet initialized at construction.
 		if mm.orchestrator != nil {
 			mm.orchestrator.SyncAcousticModelsNotice()
 			mm.orchestrator.SyncGeomodelNotice()

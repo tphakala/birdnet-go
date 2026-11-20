@@ -229,6 +229,6 @@ func (o *Orchestrator) syncGeomodelNotice() {
 }
 
 // SyncGeomodelNotice is the exported entry point for ModelManager.ScanInstalled, which
-// evaluates the notice once the models directory is final and the notification service is
+// evaluates the notice once startup loading is done and the notification service is
 // certainly up.
 func (o *Orchestrator) SyncGeomodelNotice() { o.syncGeomodelNotice() }
