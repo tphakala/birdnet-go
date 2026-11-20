@@ -464,8 +464,8 @@ func modelAndLabelsFiles(files []CatalogFile) (modelFile, labelsFile string) {
 // variant whose model file matches it is preferred, so an ambiguous on-disk state
 // (e.g. both files present after a crashed replace) resolves to the variant the
 // loader will actually open. It then falls back to the default variant, then the
-// remaining variants in catalog order. ok is false when no variant's model file
-// is present on disk.
+// remaining live variants in catalog order, then the Legacy ones. ok is false
+// when no variant's model file is present on disk.
 func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (InstalledModel, bool) {
 	// Permanent entry with a BuiltIn baseline (BirdNET v2.4): the model is ALWAYS
 	// installed, but which variant is active is decided by the settings hint alone,
@@ -508,13 +508,18 @@ func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (In
 			return im, true
 		}
 	}
-	for i := range entry.Variants {
-		v := &entry.Variants[i]
-		if def != nil && v.ID == def.ID {
-			continue
-		}
-		if im, ok := installedFromVariant(entry, v, subdir); ok {
-			return im, true
+	// The remaining variants in catalog order, live ones first: with no configured
+	// path, a leftover Legacy build (an older release, a withdrawn precision) must
+	// not shadow a live build that is also on disk, whatever order they are listed in.
+	for _, legacy := range []bool{false, true} {
+		for i := range entry.Variants {
+			v := &entry.Variants[i]
+			if v.Legacy != legacy || (def != nil && v.ID == def.ID) {
+				continue
+			}
+			if im, ok := installedFromVariant(entry, v, subdir); ok {
+				return im, true
+			}
 		}
 	}
 	return InstalledModel{}, false
@@ -665,8 +670,9 @@ func installedModelBasenameHint(settings *conf.Settings, registryID string, load
 }
 
 // installedFromVariant builds the InstalledModel for a specific variant if its
-// model file exists on disk under subdir. ok is false when the variant carries
-// no model role or its model file is absent.
+// model file exists on disk under subdir; its Version is the variant's release
+// (variantVersion). ok is false when the variant carries no model role or its
+// model file is absent.
 func installedFromVariant(entry *CatalogEntry, v *CatalogVariant, subdir string) (InstalledModel, bool) {
 	modelFile, labelsFile := modelAndLabelsFiles(v.Files)
 	if modelFile == "" {
@@ -686,7 +692,7 @@ func installedFromVariant(entry *CatalogEntry, v *CatalogVariant, subdir string)
 		ModelPath:   modelPath,
 		LabelsPath:  labelsPath,
 		InstalledAt: fileModTime(modelPath),
-		Version:     entry.Version,
+		Version:     variantVersion(entry, v.ID),
 	}, true
 }
 
@@ -1515,8 +1521,8 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 
 // replaceVariant switches an installed model to newVariantID using a
 // download-before-delete strategy: the new variant's files are downloaded and
-// verified first (the old model keeps running), the install record and config are
-// swapped, and the new variant is activated. A LOADED family activates GAPLESSLY via
+// verified first (the old model keeps running), the install record (the new
+// variant and its release) and config are swapped, and the new variant is activated. A LOADED family activates GAPLESSLY via
 // reloadEntry (the old instance keeps serving until the new one is built and swapped
 // in under entry.mu, then closed); a not-loaded family is fresh-loaded via
 // hotLoadAfterInstall. Only after a successful activation are the old variant's
@@ -1565,7 +1571,7 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 		ModelPath:   modelPath,
 		LabelsPath:  labelsPath,
 		InstalledAt: time.Now(),
-		Version:     entry.Version,
+		Version:     variantVersion(entry, newVariantID),
 	}
 	mm.recordDependenciesLocked(entry)
 	mm.mu.Unlock()
@@ -2130,7 +2136,7 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 
 // downloadModelFiles installs a catalog entry's selected variant: it delegates
 // the file download and verification to downloadVariantFiles, then records the
-// install, applies config, and hot-loads the model. It is the install/reinstall
+// install (the variant and its release), applies config, and hot-loads the model. It is the install/reinstall
 // entry point; the variant-switch path (replaceVariant) uses downloadVariantFiles
 // directly so it can interpose an unload between download and load. The caller
 // must have registered the entry in mm.downloading. cleanupOnFailure is passed
@@ -2162,7 +2168,7 @@ func (mm *ModelManager) downloadModelFiles(ctx context.Context, entry *CatalogEn
 		ModelPath:   modelPath,
 		LabelsPath:  labelsPath,
 		InstalledAt: time.Now(),
-		Version:     entry.Version,
+		Version:     variantVersion(entry, recordedVariant),
 	}
 	mm.recordDependenciesLocked(entry)
 	delete(mm.downloading, entry.ID)

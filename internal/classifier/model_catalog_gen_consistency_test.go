@@ -5,6 +5,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +18,9 @@ import (
 // The CI drift gate (model-catalog-drift.yml) catches a stale generated file;
 // this fast unit test additionally catches a hand-edit of the generated file that
 // diverges from the manifest data (checksum, size, region, or model path), which
-// a byte-level regeneration on a developer's machine might otherwise mask.
+// a byte-level regeneration on a developer's machine might otherwise mask. A
+// family's frozen older-release manifests (gen/manifests/releases) are read too,
+// since the generator emits their builds as Legacy variants.
 func TestRegionalVariants_MatchManifest(t *testing.T) {
 	t.Parallel()
 
@@ -70,59 +74,12 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 				}
 			}
 
-			manifest := loadTestManifest(t, tc.manifestFile)
-			regional := 0
-			for i := range manifest.Models {
-				e := &manifest.Models[i]
-				if e.Region == "" {
-					continue
-				}
-				regional++
-
+			regionalEntries := regionalManifestEntries(loadFamilyManifests(t, tc.manifestFile))
+			regional := len(regionalEntries)
+			for _, e := range regionalEntries {
 				v, found := byModelPath[e.Path]
 				require.Truef(t, found, "no generated variant carries model path %q", e.Path)
-				assert.Equalf(t, e.Region, v.Region, "variant for %q must carry the manifest region slug", e.Path)
-
-				var model *CatalogFile
-				for j := range v.Files {
-					if v.Files[j].Role == RoleModel {
-						model = &v.Files[j]
-					}
-				}
-				require.NotNil(t, model)
-				assert.Equalf(t, e.SHA256, model.SHA256, "model checksum for %q", e.Path)
-				assert.Equalf(t, e.SizeBytes, model.SizeBytes, "model size for %q", e.Path)
-				require.NotNilf(t, e.Requirements, "manifest entry %q must carry requirements", e.Path)
-				assert.Equalf(t, e.Requirements.MinRAMMB, v.Requirements.MinRAMMB, "RAM floor for %q", e.Path)
-
-				// The generated variant ID is the manifest variant token joined to
-				// the region slug (generator: e.Variant + "@" + e.Region).
-				assert.Equalf(t, e.Variant+"@"+e.Region, v.ID, "variant ID for %q", e.Path)
-
-				// Precision, normalized the same way the generator does.
-				assert.Equalf(t, normalizeManifestPrecision(e.Precision), v.Precision, "precision for %q", e.Path)
-
-				// SpeciesCount: v3.0 supplies classes in the manifest; Perch omits it
-				// and the region table fills it in, so there we only assert it is set.
-				if e.Classes != nil {
-					assert.Equalf(t, *e.Classes, v.SpeciesCount, "species count for %q", e.Path)
-				} else {
-					assert.Positivef(t, v.SpeciesCount, "species count for %q must be populated", e.Path)
-				}
-
-				// Arch is derived by the generator: the int8-arm build is aarch64-only.
-				var wantArch []string
-				if e.Variant == "int8-arm" {
-					wantArch = []string{"aarch64"}
-				}
-				assert.ElementsMatchf(t, wantArch, v.Requirements.Arch, "arch for %q", e.Path)
-
-				// Excludes pass through verbatim from the manifest requirements.
-				assert.ElementsMatchf(t, e.Requirements.Excludes, v.Requirements.Excludes, "excludes for %q", e.Path)
-
-				// Score calibration: every Perch regional entry carries the manifest's
-				// value verbatim; the sigmoid-scored BirdNET v3.0 entries carry none.
-				assertGeneratedScoreCalibration(t, entry.RegistryID == RegistryIDPerchV2, e.Path, e.ScoreCalibration, v.ScoreCalibration)
+				assertRegionalVariantMatchesManifest(t, &entry, v, e)
 			}
 			assert.Equalf(t, regionalTilesFor(tc.entryID), regional, "manifest %s must describe %d regional tiles", tc.manifestFile, regionalTilesFor(tc.entryID))
 			assert.Lenf(t, byModelPath, regionalTilesFor(tc.entryID), "%s must expose exactly %d regional model paths", tc.entryID, regionalTilesFor(tc.entryID))
@@ -130,13 +87,92 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 	}
 }
 
+// regionalManifestEntries returns the regional (region-sliced) models of the
+// given manifests.
+func regionalManifestEntries(manifests []*testManifest) []*testManifestModel {
+	var out []*testManifestModel
+	for _, manifest := range manifests {
+		for i := range manifest.Models {
+			if manifest.Models[i].Region != "" {
+				out = append(out, &manifest.Models[i])
+			}
+		}
+	}
+	return out
+}
+
+// assertRegionalVariantMatchesManifest compares one generated regional variant
+// with its manifest model.
+func assertRegionalVariantMatchesManifest(t *testing.T, entry *CatalogEntry, v *CatalogVariant, e *testManifestModel) {
+	t.Helper()
+	assert.Equalf(t, e.Region, v.Region, "variant for %q must carry the manifest region slug", e.Path)
+
+	var model *CatalogFile
+	for j := range v.Files {
+		if v.Files[j].Role == RoleModel {
+			model = &v.Files[j]
+		}
+	}
+	require.NotNil(t, model)
+	assert.Equalf(t, e.SHA256, model.SHA256, "model checksum for %q", e.Path)
+	assert.Equalf(t, e.SizeBytes, model.SizeBytes, "model size for %q", e.Path)
+	require.NotNilf(t, e.Requirements, "manifest entry %q must carry requirements", e.Path)
+	assert.Equalf(t, e.Requirements.MinRAMMB, v.Requirements.MinRAMMB, "RAM floor for %q", e.Path)
+
+	// The generated variant ID is the manifest variant token joined to
+	// the region slug, restated independently of the generator: bare for
+	// Perch, BirdNET v3.0 and the BirdNET+ 3.0 release, and carrying
+	// "-<upstream_version>" for every later BirdNET+ release.
+	wantID := e.Variant + "@" + e.Region
+	if entry.ID == "birdnet-plus-v3.0" && e.UpstreamVersion != "3.0" {
+		wantID = e.Variant + "-" + e.UpstreamVersion + "@" + e.Region
+	}
+	assert.Equalf(t, wantID, v.ID, "variant ID for %q", e.Path)
+
+	// A BirdNET+ file name carries the entry's own release, so no build can
+	// sit under another release's name, and the variant reports that release.
+	if entry.ID == "birdnet-plus-v3.0" {
+		assert.Equalf(t, "birdnet_plus_v"+e.UpstreamVersion+"_"+e.Region+"_"+e.Variant+".onnx", model.LocalName, "model LocalName for %q", e.Path)
+		assert.Equalf(t, e.UpstreamVersion, variantVersion(entry, v.ID), "release of variant %q", v.ID)
+	}
+
+	// Precision, normalized the same way the generator does.
+	assert.Equalf(t, normalizeManifestPrecision(e.Precision), v.Precision, "precision for %q", e.Path)
+
+	// SpeciesCount: v3.0 supplies classes in the manifest; Perch omits it
+	// and the region table fills it in, so there we only assert it is set.
+	if e.Classes != nil {
+		assert.Equalf(t, *e.Classes, v.SpeciesCount, "species count for %q", e.Path)
+	} else {
+		assert.Positivef(t, v.SpeciesCount, "species count for %q must be populated", e.Path)
+	}
+
+	// Arch is derived by the generator: the int8-arm build is aarch64-only.
+	var wantArch []string
+	if e.Variant == "int8-arm" {
+		wantArch = []string{"aarch64"}
+	}
+	assert.ElementsMatchf(t, wantArch, v.Requirements.Arch, "arch for %q", e.Path)
+
+	// Excludes pass through verbatim from the manifest requirements.
+	assert.ElementsMatchf(t, e.Requirements.Excludes, v.Requirements.Excludes, "excludes for %q", e.Path)
+
+	// Score calibration: every Perch regional entry carries the manifest's
+	// value verbatim; the sigmoid-scored BirdNET v3.0 entries carry none.
+	assertGeneratedScoreCalibration(t, entry.RegistryID == RegistryIDPerchV2, e.Path, e.ScoreCalibration, v.ScoreCalibration)
+}
+
 // TestGlobalVariants_MatchManifest cross-checks the hand-written global variants
-// of every family with a vendored manifest against that manifest: each manifest
-// model without a region must match a catalog variant by model path on checksum,
-// size, RAM floor, backend support, benchmarks and labels file, and the family metadata (license, commercial
+// of every family with a vendored manifest (and its frozen older-release
+// manifests) against it: each manifest model without a region must match a
+// catalog variant by model path on checksum, size, RAM floor, backend support,
+// benchmarks and labels file, and the family metadata (license, commercial
 // use, species count and, when the manifest states one, channel) must equal the
-// entry's. It catches a mistyped hash or size in a hand-written entry, which the
-// generator cannot see.
+// entry's. For an entry that carries per-variant releases, the entry's Version
+// must be the manifest's current release and each global variant's release must
+// be its manifest entry's upstream_version, so a forgotten Version at the next
+// release fails here. It catches a mistyped hash or size in a hand-written entry,
+// which the generator cannot see.
 func TestGlobalVariants_MatchManifest(t *testing.T) {
 	t.Parallel()
 
@@ -151,7 +187,8 @@ func TestGlobalVariants_MatchManifest(t *testing.T) {
 		t.Run(entry.ID, func(t *testing.T) {
 			t.Parallel()
 
-			manifest := loadTestManifest(t, manifestFile)
+			manifests := loadFamilyManifests(t, manifestFile)
+			manifest := manifests[0]
 			assert.Equal(t, entry.License, manifest.FamilyMeta.License, "license")
 			assert.Equal(t, entry.CommercialUse, manifest.FamilyMeta.CommercialUse, "commercial use")
 			assert.Equal(t, entry.SpeciesCount, manifest.FamilyMeta.SpeciesCount, "species count")
@@ -173,18 +210,28 @@ func TestGlobalVariants_MatchManifest(t *testing.T) {
 				}
 			}
 
+			perVariantReleases := slices.ContainsFunc(entry.Variants, func(v CatalogVariant) bool { return v.Version != "" })
+			if perVariantReleases {
+				assert.Equal(t, manifest.FamilyMeta.CurrentVersion, entry.Version, "entry Version must be the manifest's current release")
+			}
+
 			global := 0
-			for j := range manifest.Models {
-				e := &manifest.Models[j]
-				if e.Region != "" {
-					continue
+			for _, mf := range manifests {
+				for j := range mf.Models {
+					e := &mf.Models[j]
+					if e.Region != "" {
+						continue
+					}
+					global++
+					v, found := byModelPath[e.Path]
+					if !assert.Truef(t, found, "no catalog variant carries global model path %q", e.Path) {
+						continue
+					}
+					assertGlobalVariantMatchesManifest(t, v, e)
+					if perVariantReleases {
+						assert.Equalf(t, e.UpstreamVersion, variantVersion(entry, v.ID), "release of global variant %q", v.ID)
+					}
 				}
-				global++
-				v, found := byModelPath[e.Path]
-				if !assert.Truef(t, found, "no catalog variant carries global model path %q", e.Path) {
-					continue
-				}
-				assertGlobalVariantMatchesManifest(t, v, e)
 			}
 			assert.Positivef(t, global, "manifest %s must describe at least one global model", manifestFile)
 		})
@@ -247,17 +294,18 @@ func assertGeneratedScoreCalibration(t *testing.T, wantPresent bool, modelPath s
 // testManifest mirrors only the manifest fields this test compares.
 // testManifestModel mirrors only the manifest model fields this test compares.
 type testManifestModel struct {
-	Path         string `json:"path"`
-	Variant      string `json:"variant"`
-	Precision    string `json:"precision"`
-	Region       string `json:"region"`
-	Classes      *int   `json:"classes"`
-	SHA256       string `json:"sha256"`
-	SizeBytes    int64  `json:"size_bytes"`
-	Labels       string `json:"labels"`
-	LabelsSHA256 string `json:"labels_sha256"`
-	LabelsSize   int64  `json:"labels_size_bytes"`
-	Requirements *struct {
+	Path            string `json:"path"`
+	Variant         string `json:"variant"`
+	Precision       string `json:"precision"`
+	Region          string `json:"region"`
+	UpstreamVersion string `json:"upstream_version"`
+	Classes         *int   `json:"classes"`
+	SHA256          string `json:"sha256"`
+	SizeBytes       int64  `json:"size_bytes"`
+	Labels          string `json:"labels"`
+	LabelsSHA256    string `json:"labels_sha256"`
+	LabelsSize      int64  `json:"labels_size_bytes"`
+	Requirements    *struct {
 		MinRAMMB int      `json:"min_ram_mb"`
 		Excludes []string `json:"excludes"`
 	} `json:"requirements"`
@@ -277,10 +325,11 @@ type testManifestModel struct {
 type testManifest struct {
 	Models     []testManifestModel `json:"models"`
 	FamilyMeta struct {
-		License       string  `json:"license"`
-		CommercialUse bool    `json:"commercial_use"`
-		SpeciesCount  int     `json:"species_count"`
-		Channel       *string `json:"channel"`
+		License        string  `json:"license"`
+		CommercialUse  bool    `json:"commercial_use"`
+		SpeciesCount   int     `json:"species_count"`
+		Channel        *string `json:"channel"`
+		CurrentVersion string  `json:"current_version"`
 	} `json:"family_meta"`
 }
 
@@ -301,6 +350,22 @@ func loadTestManifest(t *testing.T, pathname string) *testManifest {
 	var m testManifest
 	require.NoErrorf(t, json.Unmarshal(data, &m), "parse vendored manifest %q", pathname)
 	return &m
+}
+
+// loadFamilyManifests loads a family's current manifest, then its frozen
+// older-release manifests (gen/manifests/releases/<repo>.release-<release>.models.json),
+// in file name order. The current manifest is always first.
+func loadFamilyManifests(t *testing.T, manifestFile string) []*testManifest {
+	t.Helper()
+	base := strings.TrimSuffix(filepath.Base(manifestFile), ".models.json")
+	frozen, err := filepath.Glob(filepath.Join(filepath.Dir(manifestFile), "releases", base+".release-*.models.json"))
+	require.NoError(t, err)
+	out := make([]*testManifest, 0, 1+len(frozen))
+	out = append(out, loadTestManifest(t, manifestFile))
+	for _, f := range frozen {
+		out = append(out, loadTestManifest(t, f))
+	}
+	return out
 }
 
 // documentManifestFiles returns every vendored manifest that feeds the document

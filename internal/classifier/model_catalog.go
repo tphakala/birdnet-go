@@ -133,6 +133,12 @@ type CatalogVariant struct {
 	Files        []CatalogFile             `json:"files"`                   // files to download for this variant
 	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded or withdrawn build)
 	SupersededBy string                    `json:"superseded_by,omitempty"` // id of the variant that replaces this one, if any
+	// Version is the release of this variant's files when it differs from the
+	// entry's Version (an older release kept as a Legacy variant), empty when the
+	// variant is of the entry's own release. omitempty keeps the on-disk JSON of
+	// every other variant byte-identical, so adding this field does not shift
+	// catalogChecksum for entries that do not use it (the same reasoning as BuiltIn).
+	Version string `json:"version,omitempty"`
 	// BuiltIn marks the embedded baseline variant of a permanent model (the
 	// BirdNET v2.4 classifier shipped inside the binary). A BuiltIn variant carries
 	// no files (nothing to download), is always reported installed by ScanInstalled,
@@ -230,7 +236,15 @@ var EmbeddedCatalog = []CatalogEntry{
 	// runs at f32 on OpenVINO (openVINOPrecisionFor). The regional tiles are
 	// appended from the generated birdnetPlusV30RegionalVariants. Backends,
 	// benchmarks, RAM floor and checksums are sourced from the BirdNET-Plus-V3.0
-	// models.json manifest, which TestGlobalVariants_MatchManifest checks.
+	// models.json manifest and its frozen 3.0 copy, which TestGlobalVariants_MatchManifest checks.
+	//
+	// Two upstream releases are listed. 3.0.1 (the entry's Version) is the build
+	// offered to new installs: its variants carry "-3.0.1" in their ids and
+	// "v3.0.1" in their file names. 3.0 stays as Legacy variants under its original
+	// ids and file names, each naming its 3.0.1 successor and carrying Version
+	// "3.0", so an installed 3.0 is still recognised, keeps running, can be
+	// repaired, and is never offered to a new install. A file name identifies one
+	// build, so no 3.0.1 file ever sits under a 3.0 name.
 	{
 		ID:              "birdnet-plus-v3.0",
 		Name:            "BirdNET+ v3.0",
@@ -240,20 +254,46 @@ var EmbeddedCatalog = []CatalogEntry{
 		CommercialUse:   true,
 		Category:        CategoryWildlife,
 		SpeciesCount:    11725,
-		Version:         "3.0",
+		Version:         "3.0.1",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETPlusV3,
 		RequiresONNX:    true,
-		UpstreamURL:     "https://doi.org/10.5281/zenodo.24162518",
+		UpstreamURL:     "https://doi.org/10.5281/zenodo.24362980",
 		HuggingFaceRepo: "tphakala/BirdNET-Plus-V3.0",
 		DependsOn:       []string{geomodelV3CatalogID},
 		Variants: slices.Concat([]CatalogVariant{
 			{
-				ID:           "fp32",
+				ID:           "fp32-3.0.1",
 				Precision:    "fp32",
 				SpeciesCount: 11725,
 				Default:      true,
 				Requirements: VariantRequirements{MinRAMMB: 550},
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"openvino-cpu":    {Supported: true},
+					"openvino-gpu":    {Supported: true, Recommended: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true, Recommended: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 260, RSSMB: 457},
+					{Device: "x86-i5-7260U-iris-plus-640", Backend: "onnxruntime-cpu", LatencyMs: 97},
+					{Device: "x86-i5-7260U-iris-plus-640", Backend: "openvino-gpu", LatencyMs: 63},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/birdnet-plus-v3.0.1-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0.1_fp32.onnx", Role: RoleModel, SHA256: "835efeb33c84c5ac8c1591d33dd99c61cdb306d5bc273e811290de625a19b88e", SizeBytes: 344606647},
+				}, birdnetPlusV301LabelsFile(), taxonomyFiles()),
+			},
+			{
+				// Release 3.0, kept so an installed 3.0 is still recognised. Every
+				// value is the one it had when it was the offered build.
+				ID:           "fp32",
+				Precision:    "fp32",
+				SpeciesCount: 11725,
+				Requirements: VariantRequirements{MinRAMMB: 550},
+				Legacy:       true,
+				SupersededBy: "fp32-3.0.1",
+				Version:      "3.0",
 				Backends: map[string]BackendSupport{
 					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"openvino-cpu":    {Supported: true},
@@ -687,12 +727,20 @@ func birdnetV30LabelsFile() []CatalogFile {
 	}
 }
 
-// birdnetPlusV30LabelsFile returns the shared global BirdNET+ v3.0 labels file.
-// Every global BirdNET+ v3.0 variant shares one label set, so each variant's
-// Files includes it.
+// birdnetPlusV30LabelsFile returns the global BirdNET+ release 3.0 labels file,
+// which the Legacy 3.0 global variant carries under its original file name.
 func birdnetPlusV30LabelsFile() []CatalogFile {
 	return []CatalogFile{
 		{RemotePath: "full/birdnet-plus-v3.0-labels-b1.txt", LocalName: "birdnet_plus_v3.0_labels.txt", Role: RoleLabels, SHA256: "ab212fdd39cc0f8be920308fbe7e793abad17d3dca07310b1590d032c36e4dc3", SizeBytes: 470040},
+	}
+}
+
+// birdnetPlusV301LabelsFile returns the global BirdNET+ release 3.0.1 labels file.
+// Its bytes equal the 3.0 file's, but it lives under its own path and local name
+// so a file name never stands for two builds.
+func birdnetPlusV301LabelsFile() []CatalogFile {
+	return []CatalogFile{
+		{RemotePath: "full/birdnet-plus-v3.0.1-labels-b1.txt", LocalName: "birdnet_plus_v3.0.1_labels.txt", Role: RoleLabels, SHA256: "ab212fdd39cc0f8be920308fbe7e793abad17d3dca07310b1590d032c36e4dc3", SizeBytes: 470040},
 	}
 }
 
@@ -1048,6 +1096,16 @@ func resolveVariant(entry *CatalogEntry, variantID string) *CatalogVariant {
 		}
 	}
 	return nil
+}
+
+// variantVersion returns the release of the given variant's files: the variant's
+// own Version when it carries one, else the entry's. An unknown variant id gets
+// the entry's.
+func variantVersion(entry *CatalogEntry, variantID string) string {
+	if v := resolveVariant(entry, variantID); v != nil && v.Version != "" {
+		return v.Version
+	}
+	return entry.Version
 }
 
 // VariantNeedsONNX reports whether running the given variant of entry requires the

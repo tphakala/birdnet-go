@@ -170,6 +170,58 @@ func TestModelManager_ScanInstalled_DetectsNonDefaultVariant(t *testing.T) {
 	assert.Equal(t, modelPath, got.ModelPath, "model path should point at the installed variant file")
 }
 
+// TestScanVariantEntry_BirdNETPlusReleases walks the on-disk states a BirdNET+
+// 3.0 install passes through on its way to 3.0.1: a file name identifies one
+// build (3.0 files keep reporting the 3.0 variant and release), the settings path
+// decides when both builds are present, and with no path a live build wins over a
+// Legacy one even when the Legacy variant is listed first or its region sorts
+// earlier.
+func TestScanVariantEntry_BirdNETPlusReleases(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok)
+
+	tests := []struct {
+		name string
+		// onDisk lists the variants whose model files are written.
+		onDisk []string
+		// hintVariant names the variant whose model file the settings path points
+		// at; empty means no path is configured.
+		hintVariant string
+		wantID      string
+		wantVersion string
+	}{
+		{name: "only the 3.0 global file", onDisk: []string{"fp32"}, wantID: "fp32", wantVersion: "3.0"},
+		{name: "only a 3.0 tile file", onDisk: []string{"fp32@nordic"}, wantID: "fp32@nordic", wantVersion: "3.0"},
+		{name: "only the 3.0.1 global file", onDisk: []string{"fp32-3.0.1"}, wantID: "fp32-3.0.1", wantVersion: "3.0.1"},
+		{name: "both global files and no path", onDisk: []string{"fp32", "fp32-3.0.1"}, wantID: "fp32-3.0.1", wantVersion: "3.0.1"},
+		{name: "both global files and the path on 3.0", onDisk: []string{"fp32", "fp32-3.0.1"}, hintVariant: "fp32", wantID: "fp32", wantVersion: "3.0"},
+		{name: "3.0 global file next to a 3.0.1 tile and no path", onDisk: []string{"fp32", "fp32-3.0.1@nordic"}, wantID: "fp32-3.0.1@nordic", wantVersion: "3.0.1"},
+		{name: "3.0 tile of an earlier region next to a 3.0.1 tile and no path", onDisk: []string{"fp32@amazonia", "fp32-3.0.1@nordic"}, wantID: "fp32-3.0.1@nordic", wantVersion: "3.0.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			modelsDir := t.TempDir()
+			for _, id := range tt.onDisk {
+				writeVariantModelFile(t, modelsDir, &entry, id)
+			}
+			hint := ""
+			if tt.hintVariant != "" {
+				hint = modelRoleLocalName(t, variantByID(t, &entry, tt.hintVariant).Files)
+			}
+
+			got, found := scanVariantEntry(&entry, filepath.Join(modelsDir, entry.ID), hint)
+
+			require.True(t, found)
+			assert.Equal(t, tt.wantID, got.VariantID)
+			assert.Equal(t, tt.wantVersion, got.Version)
+		})
+	}
+}
+
 func TestModelManager_ScanInstalled_ZeroVariantEntryHasEmptyVariantID(t *testing.T) {
 	t.Parallel()
 

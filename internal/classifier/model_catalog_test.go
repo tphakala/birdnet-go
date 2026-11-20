@@ -756,8 +756,10 @@ func TestIsPermanentEntry(t *testing.T) {
 // with the model and labels LocalName + checksum unchanged from the pre-variant flat
 // entries (so existing installs are undisturbed), carry the taxonomy companion (the
 // geomodel comes from the entry's DependsOn), and declare exactly one Default variant, which is never Legacy (an
-// empty install request resolves to it). The only Legacy global variant is Perch's
-// withdrawn int8-arm build, which names no-dft-fp32 as its successor.
+// empty install request resolves to it). The Legacy global variants are Perch's
+// withdrawn int8-arm build, which names no-dft-fp32 as its successor, and the
+// BirdNET+ 3.0 build, which names its 3.0.1 successor and keeps its pre-3.0.1
+// file names and id.
 func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 	t.Parallel()
 
@@ -768,6 +770,11 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 		modelSHA    string
 		labelsLocal string
 		labelsSHA   string
+		// legacy maps each Legacy global variant id to its successor's id.
+		legacy map[string]string
+		// withdrawn marks a Legacy variant that recommends no backend (a withdrawn
+		// build, as opposed to an older release that keeps its backend claims).
+		withdrawn map[string]bool
 	}{
 		{
 			id:          "perch-v2",
@@ -776,6 +783,8 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 			modelSHA:    "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f",
 			labelsLocal: "perch_v2_labels.txt",
 			labelsSHA:   "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057",
+			legacy:      map[string]string{"int8-arm": "no-dft-fp32"},
+			withdrawn:   map[string]bool{"int8-arm": true},
 		},
 		{
 			id:          "birdnet-v3.0",
@@ -787,11 +796,12 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 		},
 		{
 			id:          "birdnet-plus-v3.0",
-			variantIDs:  []string{"fp32"},
-			modelLocal:  "birdnet_plus_v3.0_fp32.onnx",
-			modelSHA:    "cf1a7a3ca29af818ee720131f800c4dd18354fc961317cc5e5e735e0b4a9c8ac",
-			labelsLocal: "birdnet_plus_v3.0_labels.txt",
+			variantIDs:  []string{"fp32-3.0.1", "fp32"},
+			modelLocal:  "birdnet_plus_v3.0.1_fp32.onnx",
+			modelSHA:    "835efeb33c84c5ac8c1591d33dd99c61cdb306d5bc273e811290de625a19b88e",
+			labelsLocal: "birdnet_plus_v3.0.1_labels.txt",
 			labelsSHA:   "ab212fdd39cc0f8be920308fbe7e793abad17d3dca07310b1590d032c36e4dc3",
+			legacy:      map[string]string{"fp32": "fp32-3.0.1"},
 		},
 	}
 
@@ -812,13 +822,15 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 				if v.Region != "" {
 					continue // regional Legacy marking is covered by TestEmbeddedCatalog_RegionalVariants
 				}
-				wantLegacy := tc.id == "perch-v2" && v.ID == "int8-arm"
+				wantSuccessor, wantLegacy := tc.legacy[v.ID]
 				assert.Equalf(t, wantLegacy, v.Legacy, "%s global variant %q Legacy flag", tc.id, v.ID)
 				if wantLegacy {
-					assert.Equalf(t, "no-dft-fp32", v.SupersededBy, "%s withdrawn variant %q successor", tc.id, v.ID)
+					assert.Equalf(t, wantSuccessor, v.SupersededBy, "%s Legacy variant %q successor", tc.id, v.ID)
 					successor := slices.IndexFunc(entry.Variants, func(c CatalogVariant) bool { return c.ID == v.SupersededBy && !c.Legacy })
-					assert.GreaterOrEqualf(t, successor, 0, "%s withdrawn variant %q must be superseded by a live variant of the entry", tc.id, v.ID)
-					assert.Falsef(t, backendRecommended(v), "%s withdrawn variant %q must recommend no backend", tc.id, v.ID)
+					assert.GreaterOrEqualf(t, successor, 0, "%s Legacy variant %q must be superseded by a live variant of the entry", tc.id, v.ID)
+					if tc.withdrawn[v.ID] {
+						assert.Falsef(t, backendRecommended(v), "%s withdrawn variant %q must recommend no backend", tc.id, v.ID)
+					}
 				}
 				assert.Falsef(t, v.Default && v.Legacy, "%s default variant %q must not be Legacy", tc.id, v.ID)
 			}

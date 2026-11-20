@@ -11,21 +11,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 )
 
-// regionalPrecisionsPerTile is how many precision builds the generator emits for
-// each region slug, per catalog entry (gen/main.go family.variantsPerRegion).
-var regionalPrecisionsPerTile = map[string]int{
+// regionalBuildsPerTile is how many builds the generator emits for each region
+// slug, per catalog entry: family.variantsPerRegion times the number of
+// releases it hosts (gen/main.go; BirdNET+ lists its 3.0.1 tile and its Legacy
+// 3.0 tile).
+var regionalBuildsPerTile = map[string]int{
 	"birdnet-v3.0":      2,
 	"perch-v2":          2,
-	"birdnet-plus-v3.0": 1,
+	"birdnet-plus-v3.0": 2,
 }
 
 // regionalTilesFor is how many region-sliced variants the generator emits for an
-// entry: every slug in the embedded region table, once per precision build. All
+// entry: every slug in the embedded region table, once per build. All
 // families share one slug set (TestCrossFamilyGeometryIdentity), so the BirdNET
 // v3.0 table stands for all of them. The tile set itself is pinned by the golden
 // tier snapshot in the region package, not by a count here.
 func regionalTilesFor(entryID string) int {
-	return regionalPrecisionsPerTile[entryID] * regionTileCount()
+	return regionalBuildsPerTile[entryID] * regionTileCount()
 }
 
 // regionTileCount returns the number of slugs in the embedded BirdNET v3.0
@@ -47,7 +49,7 @@ var allowedRegionalPrecisions = map[string]bool{"fp32": true, "fp16": true, "int
 // against the failure modes that would silently break region-aware recommendation:
 // a Region set to a display name instead of a slug (region.matched never fires), a
 // tile marked Default (wrong preselection), a Legacy marking outside the withdrawn
-// Perch int8-arm builds (hidden tile), a missing checksum, or a species count that
+// Perch int8-arm builds and the BirdNET+ 3.0 builds (hidden tile), a missing checksum, or a species count that
 // has drifted from the region table.
 func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 	t.Parallel()
@@ -92,15 +94,35 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 				assert.Truef(t, inTable, "variant %q Region %q must be a region-table slug", v.ID, v.Region)
 				assert.Falsef(t, displayNames[v.Region], "variant %q Region %q must be a slug, not a display name", v.ID, v.Region)
 
+				var model, labels *CatalogFile
+				for j := range v.Files {
+					switch v.Files[j].Role {
+					case RoleModel:
+						model = &v.Files[j]
+					case RoleLabels:
+						labels = &v.Files[j]
+					}
+				}
+				require.NotNilf(t, model, "variant %q must carry a model file", v.ID)
+				require.NotNilf(t, labels, "variant %q must carry a labels file", v.ID)
+
 				assert.Falsef(t, v.Default, "regional variant %q must not be Default", v.ID)
-				// Only the withdrawn Perch int8-arm builds are Legacy.
-				withdrawn := entryID == "perch-v2" && strings.HasPrefix(v.ID, "int8-arm@")
-				assert.Equalf(t, withdrawn, v.Legacy, "regional variant %q is Legacy exactly when it is a Perch int8-arm build", v.ID)
+				// Legacy builds are the withdrawn Perch int8-arm builds and the BirdNET+
+				// 3.0 builds, which the 3.0.1 build of the same tile replaces.
+				kind := regionalLegacyKind(entryID, v, model)
+				assert.Equalf(t, kind != legacyNone, v.Legacy, "regional variant %q is Legacy exactly when it is a Perch int8-arm build or a BirdNET+ 3.0 build", v.ID)
+				wantVersion := ""
+				if kind == legacyOlderRelease {
+					wantVersion = "3.0"
+				}
+				assert.Equalf(t, wantVersion, v.Version, "regional variant %q release", v.ID)
 				if v.Legacy {
 					regionSawLegacy[v.Region] = true
 					successors[v.ID] = v.SupersededBy
-					assert.Equalf(t, "no-dft-fp32@"+v.Region, v.SupersededBy, "withdrawn variant %q must name its region's no-dft-fp32 build", v.ID)
-					assert.Falsef(t, backendRecommended(v), "withdrawn variant %q must recommend no backend", v.ID)
+					assert.Equalf(t, wantRegionalSuccessor(kind, v.Region), v.SupersededBy, "Legacy variant %q must name its region's replacement", v.ID)
+					if kind == legacyWithdrawn {
+						assert.Falsef(t, backendRecommended(v), "withdrawn variant %q must recommend no backend", v.ID)
+					}
 				} else {
 					regionHasLive[v.Region] = true
 					liveIDs[v.ID] = true
@@ -115,18 +137,6 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 
 				assert.Falsef(t, seenID[v.ID], "duplicate variant id %q", v.ID)
 				seenID[v.ID] = true
-
-				var model, labels *CatalogFile
-				for j := range v.Files {
-					switch v.Files[j].Role {
-					case RoleModel:
-						model = &v.Files[j]
-					case RoleLabels:
-						labels = &v.Files[j]
-					}
-				}
-				require.NotNilf(t, model, "variant %q must carry a model file", v.ID)
-				require.NotNilf(t, labels, "variant %q must carry a labels file", v.ID)
 
 				assert.Falsef(t, seenModelLocal[model.LocalName], "duplicate model LocalName %q within %s", model.LocalName, entryID)
 				seenModelLocal[model.LocalName] = true
@@ -152,6 +162,37 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 			assert.Equalf(t, regionalTilesFor(entryID), regional, "%s must expose %d regional tiles", entryID, regionalTilesFor(entryID))
 		})
 	}
+}
+
+// legacyKind says why a regional variant is expected to be Legacy.
+type legacyKind int
+
+const (
+	legacyNone         legacyKind = iota // a live build
+	legacyWithdrawn                      // a withdrawn Perch int8-arm build
+	legacyOlderRelease                   // a BirdNET+ 3.0 build, replaced by 3.0.1
+)
+
+// regionalLegacyKind classifies a regional variant of the given entry by its id
+// and, for BirdNET+, by the release its model file name carries.
+func regionalLegacyKind(entryID string, v *CatalogVariant, model *CatalogFile) legacyKind {
+	switch {
+	case entryID == "perch-v2" && strings.HasPrefix(v.ID, "int8-arm@"):
+		return legacyWithdrawn
+	case entryID == "birdnet-plus-v3.0" && strings.HasPrefix(model.LocalName, "birdnet_plus_v3.0_"):
+		return legacyOlderRelease
+	default:
+		return legacyNone
+	}
+}
+
+// wantRegionalSuccessor is the SupersededBy a Legacy variant of the given kind
+// in the region slug must carry.
+func wantRegionalSuccessor(kind legacyKind, slug string) string {
+	if kind == legacyOlderRelease {
+		return "fp32-3.0.1@" + slug
+	}
+	return "no-dft-fp32@" + slug
 }
 
 // backendRecommended reports whether any backend row of v is Recommended.

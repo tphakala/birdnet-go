@@ -4,7 +4,17 @@
     "size_bytes": 130096,
     "lines": 3182
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/amazonia/birdnet-plus-v3.0.1-amazonia-labels-b1.txt": {
+    "sha256": "f7e880941f764d5e253708d1f3ca4dd6e32e5a2d7694accbb05f491b7ff16ffb",
+    "size_bytes": 130096,
+    "lines": 3182
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/andes/birdnet-plus-v3.0-andes-labels-b1.txt": {
+    "sha256": "f683ed1308ce0844e85bf6bcbd3ab8b2cfbf0bcb734d76b7a0c635635c305b9d",
+    "size_bytes": 135244,
+    "lines": 3314
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/andes/birdnet-plus-v3.0.1-andes-labels-b1.txt": {
     "sha256": "f683ed1308ce0844e85bf6bcbd3ab8b2cfbf0bcb734d76b7a0c635635c305b9d",
     "size_bytes": 135244,
     "lines": 3314
@@ -14,7 +24,17 @@
     "size_bytes": 28332,
     "lines": 757
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/australia-east/birdnet-plus-v3.0.1-australia-east-labels-b1.txt": {
+    "sha256": "4069aa1b22ea3edaa564ec25b78ae8680f57907af0bfa8b3a8f8ad462bc3c752",
+    "size_bytes": 28332,
+    "lines": 757
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/azores/birdnet-plus-v3.0-azores-labels-b1.txt": {
+    "sha256": "52425d3d0f17367c16dbcdd2165e636cb5937e66e655112e5522fbb80eb07370",
+    "size_bytes": 7882,
+    "lines": 242
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/azores/birdnet-plus-v3.0.1-azores-labels-b1.txt": {
     "sha256": "52425d3d0f17367c16dbcdd2165e636cb5937e66e655112e5522fbb80eb07370",
     "size_bytes": 7882,
     "lines": 242
@@ -24,7 +44,17 @@
     "size_bytes": 15409,
     "lines": 460
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/baltics/birdnet-plus-v3.0.1-baltics-labels-b1.txt": {
+    "sha256": "86489bc09aac2cac320b8a04f6483dd202b00ce026242943c2a46d6c64b2e3c4",
+    "size_bytes": 15409,
+    "lines": 460
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/british-isles/birdnet-plus-v3.0-british-isles-labels-b1.txt": {
+    "sha256": "a0c031e08a13fed442218dc37de1b3c450fb191c688259ee79813a3461ae3d4e",
+    "size_bytes": 19692,
+    "lines": 579
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/british-isles/birdnet-plus-v3.0.1-british-isles-labels-b1.txt": {
     "sha256": "a0c031e08a13fed442218dc37de1b3c450fb191c688259ee79813a3461ae3d4e",
     "size_bytes": 19692,
     "lines": 579
@@ -34,7 +64,17 @@
     "size_bytes": 27652,
     "lines": 777
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/canada-alaska/birdnet-plus-v3.0.1-canada-alaska-labels-b1.txt": {
+    "sha256": "bcfab1adc60e3b91e1c549643c56d22774e13422c26bdb939156ff4f79e140a0",
+    "size_bytes": 27652,
+    "lines": 777
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/canary-islands/birdnet-plus-v3.0-canary-islands-labels-b1.txt": {
+    "sha256": "399ddce57ff80e9fbe92e24bd4e09f47b10930c9ef430f6779a6afc887c084a1",
+    "size_bytes": 14086,
+    "lines": 412
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/canary-islands/birdnet-plus-v3.0.1-canary-islands-labels-b1.txt": {
     "sha256": "399ddce57ff80e9fbe92e24bd4e09f47b10930c9ef430f6779a6afc887c084a1",
     "size_bytes": 14086,
     "lines": 412
@@ -44,7 +84,17 @@
     "size_bytes": 5459,
     "lines": 162
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/cape-verde/birdnet-plus-v3.0.1-cape-verde-labels-b1.txt": {
+    "sha256": "9bb28b59a206e8d55dc962a7c99c8e48372053f5293886045b66bc898336a39d",
+    "size_bytes": 5459,
+    "lines": 162
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/central-africa/birdnet-plus-v3.0-central-africa-labels-b1.txt": {
+    "sha256": "492e16e8d407f5003ee47f4b56f10d64dc51993b1d7a37f73b0ef378fed6bb99",
+    "size_bytes": 59936,
+    "lines": 1537
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/central-africa/birdnet-plus-v3.0.1-central-africa-labels-b1.txt": {
     "sha256": "492e16e8d407f5003ee47f4b56f10d64dc51993b1d7a37f73b0ef378fed6bb99",
     "size_bytes": 59936,
     "lines": 1537
@@ -54,7 +104,17 @@
     "size_bytes": 23024,
     "lines": 667
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/central-europe/birdnet-plus-v3.0.1-central-europe-labels-b1.txt": {
+    "sha256": "df61211c6ef0b9388473fa1e8774cd5234d9c9677ff1216cc18dfa9ae9f7e5bb",
+    "size_bytes": 23024,
+    "lines": 667
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/china-north-central/birdnet-plus-v3.0-china-north-central-labels-b1.txt": {
+    "sha256": "52526c82348b6540c278f4eb9e28cddf69125812c17a0671066d19b7446c746d",
+    "size_bytes": 29363,
+    "lines": 791
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/china-north-central/birdnet-plus-v3.0.1-china-north-central-labels-b1.txt": {
     "sha256": "52526c82348b6540c278f4eb9e28cddf69125812c17a0671066d19b7446c746d",
     "size_bytes": 29363,
     "lines": 791
@@ -64,7 +124,17 @@
     "size_bytes": 24768,
     "lines": 688
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/china-northeast/birdnet-plus-v3.0.1-china-northeast-labels-b1.txt": {
+    "sha256": "6281c60acb10d9fd4ba3361a0fc25c0adcebab814e47e97bf2a623d05abe18e9",
+    "size_bytes": 24768,
+    "lines": 688
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/china-southeast/birdnet-plus-v3.0-china-southeast-labels-b1.txt": {
+    "sha256": "f48dcb0e5fb507db291a91924e677284eff33869cdb432802e25ef597db3e288",
+    "size_bytes": 45168,
+    "lines": 1178
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/china-southeast/birdnet-plus-v3.0.1-china-southeast-labels-b1.txt": {
     "sha256": "f48dcb0e5fb507db291a91924e677284eff33869cdb432802e25ef597db3e288",
     "size_bytes": 45168,
     "lines": 1178
@@ -74,7 +144,17 @@
     "size_bytes": 47552,
     "lines": 1228
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/china-southwest/birdnet-plus-v3.0.1-china-southwest-labels-b1.txt": {
+    "sha256": "d06bcd3fde7d1462ffd0c994084428a7314a624a724de7f7df0a7c23f8180d8d",
+    "size_bytes": 47552,
+    "lines": 1228
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/east-africa/birdnet-plus-v3.0-east-africa-labels-b1.txt": {
+    "sha256": "149541f3c4e55571e07c79aed737faeb7bfd2164d9ccadeeb396a7329182d582",
+    "size_bytes": 70379,
+    "lines": 1824
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/east-africa/birdnet-plus-v3.0.1-east-africa-labels-b1.txt": {
     "sha256": "149541f3c4e55571e07c79aed737faeb7bfd2164d9ccadeeb396a7329182d582",
     "size_bytes": 70379,
     "lines": 1824
@@ -84,7 +164,17 @@
     "size_bytes": 79835,
     "lines": 1972
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/eastern-brazil/birdnet-plus-v3.0.1-eastern-brazil-labels-b1.txt": {
+    "sha256": "1570576223b4bce58f0daca34e51aa3657e018b006e82c477f844e74d734228d",
+    "size_bytes": 79835,
+    "lines": 1972
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/eastern-europe/birdnet-plus-v3.0-eastern-europe-labels-b1.txt": {
+    "sha256": "800061e876ce4712e03f0c71d7a98e9eae1f16ac98fab82785b1021fcedc5683",
+    "size_bytes": 18574,
+    "lines": 540
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/eastern-europe/birdnet-plus-v3.0.1-eastern-europe-labels-b1.txt": {
     "sha256": "800061e876ce4712e03f0c71d7a98e9eae1f16ac98fab82785b1021fcedc5683",
     "size_bytes": 18574,
     "lines": 540
@@ -94,7 +184,17 @@
     "size_bytes": 5248,
     "lines": 156
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/galapagos/birdnet-plus-v3.0.1-galapagos-labels-b1.txt": {
+    "sha256": "3ce55f514fcb6bc981bdeb7b0878612d5361cf603d6a5faff31ced1d72b33979",
+    "size_bytes": 5248,
+    "lines": 156
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/hawaii/birdnet-plus-v3.0-hawaii-labels-b1.txt": {
+    "sha256": "37689f29ace9021cb12e4134137fa1b065ced35856d2f163ddcc49d3ef125add",
+    "size_bytes": 9940,
+    "lines": 294
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/hawaii/birdnet-plus-v3.0.1-hawaii-labels-b1.txt": {
     "sha256": "37689f29ace9021cb12e4134137fa1b065ced35856d2f163ddcc49d3ef125add",
     "size_bytes": 9940,
     "lines": 294
@@ -104,7 +204,17 @@
     "size_bytes": 46901,
     "lines": 1226
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/himalaya/birdnet-plus-v3.0.1-himalaya-labels-b1.txt": {
+    "sha256": "a2e0ffb54ecbdbbf86b35b685c673459045459a7de805ae97cee22567390caa3",
+    "size_bytes": 46901,
+    "lines": 1226
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/iberia/birdnet-plus-v3.0-iberia-labels-b1.txt": {
+    "sha256": "d723a8948b5ba6ca840f314db65ea9b11353a4c81adedc1b88979377b4a079ff",
+    "size_bytes": 22499,
+    "lines": 649
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/iberia/birdnet-plus-v3.0.1-iberia-labels-b1.txt": {
     "sha256": "d723a8948b5ba6ca840f314db65ea9b11353a4c81adedc1b88979377b4a079ff",
     "size_bytes": 22499,
     "lines": 649
@@ -114,7 +224,17 @@
     "size_bytes": 13626,
     "lines": 409
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/iceland/birdnet-plus-v3.0.1-iceland-labels-b1.txt": {
+    "sha256": "00e00b07ee00cecba5bbf51027b3919fa7836c84a4edefca41303a470df39951",
+    "size_bytes": 13626,
+    "lines": 409
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/indo-gangetic/birdnet-plus-v3.0-indo-gangetic-labels-b1.txt": {
+    "sha256": "8493e9571b87d195c87f4dda19792374b13594c1267f95b98290d4ed95e8ed96",
+    "size_bytes": 45645,
+    "lines": 1199
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/indo-gangetic/birdnet-plus-v3.0.1-indo-gangetic-labels-b1.txt": {
     "sha256": "8493e9571b87d195c87f4dda19792374b13594c1267f95b98290d4ed95e8ed96",
     "size_bytes": 45645,
     "lines": 1199
@@ -124,7 +244,17 @@
     "size_bytes": 21951,
     "lines": 609
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/japan/birdnet-plus-v3.0.1-japan-labels-b1.txt": {
+    "sha256": "49f7c7a1dc65201f1d654570b9cc0cca18dbf7d95fbd1296f9eba55b2987822e",
+    "size_bytes": 21951,
+    "lines": 609
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/madeira/birdnet-plus-v3.0-madeira-labels-b1.txt": {
+    "sha256": "481b6320fbffd0e7f5abda553cefe4d30ec13cf8b7f5079c56558dbca15db172",
+    "size_bytes": 9097,
+    "lines": 274
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/madeira/birdnet-plus-v3.0.1-madeira-labels-b1.txt": {
     "sha256": "481b6320fbffd0e7f5abda553cefe4d30ec13cf8b7f5079c56558dbca15db172",
     "size_bytes": 9097,
     "lines": 274
@@ -134,7 +264,17 @@
     "size_bytes": 2864,
     "lines": 90
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/mauritius/birdnet-plus-v3.0.1-mauritius-labels-b1.txt": {
+    "sha256": "ff166184cf00fcfcae44c020f2a65275c34b29922433e8b8fb6c36627d744822",
+    "size_bytes": 2864,
+    "lines": 90
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/new-caledonia/birdnet-plus-v3.0-new-caledonia-labels-b1.txt": {
+    "sha256": "5eac0593d7f91a6b5a4b42779d177a506c8702668ccea03431d52fd94053b2c3",
+    "size_bytes": 6766,
+    "lines": 190
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/new-caledonia/birdnet-plus-v3.0.1-new-caledonia-labels-b1.txt": {
     "sha256": "5eac0593d7f91a6b5a4b42779d177a506c8702668ccea03431d52fd94053b2c3",
     "size_bytes": 6766,
     "lines": 190
@@ -144,7 +284,17 @@
     "size_bytes": 10101,
     "lines": 289
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/new-zealand/birdnet-plus-v3.0.1-new-zealand-labels-b1.txt": {
+    "sha256": "500a4e2c2c55ee45d3f694da6b926d900fe01435948a0372feef4b56e4961a31",
+    "size_bytes": 10101,
+    "lines": 289
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/nordic/birdnet-plus-v3.0-nordic-labels-b1.txt": {
+    "sha256": "64cf30aa5e2b5f1b84a47ab8c5e651953e753b59344a5b6f82efeb063ca67db2",
+    "size_bytes": 14748,
+    "lines": 443
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/nordic/birdnet-plus-v3.0.1-nordic-labels-b1.txt": {
     "sha256": "64cf30aa5e2b5f1b84a47ab8c5e651953e753b59344a5b6f82efeb063ca67db2",
     "size_bytes": 14748,
     "lines": 443
@@ -154,7 +304,17 @@
     "size_bytes": 29846,
     "lines": 818
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/north-america-east/birdnet-plus-v3.0.1-north-america-east-labels-b1.txt": {
+    "sha256": "a03348efa5a64d338f481748a587d790c3ba6158b068e1f4617c7f2fc1f60f39",
+    "size_bytes": 29846,
+    "lines": 818
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/north-america-west/birdnet-plus-v3.0-north-america-west-labels-b1.txt": {
+    "sha256": "00fb77754ee1ede69e15f2794fb198fb3ab6d1aec6ec409b968ad70022844c1a",
+    "size_bytes": 29862,
+    "lines": 821
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/north-america-west/birdnet-plus-v3.0.1-north-america-west-labels-b1.txt": {
     "sha256": "00fb77754ee1ede69e15f2794fb198fb3ab6d1aec6ec409b968ad70022844c1a",
     "size_bytes": 29862,
     "lines": 821
@@ -164,7 +324,17 @@
     "size_bytes": 2942,
     "lines": 92
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/reunion/birdnet-plus-v3.0.1-reunion-labels-b1.txt": {
+    "sha256": "d6c96af53dc1b0b0848706a58854849c5b2d89a21f9c02f18de8361b737f08f9",
+    "size_bytes": 2942,
+    "lines": 92
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/sao-tome-principe/birdnet-plus-v3.0-sao-tome-principe-labels-b1.txt": {
+    "sha256": "99accb3b223c60d07497933303c30fcd47757b4cb5c48c07836acd3edb45085e",
+    "size_bytes": 4378,
+    "lines": 133
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/sao-tome-principe/birdnet-plus-v3.0.1-sao-tome-principe-labels-b1.txt": {
     "sha256": "99accb3b223c60d07497933303c30fcd47757b4cb5c48c07836acd3edb45085e",
     "size_bytes": 4378,
     "lines": 133
@@ -174,7 +344,17 @@
     "size_bytes": 4488,
     "lines": 137
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/seychelles/birdnet-plus-v3.0.1-seychelles-labels-b1.txt": {
+    "sha256": "1e6af4bf4540296628335499aac76b74ed077df072f417a0b4328ab3fe07095c",
+    "size_bytes": 4488,
+    "lines": 137
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/south-asia-peninsular/birdnet-plus-v3.0-south-asia-peninsular-labels-b1.txt": {
+    "sha256": "7ee32d1f752a69eb75f71d12caeffcb2be1cb3d61f3460bf73ad1866b0896195",
+    "size_bytes": 24758,
+    "lines": 671
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/south-asia-peninsular/birdnet-plus-v3.0.1-south-asia-peninsular-labels-b1.txt": {
     "sha256": "7ee32d1f752a69eb75f71d12caeffcb2be1cb3d61f3460bf73ad1866b0896195",
     "size_bytes": 24758,
     "lines": 671
@@ -184,7 +364,17 @@
     "size_bytes": 30842,
     "lines": 820
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/southern-africa/birdnet-plus-v3.0.1-southern-africa-labels-b1.txt": {
+    "sha256": "c99d513d5fd0aa1be37f74f5b601c9d88fe91041454ac90b17897da282ae0023",
+    "size_bytes": 30842,
+    "lines": 820
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/southern-cone/birdnet-plus-v3.0-southern-cone-labels-b1.txt": {
+    "sha256": "63f03d60d3c8c9bb8862ef14e9cf852ccbdb8a69a10351a78f0e114d263ec065",
+    "size_bytes": 65353,
+    "lines": 1639
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/southern-cone/birdnet-plus-v3.0.1-southern-cone-labels-b1.txt": {
     "sha256": "63f03d60d3c8c9bb8862ef14e9cf852ccbdb8a69a10351a78f0e114d263ec065",
     "size_bytes": 65353,
     "lines": 1639
@@ -194,7 +384,17 @@
     "size_bytes": 22214,
     "lines": 638
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/southern-europe/birdnet-plus-v3.0.1-southern-europe-labels-b1.txt": {
+    "sha256": "21f4705778b5bc7857319e3c1525f504f43340f3d3bd8306954c8a05ad8365d1",
+    "size_bytes": 22214,
+    "lines": 638
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/svalbard/birdnet-plus-v3.0-svalbard-labels-b1.txt": {
+    "sha256": "6cd4bffca55556f10119d6b4d4cdd9fbb03046bf1ccc9382826bd6b2fae60b26",
+    "size_bytes": 9583,
+    "lines": 298
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/svalbard/birdnet-plus-v3.0.1-svalbard-labels-b1.txt": {
     "sha256": "6cd4bffca55556f10119d6b4d4cdd9fbb03046bf1ccc9382826bd6b2fae60b26",
     "size_bytes": 9583,
     "lines": 298
@@ -204,12 +404,27 @@
     "size_bytes": 46733,
     "lines": 1226
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/tibet/birdnet-plus-v3.0.1-tibet-labels-b1.txt": {
+    "sha256": "ce12fdcdad369d1ae2042071b883c6d5a0f234f82a7f43cee962cfa517a973bb",
+    "size_bytes": 46733,
+    "lines": 1226
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/west-africa/birdnet-plus-v3.0-west-africa-labels-b1.txt": {
     "sha256": "920c77682bd8cad285665bc3a489001b2163ed3e0229ef7223a7e48c1ef0ff18",
     "size_bytes": 39429,
     "lines": 1027
   },
+  "tphakala/BirdNET-Plus-V3.0|regional/west-africa/birdnet-plus-v3.0.1-west-africa-labels-b1.txt": {
+    "sha256": "920c77682bd8cad285665bc3a489001b2163ed3e0229ef7223a7e48c1ef0ff18",
+    "size_bytes": 39429,
+    "lines": 1027
+  },
   "tphakala/BirdNET-Plus-V3.0|regional/western-palearctic/birdnet-plus-v3.0-western-palearctic-labels-b1.txt": {
+    "sha256": "0b3374bf19148e3c4e6d99c750ea85ecce436ea30928d3dac46a7a4044a595bc",
+    "size_bytes": 51767,
+    "lines": 1418
+  },
+  "tphakala/BirdNET-Plus-V3.0|regional/western-palearctic/birdnet-plus-v3.0.1-western-palearctic-labels-b1.txt": {
     "sha256": "0b3374bf19148e3c4e6d99c750ea85ecce436ea30928d3dac46a7a4044a595bc",
     "size_bytes": 51767,
     "lines": 1418
