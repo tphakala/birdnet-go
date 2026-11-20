@@ -205,15 +205,14 @@ describe('FilterSettingsPage - Privacy Guard & VAD Settings', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('calls updateSection when toggling Privacy Guard checkbox', async () => {
-    const { container } = render(FilterSettingsPage);
+  it('calls updateSection when toggling the Privacy Guard switch', async () => {
+    const { getByRole } = render(FilterSettingsPage);
 
-    // Find the Privacy Guard checkbox (the second checkbox on the page)
-    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-    expect(checkboxes.length).toBeGreaterThanOrEqual(2);
-    const vadCheckbox = checkboxes[1];
+    const vadSwitch = getByRole('switch', {
+      name: 'settings.filters.privacyFiltering.vadEnable',
+    });
 
-    await fireEvent.click(vadCheckbox);
+    await fireEvent.click(vadSwitch);
 
     expect(mockUpdateSection).toHaveBeenCalledWith(
       'realtime',

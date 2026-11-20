@@ -40,7 +40,7 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
@@ -465,14 +465,14 @@
           </div>
         {/if}
 
-        <Checkbox
-          checked={playbackDenoise.enabled}
+        <ToggleField
+          value={playbackDenoise.enabled}
           label={t('settings.userInterface.audioPlayback.denoiseLabel')}
-          helpText={exportDenoiseOn
+          description={exportDenoiseOn
             ? t('settings.userInterface.audioPlayback.denoiseExportPrecedence')
             : t('settings.userInterface.audioPlayback.denoiseHelpText')}
           disabled={exportDenoiseOn || store.isLoading || store.isSaving}
-          onchange={checked => updatePlaybackDenoise({ enabled: checked })}
+          onUpdate={checked => updatePlaybackDenoise({ enabled: checked })}
         />
 
         <SelectDropdown
@@ -538,25 +538,29 @@
             {t('settings.main.sections.userInterface.dashboard.birdImages.title')}
           </SettingsGroupLabel>
 
-          <Checkbox
-            checked={settings.dashboard.thumbnails.summary}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('summary', value)}
-          />
+          <div class="divide-y divide-[var(--border-100)]">
+            <ToggleField
+              className="pb-4"
+              value={settings.dashboard.thumbnails.summary}
+              label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
+              description={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
+              )}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={value => updateThumbnailSetting('summary', value)}
+            />
 
-          <Checkbox
-            checked={settings.dashboard.thumbnails.recent}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('recent', value)}
-          />
+            <ToggleField
+              className="pt-4"
+              value={settings.dashboard.thumbnails.recent}
+              label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
+              description={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
+              )}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={value => updateThumbnailSetting('recent', value)}
+            />
+          </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <div class:opacity-50={!multipleProvidersAvailable}>

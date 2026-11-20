@@ -22,7 +22,7 @@
 <script lang="ts">
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import WeatherIcon, { type WeatherProvider } from '$lib/desktop/components/ui/WeatherIcon.svelte';
@@ -520,11 +520,11 @@
         </div>
 
         <!-- Enable Error Tracking -->
-        <Checkbox
-          checked={settings.sentry.enabled}
+        <ToggleField
+          value={settings.sentry.enabled}
           label={t('settings.support.telemetry.enableTracking')}
           disabled={store.isLoading || store.isSaving}
-          onchange={enabled => updateTelemetryEnabled(enabled)}
+          onUpdate={enabled => updateTelemetryEnabled(enabled)}
         />
       </div>
     </SettingsSection>

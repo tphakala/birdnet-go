@@ -207,18 +207,18 @@ describe('AudioSettingsPage clip denoise', () => {
   it('links the recording-required reason to both disabled controls while recording is off', async () => {
     await renderProcessingTab({ enabled: false });
 
-    const checkbox = await screen.findByLabelText(ENABLE_LABEL);
+    const toggle = await screen.findByLabelText(ENABLE_LABEL);
     const strength = await screen.findByLabelText(STRENGTH_LABEL);
-    expect(describedText(checkbox)).toContain(REQUIRES_RECORDING);
+    expect(describedText(toggle)).toContain(REQUIRES_RECORDING);
     expect(describedText(strength)).toContain(REQUIRES_RECORDING);
   });
 
   it('keeps the regular help descriptions while recording is on', async () => {
     await renderProcessingTab({});
 
-    const checkbox = await screen.findByLabelText(ENABLE_LABEL);
+    const toggle = await screen.findByLabelText(ENABLE_LABEL);
     const strength = await screen.findByLabelText(STRENGTH_LABEL);
-    expect(describedText(checkbox)).not.toContain(REQUIRES_RECORDING);
+    expect(describedText(toggle)).not.toContain(REQUIRES_RECORDING);
     expect(describedText(strength)).toContain(STRENGTH_DISABLED_HELP);
     expect(describedText(strength)).not.toContain(REQUIRES_RECORDING);
   });

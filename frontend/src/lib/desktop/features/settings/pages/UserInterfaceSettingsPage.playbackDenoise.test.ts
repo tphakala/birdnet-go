@@ -146,7 +146,8 @@ describe('UserInterfaceSettingsPage playback denoise', () => {
         exportDenoise,
       });
 
-      expect((enable as HTMLInputElement).disabled).toBe(true);
+      expect(enable).toHaveAttribute('aria-disabled', 'true');
+      expect(enable).toHaveAccessibleDescription(EXPORT_PRECEDENCE);
       expect((await screen.findByLabelText<HTMLButtonElement>(STRENGTH_LABEL)).disabled).toBe(true);
       expect(screen.getAllByText(EXPORT_PRECEDENCE).length).toBeGreaterThan(0);
       expect(screen.queryByText(ENABLE_HELP)).toBeNull();
