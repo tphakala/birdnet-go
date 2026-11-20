@@ -434,6 +434,67 @@ describe('ModelCard', () => {
     });
   });
 
+  describe('update', () => {
+    const UPDATE = { variantId: 'v2', fromVersion: '3.0', toVersion: '3.0.1' };
+
+    it('shows the note with both versions and an Update button that emits update', async () => {
+      const model = entry({ installed: true, update: UPDATE });
+      const { onAction } = renderCard({ entry: model, mode: 'installed' });
+
+      expect(screen.getByRole('note')).toHaveTextContent('analysis.gallery.update.cardNotice');
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.update.cardNotice', {
+        from: '3.0',
+        to: '3.0.1',
+      });
+      await fireEvent.click(button('analysis.gallery.update.action'));
+      expect(onAction).toHaveBeenCalledExactlyOnceWith('update', model);
+    });
+
+    it('shows neither the note nor Update on an available card', () => {
+      renderCard({ entry: entry({ update: UPDATE }), mode: 'available' });
+
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /analysis\.gallery\.update\.action/ })
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows neither the note nor Update without an update', () => {
+      renderCard({ entry: entry({ installed: true }), mode: 'installed' });
+
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /analysis\.gallery\.update\.action/ })
+      ).not.toBeInTheDocument();
+    });
+
+    it('labels a running swap as updating and pauses the button', async () => {
+      const { onAction } = renderCard({
+        entry: entry({ installed: true, update: UPDATE }),
+        mode: 'installed',
+        busy: 'install',
+      });
+
+      const update = button('analysis.gallery.update.applying');
+      expect(update).toHaveAttribute('aria-disabled', 'true');
+      await fireEvent.click(update);
+      expect(onAction).not.toHaveBeenCalled();
+    });
+
+    it('pauses Update while another card runs an action', async () => {
+      const { onAction } = renderCard({
+        entry: entry({ installed: true, update: UPDATE }),
+        mode: 'installed',
+        actionInFlight: true,
+      });
+
+      const update = button('analysis.gallery.update.action');
+      expect(update).toHaveAttribute('aria-disabled', 'true');
+      await fireEvent.click(update);
+      expect(onAction).not.toHaveBeenCalled();
+    });
+  });
+
   describe('experimental', () => {
     it.each(['available', 'installed'] as const)('shows the pill on a %s card', mode => {
       renderCard({ entry: entry({ channel: CHANNEL_EXPERIMENTAL, installed: true }), mode });

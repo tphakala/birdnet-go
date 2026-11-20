@@ -507,6 +507,10 @@
         "title": "{count, plural, one {Asennetulla mallilla on uudempi julkaisu} other {# asennetulla mallilla on uudempi julkaisu}}",
         "message": "Asennettu malli on esiversio, ja sen lopullinen julkaisu on nyt saatavilla: {models}. Avaa Asetukset > Analyysi > Mallit, asenna lopullinen julkaisu ja poista esiversio."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {Asennetulle mallille on saatavilla uudempi versio} other {# asennetulle mallille on saatavilla uudempia versioita}}",
+        "message": "Uudempi versio korvaa asennetun seuraaville malleille: {models}. Asennettu versio toimii, kunnes vaihdat. Avaa Asetukset > Analyysi > Mallit ja valitse Päivitä."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Korvattu mallilla {name}. Käytä sen sijaan uudempaa mallia.",
         "dialogNotice": "Tämän mallin on korvannut {name}. Harkitse mallin {name} asentamista sen sijaan."
+      },
+      "update": {
+        "cardNotice": "Uudempi versio ({to}) korvaa asennetun version {from}.",
+        "action": "Päivitä",
+        "applying": "Päivitetään..."
       },
       "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä.",
       "regionGlobal": "Globaali",

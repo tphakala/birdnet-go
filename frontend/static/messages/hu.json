@@ -507,6 +507,10 @@
         "title": "{count, plural, one {Egy telepített modellnek újabb kiadása van} other {# telepített modellnek újabb kiadása van}}",
         "message": "Egy telepített modell előzetes verzió, és a végleges kiadása már elérhető: {models}. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, telepítse a végleges kiadást, és távolítsa el az előzetes verziót."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {Egy telepített modellnek van újabb változata} other {# telepített modellnek van újabb változata}}",
+        "message": "Újabb változat váltja le a telepítettet a következőknél: {models}. A telepített változat addig működik, amíg át nem vált. Nyissa meg a Beállítások > Elemzés > Modellek oldalt, és válassza a Frissítés gombot."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Jelenlegi érték: {value}% (küszöbérték: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Leváltotta a(z) {name}. Használja helyette az újabb modellt.",
         "dialogNotice": "Ezt a modellt leváltotta a(z) {name}. Fontolja meg a(z) {name} telepítését helyette."
+      },
+      "update": {
+        "cardNotice": "Újabb változat ({to}) váltja le a telepített {from} változatot.",
+        "action": "Frissítés",
+        "applying": "Frissítés..."
       },
       "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren.",
       "regionGlobal": "Globális",

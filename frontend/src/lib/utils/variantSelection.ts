@@ -245,13 +245,15 @@ export interface OptimizeOffer {
  * like any other installed model (its BuiltIn baseline is the installed variant when
  * no DFT build is active). An entry with `supersededBy` (the server sets it only when
  * the successor is visible) gets no offer: the superseded notice tells the user to
- * move to the successor instead of switching builds of the old model.
+ * move to the successor instead of switching builds of the old model. An entry with
+ * `update` (its installed build is an older release) gets none either: the update notice
+ * and the card's Update action cover it, so one model never has two prompts.
  */
 export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
   const offers: OptimizeOffer[] = [];
   for (const entry of catalog) {
     const variants = entry.variants ?? [];
-    if (variants.length === 0 || !entry.installed || entry.supersededBy) continue;
+    if (variants.length === 0 || !entry.installed || entry.supersededBy || entry.update) continue;
 
     const installedId = entry.installedVariantId;
     const recommendedId = entry.recommendedVariantId;

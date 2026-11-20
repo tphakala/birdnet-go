@@ -507,6 +507,10 @@
         "title": "{count, plural, one {En installeret model har en nyere udgave} other {# installerede modeller har nyere udgaver}}",
         "message": "En installeret model er en forhåndsversion, og den endelige udgave er nu tilgængelig: {models}. Åbn Indstillinger > Analyse > Modeller, installer den endelige udgave, og fjern forhåndsversionen."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {En installeret model har en nyere version} other {# installerede modeller har nyere versioner}}",
+        "message": "En nyere version erstatter den installerede for: {models}. Den installerede version fungerer, indtil du skifter. Åbn Indstillinger > Analyse > Modeller, og vælg Opdater."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuel værdi: {value}% (grænse: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Afløst af {name}. Brug den nyere model i stedet.",
         "dialogNotice": "Denne model er afløst af {name}. Overvej at installere {name} i stedet."
+      },
+      "update": {
+        "cardNotice": "En nyere version ({to}) erstatter den installerede version {from}.",
+        "action": "Opdater",
+        "applying": "Opdaterer..."
       },
       "entryIncompatible": "Denne model er ikke tilgængelig på dette system.",
       "regionGlobal": "Global",

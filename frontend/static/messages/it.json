@@ -507,6 +507,10 @@
         "title": "{count, plural, one {Un modello installato ha una versione più recente} other {# modelli installati hanno versioni più recenti}}",
         "message": "Un modello installato è una versione di anteprima e la sua versione finale è ora disponibile: {models}. Apri Impostazioni > Analisi > Modelli, installa la versione finale e rimuovi l'anteprima."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {Un modello installato ha una build più recente} other {# modelli installati hanno build più recenti}}",
+        "message": "Una build più recente sostituisce quella installata per: {models}. La build installata continua a funzionare finché non passi alla nuova. Apri Impostazioni > Analisi > Modelli e scegli Aggiorna."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Sostituito da {name}. Usa invece il modello più recente.",
         "dialogNotice": "Questo modello è stato sostituito da {name}. Valuta di installare {name} al suo posto."
+      },
+      "update": {
+        "cardNotice": "Una build più recente ({to}) sostituisce la build {from} installata.",
+        "action": "Aggiorna",
+        "applying": "Aggiornamento..."
       },
       "entryIncompatible": "Questo modello non è disponibile su questo sistema.",
       "regionGlobal": "Globale",

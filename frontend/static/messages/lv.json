@@ -507,6 +507,10 @@
         "title": "{count, plural, zero {# instalētajiem modeļiem ir jaunākas versijas} one {Instalētajam modelim ir jaunāka versija} other {# instalētajiem modeļiem ir jaunākas versijas}}",
         "message": "Instalētais modelis ir priekšskatījuma versija, un tā galīgā versija tagad ir pieejama: {models}. Atveriet Iestatījumi > Analīze > Modeļi, instalējiet galīgo versiju un noņemiet priekšskatījuma versiju."
       },
+      "modelUpdate": {
+        "title": "{count, plural, zero {# instalētiem modeļiem ir jaunākas versijas} one {# instalētam modelim ir jaunāka versija} other {# instalētiem modeļiem ir jaunākas versijas}}",
+        "message": "Jaunāka versija aizstāj instalēto šādiem modeļiem: {models}. Instalētā versija darbojas, līdz pārslēdzaties. Atveriet Iestatījumi > Analīze > Modeļi un izvēlieties Atjaunināt."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Pašreizējā vērtība: {value}% (slieksnis: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Aizstāts ar {name}. Izmantojiet tā vietā jaunāko modeli.",
         "dialogNotice": "Šo modeli ir aizstājis {name}. Apsveriet {name} instalēšanu tā vietā."
+      },
+      "update": {
+        "cardNotice": "Jaunāka versija ({to}) aizstāj instalēto versiju {from}.",
+        "action": "Atjaunināt",
+        "applying": "Atjaunina..."
       },
       "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā.",
       "regionGlobal": "Globāls",

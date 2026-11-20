@@ -430,6 +430,15 @@ describe('optimizeOffers', () => {
     expect(optimizeOffers([e])).toHaveLength(0);
   });
 
+  it('makes no offer for an entry whose installed build has a newer release to update to', () => {
+    // The update notice and the card Update action cover this entry, so it gets
+    // no Optimize offer on top of them (one model, one notice and one card action).
+    const e = v24Entry({
+      update: { variantId: 'fp32-dfttrunc', fromVersion: '3.0', toVersion: '3.0.1' },
+    });
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
   it('keeps offering later entries after skipping a superseded one', () => {
     const superseded = v24Entry({
       id: 'old-model',

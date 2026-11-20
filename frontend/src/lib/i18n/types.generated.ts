@@ -424,6 +424,8 @@ export type TranslationKey =
   | 'notifications.content.modelOptimize.message' // params: models
   | 'notifications.content.modelSuperseded.title' // params: count
   | 'notifications.content.modelSuperseded.message' // params: models
+  | 'notifications.content.modelUpdate.title' // params: count
+  | 'notifications.content.modelUpdate.message' // params: models
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
@@ -4466,6 +4468,9 @@ export type TranslationKey =
   | 'analysis.gallery.experimental.dialogNotice'
   | 'analysis.gallery.superseded.cardNotice' // params: name
   | 'analysis.gallery.superseded.dialogNotice' // params: name
+  | 'analysis.gallery.update.cardNotice' // params: to, from
+  | 'analysis.gallery.update.action'
+  | 'analysis.gallery.update.applying'
   | 'analysis.gallery.entryIncompatible'
   | 'analysis.gallery.regionGlobal'
   | 'analysis.gallery.hardwareLabel'
@@ -4767,6 +4772,8 @@ export type TranslationParams = {
   'notifications.content.modelOptimize.message': { models: string | number };
   'notifications.content.modelSuperseded.title': { count: string | number };
   'notifications.content.modelSuperseded.message': { models: string | number };
+  'notifications.content.modelUpdate.title': { count: string | number };
+  'notifications.content.modelUpdate.message': { models: string | number };
   'notifications.content.alert.firedTitle': { rule_name: string | number };
   'notifications.content.alert.metricExceeded': {
     value: string | number;
@@ -5353,6 +5360,7 @@ export type TranslationParams = {
   'analysis.gallery.preview.dialogNotice': { build: string | number };
   'analysis.gallery.superseded.cardNotice': { name: string | number };
   'analysis.gallery.superseded.dialogNotice': { name: string | number };
+  'analysis.gallery.update.cardNotice': { to: string | number; from: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
   'analysis.gallery.documents.source': { repo: string | number };

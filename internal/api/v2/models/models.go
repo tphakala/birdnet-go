@@ -68,6 +68,9 @@ type Handler struct {
 	// superseded latches the superseded-model bell notice (superseded_notice.go),
 	// evaluated alongside the optimize notice.
 	superseded supersededNotice
+	// update latches the bell notice for an installed build that a newer release
+	// replaces (update_notice.go), evaluated alongside the other two.
+	update updateNotice
 	// modelRuntime reports the live backend and precision of each loaded model,
 	// keyed by registry ID. It is an injectable seam: nil means the live default
 	// (liveModelRuntime, read from the model manager and the orchestrator), and
@@ -246,6 +249,21 @@ type CatalogEntryResponse struct {
 	// Omitted for flat entries and when the request is not eligible for hardware
 	// recommendations (an unauthenticated request on an auth-enabled instance).
 	RecommendedVariantID string `json:"recommendedVariantId,omitempty"`
+	// Update is set when the installed build is an older release that a newer
+	// release of this model replaces. Omitted otherwise. It depends on install
+	// state and the catalog only, not on hardware recommendations, so it is
+	// reported to every caller that can see the catalog.
+	Update *CatalogUpdateResponse `json:"update,omitempty"`
+}
+
+// CatalogUpdateResponse describes the newer release that replaces the installed
+// build of a catalog entry. VariantID is the variant of that release to install:
+// the successor of the installed variant, so the update keeps its region and
+// precision.
+type CatalogUpdateResponse struct {
+	VariantID   string `json:"variantId"`
+	FromVersion string `json:"fromVersion"`
+	ToVersion   string `json:"toVersion"`
 }
 
 // CatalogSuccessorResponse identifies the catalog entry that supersedes another.
@@ -536,6 +554,8 @@ func visibleSuccessor(visible []classifier.CatalogEntry, id string) *CatalogSucc
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information. An entry's successor is reported only when
 // the successor is itself visible, and its documents are those of its own repo only.
+// An installed older release that a newer release of the entry replaces carries
+// update, whether or not hardware recommendations are computed for the request.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
@@ -577,6 +597,11 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			}
 		}
 
+		var update *CatalogUpdateResponse
+		if offer, ok := installedUpdate(visible, entry, installedVariantID); ok {
+			update = &CatalogUpdateResponse{VariantID: offer.ToVariantID, FromVersion: offer.FromVersion, ToVersion: offer.ToVersion}
+		}
+
 		// Models requiring ONNX Runtime are incompatible when ORT is absent.
 		compatible := true
 		incompatibleReason := ""
@@ -611,6 +636,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			Documents:            buildDocumentResponses(docSvc, entry),
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
+			Update:               update,
 			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID], hostArch),
 		})
 	}

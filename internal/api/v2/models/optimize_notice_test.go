@@ -132,6 +132,7 @@ func TestOptimizeOffers(t *testing.T) {
 		{ID: "flat", Name: "Flat model"},
 		superseded,
 		orphan,
+		updateTestEntry(),
 	}
 	compatible := func(ids ...string) map[string]recommend.Recommendation {
 		m := make(map[string]recommend.Recommendation, len(ids))
@@ -205,6 +206,12 @@ func TestOptimizeOffers(t *testing.T) {
 			byVariant:   map[string]map[string]recommend.Recommendation{"orphan": compatible("base", "fast")},
 			recommended: map[string]string{"orphan": "fast"},
 			want:        []optimizeOffer{{CatalogID: "orphan", ModelName: "Orphan model", FromVariantID: "base", ToVariantID: "fast"}},
+		},
+		{
+			name:        "installed older release with an update gets no variant offer",
+			installed:   map[string]string{updateEntryID: updateOldID},
+			byVariant:   map[string]map[string]recommend.Recommendation{updateEntryID: compatible(updateOldID, updateNewID)},
+			recommended: map[string]string{updateEntryID: updateNewID},
 		},
 		{
 			name:      "several offers keep catalog order",

@@ -1115,6 +1115,36 @@ func variantRelease(entry *CatalogEntry, v *CatalogVariant) string {
 	return cmp.Or(v.Version, entry.Version)
 }
 
+// VariantVersion returns the release of the given variant's files: the variant's
+// own Version when it carries one, else the entry's. An unknown variant id gets
+// the entry's. entry must not be nil.
+func VariantVersion(entry *CatalogEntry, variantID string) string {
+	return variantVersion(entry, variantID)
+}
+
+// VariantUpdate reports whether the given variant is an older release that a
+// newer one replaces, and returns the replacing variant. It is ok when the
+// variant resolves, is Legacy, its SupersededBy names a live (non-Legacy)
+// variant of the same entry, and the two variants are of different releases. The
+// release test keeps a withdrawn build of the same release (a Perch int8-arm
+// build and its successor) out: that is a better build, not a newer one. An empty
+// variantId, a dangling SupersededBy and a successor that is itself Legacy are
+// not updates. The returned variant points into entry.
+func VariantUpdate(entry *CatalogEntry, variantID string) (successor *CatalogVariant, ok bool) {
+	if entry == nil || variantID == "" {
+		return nil, false
+	}
+	v := resolveVariant(entry, variantID)
+	if v == nil || !v.Legacy || v.SupersededBy == "" {
+		return nil, false
+	}
+	next := resolveVariant(entry, v.SupersededBy)
+	if next == nil || next.Legacy || variantRelease(entry, next) == variantRelease(entry, v) {
+		return nil, false
+	}
+	return next, true
+}
+
 // liveFirstVariants yields the entry's variants with the live ones first and the
 // Legacy ones after, in catalog order within each group. A first-match walk with
 // no configured model path uses it so a leftover Legacy build (an older release,

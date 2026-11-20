@@ -20,7 +20,7 @@
   import logoJyu from '$lib/assets/logos/logo-jyu.jpeg';
 
   export type ModelCardMode = 'installed' | 'available';
-  export type ModelCardAction = 'install' | 'reinstall' | 'remove';
+  export type ModelCardAction = 'install' | 'reinstall' | 'remove' | 'update';
 
   const MODEL_LOGOS: Record<string, string> = {
     birdnet: logoBirdnet,
@@ -41,6 +41,7 @@
   import {
     BrainCircuit,
     Check,
+    CircleArrowUp,
     Download,
     ExternalLink,
     Globe,
@@ -75,11 +76,11 @@
   interface Props {
     /** The catalog entry shown. */
     entry: CatalogEntry;
-    /** 'installed' describes the installed variant and offers Optimize, Reinstall and Remove; 'available' describes the recommended variant and offers Install. */
+    /** 'installed' describes the installed variant and offers Update (when the entry has one), Optimize, Reinstall and Remove; 'available' describes the recommended variant and offers Install. */
     mode: ModelCardMode;
     /** Region slug to localized name, as ModelVariantPicker takes it. */
     regionNames: ReadonlyMap<string, string>;
-    /** The action running on this card, or null. On an installed card 'install' is the variant swap (Optimize). */
+    /** The action running on this card, or null. On an installed card 'install' is the variant swap (Optimize or Update). */
     busy?: ModelCardAction | null;
     /** True while any gallery action runs on any card. */
     actionInFlight?: boolean;
@@ -206,9 +207,20 @@
       ? t('analysis.gallery.superseded.cardNotice', { name: entry.supersededBy.name })
       : null
   );
+  // An installed older release that a newer release replaces: a note with both versions, and the Update action
+  const showUpdate = $derived(mode === 'installed' && entry.update !== undefined);
+  const updateNoticeText = $derived(
+    showUpdate && entry.update
+      ? t('analysis.gallery.update.cardNotice', {
+          from: entry.update.fromVersion,
+          to: entry.update.toVersion,
+        })
+      : null
+  );
   const hasNotices = $derived(
     channelNoticeText !== null ||
       supersededNoticeText !== null ||
+      updateNoticeText !== null ||
       !entry.compatible ||
       progress !== null
   );
@@ -271,6 +283,17 @@
     icon: Sparkles,
     label: t('analysis.gallery.optimize.swap'),
     runningLabel: t('analysis.gallery.optimize.applying'),
+    paused: inFlight && busy !== 'install',
+    running: busy === 'install',
+  });
+
+  // Update is the variant swap to the successor build, so it runs while a swap does ('install')
+  const updateAction = $derived<ActionSpec>({
+    action: 'update',
+    variant: 'primary',
+    icon: CircleArrowUp,
+    label: t('analysis.gallery.update.action'),
+    runningLabel: t('analysis.gallery.update.applying'),
     paused: inFlight && busy !== 'install',
     running: busy === 'install',
   });
@@ -426,6 +449,9 @@
       {#if supersededNoticeText}
         {@render notice('warning', supersededNoticeText, 'note', undefined)}
       {/if}
+      {#if updateNoticeText}
+        {@render notice('warning', updateNoticeText, 'note', undefined)}
+      {/if}
       {#if !entry.compatible}
         {@render notice(
           mode === 'installed' ? 'error' : 'warning',
@@ -526,6 +552,9 @@
     {#if mode === 'available'}
       {@render actionButton(installAction)}
     {:else}
+      {#if showUpdate}
+        {@render actionButton(updateAction)}
+      {/if}
       {#if showOptimize}
         {@render actionButton(optimizeAction)}
       {/if}

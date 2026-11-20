@@ -507,6 +507,10 @@
         "title": "{count, plural, one {En installerad modell har en nyare utgåva} other {# installerade modeller har nyare utgåvor}}",
         "message": "En installerad modell är en förhandsversion, och dess slutliga utgåva finns nu tillgänglig: {models}. Öppna Inställningar > Analys > Modeller, installera den slutliga utgåvan och ta bort förhandsversionen."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {En installerad modell har en nyare version} other {# installerade modeller har nyare versioner}}",
+        "message": "En nyare version ersätter den installerade för: {models}. Den installerade versionen fungerar tills du byter. Öppna Inställningar > Analys > Modeller och välj Uppdatera."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Ersatt av {name}. Använd den nyare modellen i stället.",
         "dialogNotice": "Den här modellen har ersatts av {name}. Överväg att installera {name} i stället."
+      },
+      "update": {
+        "cardNotice": "En nyare version ({to}) ersätter den installerade versionen {from}.",
+        "action": "Uppdatera",
+        "applying": "Uppdaterar..."
       },
       "entryIncompatible": "Den här modellen är inte tillgänglig på detta system.",
       "regionGlobal": "Global",

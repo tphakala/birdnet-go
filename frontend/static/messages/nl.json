@@ -507,6 +507,10 @@
         "title": "{count, plural, one {Een geïnstalleerd model heeft een nieuwere uitgave} other {# geïnstalleerde modellen hebben nieuwere uitgaven}}",
         "message": "Een geïnstalleerd model is een voorvertoningsversie en de definitieve uitgave is nu beschikbaar: {models}. Open Instellingen > Analyse > Modellen, installeer de definitieve uitgave en verwijder de voorvertoning."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {Een geïnstalleerd model heeft een nieuwere versie} other {# geïnstalleerde modellen hebben nieuwere versies}}",
+        "message": "Een nieuwere versie vervangt de geïnstalleerde voor: {models}. De geïnstalleerde versie blijft werken tot er wordt overgeschakeld. Open Instellingen > Analyse > Modellen en kies Bijwerken."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Vervangen door {name}. Gebruik in plaats daarvan het nieuwere model.",
         "dialogNotice": "Dit model is vervangen door {name}. Overweeg in plaats daarvan {name} te installeren."
+      },
+      "update": {
+        "cardNotice": "Een nieuwere versie ({to}) vervangt de geïnstalleerde versie {from}.",
+        "action": "Bijwerken",
+        "applying": "Bijwerken..."
       },
       "entryIncompatible": "Dit model is niet beschikbaar op dit systeem.",
       "regionGlobal": "Globaal",

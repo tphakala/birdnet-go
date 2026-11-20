@@ -507,6 +507,10 @@
         "title": "{count, plural, one {Zainstalowany model ma nowsze wydanie} few {# zainstalowane modele mają nowsze wydania} many {# zainstalowanych modeli ma nowsze wydania} other {# zainstalowanych modeli ma nowsze wydania}}",
         "message": "Zainstalowany model jest wersją zapoznawczą, a jego ostateczne wydanie jest już dostępne: {models}. Otwórz Ustawienia > Analiza > Modele, zainstaluj ostateczne wydanie i usuń wersję zapoznawczą."
       },
+      "modelUpdate": {
+        "title": "{count, plural, one {Zainstalowany model ma nowszą wersję} few {# zainstalowane modele mają nowsze wersje} many {# zainstalowanych modeli ma nowsze wersje} other {# zainstalowanych modeli ma nowsze wersje}}",
+        "message": "Nowsza wersja zastępuje zainstalowaną dla: {models}. Zainstalowana wersja działa do czasu przełączenia. Otwórz Ustawienia > Analiza > Modele i wybierz Zaktualizuj."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
@@ -6058,6 +6062,11 @@
       "superseded": {
         "cardNotice": "Zastąpiony przez {name}. Używaj zamiast niego nowszego modelu.",
         "dialogNotice": "Ten model został zastąpiony przez {name}. Rozważ zainstalowanie {name}."
+      },
+      "update": {
+        "cardNotice": "Nowsza wersja ({to}) zastępuje zainstalowaną wersję {from}.",
+        "action": "Zaktualizuj",
+        "applying": "Aktualizowanie..."
       },
       "entryIncompatible": "Ten model nie jest dostępny w tym systemie.",
       "regionGlobal": "Globalny",

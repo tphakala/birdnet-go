@@ -722,6 +722,71 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
     expect(screen.queryByRole('button', { name: /analysis\.gallery\.optimize\.swap/ })).toBeNull();
   });
 
+  describe('update of an installed older release', () => {
+    // An installed 3.0 build whose 3.0.1 successor is the same global build; the host
+    // recommendation is a different (regional) variant, so Optimize would offer it
+    // if the entry were not on the update path.
+    function updatable(): CatalogEntry {
+      const variant = (id: string, installed: boolean, recommended: boolean) => ({
+        id,
+        precision: 'fp32',
+        default: false,
+        installed,
+        speciesCount: 10,
+        sizeBytes: 1,
+        compatible: true,
+        recommended,
+      });
+      return birdEntry({
+        installed: true,
+        installedVariantId: 'fp32',
+        recommendedVariantId: 'fp32-3.0.1@nordic',
+        update: { variantId: 'fp32-3.0.1', fromVersion: '3.0', toVersion: '3.0.1' },
+        variants: [
+          variant('fp32', true, false),
+          variant('fp32-3.0.1', false, false),
+          variant('fp32-3.0.1@nordic', false, true),
+        ],
+      });
+    }
+
+    beforeEach(() => {
+      vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+      vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(() => () => {});
+    });
+
+    it('shows no optimize banner or Optimize button, only the update note and action', async () => {
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [updatable()] });
+      render(AnalysisSettingsPage);
+      await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+
+      expect(
+        await screen.findByRole('button', { name: /analysis\.gallery\.update\.action/ })
+      ).toBeInTheDocument();
+      expect(screen.queryByText('analysis.gallery.optimize.bannerTitle')).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: /analysis\.gallery\.optimize\.swap/ })
+      ).toBeNull();
+    });
+
+    it('opens the dialog with the successor build selected, not the host recommendation', async () => {
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [updatable()] });
+      render(AnalysisSettingsPage);
+      await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+
+      await fireEvent.click(
+        await screen.findByRole('button', { name: /analysis\.gallery\.update\.action/ })
+      );
+      await fireEvent.click(
+        await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+      );
+
+      await waitFor(() =>
+        expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32-3.0.1')
+      );
+    });
+  });
+
   it('renders the permanent card with a built-in badge, no Remove/Reinstall, and an Optimize action', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [v24Installed()] });
     render(AnalysisSettingsPage);
