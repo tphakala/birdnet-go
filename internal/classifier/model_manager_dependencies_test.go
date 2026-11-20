@@ -793,6 +793,27 @@ func TestEmbeddedCatalog_BirdNETPlusUpdateFromRelease30(t *testing.T) {
 	assert.Equal(t, "3.0.1", got.Version)
 }
 
+// TestEmbeddedCatalog_BirdNETPlusSwitchRecordsTargetRelease checks the install
+// record a variant switch writes carries the release of the variant switched to,
+// not the entry's: moving an installed 3.0.1 build back to the Legacy 3.0 variant
+// records release 3.0. It reads the record before any rescan, which would
+// re-derive the release from disk.
+func TestEmbeddedCatalog_BirdNETPlusSwitchRecordsTargetRelease(t *testing.T) {
+	const plusID = "birdnet-plus-v3.0"
+	h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
+	entry := h.entry(plusID)
+
+	require.NoError(t, h.install(plusID, "fp32-3.0.1"))
+	require.Equal(t, "3.0.1", installedSnapshot(h.mm)[plusID].Version)
+
+	require.NoError(t, h.mm.InstallOrReplace(t.Context(), &entry, "fp32", h.srv.URL, nil))
+
+	got := installedSnapshot(h.mm)[plusID]
+	assert.Equal(t, "fp32", got.VariantID)
+	assert.Equal(t, "3.0", got.Version)
+	assert.Equal(t, h.own(plusID, "birdnet_plus_v3.0_fp32.onnx"), got.ModelPath)
+}
+
 func TestEmbeddedCatalog_GeomodelOutlivesItsDependents(t *testing.T) {
 	h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
 	require.NoError(t, h.install("birdnet-plus-v3.0", ""))
