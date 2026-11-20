@@ -2,11 +2,15 @@ package classifier
 
 import (
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -123,10 +127,103 @@ func TestBirdNETV3_LoaderRegistered(t *testing.T) {
 	assert.True(t, ok, "BirdNET+ v3.0 must have an OpenVINO-capable secondary builder")
 }
 
-// TestBirdNETV3_RegistryIDCarriesIdentity guards the parametrised registry ID: an
-// instance built for BirdNET+ v3.0 must report that ID and name and tag a failed
-// prediction with it, not with the BirdNET v3.0 preview's ID.
-func TestBirdNETV3_RegistryIDCarriesIdentity(t *testing.T) {
+// birdNETV3FamilySettings returns settings in which the BirdNET v3.0 and BirdNET+ v3.0
+// sections name distinct, existing, empty files, plus the label path of each family
+// keyed by registry ID. BirdNET.ONNXRuntimePath names an existing stub file.
+func birdNETV3FamilySettings(t *testing.T) (settings *conf.Settings, labelPaths map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	touch := func(name string) string {
+		p := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(p, nil, 0o600))
+		return p
+	}
+	settings = &conf.Settings{}
+	settings.BirdNETV3.ModelPath = touch("preview.onnx")
+	settings.BirdNETV3.LabelPath = touch("preview-labels.txt")
+	settings.BirdNETPlus.ModelPath = touch("plus.onnx")
+	settings.BirdNETPlus.LabelPath = touch("plus-labels.txt")
+	settings.BirdNET.ONNXRuntimePath = touch("ort-stub")
+	return settings, map[string]string{
+		RegistryIDBirdNETV3:     settings.BirdNETV3.LabelPath,
+		RegistryIDBirdNETPlusV3: settings.BirdNETPlus.LabelPath,
+	}
+}
+
+// TestBirdNETV3Family_EachFamilyReadsItsOwnSection drives the two map entries
+// production uses for each BirdNET v3.0 architecture family (modelLoaders for the
+// startup and runtime load, openvinoCapableSecondaryBuilders for the hot reload) and
+// proves each family builds from its own settings section, not the sibling's.
+//
+// A real instance needs ONNX Runtime and a model file, so the observable here is the
+// build error. Both sections name distinct existing files and the label files are
+// empty, so NewBirdNETV3 fails at "no labels parsed from <path>"
+// (birdnet_v3_onnx.go:113-117) and the error carries the label path it was handed.
+// That check runs before the runtime is loaded (birdnet_v3_onnx.go:126), and
+// BirdNET.ONNXRuntimePath names an existing stub file so the availability probe
+// passes (internal/inference/ort_status.go:72-95) whether or not ONNX Runtime is
+// installed on the machine. The result is the same on every machine and the native
+// runtime is never loaded.
+//
+// Only the label path is observable this way. The model path travels in the same
+// familyFields set as the label path, and TestFamilyFields pins that set's pointers
+// for both families. This test pins that the right registry ID reaches it.
+//
+// The loader reads the global settings snapshot (orchestrator.go:280-291), and
+// o.Settings stays nil on purpose, so a loader that stopped reading the snapshot
+// fails with the unknown-ID error (familyFields returns false for nil settings,
+// model_manager.go:571-572) instead of passing. The test is not parallel because it
+// publishes the global snapshot.
+func TestBirdNETV3Family_EachFamilyReadsItsOwnSection(t *testing.T) {
+	ids := []string{RegistryIDBirdNETV3, RegistryIDBirdNETPlusV3}
+
+	assertOwnLabelPath := func(t *testing.T, err error, labels map[string]string, id string) {
+		t.Helper()
+		require.Error(t, err)
+		require.ErrorContains(t, err, labels[id], "the build must read this family's own label path")
+		for other, otherPath := range labels {
+			if other != id {
+				assert.NotContains(t, err.Error(), otherPath,
+					"the build must not read the %s section", other)
+			}
+		}
+	}
+
+	for _, id := range ids {
+		t.Run("loader/"+id, func(t *testing.T) {
+			s, labels := birdNETV3FamilySettings(t)
+			o := newTestOrchestrator(t)
+			conftest.SetTestSettings(s)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			require.Contains(t, modelLoaders, id)
+			o.mu.Lock()
+			err := modelLoaders[id](o, 1)
+			o.mu.Unlock()
+
+			assertOwnLabelPath(t, err, labels, id)
+			assert.Empty(t, o.models, "a failed load must not register a model")
+		})
+
+		t.Run("reload_builder/"+id, func(t *testing.T) {
+			s, labels := birdNETV3FamilySettings(t)
+			o := newTestOrchestrator(t)
+
+			require.Contains(t, openvinoCapableSecondaryBuilders, id)
+			m, err := openvinoCapableSecondaryBuilders[id](o, s, 1)
+
+			assertOwnLabelPath(t, err, labels, id)
+			assert.Nil(t, m, "a failed build must return no instance")
+		})
+	}
+}
+
+// TestBirdNETV3_IdentityComesFromRegistryInfo checks that an instance carrying the
+// BirdNET+ v3.0 registry entry reports that ID and name and tags a failed prediction
+// with it, not with the BirdNET v3.0 preview's ID. The instance is built by hand, so
+// this pins the methods that read the instance's registry info, not NewBirdNETV3
+// storing the entry that cfg.RegistryID selects.
+func TestBirdNETV3_IdentityComesFromRegistryInfo(t *testing.T) {
 	resetGlobalMetrics(t)
 	t.Cleanup(func() { resetGlobalMetrics(t) })
 	m := newTestMetrics(t)

@@ -370,10 +370,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// snapshot to go stale.
 
 	// Build the range-filter backend from the loaded participant set now that the
-	// models are loaded, independent of BirdNET v2.4: a Perch-only or v3.0-only install
-	// with the geomodel builds a real backend. reload snapshots the participant view
-	// under its own lock. A build failure is non-fatal: the process starts without
-	// species filtering and the user can fix it via Settings > Species.
+	// models are loaded, independent of BirdNET v2.4: an install running Perch v2,
+	// BirdNET v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded builds a real backend
+	// with the geomodel. reload snapshots the participant view under its own lock. A
+	// build failure is non-fatal: the process starts without species filtering and the
+	// user can fix it via Settings > Species.
 	if err := o.rangeFilter.reload(settings, o.rangeFilterView); err != nil {
 		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
 			logger.Error(err),
@@ -1002,9 +1003,9 @@ func (o *Orchestrator) rangeFilterReady() (rfs *rangeFilterService, ok bool) {
 	// loaded. The service is created once in NewOrchestrator and never reassigned, so
 	// the read needs no lock; whether a backend is actually loaded (and thus whether
 	// filtering is active) is decided per call inside the service. Decoupling readiness
-	// from v2.4 is what lets a Perch-only or v3.0-only install with the geomodel filter,
-	// and lets an N=0 runtime fail open over an empty label set instead of dropping
-	// every detection.
+	// from v2.4 is what lets an install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0
+	// without BirdNET v2.4 loaded filter with the geomodel, and lets an N=0 runtime fail
+	// open over an empty label set instead of dropping every detection.
 	rfs = o.rangeFilter
 	return rfs, rfs != nil
 }
@@ -1502,7 +1503,8 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 
 	// Per-participant coverage, built from the same rangeFilterView the backend build
 	// consumes. Bat/BSG are not range-filter participants, so rangeFilterView never
-	// includes them; a Perch-only or v3.0-only install is reported without a v2.4 gate.
+	// includes them; an install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without
+	// BirdNET v2.4 loaded is reported without a v2.4 gate.
 	classifiers := buildClassifierViews(view, geoLabels)
 	// A geomodel backend kept by a failed reload was built before any participant that
 	// loaded since, so it does not serve those. A reload still in flight is not flagged,
@@ -1584,8 +1586,8 @@ func (o *Orchestrator) ReloadRangeFilter() error {
 	}
 	GetLogger().Info("Reloading range filter from updated settings")
 	// reload snapshots the participant view under its own lock, so this is not gated on
-	// v2.4: applyInstalledGeomodelConfig on a Perch-only or v3.0-only install can now
-	// light up the geomodel here.
+	// v2.4: applyInstalledGeomodelConfig on an install running Perch v2, BirdNET v3.0 or
+	// BirdNET+ v3.0 without BirdNET v2.4 loaded can now light up the geomodel here.
 	if err := rfs.reload(o.CurrentSettings(), o.rangeFilterView); err != nil {
 		return err
 	}

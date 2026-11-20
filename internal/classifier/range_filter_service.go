@@ -59,8 +59,9 @@ type participantLabels struct {
 // range-filter backend independent of which acoustic classifier is loaded. It
 // supersedes classifierView's single-anchor identity: instead of one classifier,
 // it carries every loaded classifier that participates in range filtering
-// (ParticipatesInRangeFilter), so a Perch-only or v3.0-only install with the v3.0
-// geomodel builds a real backend rather than an empty one.
+// (ParticipatesInRangeFilter), so an install running Perch v2, BirdNET v3.0 or
+// BirdNET+ v3.0 without BirdNET v2.4 loaded builds a real backend with the v3.0
+// geomodel rather than an empty one.
 //
 // participants lead with BirdNET v2.4 (when loaded) and are otherwise byte-sorted
 // by registry ID, mirroring orderedEntryRefs so label unions resolve
@@ -138,9 +139,9 @@ const (
 // coveredLabels is the classifier-side label space the range-filter backend maps
 // onto: BirdNET v2.4's labels when v2.4 is loaded (so existing v2.4 installs stay
 // byte-identical, and legacy MData, which only maps the 6522 v2.4 labels, always uses
-// them), otherwise the union of the loaded participants' labels (so a Perch-only or
-// v3.0-only install maps and fails open over its own species). Returns nil when no
-// participant is loaded (N=0).
+// them), otherwise the union of the loaded participants' labels (so an install running
+// Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded maps and fails
+// open over its own species). Returns nil when no participant is loaded (N=0).
 func (v rangeFilterView) coveredLabels(settings *conf.Settings) []string {
 	if v.v24Labels != nil {
 		// v2.4 loaded: prefer the PUBLISHED v2.4 label set (settings.BirdNET.Labels), not
@@ -197,8 +198,9 @@ type rangeFilterState struct {
 	// coveredLabels is the classifier-side label space the backend maps onto: BirdNET
 	// v2.4's labels when v2.4 is loaded (byte-identical to the pre-decouple behavior),
 	// otherwise the union of the loaded participants' labels. The synthetic-zero
-	// fail-open path and scoreProbableSpecies index this slice, so a Perch-only or
-	// v3.0-only install fails open over its own species instead of an empty v2.4 list.
+	// fail-open path and scoreProbableSpecies index this slice, so an install running
+	// Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded fails open over
+	// its own species instead of an empty v2.4 list.
 	coveredLabels []string
 	// participants is the participant snapshot (registry ID + label set) this state's
 	// backend was actually built over, in rangeFilterView order. The status surface and
@@ -345,11 +347,13 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 		// none), the published state still carries the OLD covered-label space (nil on a
 		// fresh service). The fail-open paths score over coveredLabels, so leaving it nil
 		// would synthesize an EMPTY inclusion list and drop every detection on a
-		// location-configured Perch-only or v3.0-only install: the exact fail-closed
-		// regression this decoupling exists to prevent. Publish the fresh covered labels
-		// with no backend (kind none) so the service fails OPEN over the loaded
-		// participants, while still returning the error so the caller surfaces and logs the
-		// build failure.
+		// location-configured install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0
+		// without BirdNET v2.4 loaded: the exact fail-closed regression this decoupling
+		// exists to prevent. Running those models with no range-filter backend is a flawed
+		// state, not a supported mode; failing open is its degraded path. Publish the fresh
+		// covered labels with no backend (kind none) so the service fails OPEN over the
+		// loaded participants, while still returning the error so the caller surfaces and
+		// logs the build failure.
 		rfs.mu.Lock()
 		if cur := rfs.loadState(); cur.backend == nil {
 			rfs.state.Store(&rangeFilterState{
@@ -514,11 +518,12 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 
 	// coveredLabels is the classifier label space the loaded backend maps onto: v2.4's
 	// labels on a v2.4 install (byte-identical to the former settings.BirdNET.Labels),
-	// the loaded-participant union otherwise. The fail-open paths score over it so a
-	// Perch-only or v3.0-only install fails open over its own species instead of the
-	// empty v2.4 label set (which would drop every detection). st is this pre-predict
-	// snapshot; the post-predict paths return predict's own snapshot (res.state) so a
-	// caller's participant backfill stays on the same generation as the geomodel.
+	// the loaded-participant union otherwise. The fail-open paths score over it so an
+	// install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded
+	// fails open over its own species instead of the empty v2.4 label set (which would
+	// drop every detection). st is this pre-predict snapshot; the post-predict paths
+	// return predict's own snapshot (res.state) so a caller's participant backfill stays
+	// on the same generation as the geomodel.
 	st := rfs.loadState()
 	covered := st.coveredLabels
 
@@ -949,8 +954,8 @@ func buildMetaModel(settings *conf.Settings, view rangeFilterView, debug debugFu
 	// (view.wantsGeomodel) and the stock files are present, on a config that yields to
 	// it: no path, a stock MData path, or a legacy pin (rangeFilterYieldsToGeomodel).
 	// Keyed on the participant set instead of a single classifier's compat, so a
-	// Perch/v3.0 set auto-selects the geomodel while a v2.4-only set
-	// (wantsGeomodel=false) stays on MData exactly as before.
+	// set with Perch v2, BirdNET v3.0 or BirdNET+ v3.0 auto-selects the geomodel while a
+	// v2.4-only set (wantsGeomodel=false) stays on MData exactly as before.
 	if view.wantsGeomodel && rangeFilterYieldsToGeomodel(&rf) &&
 		geomodelFilesPresent(view.modelsDir) {
 		localSettings := conf.CloneSettings(settings)
@@ -1345,7 +1350,8 @@ func buildMappedGeoModel(settings *conf.Settings, coveredLabels []string) (infer
 
 	// Map onto coveredLabels: BirdNET v2.4's labels when v2.4 is loaded (byte-identical
 	// to the pre-decouple mapping), otherwise the union of the loaded participants'
-	// labels, so the geomodel remaps onto a Perch-only or v3.0-only classifier set too.
+	// labels, so the geomodel also remaps onto the classifier set of an install running
+	// Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded.
 	classifierLabels := coveredLabels
 	var unmappedScore float32
 	if rfSettings.PassUnmappedSpecies {
