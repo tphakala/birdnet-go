@@ -33,7 +33,7 @@
     AUDIO_SOURCES_FIELD_PREFIX,
     STREAMS_FIELD_PREFIX,
   } from '$lib/desktop/components/forms/sourceFields';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
@@ -836,14 +836,14 @@
           class="space-y-4 transition-opacity duration-200"
           class:opacity-50={!settings.audio.export.enabled}
         >
-          <Checkbox
-            checked={exportDenoise.enabled}
+          <ToggleField
+            value={exportDenoise.enabled}
             label={t('settings.audio.exportDenoise.enable')}
-            helpText={settings.audio.export.enabled
+            description={settings.audio.export.enabled
               ? t('settings.audio.exportDenoise.enableHelp')
               : t('settings.audio.exportDenoise.requiresRecording')}
             disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
-            onchange={checked => updateExportDenoise({ enabled: checked })}
+            onUpdate={checked => updateExportDenoise({ enabled: checked })}
           />
 
           <SelectDropdown
@@ -937,12 +937,12 @@
           class="space-y-4 transition-opacity duration-200"
           class:opacity-50={!settings.audio.export.enabled}
         >
-          <Checkbox
-            bind:checked={settings.audio.export.normalization.enabled}
+          <ToggleField
+            value={settings.audio.export.normalization.enabled}
             label={t('settings.audio.audioNormalization.enable')}
-            helpText={t('settings.audio.audioNormalization.enableHelp')}
+            description={t('settings.audio.audioNormalization.enableHelp')}
             disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
-            onchange={() =>
+            onUpdate={enabled =>
               settingsActions.updateSection('realtime', {
                 audio: {
                   ...settings.audio,
@@ -950,7 +950,7 @@
                     ...settings.audio.export,
                     normalization: {
                       ...settings.audio.export.normalization,
-                      enabled: settings.audio.export.normalization.enabled,
+                      enabled,
                     },
                   },
                 },
@@ -1082,12 +1082,12 @@
       currentData={store.formData.realtime?.audio?.soundLevel}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.audio.soundLevel.enabled}
+        <ToggleField
+          value={settings.audio.soundLevel.enabled}
           label={t('settings.audio.soundLevelMonitoring.enable')}
-          helpText={t('settings.audio.soundLevelMonitoring.enableHelp')}
+          description={t('settings.audio.soundLevelMonitoring.enableHelp')}
           disabled={store.isLoading || store.isSaving}
-          onchange={enabled =>
+          onUpdate={enabled =>
             settingsActions.updateSection('realtime', {
               audio: {
                 ...settings.audio,
@@ -1190,12 +1190,12 @@
       }}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.audio.export.enabled}
+        <ToggleField
+          value={settings.audio.export.enabled}
           label={t('settings.audio.clipRecording.enable')}
-          helpText={t('settings.audio.clipRecording.enableHelp')}
+          description={t('settings.audio.clipRecording.enableHelp')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateExportEnabled}
+          onUpdate={updateExportEnabled}
         />
 
         <!-- Fieldset for accessible disabled state -->
@@ -1319,12 +1319,12 @@
         </ErrorAlert>
 
         <!-- Enable Extended Capture -->
-        <Checkbox
-          checked={extendedCaptureSettingsLocal.enabled}
+        <ToggleField
+          value={extendedCaptureSettingsLocal.enabled}
           label={t('settings.audio.extendedCapture.enable')}
-          helpText={t('settings.audio.extendedCapture.enableHelp')}
+          description={t('settings.audio.extendedCapture.enableHelp')}
           disabled={store.isLoading || store.isSaving}
-          onchange={enabled => updateExtendedCaptureEnabled(enabled)}
+          onUpdate={enabled => updateExtendedCaptureEnabled(enabled)}
         />
 
         <!-- Fieldset for accessible disabled state -->
@@ -1589,18 +1589,16 @@
               helpText={t('settings.audio.audioClipRetention.minClipsHelp')}
               disabled={store.isLoading || store.isSaving}
             />
-
-            <!-- Keep Spectrograms -->
-            <div class="mt-8">
-              <Checkbox
-                checked={retentionSettings.keepSpectrograms}
-                label={t('settings.audio.audioClipRetention.keepSpectrograms')}
-                helpText={t('settings.audio.audioClipRetention.keepSpectrogramsHelp')}
-                disabled={store.isLoading || store.isSaving}
-                onchange={updateRetentionKeepSpectrograms}
-              />
-            </div>
           </div>
+
+          <!-- Keep Spectrograms -->
+          <ToggleField
+            value={retentionSettings.keepSpectrograms}
+            label={t('settings.audio.audioClipRetention.keepSpectrograms')}
+            description={t('settings.audio.audioClipRetention.keepSpectrogramsHelp')}
+            disabled={store.isLoading || store.isSaving}
+            onUpdate={updateRetentionKeepSpectrograms}
+          />
         {/if}
 
         <!-- Retention Policy Info -->

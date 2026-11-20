@@ -27,7 +27,7 @@
   @component
 -->
 <script lang="ts">
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -1073,14 +1073,14 @@
           </div>
         {/if}
 
-        <!-- Redirect to HTTPS checkbox -->
+        <!-- Redirect to HTTPS switch -->
         {#if settings.tlsMode !== ''}
           <div class="mt-4">
-            <Checkbox
-              checked={settings.redirectToHttps}
+            <ToggleField
+              value={settings.redirectToHttps}
               label={t('settings.security.tls.redirectToHttps')}
               disabled={store.isLoading || store.isSaving}
-              onchange={updateRedirectToHttps}
+              onUpdate={updateRedirectToHttps}
             />
           </div>
         {/if}
@@ -1120,11 +1120,11 @@
       currentData={store.formData.security?.basicAuth}
     >
       <form class="space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
-        <Checkbox
-          checked={settings.basicAuth.enabled}
+        <ToggleField
+          value={settings.basicAuth.enabled}
           label={t('settings.security.basicAuthentication.enableLabel')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateBasicAuthEnabled}
+          onUpdate={updateBasicAuthEnabled}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -1312,16 +1312,16 @@
                     onchange={(value) => (providerFormData.scopesText = value)}
                   />
 
-                  <Checkbox
-                    checked={providerFormData.postLogoutRedirect}
+                  <ToggleField
+                    value={providerFormData.postLogoutRedirect}
                     label={t('settings.security.oauth.oidc.postLogoutRedirectLabel')}
-                    helpText={configuredBaseUrl
+                    description={configuredBaseUrl
                       ? t('settings.security.oauth.oidc.postLogoutRedirectHelpText', {
                           url: `${configuredBaseUrl}${POST_LOGOUT_RETURN_PATH}`,
                         })
                       : t('settings.security.oauth.oidc.postLogoutRedirectNoBaseUrl')}
                     disabled={store.isLoading || store.isSaving}
-                    onchange={(enabled) => (providerFormData.postLogoutRedirect = enabled)}
+                    onUpdate={(enabled) => (providerFormData.postLogoutRedirect = enabled)}
                   />
                 {/if}
 
@@ -1348,11 +1348,11 @@
                   </p>
                 {/if}
 
-                <Checkbox
-                  checked={providerFormData.enabled}
+                <ToggleField
+                  value={providerFormData.enabled}
                   label={t('settings.security.oauth.enableProviderLabel')}
                   disabled={store.isLoading || store.isSaving}
-                  onchange={(enabled) => (providerFormData.enabled = enabled)}
+                  onUpdate={(enabled) => (providerFormData.enabled = enabled)}
                 />
 
                 <!-- Form Actions -->
@@ -1492,11 +1492,11 @@
       currentData={store.formData.security?.allowSubnetBypass}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.allowSubnetBypass.enabled}
+        <ToggleField
+          value={settings.allowSubnetBypass.enabled}
           label={t('settings.security.allowSubnetBypassLabel')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateSubnetBypassEnabled}
+          onUpdate={updateSubnetBypassEnabled}
         />
 
         <!-- Outside the fieldset so the link stays usable while the bypass is off -->
@@ -1567,21 +1567,25 @@
       currentData={store.formData.security?.publicAccess}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.privateMode ?? false}
-          label={t('settings.security.privateMode.label')}
-          helpText={t('settings.security.privateMode.help')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updatePrivateMode}
-        />
+        <div class="divide-y divide-[var(--border-100)]">
+          <ToggleField
+            className="pb-4"
+            value={settings.privateMode ?? false}
+            label={t('settings.security.privateMode.label')}
+            description={t('settings.security.privateMode.help')}
+            disabled={store.isLoading || store.isSaving}
+            onUpdate={updatePrivateMode}
+          />
 
-        <Checkbox
-          checked={settings.publicAccess?.liveAudio ?? false}
-          label={t('settings.security.publicAccess.liveAudioLabel')}
-          helpText={t('settings.security.publicAccess.liveAudioHelp')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updatePublicLiveAudio}
-        />
+          <ToggleField
+            className="pt-4"
+            value={settings.publicAccess?.liveAudio ?? false}
+            label={t('settings.security.publicAccess.liveAudioLabel')}
+            description={t('settings.security.publicAccess.liveAudioHelp')}
+            disabled={store.isLoading || store.isSaving}
+            onUpdate={updatePublicLiveAudio}
+          />
+        </div>
 
         <ErrorAlert type="warning">
           {#snippet children()}
@@ -1604,11 +1608,11 @@
           {t('settings.security.terminal.securityWarning')}
         {/snippet}
       </ErrorAlert>
-      <Checkbox
+      <ToggleField
         label={t('settings.security.terminal.enableLabel')}
-        helpText={t('settings.security.terminal.enableHelpText')}
-        checked={enableTerminal}
-        onchange={handleTerminalToggle}
+        description={t('settings.security.terminal.enableHelpText')}
+        value={enableTerminal}
+        onUpdate={handleTerminalToggle}
         disabled={store.isLoading || store.isSaving}
       />
     </SettingsSection>

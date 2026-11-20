@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import SpeciesConfigEditor from './SpeciesConfigEditor.svelte';
 import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+import type { Action } from '$lib/stores/settings';
 
 // The dictionary store is the only dict dependency; stub the unique resolver so the
 // free-typed-name path is deterministic.
@@ -29,6 +30,7 @@ const fiLocalize = (value: string): string => FI.get(value) ?? value;
 const SAVE_BUTTON = 'settings.species.customConfiguration.save';
 
 interface RenderOpts {
+  actions?: Action[];
   predictions?: string[];
   localizeLabel?: (_value: string) => string;
 }
@@ -38,7 +40,7 @@ function renderEditor(opts: RenderOpts = {}) {
   const result = render(SpeciesConfigEditor, {
     props: {
       species: 'barn owl', // existing canonical config key (lowercased)
-      config: { threshold: 0.5, interval: 0, actions: [] },
+      config: { threshold: 0.5, interval: 0, actions: opts.actions ?? [] },
       predictions: opts.predictions ?? ['Barn Owl', 'Tawny Owl'],
       localizeLabel: opts.localizeLabel ?? fiLocalize,
       onSave,
@@ -135,5 +137,29 @@ describe('SpeciesConfigEditor canonical-key persistence', () => {
     await fireEvent.click(screen.getByRole('button', { name: SAVE_BUTTON }));
 
     expect(savedSpecies(onSave)).toBe('Some Custom Name');
+  });
+});
+
+describe('SpeciesConfigEditor execute-defaults option', () => {
+  const EXECUTE_DEFAULTS_LABEL = 'settings.species.actionsModal.executeDefaults.label';
+  const action = (executeDefaults: boolean): Action => ({
+    type: 'ExecuteCommand',
+    command: 'notify.sh',
+    parameters: [],
+    executeDefaults,
+  });
+
+  it.each([
+    ['off', true, false],
+    ['on', false, true],
+  ])('saves the toggled value after the switch is turned %s', async (_name, was, now) => {
+    const { onSave } = renderEditor({ actions: [action(was)] });
+    const toggle = screen.getByRole<HTMLInputElement>('switch', { name: EXECUTE_DEFAULTS_LABEL });
+    expect(toggle.checked).toBe(was);
+
+    await fireEvent.click(toggle);
+    await fireEvent.click(screen.getByRole('button', { name: SAVE_BUTTON }));
+
+    expect(onSave.mock.calls[0][0].actions[0].executeDefaults).toBe(now);
   });
 });

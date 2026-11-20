@@ -83,7 +83,7 @@ describe('SecuritySettingsPage OAuth provider list', () => {
       seedProvider('oidc');
       await openEditForm();
 
-      const toggle = screen.getByRole<HTMLInputElement>('checkbox', { name: POST_LOGOUT_LABEL });
+      const toggle = screen.getByRole<HTMLInputElement>('switch', { name: POST_LOGOUT_LABEL });
       expect(toggle.checked).toBe(false);
       await userEvent.click(toggle);
       await userEvent.click(
@@ -98,7 +98,7 @@ describe('SecuritySettingsPage OAuth provider list', () => {
         screen.getByRole('button', { name: 'settings.security.oauth.providers.editButton' })
       );
       expect(
-        screen.getByRole<HTMLInputElement>('checkbox', { name: POST_LOGOUT_LABEL }).checked
+        screen.getByRole<HTMLInputElement>('switch', { name: POST_LOGOUT_LABEL }).checked
       ).toBe(true);
     });
 
@@ -131,7 +131,7 @@ describe('SecuritySettingsPage OAuth provider list', () => {
       seedProvider('google');
       await openEditForm();
 
-      expect(screen.queryByRole('checkbox', { name: POST_LOGOUT_LABEL })).toBeNull();
+      expect(screen.queryByRole('switch', { name: POST_LOGOUT_LABEL })).toBeNull();
     });
   });
 });

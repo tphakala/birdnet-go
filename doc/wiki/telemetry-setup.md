@@ -8,7 +8,7 @@ This guide walks you through enabling and configuring BirdNET-Go's optional erro
 
 1. Open your BirdNET-Go web interface
 2. Navigate to **Settings** in the sidebar
-3. Click on **Support** in the settings menu
+3. Click on **General** in the settings menu and stay on its **General** tab
 
 ### Step 2: Review Privacy Information
 
@@ -20,8 +20,8 @@ Before enabling telemetry, please review:
 
 ### Step 3: Enable Telemetry
 
-1. Check the box **"Enable Error Tracking (Opt-in)"**
-2. Click **Save Settings** at the bottom of the page
+1. Turn on the **"Enable Error Tracking (Opt-in)"** switch
+2. Click **Save Changes** at the bottom of the page
 3. You'll see a confirmation message that telemetry is now active
 
 ### Step 4: Verification
@@ -40,7 +40,7 @@ That's it! No additional configuration is required.
 
 ### Settings Page Layout
 
-The Support settings page contains several sections:
+The Privacy and Telemetry card on the General tab of Settings → General contains several sections:
 
 #### Privacy Notice
 
@@ -50,7 +50,7 @@ The Support settings page contains several sections:
 
 #### Enable/Disable Toggle
 
-- **Control**: Single checkbox to turn telemetry on/off
+- **Control**: Single switch to turn telemetry on/off
 - **Default**: Disabled (opt-in required)
 - **Effect**: Immediate - no restart needed
 
@@ -88,9 +88,9 @@ sentry:
 
 The web interface automatically manages the configuration:
 
-- **Enable/Disable**: Checkbox in Settings → Support
+- **Enable/Disable**: Switch on the General tab of Settings → General
 - **Status**: Visual indicators show current state
-- **Changes**: Take effect immediately without restart
+- **Changes**: Take effect once you save them, without a restart
 
 ## Advanced Information
 
@@ -122,7 +122,7 @@ sentry:
 If running BirdNET-Go in Docker, telemetry settings are managed the same way:
 
 1. Access the web interface through its port (the mapped host port with bridge networking, `WEB_PORT` with host networking)
-2. Navigate to Settings → Support
+2. Navigate to Settings → General (General tab)
 3. Enable telemetry as described above
 4. Settings persist in your mounted config volume
 
@@ -210,7 +210,7 @@ The telemetry system only becomes active when:
 
 To verify telemetry is properly configured:
 
-1. **Check settings**: Ensure "Error Tracking Enabled" appears in Settings → Support
+1. **Check settings**: Ensure "Error Tracking Enabled" is on in Settings → General (General tab)
 2. **Review logs**: Look for "Sentry telemetry initialized successfully" in system logs
 3. **Network test**: Verify outbound HTTPS connectivity to sentry.io
 
@@ -228,7 +228,7 @@ You can test the system by temporarily causing a harmless error:
 
 ### Q: Do I need to restart BirdNET-Go after enabling telemetry?
 
-**A:** No. Changes take effect immediately.
+**A:** No. Changes take effect once you save them.
 
 ### Q: Can I see what data is being sent?
 
@@ -248,7 +248,7 @@ You can test the system by temporarily causing a harmless error:
 
 ### Q: How do I disable telemetry temporarily?
 
-**A:** Go to Settings → Support and uncheck "Enable Error Tracking". Changes take effect immediately.
+**A:** Go to Settings → General, General tab, turn off the "Enable Error Tracking" switch, and click **Save Changes**. The change takes effect without a restart.
 
 ## Troubleshooting
 

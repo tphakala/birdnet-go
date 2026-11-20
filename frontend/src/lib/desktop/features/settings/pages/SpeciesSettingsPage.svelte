@@ -30,7 +30,7 @@
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
@@ -1741,12 +1741,12 @@
     >
       <div class="space-y-4">
         <!-- Enable Species Tracking -->
-        <Checkbox
-          checked={trackingSettings?.enabled ?? false}
+        <ToggleField
+          value={trackingSettings?.enabled ?? false}
           label={t('settings.species.tracking.enabled.label')}
-          helpText={t('settings.species.tracking.enabled.helpText')}
+          description={t('settings.species.tracking.enabled.helpText')}
           disabled={store.isLoading || store.isSaving}
-          onchange={value => updateTrackingSettings({ enabled: value })}
+          onUpdate={value => updateTrackingSettings({ enabled: value })}
         />
 
         {#if trackingSettings?.enabled}
@@ -1864,12 +1864,12 @@
       >
         <div class="space-y-4">
           <!-- Enable Yearly Tracking -->
-          <Checkbox
-            checked={trackingSettings?.yearlyTracking?.enabled ?? false}
+          <ToggleField
+            value={trackingSettings?.yearlyTracking?.enabled ?? false}
             label={t('settings.species.tracking.yearly.enabled.label')}
-            helpText={t('settings.species.tracking.yearly.enabled.helpText')}
+            description={t('settings.species.tracking.yearly.enabled.helpText')}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateTrackingSettings({ yearlyTracking: { enabled: value } })}
+            onUpdate={value => updateTrackingSettings({ yearlyTracking: { enabled: value } })}
           />
 
           {#if trackingSettings?.yearlyTracking?.enabled}
@@ -1971,12 +1971,12 @@
       >
         <div class="space-y-4">
           <!-- Enable Seasonal Tracking -->
-          <Checkbox
-            checked={trackingSettings?.seasonalTracking?.enabled ?? false}
+          <ToggleField
+            value={trackingSettings?.seasonalTracking?.enabled ?? false}
             label={t('settings.species.tracking.seasonal.enabled.label')}
-            helpText={t('settings.species.tracking.seasonal.enabled.helpText')}
+            description={t('settings.species.tracking.seasonal.enabled.helpText')}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateTrackingSettings({ seasonalTracking: { enabled: value } })}
+            onUpdate={value => updateTrackingSettings({ seasonalTracking: { enabled: value } })}
           />
 
           {#if trackingSettings?.seasonalTracking?.enabled}
@@ -2097,12 +2097,12 @@
       >
         <div class="space-y-4">
           <!-- Enable Infrequent Tracking -->
-          <Checkbox
-            checked={trackingSettings?.infrequentTracking?.enabled ?? false}
+          <ToggleField
+            value={trackingSettings?.infrequentTracking?.enabled ?? false}
             label={t('settings.species.tracking.infrequent.enabled.label')}
-            helpText={t('settings.species.tracking.infrequent.enabled.helpText')}
+            description={t('settings.species.tracking.infrequent.enabled.helpText')}
             disabled={store.isLoading || store.isSaving}
-            onchange={value => updateTrackingSettings({ infrequentTracking: { enabled: value } })}
+            onUpdate={value => updateTrackingSettings({ infrequentTracking: { enabled: value } })}
           />
 
           {#if trackingSettings?.infrequentTracking?.enabled}

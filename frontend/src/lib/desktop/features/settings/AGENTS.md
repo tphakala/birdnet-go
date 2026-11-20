@@ -130,22 +130,33 @@ Controls call `commitSetting(section, partial, { field, debounceMs? })` from
   the server changed elsewhere is replaced by the server value and the field says
   so. Keep the control controlled, so it follows the store.
 
-Boolean settings use `ToggleField`, not `Checkbox`.
-
 ## Form Controls
 
 Settings controls (in `$lib/desktop/components/forms/`) are used as controlled
 components: pass the current value one way and write changes back through the
 store in the callback. This is the pattern the existing pages use:
 
-| Component                 | Pattern                |
-| ------------------------- | ---------------------- |
-| `NumberField`             | `value` + `onUpdate`   |
-| `PasswordField`           | `value` + `onUpdate`   |
-| `NetworkAddressListInput` | `values` + `onUpdate`  |
-| `TextInput`               | `value` + `onchange`   |
-| `Checkbox`                | `checked` + `onchange` |
-| `SelectDropdown`          | `value` + `onChange`   |
+| Component                 | Pattern               |
+| ------------------------- | --------------------- |
+| `NumberField`             | `value` + `onUpdate`  |
+| `PasswordField`           | `value` + `onUpdate`  |
+| `NetworkAddressListInput` | `values` + `onUpdate` |
+| `TextInput`               | `value` + `onchange`  |
+| `ToggleField`             | `value` + `onUpdate`  |
+| `SelectDropdown`          | `value` + `onChange`  |
+
+Boolean settings use `ToggleField`, not `Checkbox`. `Checkbox` is for
+acknowledgements and multi-select lists (`ModelAgreementDialog` and the
+notification type filters). Lay the switches out as the bat card in
+`pages/AnalysisSettingsPage.svelte` does:
+
+- A single switch is a plain row in its stack: no wrapper, no `className`.
+- Two or more in a row go in a `divide-y divide-[var(--border-100)]` list; the first takes `className="pb-4"`, middle ones `py-4`, the last `pt-4` when the list sits in a `space-y-*` stack.
+- A switch that only applies while the one above it is on renders under `{#if}` in that list with `pl-6` added.
+- A switch is never a grid cell beside inputs; it takes a full row.
+
+`disabled` on a `ToggleField` sets `aria-disabled`, not the native attribute,
+so put the reason in `description`.
 
 Avoid combining `bind:value` with an update callback on the same control: the
 value is then written twice, and the store update in the callback is the one

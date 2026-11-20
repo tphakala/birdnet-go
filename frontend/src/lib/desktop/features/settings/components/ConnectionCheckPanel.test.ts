@@ -248,14 +248,14 @@ describe('ConnectionCheckPanel', () => {
     expect(screen.getByText(/check\.chainHint/)).toBeInTheDocument();
   });
 
-  it('points to the Cloudflare checkbox for a Cloudflare edge while the preset is off', () => {
+  it('points to the Cloudflare switch for a Cloudflare edge while the preset is off', () => {
     renderPanel({
       result: result({ status: 'untrusted_public_proxy', peerIsCloudflareEdge: true }),
     });
     expect(screen.getByText(/check\.cloudflareEdge/)).toBeInTheDocument();
   });
 
-  it('does not point to the Cloudflare checkbox when the preset is already on', () => {
+  it('does not point to the Cloudflare switch when the preset is already on', () => {
     renderPanel({
       result: result({ status: 'untrusted_public_proxy', peerIsCloudflareEdge: true }),
       cloudflareEnabled: true,
@@ -263,7 +263,7 @@ describe('ConnectionCheckPanel', () => {
     expect(screen.queryByText(/check\.cloudflareEdge/)).toBeNull();
   });
 
-  it('does not point to the Cloudflare checkbox for a public proxy outside Cloudflare', () => {
+  it('does not point to the Cloudflare switch for a public proxy outside Cloudflare', () => {
     renderPanel({ result: result({ status: 'untrusted_public_proxy' }) });
     expect(screen.queryByText(/check\.cloudflareEdge/)).toBeNull();
   });
