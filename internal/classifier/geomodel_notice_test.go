@@ -1,6 +1,9 @@
 package classifier
 
 import (
+	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -94,8 +97,9 @@ func TestGeomodelNoticeFor(t *testing.T) {
 
 // TestSyncGeomodelNotice_FollowsRangeFilterState walks one orchestrator through model
 // load, replacement, a failed range filter reload, the geomodel serving and teardown.
-// The notice is raised by the range filter reload hook alone: no step calls
-// syncGeomodelNotice until the injected-state steps near the end.
+// The notice is raised by the range filter reload hook: the steps that load models or
+// reload the range filter never call syncGeomodelNotice themselves. The unchanged-state
+// step and the injected-state steps near the end do call it directly.
 func TestSyncGeomodelNotice_FollowsRangeFilterState(t *testing.T) {
 	// Not parallel: uses the process-global notification service, settings snapshot and
 	// model loaders.
@@ -150,12 +154,15 @@ func TestSyncGeomodelNotice_FollowsRangeFilterState(t *testing.T) {
 	assert.Equal(t, notification.MsgGeomodelNotInstalledMessage, first.MessageKey)
 	assert.Equal(t, ModelNamePerchV2, first.MessageParams["models"])
 	assert.Equal(t, notification.TypeWarning, first.Type)
+	assert.Equal(t, notification.PriorityMedium, first.Priority)
+	assert.Equal(t, notification.DeliveryTargetBell, first.DeliveryTarget)
 	assert.Contains(t, first.Message, "Settings > Analysis > Models")
 	assert.Empty(t, first.Metadata, "the bell renders metadata as raw lines")
 
-	// The same state again is a no-op.
+	// The same state again is a no-op, both through a reconcile and through a direct sync.
 	_, _, err = o.ReconcileEnabledModels()
 	require.NoError(t, err)
+	o.syncGeomodelNotice()
 	notes = geomodelNotices()
 	require.Len(t, notes, 1)
 	assert.Equal(t, first.ID, notes[0].ID, "an unchanged state keeps the same notice")
@@ -180,6 +187,8 @@ func TestSyncGeomodelNotice_FollowsRangeFilterState(t *testing.T) {
 	require.Len(t, notes, 1)
 	assert.Equal(t, notification.MsgGeomodelLoadFailedTitle, notes[0].TitleKey)
 	assert.Equal(t, notification.MsgGeomodelLoadFailedMessage, notes[0].MessageKey)
+	assert.Contains(t, notes[0].Message, "could not be loaded")
+	assert.Contains(t, notes[0].Message, "Settings > Analysis > Models")
 
 	// The geomodel serves both models: the notice clears. A real geomodel build needs ONNX
 	// Runtime and the model file, so the serving state is injected; the reload trigger is
@@ -210,4 +219,27 @@ func TestSyncGeomodelNotice_FollowsRangeFilterState(t *testing.T) {
 
 	o.Delete()
 	assert.Empty(t, geomodelNotices(), "Delete clears the notice so a rebuilt orchestrator does not add a second one")
+}
+
+// TestGeomodelNoticeFallbacksMatchEnglishLocale pins that the English fallback texts in Go
+// equal the notifications.content.geomodel strings in en.json, with %s for {models}.
+func TestGeomodelNoticeFallbacksMatchEnglishLocale(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("../../frontend/static/messages/en.json") //nolint:gosec // repo-relative test input
+	require.NoError(t, err)
+	var doc struct {
+		Notifications struct {
+			Content struct {
+				Geomodel map[string]string `json:"geomodel"`
+			} `json:"content"`
+		} `json:"notifications"`
+	}
+	require.NoError(t, json.Unmarshal(data, &doc))
+	en := doc.Notifications.Content.Geomodel
+
+	assert.Equal(t, geomodelNotInstalledTitle, en["notInstalledTitle"])
+	assert.Equal(t, geomodelLoadFailedTitle, en["loadFailedTitle"])
+	assert.Equal(t, geomodelNotInstalledMessage, strings.ReplaceAll(en["notInstalledMessage"], "{models}", "%s"))
+	assert.Equal(t, geomodelLoadFailedMessage, strings.ReplaceAll(en["loadFailedMessage"], "{models}", "%s"))
 }
