@@ -79,29 +79,30 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dd %dh %dm %ds", days, hours, minutes, seconds)
 }
 
-// AgeBasedCleanup removes clips from the filesystem based on their age and the number of clips per species.
-// Age-based policy retains files that are newer than the specified retention period, while also
-// ensuring the minimum clips per species constraint is respected.
-// All time calculations use system local time to match file timestamps.
-//
-// IMPORTANT: File timestamps (including those in the filename with 'Z' suffix) are in local system time,
-// despite the 'Z' suffix normally indicating UTC/Zulu time. All time comparisons are done in local time.
-//
-// Deletion is paced and done in batches, and one run ends after at most maxCleanupRunDuration.
-//
-// Returns a CleanupResult containing error, number of clips removed, current disk utilization percentage,
-// and whether a follow-up run should start soon (MoreWork).
+// AgeBasedCleanup removes clips older than maxage while preserving at least minclips per species.
 func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
+	return cleanupByAgePolicy(quit, db, conf.RetentionPolicyAge)
+}
+
+// cleanupByAgePolicy runs the shared age-window cleanup used by age and best-samples policies.
+// File timestamps are compared in local time to match how clip filenames are parsed.
+// Deletion is paced and done in batches, and one run ends after at most maxCleanupRunDuration.
+func cleanupByAgePolicy(quit <-chan struct{}, db Interface, policy string) CleanupResult {
+	policyName := "Age-based"
+	if policy == conf.RetentionPolicyBestSamples {
+		policyName = "Best-samples"
+	}
+
 	// Log the start of the cleanup run with structured logger
-	GetLogger().Info("Age-based cleanup run started",
-		logger.String("policy", "age"),
+	GetLogger().Info(fmt.Sprintf("%s cleanup run started", policyName),
+		logger.String("policy", policy),
 		logger.String("timestamp", time.Now().Format(time.RFC3339)))
 
 	// Perform initial setup (get files, settings, check if proceed)
 	files, baseDir, retention, proceed, initialResult := prepareInitialCleanup(quit, db)
 	if !proceed {
-		GetLogger().Info("Age-based cleanup run completed",
-			logger.String("policy", "age"),
+		GetLogger().Info(fmt.Sprintf("%s cleanup run completed", policyName),
+			logger.String("policy", policy),
 			logger.String("result", "no action needed"),
 			logger.Int("files_removed", 0),
 			logger.Int("disk_utilization", initialResult.DiskUtilization),
@@ -123,7 +124,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	retentionPeriodInHours, err := conf.ParseRetentionPeriod(retentionPeriodTrimmed)
 	if err != nil {
 		GetLogger().Error("Invalid retention period",
-			logger.String("policy", "age"),
+			logger.String("policy", policy),
 			logger.String("retention_period", retentionPeriodSetting),
 			logger.Error(err))
 		// Try to get current disk usage for the result
@@ -136,8 +137,8 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		return CleanupResult{Err: fmt.Errorf("invalid retention period '%s': %w", retentionPeriodSetting, err), ClipsRemoved: 0, DiskUtilization: utilization}
 	}
 
-	GetLogger().Debug("Starting age-based cleanup",
-		logger.String("policy", "age"),
+	GetLogger().Debug(fmt.Sprintf("Starting %s cleanup", strings.ToLower(policyName)),
+		logger.String("policy", policy),
 		logger.String("base_dir", baseDir),
 		logger.String("retention_period", retentionPeriodSetting),
 		logger.Int("retention_hours", retentionPeriodInHours))
@@ -164,18 +165,23 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 	cutoffFormatted, cutoffAge := formatTimeForHumans(retentionCutoffUnix)
 	GetLogger().Debug("Retention cutoff calculated",
-		logger.String("policy", "age"),
+		logger.String("policy", policy),
 		logger.String("cutoff_time", cutoffFormatted),
 		logger.String("cutoff_age", cutoffAge),
 		logger.String("system_time", time.Now().Format("2006-01-02 15:04:05 MST")),
 		logger.String("timezone", time.Now().Format("MST")))
 
 	startSnapshot := newRetentionSnapshot(baseDir, &retention)
-	run := newDeletionRun("age", quit, db, baseDir, keepSpectrograms, &startSnapshot)
+	run := newDeletionRun(policy, quit, db, baseDir, keepSpectrograms, &startSnapshot)
+
+	var bestClipPaths map[string]struct{}
+	if policy == conf.RetentionPolicyBestSamples {
+		bestClipPaths = selectBestClipsPerSpecies(files, minClipsPerSpecies)
+	}
 
 	// Call the helper function to process files
-	deletedCount, _, stats, loopErr := processAgeBasedDeletionLoop(files, speciesTotalCount,
-		minClipsPerSpecies, keepSpectrograms, run, retentionCutoffUnix)
+	deletedCount, _, stats, loopErr := processAgeDeletionLoop(files, speciesTotalCount,
+		minClipsPerSpecies, keepSpectrograms, run, retentionCutoffUnix, policy, bestClipPaths)
 
 	// Release the clip_name references of the last, partial batch; earlier
 	// batches were released at their boundaries.
@@ -195,7 +201,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		usageAfter = int(diskUsage)
 	}
 	logCleanupSummary(&cleanupSummary{
-		policy:           "age",
+		policy:           policy,
 		stats:            stats,
 		duration:         time.Since(startTime),
 		keepSpectrograms: keepSpectrograms,
@@ -210,8 +216,8 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 		// Log the completion with error
 		duration := time.Since(startTime)
-		GetLogger().Error("Age-based cleanup run completed with errors",
-			logger.String("policy", "age"),
+		GetLogger().Error(fmt.Sprintf("%s cleanup run completed with errors", policyName),
+			logger.String("policy", policy),
 			logger.Int("files_removed", deletedCount),
 			logger.Int("disk_utilization", 0),
 			logger.Error(finalErr),
@@ -223,8 +229,8 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 	// Log the successful completion
 	duration := time.Since(startTime)
-	GetLogger().Info("Age-based cleanup run completed",
-		logger.String("policy", "age"),
+	GetLogger().Info(fmt.Sprintf("%s cleanup run completed", policyName),
+		logger.String("policy", policy),
 		logger.Int("files_removed", deletedCount),
 		logger.Int("disk_utilization", int(diskUsage)),
 		logger.String("timestamp", time.Now().Format(time.RFC3339)),
@@ -239,16 +245,17 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 // deletion took (zero when the file was not eligible, i.e. reason is not ageReasonEligible), and
 // any deletion error.
 func processSingleAgeFile(file *FileInfo, retentionCutoffUnix int64, speciesTotalCount map[string]int,
-	minClipsPerSpecies int, keepSpectrograms bool, now func() time.Time, dirs *renderDirCache) (deleted bool, reason string, latency time.Duration, err error) {
+	minClipsPerSpecies int, policy string, bestClipPaths map[string]struct{}, keepSpectrograms bool,
+	now func() time.Time, dirs *renderDirCache) (deleted bool, reason string, latency time.Duration, err error) {
 	// Check eligibility
-	eligible, reason := isEligibleForAgeDeletion(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies)
+	eligible, reason := isEligibleForAgeDeletion(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies, policy, bestClipPaths)
 	if !eligible {
 		return false, reason, 0, nil
 	}
 
 	// Perform deletion
 	start := now()
-	delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, "age", dirs)
+	delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, policy, dirs)
 	latency = now().Sub(start)
 	if delErr != nil {
 		return false, reason, latency, delErr
@@ -281,12 +288,23 @@ func decrementSpeciesCount(speciesTotalCount map[string]int, species string) {
 func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]int,
 	minClipsPerSpecies int, keepSpectrograms bool,
 	run *deletionRun, retentionCutoffUnix int64) (deletedCount int, deletedNames []string, stats cleanupStats, loopErr error) {
+	return processAgeDeletionLoop(files, speciesTotalCount, minClipsPerSpecies, keepSpectrograms, run, retentionCutoffUnix, conf.RetentionPolicyAge, nil)
+}
+
+func processAgeDeletionLoop(files []FileInfo, speciesTotalCount map[string]int,
+	minClipsPerSpecies int, keepSpectrograms bool,
+	run *deletionRun, retentionCutoffUnix int64, policy string,
+	bestClipPaths map[string]struct{}) (deletedCount int, deletedNames []string, stats cleanupStats, loopErr error) {
 
 	deletedCount = 0
 	errorCount := 0
 	stats.Scanned = len(files)
 
 	log := GetLogger()
+	policyName := "Age-based"
+	if policy == conf.RetentionPolicyBestSamples {
+		policyName = "Best-samples"
+	}
 
 	if !run.begin() {
 		stats.StopReason = run.stopReason
@@ -297,8 +315,8 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 	for i := range files {
 		select {
 		case <-run.quit:
-			log.Info("Age-based cleanup loop interrupted by quit signal",
-				logger.String("policy", "age"),
+			log.Info(fmt.Sprintf("%s cleanup loop interrupted by quit signal", policyName),
+				logger.String("policy", policy),
 				logger.Int("files_deleted", deletedCount))
 			stats.StopReason = stopQuit
 			return deletedCount, deletedNames, stats, nil // Indicate interruption, but not necessarily an error from the loop itself
@@ -310,8 +328,8 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 			// files is sorted oldest first, so if the next file is not older
 			// than the cutoff, no age-eligible work remains.
 			stats.MoreWork = run.moreWork(files[i].Timestamp.Unix() < retentionCutoffUnix)
-			log.Debug("Age-based cleanup run stopped at a batch boundary",
-				logger.String("policy", "age"),
+			log.Debug(fmt.Sprintf("%s cleanup run stopped at a batch boundary", policyName),
+				logger.String("policy", policy),
 				logger.String("stop_reason", stats.StopReason),
 				logger.Bool("more_work", stats.MoreWork))
 			return deletedCount, deletedNames, stats, nil
@@ -319,7 +337,8 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 
 		file := &files[i]
 		run.markLocked(file)
-		deleted, reason, latency, delErr := processSingleAgeFile(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies, keepSpectrograms, run.now, &run.renderDirs)
+		deleted, reason, latency, delErr := processSingleAgeFile(file, retentionCutoffUnix,
+			speciesTotalCount, minClipsPerSpecies, policy, bestClipPaths, keepSpectrograms, run.now, &run.renderDirs)
 
 		if errors.Is(delErr, errFileAlreadyGone) {
 			// Removed elsewhere since the scan: it no longer counts toward its
@@ -331,7 +350,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 
 		if delErr != nil {
 			stats.Errors++
-			shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10, "age")
+			shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10, policy)
 			if shouldStop {
 				stats.StopReason = stopTooManyErrors
 				return deletedCount, deletedNames, stats, loopErrTmp
@@ -373,9 +392,9 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 // Files are eligible for deletion when ALL of these conditions are met:
 // 1. File is not locked (protected from deletion)
 // 2. File is older than the retention cutoff time (using Unix timestamps in local timezone)
-// 3. There are more than minClipsPerSpecies files for this species
+// 3. The policy's clip-selection rule allows deletion and more than minClipsPerSpecies remain
 func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, speciesTotalCount map[string]int,
-	minClipsPerSpecies int) (eligible bool, reason string) {
+	minClipsPerSpecies int, policy string, bestClipPaths map[string]struct{}) (eligible bool, reason string) {
 
 	// 1. Check if locked (reuse common helper)
 	if checkLocked(file) {
@@ -393,7 +412,7 @@ func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, species
 		cutoffFormatted, cutoffAge := formatTimeForHumans(retentionCutoffUnix)
 
 		log.Trace("Skipping file (not old enough)",
-			logger.String("policy", "age"),
+			logger.String("policy", policy),
 			logger.String("path", file.Path),
 			logger.String("file_created", fileFormatted),
 			logger.String("file_age", fileAge),
@@ -402,13 +421,21 @@ func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, species
 		return false, ageReasonNotOldEnough
 	}
 
-	// 3. Check minimum *total* clips constraint
-	// We must maintain at least minClipsPerSpecies clips for each species
-	// If current count is at or below minimum, we can't delete more
+	// Best-samples policy keeps the highest-confidence clips regardless of age.
+	if _, keep := bestClipPaths[file.Path]; keep {
+		log.Trace("Keeping clip among the best samples for species",
+			logger.String("policy", policy),
+			logger.String("species", file.Species),
+			logger.String("path", file.Path))
+		return false, ageReasonMinClips
+	}
+
+	// Check minimum *total* clips constraint. Age policy uses this floor to
+	// retain the newest clips; best-samples uses it as an additional guard.
 	if count, exists := speciesTotalCount[file.Species]; exists && count <= minClipsPerSpecies {
 		fileFormatted, fileAge := formatTimeForHumans(fileUnix)
 		log.Trace("Total clip count at minimum threshold",
-			logger.String("policy", "age"),
+			logger.String("policy", policy),
 			logger.String("species", file.Species),
 			logger.Int("min_threshold", minClipsPerSpecies),
 			logger.String("path", file.Path),
@@ -420,7 +447,7 @@ func isEligibleForAgeDeletion(file *FileInfo, retentionCutoffUnix int64, species
 	// If all checks pass, the file is eligible
 	fileFormatted, fileAge := formatTimeForHumans(fileUnix)
 	log.Trace("File eligible for deletion",
-		logger.String("policy", "age"),
+		logger.String("policy", policy),
 		logger.String("path", file.Path),
 		logger.String("file_created", fileFormatted),
 		logger.String("file_age", fileAge),

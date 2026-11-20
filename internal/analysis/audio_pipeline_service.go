@@ -385,7 +385,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// enabling retention via the web UI after startup takes effect without a
 	// restart, matching every other hot-reloadable setting here. Gating the
 	// goroutine itself on the startup-time policy would strand a config change
-	// from "none" to "age"/"usage" until the process restarts.
+	// from "none" to an active retention policy until the process restarts.
 	p.wg.Go(func() {
 		clipCleanupMonitor(p.done, dataStore)
 	})
@@ -2598,17 +2598,19 @@ func runClipCleanupLoop(quitChan <-chan struct{}, wait func(<-chan struct{}, tim
 // clipCleanupDeps holds the diskmanager calls a cleanup pass makes, so tests can
 // replace them.
 type clipCleanupDeps struct {
-	ageCleanup      func(quit <-chan struct{}, db diskmanager.Interface) diskmanager.CleanupResult
-	usageCleanup    func(quit <-chan struct{}, db diskmanager.Interface) diskmanager.CleanupResult
-	shouldSkipUsage func(retention *conf.RetentionSettings, baseDir string) (skip bool, utilization int, err error)
+	ageCleanup         func(quit <-chan struct{}, db diskmanager.Interface) diskmanager.CleanupResult
+	usageCleanup       func(quit <-chan struct{}, db diskmanager.Interface) diskmanager.CleanupResult
+	bestSamplesCleanup func(quit <-chan struct{}, db diskmanager.Interface) diskmanager.CleanupResult
+	shouldSkipUsage    func(retention *conf.RetentionSettings, baseDir string) (skip bool, utilization int, err error)
 }
 
 // defaultClipCleanupDeps returns the production diskmanager calls.
 func defaultClipCleanupDeps() clipCleanupDeps {
 	return clipCleanupDeps{
-		ageCleanup:      diskmanager.AgeBasedCleanup,
-		usageCleanup:    diskmanager.UsageBasedCleanup,
-		shouldSkipUsage: diskmanager.ShouldSkipUsageBasedCleanup,
+		ageCleanup:         diskmanager.AgeBasedCleanup,
+		usageCleanup:       diskmanager.UsageBasedCleanup,
+		bestSamplesCleanup: diskmanager.BestSamplesCleanup,
+		shouldSkipUsage:    diskmanager.ShouldSkipUsageBasedCleanup,
 	}
 }
 
@@ -2674,7 +2676,7 @@ func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface,
 		logger.String("policy", currentPolicy),
 		logger.String("operation", "clip_cleanup_task"))
 
-	if currentPolicy == "age" {
+	if currentPolicy == conf.RetentionPolicyAge {
 		result := deps.ageCleanup(quitChan, dataStore)
 		if result.Err != nil {
 			log.Error("age-based cleanup failed",
@@ -2690,7 +2692,23 @@ func runClipCleanupPass(quitChan <-chan struct{}, dataStore datastore.Interface,
 		return result.MoreWork
 	}
 
-	if currentPolicy == "usage" {
+	if currentPolicy == conf.RetentionPolicyBestSamples {
+		result := deps.bestSamplesCleanup(quitChan, dataStore)
+		if result.Err != nil {
+			log.Error("best-samples cleanup failed",
+				logger.Error(result.Err),
+				logger.String("operation", "best_samples_cleanup"))
+		} else {
+			log.Info("best-samples cleanup completed",
+				logger.Int("clips_removed", result.ClipsRemoved),
+				logger.Int("disk_utilization_percent", result.DiskUtilization),
+				logger.Bool("more_work", result.MoreWork),
+				logger.String("operation", "best_samples_cleanup"))
+		}
+		return result.MoreWork
+	}
+
+	if currentPolicy == conf.RetentionPolicyUsage {
 		currentRetention := exportCfg.Retention
 		baseDir := exportCfg.Path
 

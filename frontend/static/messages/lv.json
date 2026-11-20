@@ -4082,7 +4082,7 @@
         "title": "Audio klipu saglabāšana",
         "description": "Konfigurēt automātisku saglabāto audio klipu tīrīšanu",
         "policyLabel": "Saglabāšanas politika",
-        "policyHelp": "Izvēlieties, kā audio klipi tiek automātiski dzēsti. Nav: saglabāt visus klipus. Vecums: dzēst klipus, kas vecāki par norādīto. Lietojums: dzēst vecākos klipus, kad diska lietojums pārsniedz limitu.",
+        "policyHelp": "Izvēlieties klipu tīrīšanas veidu: paturēt visus, dzēst pēc vecuma vai diska lietojuma, vai paturēt nesenos un uzticamākos paraugus.",
         "maxAgeLabel": "Maksimālais vecums",
         "maxAgeHelp": "Dzēst audio klipus, kas vecāki par šo ilgumu. Formāts: skaitlis, kam seko vienība (h=stundas, d=dienas, w=nedēļas, m=mēneši). Piemēri: '7d' - 7 dienas, '4w' - 4 nedēļas.",
         "maxUsageLabel": "Maksimālais diska lietojums",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Nav - Saglabāt visus",
           "age": "Pēc vecuma",
-          "usage": "Pēc diska lietojuma"
+          "usage": "Pēc diska lietojuma",
+          "bestSamples": "Labākie paraugi"
         },
         "noRetentionTitle": "Visi klipi saglabāti",
         "noRetentionDescription": "Audio klipi tiks saglabāti bezgalīgi. Uzraugiet diska lietojumu, lai novērstu glabāšanas problēmas.",
         "ageRetentionTitle": "Tīrīšana pēc vecuma",
         "ageRetentionDescription": "Klipi, kas vecāki par norādīto vecumu, tiks automātiski dzēsti, saglabājot minimālo skaitu pa sugām.",
         "usageRetentionTitle": "Tīrīšana pēc lietojuma",
-        "usageRetentionDescription": "Kad diska lietojums pārsniedz slieksni, vecākie klipi tiks dzēsti, līdz lietojums būs robežās."
+        "usageRetentionDescription": "Kad diska lietojums pārsniedz slieksni, vecākie klipi tiks dzēsti, līdz lietojums būs robežās.",
+        "bestSamplesMaxAgeLabel": "Nesenāko paraugu periods",
+        "bestSamplesMaxAgeHelp": "Manuālai pārskatīšanai paturiet visus klipus, kas ir jaunāki par šo periodu. Vecākus klipus paturiet tikai tad, ja tiem ir viena no augstākajām pārliecības vērtībām sugai.",
+        "bestSamplesMinClipsHelp": "Papildus visiem nesenā perioda klipiem paturiet šo skaitu katras sugas klipu ar augstāko pārliecību."
       },
       "formats": {
         "wav": "WAV",

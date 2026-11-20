@@ -530,6 +530,33 @@ func TestValidateRetentionSettings_MaxAgeMustBePositive(t *testing.T) {
 	}
 }
 
+func TestValidateRetentionSettings_BestSamplesRequiresValidMaxAge(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		maxAge  string
+		wantErr bool
+	}{
+		{name: "valid window", maxAge: "7d"},
+		{name: "invalid duration", maxAge: "unknown", wantErr: true},
+		{name: "zero duration", maxAge: "0h", wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateRetentionSettings(&RetentionSettings{
+				Policy: RetentionPolicyBestSamples,
+				MaxAge: tt.maxAge,
+			})
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateRetentionSettings_MinClipsNonNegative(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

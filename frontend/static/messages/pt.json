@@ -4082,7 +4082,7 @@
         "title": "Retenção de clipes de áudio",
         "description": "Configurar limpeza de clipes de áudio",
         "policyLabel": "Política de retenção",
-        "policyHelp": "Escolha como os clipes de áudio são excluídos automaticamente. Nenhuma: manter todos os clipes. Idade: excluir clipes mais antigos do que o especificado. Uso: excluir clipes mais antigos quando o uso do disco exceder o limite.",
+        "policyHelp": "Escolha como limpar os clips: manter todos, eliminar por idade ou utilização do disco, ou manter amostras recentes e de maior confiança.",
         "maxAgeLabel": "Idade máxima",
         "maxAgeHelp": "Excluir clipes de áudio mais antigos do que esta duração. Formato: número seguido de unidade (h=horas, d=dias, w=semanas, m=meses). Exemplos: '7d' para 7 dias, '4w' para 4 semanas.",
         "maxUsageLabel": "Uso máximo do disco",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Nenhuma",
           "age": "Idade",
-          "usage": "Uso"
+          "usage": "Uso",
+          "bestSamples": "Melhores amostras"
         },
         "noRetentionTitle": "Todos os clipes retidos",
         "noRetentionDescription": "Os clipes de áudio serão mantidos indefinidamente. Monitore o uso do disco para evitar problemas de armazenamento.",
         "ageRetentionTitle": "Limpeza baseada em idade",
         "ageRetentionDescription": "Clipes mais antigos que a idade especificada serão automaticamente excluídos, preservando o número mínimo por espécie.",
         "usageRetentionTitle": "Limpeza baseada em uso",
-        "usageRetentionDescription": "Quando o uso do disco exceder o limiar, os clipes mais antigos serão excluídos até que o uso esteja dentro dos limites."
+        "usageRetentionDescription": "Quando o uso do disco exceder o limiar, os clipes mais antigos serão excluídos até que o uso esteja dentro dos limites.",
+        "bestSamplesMaxAgeLabel": "Período de amostras recentes",
+        "bestSamplesMaxAgeHelp": "Mantenha todos os clips mais recentes do que este período para revisão manual. Os clips mais antigos só são mantidos se estiverem entre os de maior confiança da espécie.",
+        "bestSamplesMinClipsHelp": "Mantenha esta quantidade de clips com maior confiança por espécie, além de todos os clips do período recente."
       },
       "formats": {
         "wav": "WAV",

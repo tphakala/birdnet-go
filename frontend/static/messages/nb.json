@@ -4082,7 +4082,7 @@
         "title": "Oppbevaring av lydklipp",
         "description": "Konfigurer automatisk opprydding av lagrede lydklipp",
         "policyLabel": "Oppbevaringspolicy",
-        "policyHelp": "Velg hvordan lydklipp automatisk slettes. Ingen: behold alle klipp. Alder: slett klipp eldre enn angitt. Bruk: slett eldste klipp når diskbruk overskrider grensen.",
+        "policyHelp": "Velg opprydding av klipp: behold alle, slett etter alder eller diskbruk, eller behold nyere klipp og klipp med høyest sikkerhet.",
         "maxAgeLabel": "Maksimal alder",
         "maxAgeHelp": "Slett lydklipp eldre enn denne varigheten. Format: tall etterfulgt av enhet (t=timer, d=dager, u=uker, m=måneder). Eksempler: «7d» for 7 dager, «4u» for 4 uker.",
         "maxUsageLabel": "Maksimal diskbruk",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Ingen - behold alle",
           "age": "Aldersbasert",
-          "usage": "Diskbruksbasert"
+          "usage": "Diskbruksbasert",
+          "bestSamples": "Beste opptak"
         },
         "noRetentionTitle": "Alle klipp beholdes",
         "noRetentionDescription": "Lydklipp beholdes på ubestemt tid. Overvåk diskbruken for å unngå lagringsproblemer.",
         "ageRetentionTitle": "Aldersbasert opprydding",
         "ageRetentionDescription": "Klipp eldre enn angitt alder slettes automatisk, mens minimum antall per art bevares.",
         "usageRetentionTitle": "Bruksbasert opprydding",
-        "usageRetentionDescription": "Når diskbruken overskrider terskelen, slettes de eldste klippene til bruken er innenfor grensene."
+        "usageRetentionDescription": "Når diskbruken overskrider terskelen, slettes de eldste klippene til bruken er innenfor grensene.",
+        "bestSamplesMaxAgeLabel": "Tidsvindu for nyere opptak",
+        "bestSamplesMaxAgeHelp": "Behold alle klipp som er nyere enn denne perioden for manuell gjennomgang. Eldre klipp beholdes bare hvis de har høyest sikkerhet for arten.",
+        "bestSamplesMinClipsHelp": "Behold dette antallet klipp med høyest sikkerhet per art, i tillegg til alle klipp i det nyere tidsvinduet."
       },
       "formats": {
         "wav": "WAV",

@@ -20,9 +20,10 @@ const DefaultCleanupCheckInterval = 15
 
 // Valid retention policy values
 const (
-	RetentionPolicyNone  = "none"  // No retention cleanup
-	RetentionPolicyAge   = "age"   // Age-based retention cleanup
-	RetentionPolicyUsage = "usage" // Disk usage-based retention cleanup
+	RetentionPolicyNone        = "none"         // No retention cleanup
+	RetentionPolicyAge         = "age"          // Age-based retention cleanup
+	RetentionPolicyUsage       = "usage"        // Disk usage-based retention cleanup
+	RetentionPolicyBestSamples = "best_samples" // Recent samples plus the best clips per species
 )
 
 // validRetentionPolicies contains all valid retention policy values
@@ -30,6 +31,7 @@ var validRetentionPolicies = []string{
 	RetentionPolicyNone,
 	RetentionPolicyAge,
 	RetentionPolicyUsage,
+	RetentionPolicyBestSamples,
 }
 
 // htmlTagPattern matches HTML tags for sanitization.

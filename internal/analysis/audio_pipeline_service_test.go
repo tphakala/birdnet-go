@@ -369,15 +369,14 @@ func TestRunClipCleanupLoop_SchedulesFromPassResult(t *testing.T) {
 	assert.Equal(t, len(passResults), passes)
 }
 
-// TestRunClipCleanupPass_ReturnsMoreWork verifies that a pass reports the
-// cleanup's MoreWork for both policies, which is what lets the monitor start
-// the next run soon after a budget-limited run.
+// TestRunClipCleanupPass_ReturnsMoreWork verifies that each retention policy
+// reports its cleanup's MoreWork, letting the monitor schedule a prompt follow-up.
 func TestRunClipCleanupPass_ReturnsMoreWork(t *testing.T) {
 	// Not parallel: the pass reads the global settings snapshot.
 	prev := conf.GetSettings()
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
 
-	for _, policy := range []string{"age", "usage"} {
+	for _, policy := range []string{conf.RetentionPolicyAge, conf.RetentionPolicyUsage, conf.RetentionPolicyBestSamples} {
 		for _, moreWork := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s/moreWork=%v", policy, moreWork), func(t *testing.T) {
 				settings := conftest.GetTestSettings()
@@ -393,8 +392,9 @@ func TestRunClipCleanupPass_ReturnsMoreWork(t *testing.T) {
 					}
 				}
 				deps := clipCleanupDeps{
-					ageCleanup:   cleanupFor("age"),
-					usageCleanup: cleanupFor("usage"),
+					ageCleanup:         cleanupFor(conf.RetentionPolicyAge),
+					usageCleanup:       cleanupFor(conf.RetentionPolicyUsage),
+					bestSamplesCleanup: cleanupFor(conf.RetentionPolicyBestSamples),
 					shouldSkipUsage: func(*conf.RetentionSettings, string) (bool, int, error) {
 						return false, 0, nil // do not skip: the usage cleanup runs
 					},

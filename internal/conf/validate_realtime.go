@@ -161,8 +161,8 @@ func validateRetentionSettings(settings *RetentionSettings) error {
 			Build()
 	}
 
-	// Validate MaxAge when age-based policy is active
-	if settings.Policy == RetentionPolicyAge {
+	// Validate MaxAge when an age-based policy is active.
+	if settings.Policy == RetentionPolicyAge || settings.Policy == RetentionPolicyBestSamples {
 		hours, err := ParseRetentionPeriod(settings.MaxAge)
 		if err != nil {
 			return errors.Newf("retention maxAge %q is invalid: %v", settings.MaxAge, err).

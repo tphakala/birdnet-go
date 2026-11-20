@@ -222,8 +222,8 @@ realtime:
       ultrasonictype: flac # wav or flac only; used for bat/ultrasonic captures above 48 kHz (stored losslessly at full source rate)
       bitrate: 96k        # bitrate for aac, mp3 and opus exports
       retention:
-        policy: usage     # retention policy: none, age or usage
-        maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
+        policy: usage     # retention policy: none, age, usage or best_samples
+        maxage: 30d       # age window for age/best_samples; best_samples keeps all newer clips plus the best minclips per species
         maxusage: 80%     # usage policy: percentage of disk usage to trigger eviction
         minclips: 10      # minumum number of clips per species to keep before starting evictions
         keepspectrograms: true # true to keep spectrograms even when clips are deleted

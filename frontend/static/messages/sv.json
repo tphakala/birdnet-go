@@ -4082,7 +4082,7 @@
         "title": "Lagring av ljudklipp",
         "description": "Konfigurera automatisk rensning av sparade ljudklipp",
         "policyLabel": "Lagringspolicy",
-        "policyHelp": "Välj hur ljudklipp tas bort automatiskt. Ingen: behåll alla klipp. Ålder: ta bort klipp äldre än angivet. Användning: ta bort äldsta klipp när diskanvändningen överskrider gränsen.",
+        "policyHelp": "Välj hur klipp ska rensas: behåll alla, ta bort efter ålder eller diskanvändning, eller behåll nya och klipp med högst säkerhet.",
         "maxAgeLabel": "Maximal ålder",
         "maxAgeHelp": "Ta bort ljudklipp äldre än denna varaktighet. Format: nummer följt av enhet (h=timmar, d=dagar, w=veckor, m=månader). Exempel: '7d' för 7 dagar, '4w' för 4 veckor.",
         "maxUsageLabel": "Maximal diskanvändning",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Ingen - Behåll alla",
           "age": "Åldersbaserad",
-          "usage": "Diskanvändningsbaserad"
+          "usage": "Diskanvändningsbaserad",
+          "bestSamples": "Bästa proverna"
         },
         "noRetentionTitle": "Alla klipp behålls",
         "noRetentionDescription": "Ljudklipp kommer att behållas på obestämd tid. Övervaka diskanvändningen för att förhindra lagringsproblem.",
         "ageRetentionTitle": "Åldersbaserad rensning",
         "ageRetentionDescription": "Klipp äldre än den angivna åldern tas bort automatiskt, samtidigt som det minsta antalet per art bevaras.",
         "usageRetentionTitle": "Användningsbaserad rensning",
-        "usageRetentionDescription": "När diskanvändningen överskrider tröskelvärdet tas de äldsta klippen bort tills användningen är inom gränserna."
+        "usageRetentionDescription": "När diskanvändningen överskrider tröskelvärdet tas de äldsta klippen bort tills användningen är inom gränserna.",
+        "bestSamplesMaxAgeLabel": "Tidsfönster för nya prover",
+        "bestSamplesMaxAgeHelp": "Behåll alla klipp som är nyare än denna period för manuell granskning. Äldre klipp behålls bara om de har högst säkerhet för arten.",
+        "bestSamplesMinClipsHelp": "Behåll detta antal klipp med högst säkerhet per art, utöver alla klipp i det nya tidsfönstret."
       },
       "formats": {
         "wav": "WAV",

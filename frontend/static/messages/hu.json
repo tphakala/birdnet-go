@@ -4082,7 +4082,7 @@
         "title": "Hangminták megőrzése",
         "description": "Mentett hangminták automatikus karbantartásának konfigurálása",
         "policyLabel": "Megőrzési szabály",
-        "policyHelp": "Válassza ki, hogyan törlődnek automatikusan a hangminták. Nincs: minden minta megtartása. Kor: régi minták törlése. Használat: legrégebbi minták törlése, ha a lemez használat meghaladja a korlátot.",
+        "policyHelp": "Válassza ki a klipek tisztítási módját: minden klip megőrzése, törlés kor vagy lemezhasználat alapján, illetve a friss és legmegbízhatóbb minták megőrzése.",
         "maxAgeLabel": "Maximális kor",
         "maxAgeHelp": "Törölje a megadott korú hangmintákat. Formátum: szám + egység (h=óra, d=nap, w=hét, m=hónap). Példák: '7d' 7 nap, '4w' 4 hét.",
         "maxUsageLabel": "Maximális lemez használat",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Nincs - Mindet megtartja",
           "age": "Kor alapú",
-          "usage": "Lemez használat alapú"
+          "usage": "Lemez használat alapú",
+          "bestSamples": "Legjobb minták"
         },
         "noRetentionTitle": "Összes klipek megtartva",
         "noRetentionDescription": "A hang klipek határozatlan ideig meg lesznek tartva. Monitorozza a lemez használatot a tárolási problémák megelőzéséhez.",
         "ageRetentionTitle": "Kor alapú karbantartás",
         "ageRetentionDescription": "A megadott időnél régebbi minták automatikusan törlődnek, miközben a fajonkénti minimum szám megőrzésre kerül.",
         "usageRetentionTitle": "Használat alapú karbantartás",
-        "usageRetentionDescription": "Amikor a lemez használat meghaladja a küszöbértéket, a legrégibb klipek törlésre kerülnek, amíg a használat a limiteken belül nem lesz."
+        "usageRetentionDescription": "Amikor a lemez használat meghaladja a küszöbértéket, a legrégibb klipek törlésre kerülnek, amíg a használat a limiteken belül nem lesz.",
+        "bestSamplesMaxAgeLabel": "Friss minták időablaka",
+        "bestSamplesMaxAgeHelp": "A manuális ellenőrzéshez őrizze meg az ennél frissebb klipeket. A régebbiek csak akkor maradnak meg, ha fajuk legmagasabb megbízhatóságú felvételei közé tartoznak.",
+        "bestSamplesMinClipsHelp": "A friss időablak összes klipjén felül fajonként ennyi, legmagasabb megbízhatóságú klipet őrizzen meg."
       },
       "formats": {
         "wav": "WAV",

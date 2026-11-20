@@ -4082,7 +4082,7 @@
         "title": "Conservazione Clip Audio",
         "description": "Configura pulizia automatica clip audio salvate",
         "policyLabel": "Politica Conservazione",
-        "policyHelp": "Scegli come clip audio vengono eliminate automaticamente. Nessuna: tieni tutte le clip. Età: elimina clip più vecchie di quanto specificato. Utilizzo: elimina clip più vecchie quando utilizzo disco supera limite.",
+        "policyHelp": "Scegli come pulire i clip: conservarli tutti, eliminarli in base all’età o all’uso del disco, oppure conservare i campioni recenti e più affidabili.",
         "maxAgeLabel": "Età Massima",
         "maxAgeHelp": "Elimina clip audio più vecchie di questa durata. Formato: numero seguito da unità (h=ore, d=giorni, w=settimane, m=mesi). Esempi: '7d' per 7 giorni, '4w' per 4 settimane.",
         "maxUsageLabel": "Utilizzo Disco Massimo",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Nessuna - Tieni Tutto",
           "age": "Basata su Età",
-          "usage": "Basata su Utilizzo Disco"
+          "usage": "Basata su Utilizzo Disco",
+          "bestSamples": "Migliori campioni"
         },
         "noRetentionTitle": "Tutte Clip Conservate",
         "noRetentionDescription": "Clip audio saranno tenute indefinitamente. Monitora utilizzo disco per prevenire problemi archiviazione.",
         "ageRetentionTitle": "Pulizia Basata su Età",
         "ageRetentionDescription": "Clip più vecchie dell'età specificata saranno eliminate automaticamente, preservando numero minimo per specie.",
         "usageRetentionTitle": "Pulizia Basata su Utilizzo",
-        "usageRetentionDescription": "Quando utilizzo disco supera soglia, clip più vecchie saranno eliminate finché utilizzo rientra nei limiti."
+        "usageRetentionDescription": "Quando utilizzo disco supera soglia, clip più vecchie saranno eliminate finché utilizzo rientra nei limiti.",
+        "bestSamplesMaxAgeLabel": "Intervallo dei campioni recenti",
+        "bestSamplesMaxAgeHelp": "Conserva tutti i clip più recenti di questo intervallo per la revisione manuale. I clip più vecchi vengono conservati solo se sono tra quelli con la confidenza più alta per la specie.",
+        "bestSamplesMinClipsHelp": "Conserva questo numero di clip con la confidenza più alta per specie, oltre a tutti i clip dell’intervallo recente."
       },
       "formats": {
         "wav": "WAV",

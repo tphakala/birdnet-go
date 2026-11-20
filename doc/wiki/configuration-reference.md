@@ -202,8 +202,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.export.ultrasonictype` | string | wav or flac only; used for bat/ultrasonic captures above 48 kHz |
 | `realtime.audio.export.bitrate` | string | bitrate for audio export |
 | `realtime.audio.export.retention.debug` | boolean | true to enable retention debug |
-| `realtime.audio.export.retention.policy` | string | retention policy, "none", "age" or "usage" |
-| `realtime.audio.export.retention.maxage` | string | maximum age of audio clips to keep |
+| `realtime.audio.export.retention.policy` | string | retention policy: none, age, usage, or best_samples |
+| `realtime.audio.export.retention.maxage` | string | age window for age/best_samples policies |
 | `realtime.audio.export.retention.maxusage` | string | maximum disk usage percentage before cleanup |
 | `realtime.audio.export.retention.minclips` | integer | minimum number of clips per species to keep |
 | `realtime.audio.export.retention.keepspectrograms` | boolean | true to keep spectrograms |

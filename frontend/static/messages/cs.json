@@ -4082,7 +4082,7 @@
         "title": "Uchování zvukových klipů",
         "description": "Konfigurace automatického čištění uložených zvukových klipů",
         "policyLabel": "Pravidla uchování",
-        "policyHelp": "Vyberte, jak se mají zvukové klipy automaticky mazat. Žádná: ponechat všechny klipy. Stáří: smazat klipy starší než zadaný čas. Využití: smazat nejstarší klipy, když využití disku překročí limit.",
+        "policyHelp": "Zvolte způsob úklidu klipů: ponechat vše, mazat podle stáří či využití disku, nebo uchovávat nedávné a nejkvalitnější vzorky.",
         "maxAgeLabel": "Maximální stáří",
         "maxAgeHelp": "Smazat zvukové klipy starší než toto trvání. Formát: číslo následované jednotkou (h=hodiny, d=dny, w=týdny, m=měsíce). Příklady: '7d' pro 7 dní, '4w' pro 4 týdny.",
         "maxUsageLabel": "Maximální využití disku",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Žádná - ponechat vše",
           "age": "Podle stáří",
-          "usage": "Podle využití disku"
+          "usage": "Podle využití disku",
+          "bestSamples": "Nejlepší vzorky"
         },
         "noRetentionTitle": "Všechny klipy ponechány",
         "noRetentionDescription": "Zvukové klipy budou uchovávány po neomezenou dobu. Sledujte využití disku, abyste předešli problémům s úložištěm.",
         "ageRetentionTitle": "Čištění podle stáří",
         "ageRetentionDescription": "Klipy starší než zadané stáří budou automaticky smazány, přičemž se zachová minimální počet na druh.",
         "usageRetentionTitle": "Čištění podle využití",
-        "usageRetentionDescription": "Když využití disku překročí prahovou hodnotu, budou nejstarší klipy mazány, dokud se využití nedostane v rámci limitů."
+        "usageRetentionDescription": "Když využití disku překročí prahovou hodnotu, budou nejstarší klipy mazány, dokud se využití nedostane v rámci limitů.",
+        "bestSamplesMaxAgeLabel": "Okno nedávných vzorků",
+        "bestSamplesMaxAgeHelp": "Všechny klipy mladší než tato doba uchovejte pro ruční kontrolu. Starší klipy ponechte pouze tehdy, patří-li mezi nejvyšší hodnoty confidence daného druhu.",
+        "bestSamplesMinClipsHelp": "Kromě všech klipů z nedávného okna uchovejte také tento počet klipů s nejvyšší confidence pro každý druh."
       },
       "formats": {
         "wav": "WAV",

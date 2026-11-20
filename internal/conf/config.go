@@ -82,8 +82,8 @@ type NormalizationSettings struct {
 
 type RetentionSettings struct {
 	Debug            bool   `yaml:"debug" json:"debug"`                       // true to enable retention debug
-	Policy           string `yaml:"policy" json:"policy"`                     // retention policy, "none", "age" or "usage"
-	MaxAge           string `yaml:"maxage" json:"maxAge"`                     // maximum age of audio clips to keep
+	Policy           string `yaml:"policy" json:"policy"`                     // retention policy: none, age, usage, or best_samples
+	MaxAge           string `yaml:"maxage" json:"maxAge"`                     // age window for age/best_samples policies
 	MaxUsage         string `yaml:"maxusage" json:"maxUsage"`                 // maximum disk usage percentage before cleanup
 	MinClips         int    `yaml:"minclips" json:"minClips"`                 // minimum number of clips per species to keep
 	KeepSpectrograms bool   `yaml:"keepspectrograms" json:"keepSpectrograms"` // true to keep spectrograms

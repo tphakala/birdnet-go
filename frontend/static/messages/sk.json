@@ -4082,7 +4082,7 @@
         "title": "Uchovávanie zvukových klipov",
         "description": "Konfigurácia automatického čistenia uložených zvukových klipov",
         "policyLabel": "Politika uchovávania",
-        "policyHelp": "Vyberte, ako sa majú zvukové klipy automaticky odstraňovať. Žiadna: ponechať všetky klipy. Vek: odstrániť klipy staršie ako zadaný čas. Využitie: odstrániť najstaršie klipy, keď využitie disku prekročí limit.",
+        "policyHelp": "Vyberte spôsob čistenia klipov: ponechať všetky, mazať podľa veku alebo využitia disku, alebo ponechať nedávne a najspoľahlivejšie vzorky.",
         "maxAgeLabel": "Maximálny vek",
         "maxAgeHelp": "Odstrániť zvukové klipy staršie ako toto trvanie. Formát: číslo nasledované jednotkou (h=hodiny, d=dni, w=týždne, m=mesiace). Príklady: '7d' pre 7 dní, '4w' pre 4 týždne.",
         "maxUsageLabel": "Maximálne využitie disku",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Žiadna - ponechať všetko",
           "age": "Na základe veku",
-          "usage": "Na základe využitia disku"
+          "usage": "Na základe využitia disku",
+          "bestSamples": "Najlepšie vzorky"
         },
         "noRetentionTitle": "Všetky klipy ponechané",
         "noRetentionDescription": "Zvukové klipy sa budú uchovávať neobmedzene. Sledujte využitie disku, aby ste predišli problémom s úložiskom.",
         "ageRetentionTitle": "Čistenie na základe veku",
         "ageRetentionDescription": "Klipy staršie ako zadaný vek budú automaticky odstránené, pričom sa zachová minimálny počet na druh.",
         "usageRetentionTitle": "Čistenie na základe využitia",
-        "usageRetentionDescription": "Keď využitie disku prekročí prahovú hodnotu, najstaršie klipy budú odstraňované, kým využitie nebude v rámci limitov."
+        "usageRetentionDescription": "Keď využitie disku prekročí prahovú hodnotu, najstaršie klipy budú odstraňované, kým využitie nebude v rámci limitov.",
+        "bestSamplesMaxAgeLabel": "Obdobie nedávnych vzoriek",
+        "bestSamplesMaxAgeHelp": "Na manuálnu kontrolu ponechajte všetky klipy novšie než toto obdobie. Staršie klipy sa ponechajú iba vtedy, ak patria k najspoľahlivejším pre daný druh.",
+        "bestSamplesMinClipsHelp": "Okrem všetkých klipov z nedávneho obdobia ponechajte tento počet klipov s najvyššou spoľahlivosťou pre každý druh."
       },
       "formats": {
         "wav": "WAV",

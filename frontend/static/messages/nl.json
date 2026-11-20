@@ -4082,7 +4082,7 @@
         "title": "Audio Clip Bewaring",
         "description": "Configureer automatische opschoning van opgeslagen audio clips",
         "policyLabel": "Bewarings Beleid",
-        "policyHelp": "Kies hoe audio clips automatisch worden verwijderd. Geen: behoud alle clips. Leeftijd: verwijder clips ouder dan gespecificeerd. Gebruik: verwijder oudste clips wanneer schijfgebruik limiet overschrijdt.",
+        "policyHelp": "Kies hoe clips worden opgeschoond: alles bewaren, verwijderen op leeftijd of schijfgebruik, of recente en meest betrouwbare samples bewaren.",
         "maxAgeLabel": "Maximum Leeftijd",
         "maxAgeHelp": "Verwijder audio clips ouder dan deze duur. Formaat: nummer gevolgd door eenheid (h=uren, d=dagen, w=weken, m=maanden). Voorbeelden: '7d' voor 7 dagen, '4w' voor 4 weken.",
         "maxUsageLabel": "Maximum Schijf Gebruik",
@@ -4094,14 +4094,18 @@
         "policies": {
           "none": "Geen - Behoud Alles",
           "age": "Leeftijd-Gebaseerd",
-          "usage": "Schijfgebruik-Gebaseerd"
+          "usage": "Schijfgebruik-Gebaseerd",
+          "bestSamples": "Beste samples"
         },
         "noRetentionTitle": "Alle Clips Bewaard",
         "noRetentionDescription": "Audio clips worden voor onbepaalde tijd bewaard. Monitor schijfgebruik om opslagproblemen te voorkomen.",
         "ageRetentionTitle": "Leeftijd-Gebaseerde Opruiming",
         "ageRetentionDescription": "Clips ouder dan de opgegeven leeftijd worden automatisch verwijderd, waarbij het minimum aantal per soort behouden blijft.",
         "usageRetentionTitle": "Gebruik-Gebaseerde Opruiming",
-        "usageRetentionDescription": "Wanneer schijfgebruik de drempelwaarde overschrijdt, worden oudste clips verwijderd totdat het gebruik binnen de limieten is."
+        "usageRetentionDescription": "Wanneer schijfgebruik de drempelwaarde overschrijdt, worden oudste clips verwijderd totdat het gebruik binnen de limieten is.",
+        "bestSamplesMaxAgeLabel": "Periode voor recente samples",
+        "bestSamplesMaxAgeHelp": "Bewaar alle clips die nieuwer zijn dan deze periode voor handmatige beoordeling. Oudere clips blijven alleen bewaard als ze tot de betrouwbaarste voor hun soort behoren.",
+        "bestSamplesMinClipsHelp": "Bewaar dit aantal clips met het hoogste vertrouwen per soort, naast alle clips binnen de recente periode."
       },
       "formats": {
         "wav": "WAV",
