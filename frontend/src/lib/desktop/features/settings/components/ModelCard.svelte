@@ -208,12 +208,12 @@
       : null
   );
   // An installed older release that a newer release replaces: a note with both versions, and the Update action
-  const showUpdate = $derived(mode === 'installed' && entry.update !== undefined);
+  const update = $derived(mode === 'installed' ? entry.update : undefined);
   const updateNoticeText = $derived(
-    showUpdate && entry.update
+    update
       ? t('analysis.gallery.update.cardNotice', {
-          from: entry.update.fromVersion,
-          to: entry.update.toVersion,
+          from: update.fromVersion,
+          to: update.toVersion,
         })
       : null
   );
@@ -552,7 +552,7 @@
     {#if mode === 'available'}
       {@render actionButton(installAction)}
     {:else}
-      {#if showUpdate}
+      {#if update}
         {@render actionButton(updateAction)}
       {/if}
       {#if showOptimize}

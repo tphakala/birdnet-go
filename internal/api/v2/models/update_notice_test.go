@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -65,7 +64,7 @@ func TestUpdateOffers(t *testing.T) {
 	}
 	want := updateOffer{
 		CatalogID: updateEntryID, ModelName: updateModelName,
-		FromVariantID: updateOldID, ToVariantID: updateNewID,
+		ToVariantID: updateNewID,
 		FromVersion: updateOldRel, ToVersion: updateNewRel,
 	}
 
@@ -86,7 +85,11 @@ func TestUpdateOffers(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, updateOffers(entries, tc.installed))
+			installedVariant := func(id string) (string, bool) {
+				vid, ok := tc.installed[id]
+				return vid, ok
+			}
+			assert.Equal(t, tc.want, updateOffers(entries, installedVariant))
 		})
 	}
 }
@@ -151,7 +154,7 @@ func TestUpdateNoticeFallbacksMatchEnglishLocale(t *testing.T) {
 func TestSyncUpdateNotice_Lifecycle(t *testing.T) {
 	profile := tfliteOnlyProfile()
 	h, notices := newOptimizeTestHandler(t, &profile)
-	offers := []updateOffer{{CatalogID: "a", ModelName: "A", FromVariantID: "old", ToVariantID: "new", FromVersion: "1", ToVersion: "2"}}
+	offers := []updateOffer{{CatalogID: "a", ModelName: "A", ToVariantID: "new", FromVersion: "1", ToVersion: "2"}}
 
 	h.applyUpdateNotice(notices, offers)
 	h.applyUpdateNotice(notices, offers)
@@ -189,9 +192,7 @@ func newUpdateFixture(t *testing.T) *updateFixture {
 	useCatalog(t, []classifier.CatalogEntry{updateTestEntry()})
 	modelDir := t.TempDir()
 	mm := classifier.NewModelManager(modelDir, nil, nil)
-	core := apitest.NewCore(t)
-	core.ModelManager = mm
-	h := New(core, nil)
+	h := dependencyHandler(t, mm)
 	notices := &fakeNotices{}
 	h.notices = notices
 	return &updateFixture{h: h, mm: mm, notices: notices, modelDir: modelDir}
@@ -274,7 +275,7 @@ func TestStopOptimizeNoticeSync_StopsUpdateLatch(t *testing.T) {
 // installed current build and a model that is not installed carry none.
 func TestGetModelCatalog_ReportsUpdate(t *testing.T) {
 	f := newUpdateFixture(t)
-	h := dependencyHandler(t, f.mm)
+	h := f.h
 
 	f.setBuild(t, "m_v1")
 	entry := findEntry(catalogRequest(t, h), updateEntryID)

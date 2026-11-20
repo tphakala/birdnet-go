@@ -33,12 +33,11 @@ const (
 
 // updateOffer is one installed model build that a newer release replaces.
 type updateOffer struct {
-	CatalogID     string
-	ModelName     string
-	FromVariantID string
-	ToVariantID   string
-	FromVersion   string
-	ToVersion     string
+	CatalogID   string
+	ModelName   string
+	ToVariantID string
+	FromVersion string
+	ToVersion   string
 }
 
 // updateNotice is the single persistent update bell notice per process, latched
@@ -56,29 +55,26 @@ type updateNotice struct {
 // (classifier.VariantUpdate). It is the one rule behind the bell notice, the
 // catalog response's update field and, through them, the card action.
 func installedUpdate(entries []classifier.CatalogEntry, entry *classifier.CatalogEntry, installedVariantID string) (updateOffer, bool) {
-	if visibleSuccessor(entries, entry.SupersededBy) != nil {
-		return updateOffer{}, false
-	}
 	successor, ok := classifier.VariantUpdate(entry, installedVariantID)
-	if !ok {
+	if !ok || visibleSuccessor(entries, entry.SupersededBy) != nil {
 		return updateOffer{}, false
 	}
 	return updateOffer{
-		CatalogID:     entry.ID,
-		ModelName:     entry.Name,
-		FromVariantID: installedVariantID,
-		ToVariantID:   successor.ID,
-		FromVersion:   classifier.VariantVersion(entry, installedVariantID),
-		ToVersion:     classifier.VariantVersion(entry, successor.ID),
+		CatalogID:   entry.ID,
+		ModelName:   entry.Name,
+		ToVariantID: successor.ID,
+		FromVersion: classifier.VariantVersion(entry, installedVariantID),
+		ToVersion:   classifier.VariantVersion(entry, successor.ID),
 	}, true
 }
 
-// updateOffers derives the offers from the visible catalog and the installed
-// variant per catalog ID. It is pure. Offers keep catalog order.
-func updateOffers(entries []classifier.CatalogEntry, installed map[string]string) []updateOffer {
+// updateOffers derives the offers from the visible catalog and installedVariant,
+// which reports the installed variant of a catalog ID (false when it is not
+// installed). Offers keep catalog order.
+func updateOffers(entries []classifier.CatalogEntry, installedVariant func(id string) (string, bool)) []updateOffer {
 	var offers []updateOffer
 	for i := range entries {
-		installedID, ok := installed[entries[i].ID]
+		installedID, ok := installedVariant(entries[i].ID)
 		if !ok {
 			continue
 		}
@@ -111,16 +107,9 @@ func (c *Handler) syncUpdateNotice() {
 	if svc == nil {
 		return
 	}
-	visible := classifier.VisibleCatalog()
-	installed := make(map[string]string, len(visible))
-	for i := range visible {
-		if vid, ok := c.ModelManager.InstalledVariantID(visible[i].ID); ok {
-			installed[visible[i].ID] = vid
-		}
-	}
 	c.update.mu.Lock()
 	defer c.update.mu.Unlock()
-	c.applyUpdateNotice(svc, updateOffers(visible, installed))
+	c.applyUpdateNotice(svc, updateOffers(classifier.VisibleCatalog(), c.ModelManager.InstalledVariantID))
 }
 
 // applyUpdateNotice reconciles the latched notice with offers. The caller holds
