@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -292,4 +295,88 @@ func TestScanInstalled_RaisesGeomodelNoticeWhenServiceStartsLate(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 	assert.Equal(t, notification.MsgGeomodelNotInstalledTitle, notes[0].TitleKey)
+}
+
+// flakyNoticeService is a notification.NoticeService that keeps its notices in memory and
+// fails the first deleteFailures Delete calls.
+type flakyNoticeService struct {
+	mu             sync.Mutex
+	live           map[string]bool
+	created        int
+	deleteFailures int
+}
+
+func (f *flakyNoticeService) CreateWithMetadata(n *notification.Notification) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.live == nil {
+		f.live = map[string]bool{}
+	}
+	f.live[n.ID] = true
+	f.created++
+	return nil
+}
+
+func (f *flakyNoticeService) Delete(id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deleteFailures > 0 {
+		f.deleteFailures--
+		return errors.NewStd("simulated notification delete failure")
+	}
+	delete(f.live, id)
+	return nil
+}
+
+func (f *flakyNoticeService) counts() (live, created int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.live), f.created
+}
+
+// TestDelete_RetriesClearingGeomodelNoticeAfterFailedDelete pins that a notification delete
+// that fails during teardown is retried by the latch, so the notice does not outlive the
+// orchestrator, and that nothing is raised after teardown.
+func TestDelete_RetriesClearingGeomodelNoticeAfterFailedDelete(t *testing.T) {
+	// Not parallel: replaces the package-level notice service and publishes the global
+	// settings snapshot.
+	isolateTestConfig(t)
+	fake := &flakyNoticeService{}
+	orig := geomodelNoticeService
+	geomodelNoticeService = func() notification.NoticeService { return fake }
+	t.Cleanup(func() { geomodelNoticeService = orig })
+
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	settings.Models.Directory = t.TempDir()
+	settings.BirdNET.RangeFilter.Model = ""
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	labels := []string{"Cyanistes caeruleus_Eurasian Blue Tit"}
+	overrideModelLoader(t, RegistryIDPerchV2, func(o *Orchestrator, _ int) error {
+		o.models[RegistryIDPerchV2] = &modelEntry{instance: &mockModelInstance{id: RegistryIDPerchV2, labels: labels, numSpecies: len(labels)}}
+		return nil
+	})
+
+	o, err := NewOrchestrator(settings)
+	require.NoError(t, err)
+	live, created := fake.counts()
+	require.Equal(t, 1, live, "the construction-time reload raises the notice")
+	require.Equal(t, 1, created)
+
+	o.geomodelNotice.SetRetryDelay(5 * time.Millisecond)
+	fake.mu.Lock()
+	fake.deleteFailures = 1
+	fake.mu.Unlock()
+
+	o.Delete()
+
+	require.Eventually(t, func() bool {
+		live, _ := fake.counts()
+		return live == 0
+	}, 5*time.Second, 10*time.Millisecond, "a failed delete at teardown is retried until the notice is gone")
+	_, createdAfter := fake.counts()
+	assert.Equal(t, created, createdAfter, "nothing is raised during or after teardown")
 }

@@ -192,6 +192,11 @@ func newGeomodelNotification(issue GeomodelIssue, models []string) *notification
 		WithDeliveryTarget(notification.DeliveryTargetBell)
 }
 
+// geomodelNoticeService returns the notification service the geomodel notice is written to,
+// or nil while it is not initialized. A variable so a test can substitute a service whose
+// calls fail.
+var geomodelNoticeService = notification.DefaultNoticeService
+
 // syncGeomodelNotice raises the persistent bell notification when a loaded model that needs
 // the BirdNET Geomodel (Perch v2, BirdNET v3.0, BirdNET+ v3.0) is not served by it, replaces
 // it when the issue or the affected model set changes, and clears it once the geomodel serves
@@ -203,11 +208,11 @@ func newGeomodelNotification(issue GeomodelIssue, models []string) *notification
 // RangeFilterStatus then takes o.mu. Callers may hold o.reloadMu (orchestrator_reload.go:66)
 // or the model manager's mu (model_manager.go:1098, held across the range filter reload at
 // :1206): nothing here takes either.
-// Nil-safe on the notification service: a raise that finds no service latches nothing, so the
-// next trigger retries it, and a failed create is re-armed a bounded number of times. A failed
-// update is logged at WARN.
+// The notice is written through geomodelNoticeService. Nil-safe on it: a raise that finds no
+// service latches nothing, so the next trigger retries it, and a failed create or delete is
+// re-armed a bounded number of times. A failed update is logged at WARN.
 func (o *Orchestrator) syncGeomodelNotice() {
-	svc := notification.GetService()
+	svc := geomodelNoticeService()
 	// NewOrchestrator always builds the range filter service (orchestrator.go:362); without
 	// one there is no backend state to diagnose, so a hand-built orchestrator is skipped.
 	if svc == nil || o.rangeFilter == nil {

@@ -1865,12 +1865,14 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 // Delete releases all resources held by the Orchestrator and its models.
 // After calling Delete, the Orchestrator must not be used. It also clears the bell
 // notices that describe the loaded models (inference failures, BirdNET Geomodel missing).
+// The geomodel latch is not stopped: with no model loaded its status has no geomodel issue,
+// so a later sync can only delete the notice, and a delete that fails here is retried on
+// the latch's bounded timer instead of leaving the notice behind.
 func (o *Orchestrator) Delete() {
 	// Stop the acoustic-model latch first, before o.mu (its sync takes the latch lock
 	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
 	// for this torn-down orchestrator.
 	o.acousticNotice.Stop()
-	o.geomodelNotice.Stop()
 
 	// Snapshot the models, stop the scheduler, and clear o.models under o.mu so the
 	// accessors (which resolve the range-filter anchor from o.models under o.mu)
@@ -1932,7 +1934,8 @@ func (o *Orchestrator) Delete() {
 	// Clear the failure notices of the models just closed and stop their latches
 	// (no model is loaded now; a latch whose delete fails is kept for a retry).
 	o.syncInferenceHealth()
-	// No model is loaded now, so the status has no geomodel issue and this deletes the notice.
+	// No model is loaded now, so the status has no geomodel issue and this deletes the
+	// notice; if the delete fails, the latch's retry timer repeats it.
 	o.syncGeomodelNotice()
 
 	CloseHeatmapService()
