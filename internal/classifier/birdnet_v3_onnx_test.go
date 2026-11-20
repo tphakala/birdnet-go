@@ -118,13 +118,13 @@ func TestBirdNETV3_LoaderRegistered(t *testing.T) {
 	assert.True(t, ok, "BirdNET v3.0 must have a modelLoaders entry")
 
 	_, ok = openvinoCapableSecondaryBuilders[RegistryIDBirdNETV3]
-	assert.True(t, ok, "BirdNET v3.0 must have an OpenVINO-capable secondary builder")
+	assert.True(t, ok, "BirdNET v3.0 must have an OpenVINO-capable reload builder")
 
 	_, ok = modelLoaders[RegistryIDBirdNETPlusV3]
 	assert.True(t, ok, "BirdNET+ v3.0 must have a modelLoaders entry")
 
 	_, ok = openvinoCapableSecondaryBuilders[RegistryIDBirdNETPlusV3]
-	assert.True(t, ok, "BirdNET+ v3.0 must have an OpenVINO-capable secondary builder")
+	assert.True(t, ok, "BirdNET+ v3.0 must have an OpenVINO-capable reload builder")
 }
 
 // birdNETV3FamilySettings returns settings in which the BirdNET v3.0 and BirdNET+ v3.0
@@ -152,7 +152,7 @@ func birdNETV3FamilySettings(t *testing.T) (settings *conf.Settings, labelPaths 
 
 // birdNETV3FamilyEntryPoints lists the two map entries production uses to build a
 // BirdNET v3.0 architecture family: modelLoaders for the startup and runtime load,
-// openvinoCapableSecondaryBuilders for the hot reload.
+// the openvinoCapableSecondaryBuilders map (a legacy name) for the hot reload.
 var birdNETV3FamilyEntryPoints = []string{"loader", "reload_builder"}
 
 // buildBirdNETV3Family builds the family registryID through the named entry point
