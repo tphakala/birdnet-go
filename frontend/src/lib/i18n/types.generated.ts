@@ -416,6 +416,10 @@ export type TranslationKey =
   | 'notifications.content.acousticModels.noneMessage'
   | 'notifications.content.acousticModels.loadFailedTitle'
   | 'notifications.content.acousticModels.loadFailedMessage'
+  | 'notifications.content.geomodel.notInstalledTitle'
+  | 'notifications.content.geomodel.notInstalledMessage' // params: models
+  | 'notifications.content.geomodel.loadFailedTitle'
+  | 'notifications.content.geomodel.loadFailedMessage' // params: models
   | 'notifications.content.modelOptimize.title' // params: count
   | 'notifications.content.modelOptimize.message' // params: models
   | 'notifications.content.modelSuperseded.title' // params: count
@@ -4757,6 +4761,8 @@ export type TranslationParams = {
     models: string | number;
     sourceName: string | number;
   };
+  'notifications.content.geomodel.notInstalledMessage': { models: string | number };
+  'notifications.content.geomodel.loadFailedMessage': { models: string | number };
   'notifications.content.modelOptimize.title': { count: string | number };
   'notifications.content.modelOptimize.message': { models: string | number };
   'notifications.content.modelSuperseded.title': { count: string | number };

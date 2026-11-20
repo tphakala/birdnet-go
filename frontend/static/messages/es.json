@@ -493,6 +493,12 @@
         "loadFailedTitle": "No se pudo cargar el modelo acústico",
         "loadFailedMessage": "Un modelo acústico activado no se pudo cargar, por lo que el audio se captura pero no se analiza. Compruebe el modelo en la página Sistema > Modelos de IA."
       },
+      "geomodel": {
+        "notInstalledTitle": "BirdNET Geomodel v3.0 no está instalado",
+        "notInstalledMessage": "Estos modelos necesitan BirdNET Geomodel v3.0 para filtrar las detecciones por ubicación: {models}. Instale BirdNET Geomodel v3.0 desde la galería de modelos en Configuración > Análisis > Modelos.",
+        "loadFailedTitle": "No se pudo cargar BirdNET Geomodel v3.0",
+        "loadFailedMessage": "No se pudo cargar BirdNET Geomodel v3.0, por lo que estos modelos no se filtran por ubicación: {models}. Revise el registro de la aplicación e instale o reinstale BirdNET Geomodel v3.0 desde la galería de modelos en Configuración > Análisis > Modelos."
+      },
       "modelOptimize": {
         "title": "{count, plural, one {# modelo tiene una versión mejor para este sistema} other {# modelos tienen versiones mejores para este sistema}}",
         "message": "Hay disponible una versión mejor adaptada al hardware o a la ubicación de este sistema para: {models}. Abra Configuración > Análisis > Modelos y elija Optimizar para cambiar."

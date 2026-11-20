@@ -493,6 +493,12 @@
         "loadFailedTitle": "Akustisen mallin lataus epäonnistui",
         "loadFailedMessage": "Käytössä olevan akustisen mallin lataus epäonnistui, joten ääntä tallennetaan, mutta sitä ei analysoida. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
       },
+      "geomodel": {
+        "notInstalledTitle": "BirdNET Geomodel v3.0 ei ole asennettu",
+        "notInstalledMessage": "Nämä mallit tarvitsevat BirdNET Geomodel v3.0 -mallin suodattaakseen havainnot sijainnin mukaan: {models}. Asenna BirdNET Geomodel v3.0 malligalleriasta kohdassa Asetukset > Analyysi > Mallit.",
+        "loadFailedTitle": "BirdNET Geomodel v3.0 -mallia ei voitu ladata",
+        "loadFailedMessage": "BirdNET Geomodel v3.0 -mallia ei voitu ladata, joten näitä malleja ei suodateta sijainnin mukaan: {models}. Tarkista sovelluksen loki sekä asenna tai asenna uudelleen BirdNET Geomodel v3.0 malligalleriasta kohdassa Asetukset > Analyysi > Mallit."
+      },
       "modelOptimize": {
         "title": "{count, plural, one {# mallille on saatavilla parempi versio tälle järjestelmälle} other {# mallille on saatavilla parempia versioita tälle järjestelmälle}}",
         "message": "Tämän järjestelmän laitteistoon tai sijaintiin paremmin sopiva versio on saatavilla seuraaville malleille: {models}. Avaa Asetukset > Analyysi > Mallit ja vaihda valitsemalla Optimoi."

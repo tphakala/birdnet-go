@@ -242,6 +242,10 @@ type Orchestrator struct {
 	// (N = 0, model de-privilege epic Phase 4); see syncAcousticModelsNotice.
 	acousticNotice notification.PersistentNotice
 
+	// geomodelNotice latches the single persistent "BirdNET Geomodel missing" bell
+	// notification; see syncGeomodelNotice for its triggers and lock rule.
+	geomodelNotice notification.PersistentNotice
+
 	// inferenceHealth latches the per-model "fails every analysis" bell notices and
 	// the observer of the failing set; see syncInferenceHealth.
 	inferenceHealth inferenceHealthState
@@ -299,6 +303,8 @@ func (o *Orchestrator) updateSettings(s *conf.Settings) {
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
 // and loads any additional models from configuration.
 // This is the primary constructor - callers should use this instead of NewBirdNET.
+// The range filter service it builds re-evaluates the BirdNET Geomodel notice after
+// every reload, including the ones during construction.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Build o with an empty models map; the models load below through the same
 	// modelLoaders path the secondaries use. The primary's identity is resolved
@@ -354,6 +360,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Build the orchestrator-owned range-filter service with EMPTY state; its
 	// backend is built against the v2.4 anchor once the model is loaded, below.
 	o.rangeFilter = newRangeFilterService(o.rangeFilterDebug)
+	o.rangeFilter.afterReload = o.syncGeomodelNotice
 
 	// Pre-compute the per-model thread allocation so each loader receives its share.
 	threadAlloc := o.computeThreadAllocation(settings)
@@ -1856,12 +1863,14 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 }
 
 // Delete releases all resources held by the Orchestrator and its models.
-// After calling Delete, the Orchestrator must not be used.
+// After calling Delete, the Orchestrator must not be used. It also clears the bell
+// notices that describe the loaded models (inference failures, BirdNET Geomodel missing).
 func (o *Orchestrator) Delete() {
 	// Stop the acoustic-model latch first, before o.mu (its sync takes the latch lock
 	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
 	// for this torn-down orchestrator.
 	o.acousticNotice.Stop()
+	o.geomodelNotice.Stop()
 
 	// Snapshot the models, stop the scheduler, and clear o.models under o.mu so the
 	// accessors (which resolve the range-filter anchor from o.models under o.mu)
@@ -1923,6 +1932,8 @@ func (o *Orchestrator) Delete() {
 	// Clear the failure notices of the models just closed and stop their latches
 	// (no model is loaded now; a latch whose delete fails is kept for a retry).
 	o.syncInferenceHealth()
+	// No model is loaded now, so the status has no geomodel issue and this deletes the notice.
+	o.syncGeomodelNotice()
 
 	CloseHeatmapService()
 }

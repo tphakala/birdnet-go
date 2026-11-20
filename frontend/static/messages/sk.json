@@ -493,6 +493,12 @@
         "loadFailedTitle": "Akustický model sa nepodarilo načítať",
         "loadFailedMessage": "Povolený akustický model sa nepodarilo načítať, takže zvuk sa zaznamenáva, ale neanalyzuje. Skontrolujte model na stránke Systém > Modely AI."
       },
+      "geomodel": {
+        "notInstalledTitle": "BirdNET Geomodel v3.0 nie je nainštalovaný",
+        "notInstalledMessage": "Tieto modely potrebujú BirdNET Geomodel v3.0 na filtrovanie detekcií podľa polohy: {models}. Nainštalujte BirdNET Geomodel v3.0 z galérie modelov v Nastavenia > Analýza > Modely.",
+        "loadFailedTitle": "BirdNET Geomodel v3.0 sa nepodarilo načítať",
+        "loadFailedMessage": "BirdNET Geomodel v3.0 sa nepodarilo načítať, preto sa tieto modely nefiltrujú podľa polohy: {models}. Skontrolujte log aplikácie a nainštalujte alebo preinštalujte BirdNET Geomodel v3.0 z galérie modelov v Nastavenia > Analýza > Modely."
+      },
       "modelOptimize": {
         "title": "{count, plural, one {# model má lepšie zostavenie pre tento systém} few {# modely majú lepšie zostavenia pre tento systém} many {# modelov má lepšie zostavenia pre tento systém} other {# modelov má lepšie zostavenia pre tento systém}}",
         "message": "Zostavenie, ktoré lepšie zodpovedá hardvéru alebo polohe tohto systému, je k dispozícii pre: {models}. Otvorte Nastavenia > Analýza > Modely a zvoľte Optimalizovať."

@@ -246,7 +246,8 @@ func (mm *ModelManager) notifyTopologyChanged() {
 // each matching subdirectory, it checks whether the ONNX model file (the
 // CatalogFile with Role "model") exists on disk. If found, the model is
 // recorded as installed. It never takes the operation slot, so startup is never
-// refused, and it keeps in-flight entries as described below.
+// refused, and it keeps in-flight entries as described below. Once the scan is done
+// it evaluates the "no acoustic model" and "BirdNET Geomodel missing" bell notices.
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
 
@@ -367,10 +368,13 @@ func (mm *ModelManager) ScanInstalled() {
 		mm.ensureGeomodelConfig(log, installedIDs)
 
 		// Startup loading is complete and the notification service is up by now, so evaluate
-		// the persistent "no acoustic model" notice. NewOrchestrator's earlier sync latched
-		// nothing if the notification service was not yet initialized at construction.
+		// the persistent "no acoustic model" and "BirdNET Geomodel missing" notices.
+		// NewOrchestrator's earlier syncs latched nothing if the notification service was not
+		// yet initialized at construction, and the geomodel notice also needs the models
+		// directory NewModelManager sets after construction.
 		if mm.orchestrator != nil {
 			mm.orchestrator.SyncAcousticModelsNotice()
+			mm.orchestrator.SyncGeomodelNotice()
 		}
 	}
 }

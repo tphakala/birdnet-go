@@ -250,6 +250,11 @@ type rangeFilterService struct {
 	// debug gates debug log lines like BirdNET.Debug (on the globally published
 	// settings). May be nil in tests; use the Debug helper.
 	debug debugFunc
+
+	// afterReload, when set, runs after every reload returns (success, failure or the
+	// closed early return) and after buildMu is released, so it may read the status that
+	// takes locks reload holds. Set once before the service is shared; may be nil.
+	afterReload func()
 }
 
 // newRangeFilterService returns a service with an empty (no-backend) state.
@@ -310,7 +315,13 @@ func (rfs *rangeFilterService) backendKind() rangeFilterBackendKind {
 // build failure with NO backend loaded, the fresh participant covered labels are
 // published with kind none so the service fails open (see the error branch below).
 // The species cache is cleared on a successful swap because the backend changed.
+// Every return path, including the already-closed one, runs afterReload once buildMu
+// is released.
 func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() rangeFilterView) error {
+	// Registered before the buildMu defer below so it runs after the unlock.
+	if rfs.afterReload != nil {
+		defer rfs.afterReload()
+	}
 	// Serialize reloads: concurrent build+swap from the monitor and API goroutines
 	// would otherwise race the atomic swap (late-writer-wins) and double-Close.
 	rfs.buildMu.Lock()
