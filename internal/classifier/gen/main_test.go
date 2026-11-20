@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -418,6 +422,84 @@ func TestBuild_PerchWithdrawnVariantsFollowTheirReplacement(t *testing.T) {
 		assert.NotContains(t, out[i], "Legacy:")
 		assert.Contains(t, out[i+1], "Legacy:")
 		assert.Contains(t, out[i+1], fmt.Sprintf("SupersededBy: %q,", live[1]+"@"+live[2]))
+	}
+}
+
+// TestBuild_BirdNETPlusRefusesBadReleaseMetadata runs build on a copy of the
+// vendored BirdNET+ manifest with its release metadata broken: a current_version
+// that is not the newest listed release, an extra build of a new variant whose
+// release string holds a path character, and a second build of the current
+// release in one region. Each must be refused with the message of the rule that
+// owns it, so the release check and the per-region count check run inside build.
+func TestBuild_BirdNETPlusRefusesBadReleaseMetadata(t *testing.T) {
+	t.Chdir("..") // the generator's manifest and sidecar paths are relative to the classifier package
+
+	labels, err := loadLabelsSidecar()
+	require.NoError(t, err)
+	var plus *family
+	for i := range families {
+		if families[i].key == "birdnet-plus-v3.0" {
+			plus = &families[i]
+		}
+	}
+	require.NotNil(t, plus)
+	data, err := os.ReadFile(plus.manifestFile)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		mutate  func(t *testing.T, doc map[string]any)
+		wantErr string
+	}{
+		{
+			name: "current_version is not the newest listed release",
+			mutate: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				doc["family_meta"].(map[string]any)["current_version"] = "3.0"
+			},
+			wantErr: `current_version "3.0"`,
+		},
+		{
+			name: "a build of a new variant with a path character in its release",
+			mutate: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				models := doc["models"].([]any)
+				extra := maps.Clone(models[len(models)-1].(map[string]any))
+				extra["path"] = "regional/extra/other.onnx"
+				extra["variant"] = "fp16"
+				extra["upstream_version"] = "3.0.1/../x"
+				doc["models"] = append(models, extra)
+			},
+			wantErr: "not a plain version",
+		},
+		{
+			name: "a second build of the current release in one region",
+			mutate: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				models := doc["models"].([]any)
+				extra := maps.Clone(models[len(models)-1].(map[string]any))
+				extra["path"] = "regional/extra/other.onnx"
+				extra["variant"] = "fp16"
+				doc["models"] = append(models, extra)
+			},
+			wantErr: "builds of release 3.0.1, want 1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var doc map[string]any
+			require.NoError(t, json.Unmarshal(data, &doc))
+			tt.mutate(t, doc)
+			mutated, err := json.Marshal(doc)
+			require.NoError(t, err)
+			file := filepath.Join(t.TempDir(), "BirdNET-Plus-V3.0.models.json")
+			require.NoError(t, os.WriteFile(file, mutated, 0o600))
+
+			fam := *plus
+			fam.manifestFile = file
+			_, err = fam.build(labels)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
 	}
 }
 
