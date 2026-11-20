@@ -495,9 +495,9 @@
       },
       "geomodel": {
         "notInstalledTitle": "Geomodel não instalado",
-        "notInstalledMessage": "Estes modelos precisam do BirdNET Geomodel v3.0 para filtrar as deteções por localização: {models}. Instale o BirdNET Geomodel v3.0 a partir da galeria de modelos em Configurações > Análise > Modelos.",
+        "notInstalledMessage": "O BirdNET Geomodel v3.0 é necessário para filtrar as deteções por localização para: {models}. Instale o BirdNET Geomodel v3.0 a partir da galeria de modelos em Configurações > Análise > Modelos.",
         "loadFailedTitle": "Falha ao carregar o Geomodel",
-        "loadFailedMessage": "Não foi possível carregar o BirdNET Geomodel v3.0, por isso estes modelos não são filtrados por localização: {models}. Verifique o registo da aplicação e instale ou reinstale o BirdNET Geomodel v3.0 a partir da galeria de modelos em Configurações > Análise > Modelos."
+        "loadFailedMessage": "Não foi possível carregar o BirdNET Geomodel v3.0, por isso a filtragem por localização está desativada para: {models}. Verifique o registo da aplicação e instale ou reinstale o BirdNET Geomodel v3.0 a partir da galeria de modelos em Configurações > Análise > Modelos."
       },
       "modelOptimize": {
         "title": "{count, plural, one {# modelo tem uma versão melhor para este sistema} other {# modelos têm versões melhores para este sistema}}",

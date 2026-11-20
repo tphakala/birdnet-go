@@ -495,9 +495,9 @@
       },
       "geomodel": {
         "notInstalledTitle": "Geomodel nincs telepítve",
-        "notInstalledMessage": "Ezeknek a modelleknek szükségük van a BirdNET Geomodel v3.0-ra, hogy a felismeréseket hely szerint szűrjék: {models}. Telepítse a BirdNET Geomodel v3.0-t a modellgalériából a Beállítások > Elemzés > Modellek oldalon.",
+        "notInstalledMessage": "A BirdNET Geomodel v3.0 szükséges a felismerések hely szerinti szűréséhez ezeknél: {models}. Telepítse a BirdNET Geomodel v3.0-t a modellgalériából a Beállítások > Elemzés > Modellek oldalon.",
         "loadFailedTitle": "Geomodel betöltése sikertelen",
-        "loadFailedMessage": "A BirdNET Geomodel v3.0 nem tölthető be, ezért ezeket a modelleket nem szűri hely szerint: {models}. Ellenőrizze az alkalmazás naplóját, majd telepítse vagy telepítse újra a BirdNET Geomodel v3.0-t a modellgalériából a Beállítások > Elemzés > Modellek oldalon."
+        "loadFailedMessage": "A BirdNET Geomodel v3.0 nem tölthető be, ezért a hely szerinti szűrés ki van kapcsolva ezeknél: {models}. Ellenőrizze az alkalmazás naplóját, majd telepítse vagy telepítse újra a BirdNET Geomodel v3.0-t a modellgalériából a Beállítások > Elemzés > Modellek oldalon."
       },
       "modelOptimize": {
         "title": "{count, plural, one {# modellnek van jobb változata ehhez a rendszerhez} other {# modellnek van jobb változata ehhez a rendszerhez}}",

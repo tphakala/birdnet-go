@@ -495,9 +495,9 @@
       },
       "geomodel": {
         "notInstalledTitle": "Geomodel není nainstalován",
-        "notInstalledMessage": "Tyto modely potřebují BirdNET Geomodel v3.0 k filtrování detekcí podle polohy: {models}. Nainstalujte BirdNET Geomodel v3.0 z galerie modelů v Nastavení > Analýza > Modely.",
+        "notInstalledMessage": "BirdNET Geomodel v3.0 je potřeba k filtrování detekcí podle polohy pro: {models}. Nainstalujte BirdNET Geomodel v3.0 z galerie modelů v Nastavení > Analýza > Modely.",
         "loadFailedTitle": "Geomodel se nepodařilo načíst",
-        "loadFailedMessage": "BirdNET Geomodel v3.0 se nepodařilo načíst, proto tyto modely nejsou filtrovány podle polohy: {models}. Zkontrolujte log aplikace a poté nainstalujte nebo přeinstalujte BirdNET Geomodel v3.0 z galerie modelů v Nastavení > Analýza > Modely."
+        "loadFailedMessage": "BirdNET Geomodel v3.0 se nepodařilo načíst, proto je filtrování podle polohy vypnuto pro: {models}. Zkontrolujte log aplikace a poté nainstalujte nebo přeinstalujte BirdNET Geomodel v3.0 z galerie modelů v Nastavení > Analýza > Modely."
       },
       "modelOptimize": {
         "title": "{count, plural, one {# model má lepší sestavení pro tento systém} few {# modely mají lepší sestavení pro tento systém} many {# modelů má lepší sestavení pro tento systém} other {# modelů má lepší sestavení pro tento systém}}",

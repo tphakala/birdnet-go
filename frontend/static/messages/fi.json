@@ -495,9 +495,9 @@
       },
       "geomodel": {
         "notInstalledTitle": "Geomodel ei ole asennettu",
-        "notInstalledMessage": "Nämä mallit tarvitsevat BirdNET Geomodel v3.0 -mallin suodattaakseen havainnot sijainnin mukaan: {models}. Asenna BirdNET Geomodel v3.0 malligalleriasta kohdassa Asetukset > Analyysi > Mallit.",
+        "notInstalledMessage": "BirdNET Geomodel v3.0 -malli tarvitaan havaintojen suodattamiseen sijainnin mukaan seuraaville: {models}. Asenna BirdNET Geomodel v3.0 malligalleriasta kohdassa Asetukset > Analyysi > Mallit.",
         "loadFailedTitle": "Geomodelia ei voitu ladata",
-        "loadFailedMessage": "BirdNET Geomodel v3.0 -mallia ei voitu ladata, joten näitä malleja ei suodateta sijainnin mukaan: {models}. Tarkista sovelluksen loki sekä asenna tai asenna uudelleen BirdNET Geomodel v3.0 malligalleriasta kohdassa Asetukset > Analyysi > Mallit."
+        "loadFailedMessage": "BirdNET Geomodel v3.0 -mallia ei voitu ladata, joten sijaintisuodatus on pois päältä seuraaville: {models}. Tarkista sovelluksen loki sekä asenna tai asenna uudelleen BirdNET Geomodel v3.0 malligalleriasta kohdassa Asetukset > Analyysi > Mallit."
       },
       "modelOptimize": {
         "title": "{count, plural, one {# mallille on saatavilla parempi versio tälle järjestelmälle} other {# mallille on saatavilla parempia versioita tälle järjestelmälle}}",

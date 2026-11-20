@@ -495,9 +495,9 @@
       },
       "geomodel": {
         "notInstalledTitle": "Geomodel nav instalēts",
-        "notInstalledMessage": "Šiem modeļiem ir vajadzīgs BirdNET Geomodel v3.0, lai filtrētu atpazīšanas rezultātus pēc atrašanās vietas: {models}. Instalējiet BirdNET Geomodel v3.0 no modeļu galerijas sadaļā Iestatījumi > Analīze > Modeļi.",
+        "notInstalledMessage": "BirdNET Geomodel v3.0 ir nepieciešams atpazīšanas rezultātu filtrēšanai pēc atrašanās vietas attiecībā uz: {models}. Instalējiet BirdNET Geomodel v3.0 no modeļu galerijas sadaļā Iestatījumi > Analīze > Modeļi.",
         "loadFailedTitle": "Geomodel neizdevās ielādēt",
-        "loadFailedMessage": "BirdNET Geomodel v3.0 neizdevās ielādēt, tāpēc šie modeļi netiek filtrēti pēc atrašanās vietas: {models}. Pārbaudiet lietotnes žurnālu un instalējiet vai pārinstalējiet BirdNET Geomodel v3.0 no modeļu galerijas sadaļā Iestatījumi > Analīze > Modeļi."
+        "loadFailedMessage": "BirdNET Geomodel v3.0 neizdevās ielādēt, tāpēc filtrēšana pēc atrašanās vietas ir izslēgta attiecībā uz: {models}. Pārbaudiet lietotnes žurnālu un instalējiet vai pārinstalējiet BirdNET Geomodel v3.0 no modeļu galerijas sadaļā Iestatījumi > Analīze > Modeļi."
       },
       "modelOptimize": {
         "title": "{count, plural, zero {# modeļiem ir labākas versijas šai sistēmai} one {# modelim ir labāka versija šai sistēmai} other {# modeļiem ir labākas versijas šai sistēmai}}",

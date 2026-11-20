@@ -495,9 +495,9 @@
       },
       "geomodel": {
         "notInstalledTitle": "Geomodel är inte installerad",
-        "notInstalledMessage": "Dessa modeller behöver BirdNET Geomodel v3.0 för att filtrera detekteringar efter plats: {models}. Installera BirdNET Geomodel v3.0 från modellgalleriet i Inställningar > Analys > Modeller.",
+        "notInstalledMessage": "BirdNET Geomodel v3.0 behövs för att filtrera detekteringar efter plats för: {models}. Installera BirdNET Geomodel v3.0 från modellgalleriet i Inställningar > Analys > Modeller.",
         "loadFailedTitle": "Geomodel kunde inte läsas in",
-        "loadFailedMessage": "BirdNET Geomodel v3.0 kunde inte läsas in, så dessa modeller filtreras inte efter plats: {models}. Kontrollera programloggen och installera eller installera om BirdNET Geomodel v3.0 från modellgalleriet i Inställningar > Analys > Modeller."
+        "loadFailedMessage": "BirdNET Geomodel v3.0 kunde inte läsas in, så filtrering efter plats är avstängd för: {models}. Kontrollera programloggen och installera eller installera om BirdNET Geomodel v3.0 från modellgalleriet i Inställningar > Analys > Modeller."
       },
       "modelOptimize": {
         "title": "{count, plural, one {# modell har en bättre version för det här systemet} other {# modeller har bättre versioner för det här systemet}}",
