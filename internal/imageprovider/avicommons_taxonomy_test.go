@@ -21,10 +21,11 @@ const (
 // but newer Avicommons data uses updated taxonomy (e.g., "Coloeus monedula").
 // This causes image lookups to fail for reclassified species.
 //
-// This test ensures the data file uses taxonomy compatible with BirdNET.
+// This test ensures the data file uses taxonomy compatible with BirdNET, and
+// that species once missing from the bundled snapshot stay present.
 func TestAvicommonsTaxonomy2022Alignment(t *testing.T) {
-	// Species that were reclassified between 2021 and 2024 taxonomy
-	// These use the BirdNET V2.4 (2021E) scientific names
+	// BirdNET V2.4 (2021E) names that previously failed because of taxonomy
+	// changes or missing entries in the bundled dataset.
 	testCases := []struct {
 		scientificName string // BirdNET 2021E taxonomy
 		commonName     string
@@ -44,6 +45,11 @@ func TestAvicommonsTaxonomy2022Alignment(t *testing.T) {
 			scientificName: "Accipiter cooperii",
 			commonName:     "Cooper's Hawk",
 			description:    "Cooper's Hawk uses BirdNET name; synonym lookup handles Astur cooperii",
+		},
+		{
+			scientificName: "Delichon urbicum",
+			commonName:     "Common House-Martin",
+			description:    "Common/Western House Martin must be available without a fallback image provider",
 		},
 	}
 
