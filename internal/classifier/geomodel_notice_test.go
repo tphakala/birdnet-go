@@ -243,3 +243,53 @@ func TestGeomodelNoticeFallbacksMatchEnglishLocale(t *testing.T) {
 	assert.Equal(t, geomodelNotInstalledMessage, strings.ReplaceAll(en["notInstalledMessage"], "{models}", "%s"))
 	assert.Equal(t, geomodelLoadFailedMessage, strings.ReplaceAll(en["loadFailedMessage"], "{models}", "%s"))
 }
+
+// TestScanInstalled_RaisesGeomodelNoticeWhenServiceStartsLate pins the ScanInstalled sync:
+// an orchestrator built before the notification service exists latches nothing, so the
+// startup scan is what raises the notice. The range filter paths stay empty so the scan
+// itself does not reload the range filter, which would raise the notice through the reload
+// hook without the ScanInstalled call.
+func TestScanInstalled_RaisesGeomodelNoticeWhenServiceStartsLate(t *testing.T) {
+	// Not parallel: uses the process-global notification service, settings snapshot and
+	// model loaders.
+	isolateTestConfig(t)
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+
+	modelsDir := t.TempDir()
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	settings.Models.Directory = modelsDir
+	settings.Models.AutoEnableMigrated = true
+	settings.BirdNET.RangeFilter.Model = ""
+	settings.BirdNET.RangeFilter.ModelPath = ""
+	settings.BirdNET.RangeFilter.LabelsPath = ""
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	labels := []string{"Cyanistes caeruleus_Eurasian Blue Tit"}
+	overrideModelLoader(t, RegistryIDPerchV2, func(o *Orchestrator, _ int) error {
+		o.models[RegistryIDPerchV2] = &modelEntry{instance: &mockModelInstance{id: RegistryIDPerchV2, labels: labels, numSpecies: len(labels)}}
+		return nil
+	})
+
+	o, err := NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(func() { o.Delete() })
+	require.True(t, o.IsModelLoaded(RegistryIDPerchV2))
+
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+	notes, err := svc.List(nil)
+	require.NoError(t, err)
+	require.Empty(t, notes, "nothing was raised while the service did not exist")
+
+	NewModelManager(modelsDir, o, settings).ScanInstalled()
+
+	notes, err = svc.List(nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, notification.MsgGeomodelNotInstalledTitle, notes[0].TitleKey)
+}
