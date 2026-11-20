@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -293,4 +295,83 @@ func TestGetModelCatalog_ReportsUpdate(t *testing.T) {
 	require.NotNil(t, entry)
 	assert.False(t, entry.Installed, "fixture: nothing is installed")
 	assert.Nil(t, entry.Update, "a model that is not installed has no update")
+}
+
+// TestSyncUpdateNotice_NilModelManagerIsNoop uses a catalog that holds an
+// installed older release, so an evaluation that reached the model manager
+// would dereference it.
+func TestSyncUpdateNotice_NilModelManagerIsNoop(t *testing.T) {
+	// Not parallel: the active catalog is process-wide.
+	f := newUpdateFixture(t)
+	f.setBuild(t, "m_v1")
+	f.h.ModelManager = nil
+
+	assert.NotPanics(t, f.h.syncUpdateNotice)
+
+	created, deleted := f.notices.counts()
+	assert.Zero(t, created)
+	assert.Zero(t, deleted)
+}
+
+// TestApplyUpdateNotice_FailedCreateIsNotLatched pins that a failed create
+// leaves nothing latched, so the next evaluation raises the notice.
+func TestApplyUpdateNotice_FailedCreateIsNotLatched(t *testing.T) {
+	profile := tfliteOnlyProfile()
+	h, notices := newOptimizeTestHandler(t, &profile)
+	t.Cleanup(h.StopOptimizeNoticeSync)
+	offers := []updateOffer{{CatalogID: "a", ModelName: "A", ToVariantID: "new", FromVersion: "1", ToVersion: "2"}}
+
+	notices.createErr = errors.NewStd("sink unavailable")
+	h.applyUpdateNotice(notices, offers)
+	created, _ := notices.counts()
+	require.Zero(t, created)
+
+	notices.createErr = nil
+	h.applyUpdateNotice(notices, offers)
+	created, _ = notices.counts()
+	assert.Equal(t, 1, created, "a failed create must be retried by the next evaluation")
+}
+
+// TestApplyUpdateNotice_FailedCreateRearmsEvaluation verifies the update latch
+// is wired to ScheduleOptimizeNoticeSync: a failed create arms the latch retry,
+// and the retry callback re-arms the debounced evaluation. The timer is
+// observed rather than waited out, as in the superseded notice's equivalent test.
+func TestApplyUpdateNotice_FailedCreateRearmsEvaluation(t *testing.T) {
+	profile := tfliteOnlyProfile()
+	h, notices := newOptimizeTestHandler(t, &profile)
+	t.Cleanup(h.StopOptimizeNoticeSync)
+	notices.createErr = errors.NewStd("create failed")
+	h.update.latch.SetRetryDelay(optimizeRetryTestDelay)
+
+	// Start arms the startup evaluation; stop it so any timer seen afterwards
+	// was armed by the update latch retry.
+	h.StartOptimizeNoticeSync()
+	startup := pendingOptimizeTimer(h)
+	require.NotNil(t, startup)
+	require.True(t, startup.Stop(), "the startup evaluation must still be pending")
+
+	h.applyUpdateNotice(notices, []updateOffer{{CatalogID: "a", ModelName: "A", ToVariantID: "new", FromVersion: "1", ToVersion: "2"}})
+
+	assert.Eventually(t, func() bool {
+		return pendingOptimizeTimer(h) != startup
+	}, time.Second, time.Millisecond, "a failed create must re-arm the debounced evaluation through the update latch retry")
+	created, _ := notices.counts()
+	assert.Zero(t, created, "the failing service records no notice")
+}
+
+// TestGetModelCatalog_ReportsUpdateToUnauthenticated pins that update does not
+// depend on the hardware-recommendation gate: an unauthenticated request on an
+// auth-enabled instance gets no recommendations but still gets update.
+func TestGetModelCatalog_ReportsUpdateToUnauthenticated(t *testing.T) {
+	f := newUpdateFixture(t)
+	stub := &stubAuth{authenticated: false}
+	f.h.authService = stub
+	f.setBuild(t, "m_v1")
+
+	entry := findEntry(catalogRequest(t, f.h), updateEntryID)
+	require.NotNil(t, entry)
+	assert.True(t, stub.called, "the auth gate must be consulted")
+	assert.Empty(t, entry.RecommendedVariantID, "fixture: recommendations are gated off")
+	require.NotNil(t, entry.Update, "update is install state, not a hardware recommendation")
+	assert.Equal(t, updateNewID, entry.Update.VariantID)
 }
