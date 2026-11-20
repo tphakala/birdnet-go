@@ -38,7 +38,23 @@ describe('SecuritySettingsPage terminal tab', () => {
 
       expect(confirmSpy).toHaveBeenCalledWith('settings.security.terminal.confirmEnable');
       await waitFor(() => expect(toggle.checked).toBe(false));
-      expect(get(settingsStore).formData.webServer?.enableTerminal).not.toBe(true);
+      expect(get(settingsStore).formData.webServer?.enableTerminal ?? false).toBe(false);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it('stages the switch on in the form when the confirmation is accepted', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      render(SecuritySettingsPage);
+
+      const toggle = screen.getByRole<HTMLInputElement>('switch', { name: ENABLE_LABEL });
+      await userEvent.click(toggle);
+
+      expect(confirmSpy).toHaveBeenCalledWith('settings.security.terminal.confirmEnable');
+      await waitFor(() => expect(toggle.checked).toBe(true));
+      expect(get(settingsStore).formData.webServer?.enableTerminal).toBe(true);
     } finally {
       confirmSpy.mockRestore();
     }

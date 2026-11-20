@@ -16,6 +16,7 @@ const STRENGTH_HELP = 'settings.audio.exportDenoise.strengthHelp';
 const STRENGTH_DISABLED_HELP = 'settings.audio.exportDenoise.strengthDisabledHelp';
 const REQUIRES_RECORDING = 'settings.audio.exportDenoise.requiresRecording';
 const TARGET_LUFS_LABEL = 'settings.audio.audioNormalization.targetLUFSLabel';
+const NORMALIZATION_ENABLE_LABEL = 'settings.audio.audioNormalization.enable';
 
 /** Number of ancestors of `el` that fade it with `opacity-50`. */
 function dimmedAncestors(el: Element): number {
@@ -284,6 +285,35 @@ describe('AudioSettingsPage clip denoise', () => {
 
       const input = await screen.findByLabelText(TARGET_LUFS_LABEL);
       expect(dimmedAncestors(input)).toBe(disabled ? 1 : 0);
+    }
+  );
+
+  it.each([
+    ['on', false, true],
+    ['off', true, false],
+  ])(
+    'writes the toggled value to normalization when the switch is turned %s',
+    async (_name, was, now) => {
+      const updateSection = await renderProcessingTab({
+        normalization: { enabled: was, targetLUFS: -20, loudnessRange: 7, truePeak: -2 },
+      });
+
+      await fireEvent.click(await screen.findByLabelText(NORMALIZATION_ENABLE_LABEL));
+
+      await waitFor(() => expect(updateSection).toHaveBeenCalled());
+      const [section, data] = updateSection.mock.calls[0] as [
+        string,
+        { audio: { export: { normalization: unknown; type: string } } },
+      ];
+      expect(section).toBe('realtime');
+      // The other normalization fields and the rest of the export object travel with it.
+      expect(data.audio.export.normalization).toEqual({
+        enabled: now,
+        targetLUFS: -20,
+        loudnessRange: 7,
+        truePeak: -2,
+      });
+      expect(data.audio.export.type).toBe('wav');
     }
   );
 });
