@@ -208,7 +208,7 @@ func newGeomodelNotification(issue GeomodelIssue, models []string) *notification
 // update is logged at WARN.
 func (o *Orchestrator) syncGeomodelNotice() {
 	svc := notification.GetService()
-	// NewOrchestrator always builds the range filter service (orchestrator.go:360); without
+	// NewOrchestrator always builds the range filter service (orchestrator.go:362); without
 	// one there is no backend state to diagnose, so a hand-built orchestrator is skipped.
 	if svc == nil || o.rangeFilter == nil {
 		return
