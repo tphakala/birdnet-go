@@ -372,11 +372,15 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 // entry.Files. Callers that stop at the first match (isGalleryManagedPath) are
 // unaffected by no longer searching the default variant twice, because the default
 // remains one of the returned variant sets.
+//
+// Live variants' file sets come before Legacy ones, in catalog order within each
+// group, so a caller that stops at the first set found on disk (the orchestrator's
+// path resolution) prefers a live build over a leftover Legacy one.
 func entryFileSets(entry *CatalogEntry) [][]CatalogFile {
 	if len(entry.Variants) > 0 {
 		sets := make([][]CatalogFile, 0, len(entry.Variants))
-		for j := range entry.Variants {
-			sets = append(sets, entry.Variants[j].Files)
+		for v := range liveFirstVariants(entry.Variants) {
+			sets = append(sets, v.Files)
 		}
 		return sets
 	}

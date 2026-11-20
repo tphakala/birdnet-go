@@ -1,6 +1,7 @@
 package classifier_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -154,6 +155,33 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 		gotPerch := recommendedVariantID(&perch, caps, high, "")
 		assert.Equal(t, "fp32", gotPerch, "no region resolved must recommend a global perch variant")
 	})
+}
+
+// TestRecommend_BirdNETPlusOffersTheCurrentRelease checks the recommender picks
+// the 3.0.1 build of the host's tile (or the 3.0.1 global build with no region)
+// and never an older release's Legacy variant, which is what makes an installed
+// 3.0 differ from the recommendation the optimize rule reads.
+func TestRecommend_BirdNETPlusOffersTheCurrentRelease(t *testing.T) {
+	t.Parallel()
+
+	plus, ok := classifier.GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok)
+	caps := []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU}
+	high := 8 * 1024 * mib
+
+	for _, tc := range []struct{ name, region, want string }{
+		{"region resolved to nordic", "nordic", "fp32-3.0.1@nordic"},
+		{"no region", "", "fp32-3.0.1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := recommendedVariantID(&plus, caps, high, tc.region)
+			assert.Equal(t, tc.want, got)
+			idx := slices.IndexFunc(plus.Variants, func(v classifier.CatalogVariant) bool { return v.ID == got })
+			require.GreaterOrEqual(t, idx, 0)
+			assert.False(t, plus.Variants[idx].Legacy, "a Legacy variant is never recommended")
+		})
+	}
 }
 
 // TestRecommend_V30GlobalSelection is a regression guard that the recommender

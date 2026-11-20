@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -61,8 +65,8 @@ func TestVariant_LabelsChecksumMustMatchSidecar(t *testing.T) {
 	const labelsRemote = "regional/x/labels.txt"
 	fam := &family{
 		key: "perch-v2", repo: "o/r", requireScoreCalibration: true,
-		modelLocalName:  func(slug, token string) string { return slug + token },
-		labelsLocalName: func(slug string) string { return slug + ".txt" },
+		modelLocalName:  func(slug, token, _ string) string { return slug + token },
+		labelsLocalName: func(slug, _ string) string { return slug + ".txt" },
 	}
 	table := &regionTable{Regions: map[string]struct {
 		Classes *int `json:"classes"`
@@ -122,25 +126,53 @@ func TestCheckRegionCounts(t *testing.T) {
 	allWithdrawn := uniform(2)
 	allWithdrawn["r05"] = regionTally{total: 2, live: 0}
 
+	// releaseTally builds a region tally from per-release build counts; live is
+	// how many of those builds are not superseded.
+	releaseTally := func(counts map[string]int, live int) regionTally {
+		total := 0
+		for _, n := range counts {
+			total += n
+		}
+		return regionTally{total: total, live: live, releases: counts}
+	}
+	twoReleases := func() map[string]regionTally {
+		m := make(map[string]regionTally, expectedRegions)
+		for i := range expectedRegions {
+			m[fmt.Sprintf("r%02d", i)] = releaseTally(map[string]int{"1.0": 1, "1.1": 1}, 1)
+		}
+		return m
+	}
+	oneReleaseMissing := twoReleases()
+	oneReleaseMissing["r03"] = releaseTally(map[string]int{"1.1": 1}, 1)
+	foreignRelease := twoReleases()
+	foreignRelease["r04"] = releaseTally(map[string]int{"1.0": 1, "1.1": 1, "0.9": 1}, 1)
+	duplicatedRelease := twoReleases()
+	duplicatedRelease["r05"] = releaseTally(map[string]int{"1.0": 2, "1.1": 1}, 1)
+
 	tests := []struct {
 		name      string
 		perRegion int
+		releases  []string
 		counts    map[string]regionTally
 		wantErr   string
 	}{
-		{"one precision accepts one per region", 1, uniform(1), ""},
-		{"one precision rejects two per region", 1, uniform(2), "has 2 variants, want 1"},
-		{"two precisions accept two per region", 2, uniform(2), ""},
-		{"two precisions reject one per region", 2, uniform(1), "has 1 variants, want 2"},
-		{"uneven split with the right total is rejected", 2, uneven, "variants, want 2"},
-		{"missing region is rejected", 1, missing, "distinct regions"},
-		{"a withdrawn build next to a live one is accepted", 2, oneWithdrawn, ""},
-		{"a region whose builds are all withdrawn is rejected", 2, allWithdrawn, "region r05 has no variant a new install can use"},
+		{"one precision accepts one per region", 1, nil, uniform(1), ""},
+		{"one precision rejects two per region", 1, nil, uniform(2), "has 2 variants, want 1"},
+		{"two precisions accept two per region", 2, nil, uniform(2), ""},
+		{"two precisions reject one per region", 2, nil, uniform(1), "has 1 variants, want 2"},
+		{"uneven split with the right total is rejected", 2, nil, uneven, "variants, want 2"},
+		{"missing region is rejected", 1, nil, missing, "distinct regions"},
+		{"a withdrawn build next to a live one is accepted", 2, nil, oneWithdrawn, ""},
+		{"a region whose builds are all withdrawn is rejected", 2, nil, allWithdrawn, "region r05 has no variant a new install can use"},
+		{"two releases accept one build of each per region", 1, []string{"1.0", "1.1"}, twoReleases(), ""},
+		{"a region missing one release is rejected", 1, []string{"1.0", "1.1"}, oneReleaseMissing, "region r03 has 0 builds of release 1.0, want 1"},
+		{"a release outside the list is rejected", 1, []string{"1.0", "1.1"}, foreignRelease, "region r04 has builds of a release outside"},
+		{"two builds of one release are rejected", 1, []string{"1.0", "1.1"}, duplicatedRelease, "region r05 has 2 builds of release 1.0, want 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			fam := &family{key: "x", variantsPerRegion: tt.perRegion}
+			fam := &family{key: "x", variantsPerRegion: tt.perRegion, releases: tt.releases}
 			err := fam.checkRegionCounts(tt.counts)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
@@ -154,34 +186,41 @@ func TestCheckRegionCounts(t *testing.T) {
 // TestSupersededVariantID checks a manifest superseded_by path becomes the
 // variant id of a live entry in the same region, and that a dangling,
 // cross-region or chained pointer is refused, so SupersededBy never names a
-// variant a new install cannot use.
+// variant a new install cannot use. A target of a later release carries the
+// release in its id.
 func TestSupersededVariantID(t *testing.T) {
 	t.Parallel()
 
-	entry := func(variant, region string, supersededBy *string) *manifestModel {
-		return &manifestModel{Path: "regional/" + region + "/" + variant + ".onnx", Variant: variant, Region: region, SupersededBy: supersededBy}
+	entry := func(variant, region, release string, supersededBy *string) *manifestModel {
+		return &manifestModel{Path: "regional/" + region + "/" + release + "/" + variant + ".onnx", Variant: variant, Region: region, UpstreamVersion: release, SupersededBy: supersededBy}
 	}
-	live := entry("no-dft-fp32", "x", nil)
-	otherRegion := entry("no-dft-fp32", "y", nil)
-	chained := entry("fp32", "x", new(live.Path))
-	byPath := map[string]*manifestModel{live.Path: live, otherRegion.Path: otherRegion, chained.Path: chained}
+	live := entry("no-dft-fp32", "x", "1.0", nil)
+	otherRegion := entry("no-dft-fp32", "y", "1.0", nil)
+	chained := entry("fp32", "x", "1.0", new(live.Path))
+	later := entry("fp32", "x", "1.1", nil)
+	byPath := map[string]*manifestModel{live.Path: live, otherRegion.Path: otherRegion, chained.Path: chained, later.Path: later}
+
+	oneRelease := &family{key: "x"}
+	twoReleases := &family{key: "x", releases: []string{"1.0", "1.1"}}
 
 	tests := []struct {
 		name         string
+		fam          *family
 		supersededBy *string
 		wantID       string
 		wantErr      string
 	}{
-		{name: "no pointer is a live variant"},
-		{name: "same region live entry", supersededBy: new(live.Path), wantID: "no-dft-fp32@x"},
-		{name: "unknown path", supersededBy: new("regional/x/missing.onnx"), wantErr: "not an entry of this family"},
-		{name: "other region", supersededBy: new(otherRegion.Path), wantErr: "different region"},
-		{name: "entry that is itself superseded", supersededBy: new(chained.Path), wantErr: "itself superseded"},
+		{name: "no pointer is a live variant", fam: oneRelease},
+		{name: "same region live entry", fam: oneRelease, supersededBy: new(live.Path), wantID: "no-dft-fp32@x"},
+		{name: "unknown path", fam: oneRelease, supersededBy: new("regional/x/missing.onnx"), wantErr: "not an entry of this family"},
+		{name: "other region", fam: oneRelease, supersededBy: new(otherRegion.Path), wantErr: "different region"},
+		{name: "entry that is itself superseded", fam: oneRelease, supersededBy: new(chained.Path), wantErr: "itself superseded"},
+		{name: "target of a later release carries the release", fam: twoReleases, supersededBy: new(later.Path), wantID: "fp32-1.1@x"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := supersededVariantID(entry("int8-arm", "x", tt.supersededBy), byPath)
+			got, err := tt.fam.supersededVariantID(entry("int8-arm", "x", "1.0", tt.supersededBy), byPath)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 				require.ErrorContains(t, err, "int8-arm@x", "the error must name the entry")
@@ -190,6 +229,163 @@ func TestSupersededVariantID(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantID, got)
 		})
+	}
+}
+
+// TestFamilyVariantID pins the id scheme: the first release of a family keeps
+// the bare "<variant>@<region>" form, so an id never changes meaning, and every
+// later release carries "-<release>".
+func TestFamilyVariantID(t *testing.T) {
+	t.Parallel()
+
+	e := func(release string) *manifestModel {
+		return &manifestModel{Variant: "fp32", Region: "nordic", UpstreamVersion: release}
+	}
+	multi := &family{releases: []string{"3.0", "3.0.1"}}
+	assert.Equal(t, "fp32@nordic", multi.variantID(e("3.0")))
+	assert.Equal(t, "fp32-3.0.1@nordic", multi.variantID(e("3.0.1")))
+	assert.Equal(t, "fp32@nordic", (&family{}).variantID(e("anything")), "a one-release family ignores upstream_version")
+}
+
+// TestMergeFrozenReleases checks the frozen older release is chained to the
+// current manifest's entry of the same region and variant, and that a frozen
+// entry that cannot be chained or that collides is refused.
+func TestMergeFrozenReleases(t *testing.T) {
+	t.Parallel()
+
+	fam := &family{key: "x", releases: []string{"1.0", "1.1"}}
+	entry := func(path, region, variant, release string, supersededBy *string) manifestModel {
+		return manifestModel{Path: path, Region: region, Variant: variant, UpstreamVersion: release, SupersededBy: supersededBy}
+	}
+	current := []manifestModel{
+		entry("a/1.1/fp32.onnx", "a", "fp32", "1.1", nil),
+		entry("b/1.1/fp32.onnx", "b", "fp32", "1.1", nil),
+	}
+
+	t.Run("each frozen entry points at the current entry of its region and variant", func(t *testing.T) {
+		t.Parallel()
+		got, err := fam.mergeFrozenReleases(current, []manifestModel{
+			entry("b/1.0/fp32.onnx", "b", "fp32", "1.0", nil),
+			entry("a/1.0/fp32.onnx", "a", "fp32", "1.0", nil),
+		})
+		require.NoError(t, err)
+		require.Len(t, got, 4)
+		assert.Nil(t, got[0].SupersededBy, "the current entries keep their own state")
+		assert.Nil(t, got[1].SupersededBy)
+		require.NotNil(t, got[2].SupersededBy)
+		assert.Equal(t, "b/1.1/fp32.onnx", *got[2].SupersededBy)
+		require.NotNil(t, got[3].SupersededBy)
+		assert.Equal(t, "a/1.1/fp32.onnx", *got[3].SupersededBy)
+	})
+
+	tests := []struct {
+		name    string
+		frozen  []manifestModel
+		wantErr string
+	}{
+		{"no current entry of that region and variant", []manifestModel{entry("c/1.0/fp32.onnx", "c", "fp32", "1.0", nil)}, "no current-release entry"},
+		{"variant missing from the current release", []manifestModel{entry("a/1.0/fp16.onnx", "a", "fp16", "1.0", nil)}, "no current-release entry"},
+		{"frozen entry already chained", []manifestModel{entry("a/1.0/fp32.onnx", "a", "fp32", "1.0", new("a/1.1/fp32.onnx"))}, "already names a successor"},
+		{"frozen entry of the current release", []manifestModel{entry("a/1.1/other.onnx", "a", "fp32", "1.1", nil)}, "current release"},
+		{"frozen path collides with the current manifest", []manifestModel{entry("a/1.1/fp32.onnx", "a", "fp32", "1.0", nil)}, "already listed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := fam.mergeFrozenReleases(current, tt.frozen)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+// TestCheckReleases covers the build-time refusals that keep an older release
+// recognised: it must stay chained to a successor, the manifest must name the
+// newest listed release as current, and a release string lands in a file name so
+// it must be digits and dots only.
+func TestCheckReleases(t *testing.T) {
+	t.Parallel()
+
+	fam := &family{key: "x", releases: []string{"1.0", "1.1"}}
+	entry := func(release string, supersededBy *string) manifestModel {
+		return manifestModel{Path: "p/" + release, Variant: "fp32", Region: "a", UpstreamVersion: release, SupersededBy: supersededBy}
+	}
+	chained := entry("1.0", new("p/1.1"))
+	current := entry("1.1", nil)
+
+	tests := []struct {
+		name           string
+		fam            *family
+		regional       []manifestModel
+		currentVersion string
+		wantErr        string
+	}{
+		{name: "older release chained to the current one", fam: fam, regional: []manifestModel{chained, current}, currentVersion: "1.1"},
+		{name: "a one-release family is not checked", fam: &family{key: "x"}, regional: []manifestModel{entry("", nil)}},
+		{name: "older release without superseded_by", fam: fam, regional: []manifestModel{entry("1.0", nil), current}, currentVersion: "1.1", wantErr: "release 1.0 must name its successor"},
+		{name: "current_version is not the newest listed release", fam: fam, regional: []manifestModel{chained, current}, currentVersion: "1.0", wantErr: `current_version "1.0"`},
+		{name: "current_version missing", fam: fam, regional: []manifestModel{chained, current}, wantErr: "current_version"},
+		{name: "release outside the list", fam: fam, regional: []manifestModel{entry("2.0", nil), current}, currentVersion: "1.1", wantErr: `release "2.0" is not one of`},
+		{name: "release with a path character", fam: fam, regional: []manifestModel{entry("1.0/../x", new("p/1.1")), current}, currentVersion: "1.1", wantErr: "not a plain version"},
+		{name: "release with a letter", fam: fam, regional: []manifestModel{entry("1.0rc1", new("p/1.1")), current}, currentVersion: "1.1", wantErr: "not a plain version"},
+		{name: "release missing from the entry", fam: fam, regional: []manifestModel{entry("", nil), current}, currentVersion: "1.1", wantErr: "not a plain version"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.fam.checkReleases(tt.regional, tt.currentVersion)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestBuild_BirdNETPlusOlderReleaseFollowsCurrent runs the generator on the
+// vendored BirdNET+ manifests: each region renders the 3.0.1 tile, then the
+// frozen 3.0 tile as a Legacy variant that keeps its id and file names and
+// names the 3.0.1 tile as its successor.
+func TestBuild_BirdNETPlusOlderReleaseFollowsCurrent(t *testing.T) {
+	t.Chdir("..") // the generator's manifest and sidecar paths are relative to the classifier package
+
+	labels, err := loadLabelsSidecar()
+	require.NoError(t, err)
+	var plus *family
+	for i := range families {
+		if families[i].key == "birdnet-plus-v3.0" {
+			plus = &families[i]
+		}
+	}
+	require.NotNil(t, plus)
+
+	out, err := plus.build(labels)
+	require.NoError(t, err)
+	require.Len(t, out, expectedRegions*len(plus.releases)*plus.variantsPerRegion)
+
+	idRe := regexp.MustCompile(`ID: "([a-z0-9.-]+)@([a-z0-9-]+)"`)
+	modelRe := regexp.MustCompile(`LocalName: "(birdnet_plus_[^"]+\.onnx)"`)
+	for i := 0; i < len(out); i += 2 {
+		current := idRe.FindStringSubmatch(out[i])
+		older := idRe.FindStringSubmatch(out[i+1])
+		require.NotNil(t, current)
+		require.NotNil(t, older)
+		slug := current[2]
+		assert.Equal(t, "fp32-3.0.1", current[1])
+		assert.Equal(t, "fp32", older[1], "the 3.0 tile keeps the bare id")
+		assert.Equal(t, slug, older[2], "a region's two tiles are adjacent")
+
+		assert.NotContains(t, out[i], "Legacy:")
+		assert.NotContains(t, out[i], "Version:")
+		assert.NotContains(t, out[i], "SupersededBy:")
+		assert.Equal(t, "birdnet_plus_v3.0.1_"+slug+"_fp32.onnx", modelRe.FindStringSubmatch(out[i])[1])
+		assert.Contains(t, out[i], `LocalName: "birdnet_plus_v3.0.1_`+slug+`_labels.txt"`)
+
+		assert.Contains(t, out[i+1], "Legacy: true,")
+		assert.Contains(t, out[i+1], `Version: "3.0",`)
+		assert.Contains(t, out[i+1], fmt.Sprintf("SupersededBy: %q,", "fp32-3.0.1@"+slug))
+		assert.Equal(t, "birdnet_plus_v3.0_"+slug+"_fp32.onnx", modelRe.FindStringSubmatch(out[i+1])[1])
+		assert.Contains(t, out[i+1], `LocalName: "birdnet_plus_v3.0_`+slug+`_labels.txt"`)
 	}
 }
 
@@ -226,6 +422,84 @@ func TestBuild_PerchWithdrawnVariantsFollowTheirReplacement(t *testing.T) {
 		assert.NotContains(t, out[i], "Legacy:")
 		assert.Contains(t, out[i+1], "Legacy:")
 		assert.Contains(t, out[i+1], fmt.Sprintf("SupersededBy: %q,", live[1]+"@"+live[2]))
+	}
+}
+
+// TestBuild_BirdNETPlusRefusesBadReleaseMetadata runs build on a copy of the
+// vendored BirdNET+ manifest with its release metadata broken: a current_version
+// that is not the newest listed release, an extra build of a new variant whose
+// release string holds a path character, and a second build of the current
+// release in one region. Each must be refused with the message of the rule that
+// owns it, so the release check and the per-region count check run inside build.
+func TestBuild_BirdNETPlusRefusesBadReleaseMetadata(t *testing.T) {
+	t.Chdir("..") // the generator's manifest and sidecar paths are relative to the classifier package
+
+	labels, err := loadLabelsSidecar()
+	require.NoError(t, err)
+	var plus *family
+	for i := range families {
+		if families[i].key == "birdnet-plus-v3.0" {
+			plus = &families[i]
+		}
+	}
+	require.NotNil(t, plus)
+	data, err := os.ReadFile(plus.manifestFile)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		mutate  func(t *testing.T, doc map[string]any)
+		wantErr string
+	}{
+		{
+			name: "current_version is not the newest listed release",
+			mutate: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				doc["family_meta"].(map[string]any)["current_version"] = "3.0"
+			},
+			wantErr: `current_version "3.0"`,
+		},
+		{
+			name: "a build of a new variant with a path character in its release",
+			mutate: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				models := doc["models"].([]any)
+				extra := maps.Clone(models[len(models)-1].(map[string]any))
+				extra["path"] = "regional/extra/other.onnx"
+				extra["variant"] = "fp16"
+				extra["upstream_version"] = "3.0.1/../x"
+				doc["models"] = append(models, extra)
+			},
+			wantErr: "not a plain version",
+		},
+		{
+			name: "a second build of the current release in one region",
+			mutate: func(t *testing.T, doc map[string]any) {
+				t.Helper()
+				models := doc["models"].([]any)
+				extra := maps.Clone(models[len(models)-1].(map[string]any))
+				extra["path"] = "regional/extra/other.onnx"
+				extra["variant"] = "fp16"
+				doc["models"] = append(models, extra)
+			},
+			wantErr: "builds of release 3.0.1, want 1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var doc map[string]any
+			require.NoError(t, json.Unmarshal(data, &doc))
+			tt.mutate(t, doc)
+			mutated, err := json.Marshal(doc)
+			require.NoError(t, err)
+			file := filepath.Join(t.TempDir(), "BirdNET-Plus-V3.0.models.json")
+			require.NoError(t, os.WriteFile(file, mutated, 0o600))
+
+			fam := *plus
+			fam.manifestFile = file
+			_, err = fam.build(labels)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
 	}
 }
 

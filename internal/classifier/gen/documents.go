@@ -53,8 +53,11 @@ var (
 
 // manifestFamilyMeta mirrors the family_meta fields the generator reads.
 type manifestFamilyMeta struct {
-	Documents []manifestDocument            `json:"documents"`
-	Versions  map[string]manifestVersionDoc `json:"versions"`
+	Documents []manifestDocument `json:"documents"`
+	// CurrentVersion is the release the manifest offers; a multi-release family
+	// requires it to be its newest listed release.
+	CurrentVersion string                        `json:"current_version"`
+	Versions       map[string]manifestVersionDoc `json:"versions"`
 }
 
 // manifestVersionDoc is a release's optional document override. Documents is a
