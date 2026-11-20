@@ -150,10 +150,46 @@ func birdNETV3FamilySettings(t *testing.T) (settings *conf.Settings, labelPaths 
 	}
 }
 
-// TestBirdNETV3Family_EachFamilyReadsItsOwnSection drives the two map entries
-// production uses for each BirdNET v3.0 architecture family (modelLoaders for the
-// startup and runtime load, openvinoCapableSecondaryBuilders for the hot reload) and
-// proves each family builds from its own settings section, not the sibling's.
+// birdNETV3FamilyEntryPoints lists the two map entries production uses to build a
+// BirdNET v3.0 architecture family: modelLoaders for the startup and runtime load,
+// openvinoCapableSecondaryBuilders for the hot reload.
+var birdNETV3FamilyEntryPoints = []string{"loader", "reload_builder"}
+
+// buildBirdNETV3Family builds the family registryID through the named entry point
+// against settings s and returns the build error. A failed build must register no
+// model (loader) and return no instance (reload builder). The loader reads the
+// global settings snapshot (orchestrator.go:280-291), so it publishes s there and
+// the caller must not be parallel. o.Settings stays nil on purpose, so a loader that
+// stopped reading the snapshot fails with the unknown-ID error (familyFields returns
+// false for nil settings, model_manager.go:571-572) instead of passing.
+func buildBirdNETV3Family(t *testing.T, entry, registryID string, s *conf.Settings) error {
+	t.Helper()
+	o := newTestOrchestrator(t)
+	switch entry {
+	case "loader":
+		conftest.SetTestSettings(s)
+		t.Cleanup(func() { conftest.SetTestSettings(nil) })
+		require.Contains(t, modelLoaders, registryID)
+		o.mu.Lock()
+		err := modelLoaders[registryID](o, 1)
+		o.mu.Unlock()
+		assert.Empty(t, o.models, "a failed load must not register a model")
+		return err
+	case "reload_builder":
+		require.Contains(t, openvinoCapableSecondaryBuilders, registryID)
+		m, err := openvinoCapableSecondaryBuilders[registryID](o, s, 1)
+		assert.Nil(t, m, "a failed build must return no instance")
+		return err
+	default:
+		require.Failf(t, "unknown entry point", "%q", entry)
+		return nil
+	}
+}
+
+// TestBirdNETV3Family_EachFamilyReadsItsOwnSection drives both entry points for each
+// BirdNET v3.0 architecture family and proves each builds from its own label path,
+// not the sibling's. TestBirdNETV3Family_EachFamilyReadsItsOwnModelPath pins the
+// model path.
 //
 // A real instance needs ONNX Runtime and a model file, so the observable here is the
 // build error. Both sections name distinct existing files and the label files are
@@ -163,58 +199,62 @@ func birdNETV3FamilySettings(t *testing.T) (settings *conf.Settings, labelPaths 
 // BirdNET.ONNXRuntimePath names an existing stub file so the availability probe
 // passes (internal/inference/ort_status.go:72-95) whether or not ONNX Runtime is
 // installed on the machine. The result is the same on every machine and the native
-// runtime is never loaded.
-//
-// Only the label path is observable this way. The model path travels in the same
-// familyFields set as the label path, and TestFamilyFields pins that set's pointers
-// for both families. This test pins that the right registry ID reaches it.
-//
-// The loader reads the global settings snapshot (orchestrator.go:280-291), and
-// o.Settings stays nil on purpose, so a loader that stopped reading the snapshot
-// fails with the unknown-ID error (familyFields returns false for nil settings,
-// model_manager.go:571-572) instead of passing. The test is not parallel because it
-// publishes the global snapshot.
+// runtime is never loaded. That same early return is why the model path is not
+// observable here: NewBirdNETV3 returns before it opens ModelPath.
 func TestBirdNETV3Family_EachFamilyReadsItsOwnSection(t *testing.T) {
-	ids := []string{RegistryIDBirdNETV3, RegistryIDBirdNETPlusV3}
+	for _, id := range []string{RegistryIDBirdNETV3, RegistryIDBirdNETPlusV3} {
+		for _, entry := range birdNETV3FamilyEntryPoints {
+			t.Run(entry+"/"+id, func(t *testing.T) {
+				s, labels := birdNETV3FamilySettings(t)
 
-	assertOwnLabelPath := func(t *testing.T, err error, labels map[string]string, id string) {
-		t.Helper()
-		require.Error(t, err)
-		require.ErrorContains(t, err, labels[id], "the build must read this family's own label path")
-		for other, otherPath := range labels {
-			if other != id {
-				assert.NotContains(t, err.Error(), otherPath,
-					"the build must not read the %s section", other)
-			}
+				err := buildBirdNETV3Family(t, entry, id, s)
+
+				require.Error(t, err)
+				require.ErrorContains(t, err, labels[id], "the build must read this family's own label path")
+				for other, otherPath := range labels {
+					if other != id {
+						assert.NotContains(t, err.Error(), otherPath,
+							"the build must not read the %s section", other)
+					}
+				}
+			})
 		}
 	}
+}
 
-	for _, id := range ids {
-		t.Run("loader/"+id, func(t *testing.T) {
-			s, labels := birdNETV3FamilySettings(t)
-			o := newTestOrchestrator(t)
-			conftest.SetTestSettings(s)
-			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+// TestBirdNETV3Family_EachFamilyReadsItsOwnModelPath proves each family builds from
+// its own model path, not the sibling's. No hermetic step after the label check
+// names the model path: NewBirdNETV3 goes on to load ONNX Runtime
+// (birdnet_v3_onnx.go:126) and open the model file. Instead the family under test has
+// an empty ModelPath while its sibling's ModelPath names an existing file. The
+// orchestrator has no models directory, so nothing can fill the empty path
+// (model_path_resolution.go:193-226 keeps it empty when the sibling lookup finds no
+// model, :294-296, and the installed-path lookup returns nothing, orchestrator.go:699-700).
+// The build must therefore stop at "model files not installed or configured" for this
+// family, before the label file is read. A build that took the sibling's model path
+// would have a model path, get past that check and fail at the empty label file
+// instead.
+func TestBirdNETV3Family_EachFamilyReadsItsOwnModelPath(t *testing.T) {
+	for _, id := range []string{RegistryIDBirdNETV3, RegistryIDBirdNETPlusV3} {
+		for _, entry := range birdNETV3FamilyEntryPoints {
+			t.Run(entry+"/"+id, func(t *testing.T) {
+				s, labels := birdNETV3FamilySettings(t)
+				switch id {
+				case RegistryIDBirdNETV3:
+					s.BirdNETV3.ModelPath = ""
+				case RegistryIDBirdNETPlusV3:
+					s.BirdNETPlus.ModelPath = ""
+				}
 
-			require.Contains(t, modelLoaders, id)
-			o.mu.Lock()
-			err := modelLoaders[id](o, 1)
-			o.mu.Unlock()
+				err := buildBirdNETV3Family(t, entry, id, s)
 
-			assertOwnLabelPath(t, err, labels, id)
-			assert.Empty(t, o.models, "a failed load must not register a model")
-		})
-
-		t.Run("reload_builder/"+id, func(t *testing.T) {
-			s, labels := birdNETV3FamilySettings(t)
-			o := newTestOrchestrator(t)
-
-			require.Contains(t, openvinoCapableSecondaryBuilders, id)
-			m, err := openvinoCapableSecondaryBuilders[id](o, s, 1)
-
-			assertOwnLabelPath(t, err, labels, id)
-			assert.Nil(t, m, "a failed build must return no instance")
-		})
+				require.Error(t, err)
+				require.ErrorContains(t, err, ModelRegistry[id].Name+" model files not installed or configured")
+				for _, labelPath := range labels {
+					assert.NotContains(t, err.Error(), labelPath, "the build must stop before the label file is read")
+				}
+			})
+		}
 	}
 }
 
