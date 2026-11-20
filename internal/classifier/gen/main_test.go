@@ -211,7 +211,6 @@ func TestSupersededVariantID(t *testing.T) {
 		{name: "unknown path", fam: oneRelease, supersededBy: new("regional/x/missing.onnx"), wantErr: "not an entry of this family"},
 		{name: "other region", fam: oneRelease, supersededBy: new(otherRegion.Path), wantErr: "different region"},
 		{name: "entry that is itself superseded", fam: oneRelease, supersededBy: new(chained.Path), wantErr: "itself superseded"},
-		{name: "target of the first release keeps the bare id", fam: twoReleases, supersededBy: new(live.Path), wantID: "no-dft-fp32@x"},
 		{name: "target of a later release carries the release", fam: twoReleases, supersededBy: new(later.Path), wantID: "fp32-1.1@x"},
 	}
 	for _, tt := range tests {

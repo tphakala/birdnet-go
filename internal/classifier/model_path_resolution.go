@@ -379,12 +379,8 @@ func declaresModelFile(files []CatalogFile, localName string) bool {
 func entryFileSets(entry *CatalogEntry) [][]CatalogFile {
 	if len(entry.Variants) > 0 {
 		sets := make([][]CatalogFile, 0, len(entry.Variants))
-		for _, legacy := range []bool{false, true} {
-			for j := range entry.Variants {
-				if entry.Variants[j].Legacy == legacy {
-					sets = append(sets, entry.Variants[j].Files)
-				}
-			}
+		for v := range liveFirstVariants(entry.Variants) {
+			sets = append(sets, v.Files)
 		}
 		return sets
 	}

@@ -508,18 +508,13 @@ func scanVariantEntry(entry *CatalogEntry, subdir, modelBasenameHint string) (In
 			return im, true
 		}
 	}
-	// The remaining variants in catalog order, live ones first: with no configured
-	// path, a leftover Legacy build (an older release, a withdrawn precision) must
-	// not shadow a live build that is also on disk, whatever order they are listed in.
-	for _, legacy := range []bool{false, true} {
-		for i := range entry.Variants {
-			v := &entry.Variants[i]
-			if v.Legacy != legacy || (def != nil && v.ID == def.ID) {
-				continue
-			}
-			if im, ok := installedFromVariant(entry, v, subdir); ok {
-				return im, true
-			}
+	// The remaining variants, live ones first (see liveFirstVariants).
+	for v := range liveFirstVariants(entry.Variants) {
+		if def != nil && v.ID == def.ID {
+			continue
+		}
+		if im, ok := installedFromVariant(entry, v, subdir); ok {
+			return im, true
 		}
 	}
 	return InstalledModel{}, false
@@ -692,7 +687,7 @@ func installedFromVariant(entry *CatalogEntry, v *CatalogVariant, subdir string)
 		ModelPath:   modelPath,
 		LabelsPath:  labelsPath,
 		InstalledAt: fileModTime(modelPath),
-		Version:     variantVersion(entry, v.ID),
+		Version:     variantRelease(entry, v),
 	}, true
 }
 

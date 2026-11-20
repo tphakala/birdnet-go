@@ -4,6 +4,8 @@
 package classifier
 
 import (
+	"cmp"
+	"iter"
 	"math"
 	"slices"
 	"sync"
@@ -1102,10 +1104,32 @@ func resolveVariant(entry *CatalogEntry, variantID string) *CatalogVariant {
 // own Version when it carries one, else the entry's. An unknown variant id gets
 // the entry's.
 func variantVersion(entry *CatalogEntry, variantID string) string {
-	if v := resolveVariant(entry, variantID); v != nil && v.Version != "" {
-		return v.Version
+	if v := resolveVariant(entry, variantID); v != nil {
+		return variantRelease(entry, v)
 	}
 	return entry.Version
+}
+
+// variantRelease is variantVersion for a variant the caller already holds.
+func variantRelease(entry *CatalogEntry, v *CatalogVariant) string {
+	return cmp.Or(v.Version, entry.Version)
+}
+
+// liveFirstVariants yields the entry's variants with the live ones first and the
+// Legacy ones after, in catalog order within each group. A first-match walk with
+// no configured model path uses it so a leftover Legacy build (an older release,
+// a withdrawn precision) cannot shadow a live build that is also on disk, whatever
+// order they are listed in.
+func liveFirstVariants(variants []CatalogVariant) iter.Seq[*CatalogVariant] {
+	return func(yield func(*CatalogVariant) bool) {
+		for _, legacy := range []bool{false, true} {
+			for i := range variants {
+				if variants[i].Legacy == legacy && !yield(&variants[i]) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // VariantNeedsONNX reports whether running the given variant of entry requires the

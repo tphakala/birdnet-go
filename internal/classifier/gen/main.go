@@ -234,8 +234,7 @@ func (f *family) mergeFrozenReleases(current, frozen []manifestModel) ([]manifes
 			return nil, fmt.Errorf("frozen entry %s: no current-release entry of that region and variant to supersede it", id)
 		}
 		listed[e.Path] = true
-		successorPath := next.Path
-		e.SupersededBy = &successorPath
+		e.SupersededBy = new(next.Path)
 		out = append(out, e)
 	}
 	return out, nil
@@ -256,13 +255,13 @@ func (f *family) checkReleases(regional []manifestModel, currentVersion string) 
 	for i := range regional {
 		e := &regional[i]
 		if !versionPattern.MatchString(e.UpstreamVersion) {
-			return fmt.Errorf("entry %s@%s: upstream_version %q is not a plain version (digits and dots)", e.Variant, e.Region, e.UpstreamVersion)
+			return fmt.Errorf("entry %s: upstream_version %q is not a plain version (digits and dots)", f.variantID(e), e.UpstreamVersion)
 		}
 		if !slices.Contains(f.releases, e.UpstreamVersion) {
-			return fmt.Errorf("entry %s@%s: release %q is not one of %v", e.Variant, e.Region, e.UpstreamVersion, f.releases)
+			return fmt.Errorf("entry %s: release %q is not one of %v", f.variantID(e), e.UpstreamVersion, f.releases)
 		}
 		if e.UpstreamVersion != f.currentRelease() && e.SupersededBy == nil {
-			return fmt.Errorf("entry %s@%s: release %s must name its successor (superseded_by), or an installed build would be offered as new", e.Variant, e.Region, e.UpstreamVersion)
+			return fmt.Errorf("entry %s: release %s must name its successor (superseded_by), or an installed build would be offered as new", f.variantID(e), e.UpstreamVersion)
 		}
 	}
 	return nil
@@ -516,10 +515,9 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	}
 
 	// Deterministic order: region slug, then live before superseded, then variant
-	// token, then release (the key that makes the order total). The two first-match walks over a catalog entry's variants when no
-	// model path is configured (the installed-model scan and the gallery path
-	// resolution) must find a live build before a withdrawn one when both files
-	// are on disk.
+	// token, then release (the key that makes the order total). The runtime walks
+	// over a catalog entry's variants order live builds first themselves; this
+	// order keeps the generated file stable and readable.
 	sort.Slice(regional, func(i, j int) bool {
 		if regional[i].Region != regional[j].Region {
 			return regional[i].Region < regional[j].Region
@@ -673,7 +671,7 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 	sort.Slice(backends, func(i, j int) bool { return backends[i].token < backends[j].token })
 
 	return genVariant{
-		id:           f.variantID(e),
+		id:           id,
 		region:       e.Region,
 		precision:    normalizePrecision(e.Precision),
 		speciesCount: species,
@@ -896,9 +894,10 @@ func updateLabelsSidecar() error {
 			if err != nil {
 				return err
 			}
-			for i := range m.Models {
-				e := &m.Models[i]
-				if e.Region == "" || e.Labels == "" {
+			entries := regionalEntries(m)
+			for j := range entries {
+				e := &entries[j]
+				if e.Labels == "" {
 					continue
 				}
 				key := fam.repo + "|" + e.Labels
