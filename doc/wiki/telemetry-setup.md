@@ -8,7 +8,7 @@ This guide walks you through enabling and configuring BirdNET-Go's optional erro
 
 1. Open your BirdNET-Go web interface
 2. Navigate to **Settings** in the sidebar
-3. Click on **Support** in the settings menu
+3. Click on **General** in the settings menu and stay on its **General** tab
 
 ### Step 2: Review Privacy Information
 
@@ -40,7 +40,7 @@ That's it! No additional configuration is required.
 
 ### Settings Page Layout
 
-The Support settings page contains several sections:
+The Privacy and Telemetry card on the General tab of Settings → General contains several sections:
 
 #### Privacy Notice
 
@@ -88,7 +88,7 @@ sentry:
 
 The web interface automatically manages the configuration:
 
-- **Enable/Disable**: Switch on the General tab of Main Settings
+- **Enable/Disable**: Switch on the General tab of Settings → General
 - **Status**: Visual indicators show current state
 - **Changes**: Take effect immediately without restart
 
@@ -122,7 +122,7 @@ sentry:
 If running BirdNET-Go in Docker, telemetry settings are managed the same way:
 
 1. Access the web interface through its port (the mapped host port with bridge networking, `WEB_PORT` with host networking)
-2. Navigate to Settings → Support
+2. Navigate to Settings → General (General tab)
 3. Enable telemetry as described above
 4. Settings persist in your mounted config volume
 
@@ -210,7 +210,7 @@ The telemetry system only becomes active when:
 
 To verify telemetry is properly configured:
 
-1. **Check settings**: Ensure "Error Tracking Enabled" appears in Settings → Support
+1. **Check settings**: Ensure "Error Tracking Enabled" is on in Settings → General (General tab)
 2. **Review logs**: Look for "Sentry telemetry initialized successfully" in system logs
 3. **Network test**: Verify outbound HTTPS connectivity to sentry.io
 
@@ -248,7 +248,7 @@ You can test the system by temporarily causing a harmless error:
 
 ### Q: How do I disable telemetry temporarily?
 
-**A:** Go to Main Settings, General tab, and turn off the "Enable Error Tracking" switch. Changes take effect immediately.
+**A:** Go to Settings → General, General tab, and turn off the "Enable Error Tracking" switch. Changes take effect immediately.
 
 ## Troubleshooting
 

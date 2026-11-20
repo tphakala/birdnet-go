@@ -26,7 +26,7 @@ describe('SecuritySettingsPage terminal tab', () => {
     settingsValidationReasons.set(new Map());
   });
 
-  it('stays off and leaves the form untouched when the confirmation is refused', async () => {
+  it('stays off and does not turn the terminal on when the confirmation is refused', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     try {
       render(SecuritySettingsPage);

@@ -6,7 +6,7 @@ BirdNET-Go includes an optional, privacy-first error tracking system designed to
 
 ## Quick Start
 
-1. Navigate to **Settings → Support** in the BirdNET-Go web interface
+1. Navigate to **Settings → General** (General tab) in the BirdNET-Go web interface
 2. Read the privacy notice and data collection information
 3. Turn on **"Enable Error Tracking (Opt-in)"** if you want to help improve BirdNET-Go
 4. Save your settings
@@ -183,7 +183,7 @@ The same sensitive data always produces the same anonymized identifier, allowing
 
 ### Q: How do I disable telemetry?
 
-**A:** Go to Main Settings, General tab, and turn off the "Enable Error Tracking" switch. Changes take effect immediately.
+**A:** Go to Settings → General, General tab, and turn off the "Enable Error Tracking" switch. Changes take effect immediately.
 
 ### Q: Where is the data sent?
 
@@ -228,7 +228,7 @@ BirdNET-Go is provided as free, open-source software maintained by volunteers. W
 - **Response times** may vary significantly during busy periods
 - **No warranties** - software provided "as is"
 
-For immediate privacy protection, simply disable telemetry in Settings → Support.
+For immediate privacy protection, simply disable telemetry in Settings → General (General tab).
 
 ---
 
