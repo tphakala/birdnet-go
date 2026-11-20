@@ -1867,7 +1867,8 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 // notices that describe the loaded models (inference failures, BirdNET Geomodel missing).
 // The geomodel latch is not stopped: with no model loaded its status has no geomodel issue,
 // so a later sync can only delete the notice, and a delete that fails here is retried on
-// the latch's bounded timer instead of leaving the notice behind.
+// the latch's bounded timer instead of leaving the notice behind. The acoustic-model latch
+// is stopped instead, because "no model loaded" is exactly the state that raises its notice.
 func (o *Orchestrator) Delete() {
 	// Stop the acoustic-model latch first, before o.mu (its sync takes the latch lock
 	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
