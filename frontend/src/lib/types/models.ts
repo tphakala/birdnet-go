@@ -120,8 +120,8 @@ export interface CatalogEntry {
   recommendedVariantId?: string;
   /**
    * Set when the installed build is an older release that a newer release of this model
-   * replaces: `variantId` is the successor variant to install (it keeps the installed region
-   * and precision), `fromVersion` and `toVersion` are the two releases. Absent otherwise.
+   * replaces: `variantId` is the successor variant to install, `fromVersion` and `toVersion`
+   * are the two releases. Absent otherwise.
    */
   update?: { variantId: string; fromVersion: string; toVersion: string };
   /** Catalog IDs installed with this model; absent when it has none. May name hidden components the catalog does not list. */

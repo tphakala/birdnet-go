@@ -2220,8 +2220,8 @@
   }
 
   // A card's action button was used. Install, the Optimize swap and Update all go through the
-  // license dialog, which picks the variant; Update preselects the successor build so it keeps
-  // the installed region and precision.
+  // license dialog, which picks the variant; Update preselects the successor of the installed
+  // build.
   function handleCardAction(action: ModelCardAction, entry: CatalogEntry) {
     switch (action) {
       case 'install':

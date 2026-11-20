@@ -258,8 +258,7 @@ type CatalogEntryResponse struct {
 
 // CatalogUpdateResponse describes the newer release that replaces the installed
 // build of a catalog entry. VariantID is the variant of that release to install:
-// the successor of the installed variant, so the update keeps its region and
-// precision.
+// the successor of the installed variant.
 type CatalogUpdateResponse struct {
 	VariantID   string `json:"variantId"`
 	FromVersion string `json:"fromVersion"`
