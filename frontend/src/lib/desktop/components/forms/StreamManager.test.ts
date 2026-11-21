@@ -887,6 +887,77 @@ describe('StreamManager health follows the saved streams', () => {
     expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
   });
 
+  it('shows no health on a card whose URL was edited to the URL of another saved stream', async () => {
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(within(header('B')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    await fireEvent.click(header('A'));
+
+    await fireEvent.input(screen.getByTestId(/-url$/), { target: { value: streamB.url } });
+    await echoLast(view, view.onUpdateStreams);
+
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+    expect(within(header('B')).getByText(CONNECTED_KEY)).toBeInTheDocument();
+  });
+
+  it('shows no health on either card when two saved streams swap URLs', async () => {
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(within(header('B')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    await fireEvent.click(header('A'));
+    await fireEvent.click(header('B'));
+
+    const [urlA, urlB] = screen.getAllByTestId(/-url$/);
+    await fireEvent.input(urlA, { target: { value: streamB.url } });
+    await echoLast(view, view.onUpdateStreams);
+    await fireEvent.input(urlB, { target: { value: streamA.url } });
+    await echoLast(view, view.onUpdateStreams);
+
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+    expect(within(header('B')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+  });
+
+  it('gives health back to a card whose URL is edited back to its saved URL', async () => {
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    await fireEvent.click(header('A'));
+    const url = screen.getByTestId(/-url$/);
+
+    await fireEvent.input(url, { target: { value: 'rtsp://a/other' } });
+    await echoLast(view, view.onUpdateStreams);
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+
+    await fireEvent.input(url, { target: { value: streamA.url } });
+    await echoLast(view, view.onUpdateStreams);
+    expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument();
+  });
+
+  it('gives a card its health back once its edited URL is saved', async () => {
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    await fireEvent.click(header('A'));
+    await fireEvent.input(screen.getByTestId(/-url$/), { target: { value: 'rtsp://a/new' } });
+    const edited = await echoLast(view, view.onUpdateStreams);
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+
+    // The save went through: the saved list now holds the edited stream.
+    vi.mocked(api.get).mockResolvedValue(edited.map(stream => healthOf(stream)));
+    await view.rerender({ streams: edited, savedStreams: edited });
+
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+  });
+
+  it('shows no health on a card that has no saved counterpart, even with the URL of a saved stream', async () => {
+    const view = renderRows([streamA], { savedStreams: [streamA] });
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+
+    await view.rerender({
+      streams: [streamA, { ...streamC, url: streamA.url }],
+      savedStreams: [streamA],
+    });
+
+    expect(within(header('C')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+    expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument();
+  });
+
   it.each([
     ['named', (stream: StreamConfig) => healthOf(stream)],
     // Older responses carry no name and are matched by URL.

@@ -22,6 +22,8 @@
   Props:
   - stream: The stream as it is in the form
   - status: Connection status shown in the header
+  - healthUrl: The saved URL the stream's live health is filed under, when the stream
+    still has it; without it the card shows no live health
   - problem: What the page's save rules report for this stream
   - availableModels: Models the server lists for the source editors
   - modelOptions: Labels of the listed models, for the header summary
@@ -104,6 +106,7 @@
   interface Props {
     stream: StreamConfig;
     status?: StreamStatus;
+    healthUrl?: string;
     problem?: StreamProblem;
     availableModels: BackendModel[];
     modelOptions: Array<{ value: string; label: string }>;
@@ -119,6 +122,7 @@
   let {
     stream,
     status = 'unknown',
+    healthUrl,
     problem,
     availableModels,
     modelOptions,
@@ -160,7 +164,10 @@
 
   // The manager passes its $state object directly; reading its keys is reactive.
   const streamHealthMap = getContext<Record<string, StreamHealthResponse>>('streamHealth');
-  let health = $derived(streamHealthMap[stream.url] ?? null);
+  // Filed under the saved URL the manager says this card still has, never under a URL
+  // typed into the field.
+  // eslint-disable-next-line security/detect-object-injection -- saved URL from validated stream config, not user input
+  let health = $derived(healthUrl === undefined ? null : (streamHealthMap[healthUrl] ?? null));
 
   function formatBytes(bytes: number): string {
     // Guard <= 0 (not just === 0): a negative value would make Math.log return NaN.

@@ -24,7 +24,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy, setContext, tick, untrack } from 'svelte';
-  import { SvelteSet } from 'svelte/reactivity';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { Plus, Radio, RefreshCw } from '@lucide/svelte';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { t } from '$lib/i18n';
@@ -230,13 +230,15 @@
     let unknown = 0;
     let disabledCount = 0;
 
-    streams.forEach(stream => {
+    streams.forEach((stream, index) => {
       if (!stream.enabled) {
         disabledCount++;
         return;
       }
 
-      const health = streamHealth[stream.url];
+      const healthUrl = healthUrlOf(rowIds.at(index), stream);
+      // eslint-disable-next-line security/detect-object-injection -- saved URL from validated stream config, not user input
+      const health = healthUrl === undefined ? undefined : streamHealth[healthUrl];
       if (!health) {
         unknown++;
       } else if (health.is_healthy && health.is_receiving_data) {
@@ -260,17 +262,17 @@
   }
 
   // Convert backend process state to UI status
-  function getStreamStatus(url: string, stream: StreamConfig): StreamStatus {
+  function getStreamStatus(healthUrl: string | undefined, stream: StreamConfig): StreamStatus {
     if (!stream.enabled) {
       return 'disabled';
     }
 
     // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
-    const health = streamHealth[url];
+    const health = healthUrl === undefined ? undefined : streamHealth[healthUrl];
     if (!health) {
       // No health data means the stream was removed from the active map.
       // Check per-stream suppression state rather than global anyActive flag.
-      if (isStreamSuppressed(url, stream)) {
+      if (isStreamSuppressed(healthUrl ?? stream.url, stream)) {
         return 'suppressed';
       }
       return 'unknown';
@@ -474,6 +476,31 @@
   // One stream opens by default, several start closed.
   const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
 
+  // The URL each row had in the saved list, by row id. Health belongs to the saved
+  // stream, so a row shows it only while its URL is still that saved URL: an edited
+  // URL, or a URL copied from another stream, shows none. A row counts as saved when
+  // its name and URL are those of a saved stream at the moment its id is given out
+  // (the first list, Reset, a reload) or the saved list changes (a Save).
+  const savedRowUrls = new SvelteMap<string, string>();
+
+  function adoptSavedUrls() {
+    const saved = new Set(savedStreams.map(stream => JSON.stringify([stream.name, stream.url])));
+    streams.forEach((stream, index) => {
+      const id = rowIds.at(index);
+      if (id !== undefined && saved.has(JSON.stringify([stream.name, stream.url]))) {
+        savedRowUrls.set(id, stream.url);
+      }
+    });
+  }
+
+  /** The URL a row's health is filed under: its saved URL while the row still has it. */
+  function healthUrlOf(id: string | undefined, stream: StreamConfig): string | undefined {
+    const saved = id === undefined ? undefined : savedRowUrls.get(id);
+    return saved !== undefined && saved === stream.url ? saved : undefined;
+  }
+
+  untrack(adoptSavedUrls);
+
   // A stream is identified by its name and URL, the fields a card's open state
   // is about; other edits keep the identity.
   function listIdentity(list: readonly StreamConfig[]): string {
@@ -499,6 +526,8 @@
       expectedIdentity = identity;
       rowIds = newRowIds(streams.length);
       expandedRows.clear();
+      savedRowUrls.clear();
+      adoptSavedUrls();
       if (streams.length === 1) expandedRows.add(rowIds[0]);
     });
   });
@@ -588,7 +617,10 @@
   async function deleteStream(index: number) {
     const id = rowIds.at(index);
     rowIds = rowIds.filter((_, i) => i !== index);
-    if (id !== undefined) expandedRows.delete(id);
+    if (id !== undefined) {
+      expandedRows.delete(id);
+      savedRowUrls.delete(id);
+    }
     sendStreams(streams.filter((_, i) => i !== index));
     // The deleted card took focus with it; land on the add button instead.
     await tick();
@@ -621,7 +653,10 @@
         eventSource.close();
         eventSource = null;
       }
-      if (savedIdentity !== undefined && savedIdentity !== identity) void loadHealthStatus();
+      if (savedIdentity !== undefined && savedIdentity !== identity) {
+        adoptSavedUrls();
+        void loadHealthStatus();
+      }
       savedIdentity = identity;
     });
   });
@@ -714,7 +749,8 @@
       {#each rows as row (row.id)}
         <StreamCard
           stream={row.stream}
-          status={getStreamStatus(row.stream.url, row.stream)}
+          status={getStreamStatus(healthUrlOf(row.id, row.stream), row.stream)}
+          healthUrl={healthUrlOf(row.id, row.stream)}
           {availableModels}
           {modelOptions}
           {disabled}
