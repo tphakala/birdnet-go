@@ -6,7 +6,7 @@ import { shortcuts, type ShortcutScope } from '$lib/stores/shortcuts.svelte';
 
 /**
  * Registers `scope` with the shortcut registry while the calling component is mounted, and
- * removes exactly that scope on unmount. Call it during component initialisation. The scope
+ * removes only its own registration on unmount. Call it during component initialisation. The scope
  * is read once: later changes to the object are not picked up, so its definitions should
  * read live state through closures.
  */
