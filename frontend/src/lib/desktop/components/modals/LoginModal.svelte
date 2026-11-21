@@ -280,6 +280,10 @@
     const providerUrl = new URL(endpoint, window.location.origin);
     if (rememberBrowser) {
       providerUrl.searchParams.set(REMEMBER_QUERY_PARAM, REMEMBER_QUERY_VALUE);
+    } else {
+      // An overridden endpoint may already carry the parameter; unticked means
+      // the server must not see it.
+      providerUrl.searchParams.delete(REMEMBER_QUERY_PARAM);
     }
     window.location.href = buildAppUrl(providerUrl.pathname + providerUrl.search);
   }

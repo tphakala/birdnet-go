@@ -5118,7 +5118,7 @@
     "enterPassword": "Ange ditt lösenord",
     "continue": "Fortsätt",
     "rememberBrowser": "Kom ihåg den här webbläsaren",
-    "rememberBrowserHelp": "Förbli inloggad i den här webbläsaren. Lämna orkryssad på en delad dator.",
+    "rememberBrowserHelp": "Förbli inloggad i den här webbläsaren. Lämna okryssad på en delad dator.",
     "or": "eller",
     "loginWithGoogle": "Logga in med Google",
     "loginWithGithub": "Logga in med GitHub",

@@ -555,6 +555,60 @@ describe('LoginModal', () => {
         expect(mockLocation.href).toBe('/auth/google?prompt=login&remember=1');
       });
     });
+
+    it('removes a remember parameter already in an overridden endpoint when unticked', async () => {
+      const mockLocation = mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          enabledProviders: ['google'],
+          endpoints: { google: '/auth/google?remember=1&prompt=login' },
+        },
+      });
+
+      await fireEvent.click(rememberCheckbox());
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      await waitFor(() => {
+        expect(mockLocation.href).toBe('/auth/google?prompt=login');
+      });
+    });
+
+    it('shows one checkbox with password and providers and sends its state to the provider URL', async () => {
+      const mockLocation = mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+
+      expect(screen.getAllByRole('checkbox', { name: /auth\.rememberBrowser/ })).toHaveLength(1);
+
+      await fireEvent.click(rememberCheckbox());
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      await waitFor(() => {
+        expect(mockLocation.href).toBe('/auth/google');
+      });
+    });
+
+    it('disables the checkbox while a sign-in is in progress', async () => {
+      mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      expect(rememberCheckbox()).toBeDisabled();
+    });
   });
 
   describe('Focus Trap and Accessibility', () => {
