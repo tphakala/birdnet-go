@@ -17,6 +17,15 @@ function keyEvent(key: string, init: KeyboardEventInit = {}): KeyboardEvent {
 }
 
 describe('matchesBinding', () => {
+  it('ignores a key event that has no key', () => {
+    // Some autofill and input method events reach a keydown listener without a key value
+    const withoutKey = { shiftKey: false };
+
+    for (const binding of [{ key: 'c' }, { key: KEYS.arrowLeft }, { key: KEYS.comma }]) {
+      expect(matchesBinding(withoutKey, binding)).toBe(false);
+    }
+  });
+
   it.each([
     { name: 'letter', key: 'c', init: {}, binding: { key: 'c' }, expected: true },
     { name: 'Caps Lock letter', key: 'C', init: {}, binding: { key: 'c' }, expected: true },

@@ -128,9 +128,11 @@ function isLetterKey(key: string): boolean {
  * the character on most layouts.
  */
 export function matchesBinding(
-  event: Pick<KeyboardEvent, 'key' | 'shiftKey'>,
+  event: { key?: string; shiftKey: boolean },
   binding: ShortcutBinding
 ): boolean {
+  // Some autofill and input method events reach a keydown listener without a key value
+  if (event.key === undefined) return false;
   const shiftWanted = Boolean(binding.shift);
   if (NAMED_KEYS.has(binding.key)) {
     return event.key === binding.key && event.shiftKey === shiftWanted;
