@@ -11,8 +11,9 @@ import (
 )
 
 // TestClassify_WindowsErrors pins the Windows errors that stand in for the POSIX
-// errnos classifyFile lists. The error is wrapped the way ValidateStartupDiskSpace
-// wraps the raw error from GetAvailableSpace.
+// errnos classifyFile lists, and that a Windows error outside the mapped set stays
+// KindUnknown. The error is wrapped the way ValidateStartupDiskSpace wraps
+// the raw error from GetAvailableSpace.
 func TestClassify_WindowsErrors(t *testing.T) {
 	t.Parallel()
 
@@ -25,6 +26,7 @@ func TestClassify_WindowsErrors(t *testing.T) {
 		{"write protected volume", windows.ERROR_WRITE_PROTECT, KindSQLitePathUnusable},
 		{"disk full", windows.ERROR_DISK_FULL, KindSQLiteDiskSpace},
 		{"handle disk full", windows.ERROR_HANDLE_DISK_FULL, KindSQLiteDiskSpace},
+		{"unrelated error stays unknown", windows.ERROR_INVALID_PARAMETER, KindUnknown},
 	}
 
 	for _, tt := range tests {
