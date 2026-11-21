@@ -91,8 +91,10 @@ C:\BirdNET-Go\
 If you want to run `birdnet-go.exe` from any directory, keep the DLL in a dedicated folder and add that folder to your user `PATH`. Avoid copying the DLL into `C:\Windows\System32`: that is a global, system-wide install that affects every application and is easy to get wrong.
 
 ```powershell
-# Example: keep onnxruntime.dll in C:\BirdNET-Go and add that folder to PATH
-[Environment]::SetEnvironmentVariable("PATH", "$env:PATH;C:\BirdNET-Go", "User")
+# Example: keep onnxruntime.dll in C:\BirdNET-Go and add that folder to your user PATH
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+$newPath = if ($userPath) { "$userPath;C:\BirdNET-Go" } else { "C:\BirdNET-Go" }
+[Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
 ```
 
 This updates your user `PATH` only and does not require Administrator privileges. Open a new terminal afterwards for the change to take effect.

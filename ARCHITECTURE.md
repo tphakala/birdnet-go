@@ -131,18 +131,19 @@ All audio infrastructure lives in `internal/audiocore`. (The older `myaudio` pac
 
 `internal/classifier` owns models and prediction. `internal/inference` defines the backend abstraction and the runtime implementations.
 
-**Orchestrator and model manager.** `classifier.Orchestrator` is the entry point for inference. It manages one or more loaded models with per-model locking, name resolution to a common species identity, hot reload and failover. `ModelManager` handles the model catalog, installation, variant and primary swaps, and uninstalling, driven from the settings UI and API.
+**Orchestrator and model manager.** `classifier.Orchestrator` is the entry point for inference. It manages one or more loaded models with per-model locking, name resolution to a common species identity, hot reload and failover. `ModelManager` handles the model catalog, installation, model and variant swaps, and uninstalling, driven from the settings UI and API.
 
 **Models.** The registry knows these model families; which ones run is chosen by `models.enabled` and the per-model settings sections:
 
-| Model         | Format | Clip | Notes                                                          |
-| ------------- | ------ | ---- | -------------------------------------------------------------- |
-| BirdNET v2.4  | TFLite | 3 s  | Default. FP32 model and range filter models are embedded.      |
-| BirdNET v3    | ONNX   | 5 s  | Downloaded.                                                    |
-| BirdNET+ v3.0 | ONNX   | 5 s  | Own settings section (`birdnetplus`).                          |
-| Perch v2      | ONNX   | 5 s  | Downloaded.                                                    |
-| Bat           | ONNX   | 3 s  | Ultrasonic source; gated by a night-time schedule. Downloaded. |
-| BSG Finland   | ONNX   | 3 s  | Regional model. Downloaded.                                    |
+| Model         | Format | Clip   | Notes                                                                                   |
+| ------------- | ------ | ------ | --------------------------------------------------------------------------------------- |
+| BirdNET v2.4  | TFLite | 3 s    | Default. FP32 model and range filter models are embedded.                               |
+| BirdNET v3    | ONNX   | 5 s    | Downloaded.                                                                             |
+| BirdNET+ v3.0 | ONNX   | 5 s    | Own settings section (`birdnetplus`).                                                   |
+| Perch v2      | ONNX   | 5 s    | Downloaded.                                                                             |
+| Bat           | ONNX   | 3 s    | Ultrasonic source; gated by a night-time schedule. Downloaded.                          |
+| BSG-BAT       | ONNX   | 1.02 s | European bat classifier (384 kHz ultrasonic; `bsgbat` settings, nighttime). Downloaded. |
+| BSG Finland   | ONNX   | 3 s    | Regional model. Downloaded.                                                             |
 
 Regional BirdNET v2.4 variants and geographic range models exist in the catalog. Non-embedded models are fetched from Hugging Face by the model manager. Building with the `noembed` tag leaves the embedded models out for smaller binaries and images; the Docker image ships them separately.
 

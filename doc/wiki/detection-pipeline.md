@@ -91,11 +91,13 @@ All frames are dispatched through the `AudioRouter`, which fans out each frame t
 
 ### Sample Rates by Model
 
-| Model        | Inference Rate   | Source Capture Rate | Resampling                     |
-| ------------ | ---------------- | ------------------- | ------------------------------ |
-| BirdNET v2.4 | 48 kHz           | 48 kHz              | None (or resample from source) |
-| Perch v2     | 32 kHz           | 48 kHz              | Downsampled by router          |
-| BattyBirdNET | 48 kHz (pretend) | 96-256 kHz          | None (the slow-down trick)     |
+| Model         | Inference Rate   | Source Capture Rate | Resampling                     |
+| ------------- | ---------------- | ------------------- | ------------------------------ |
+| BirdNET v2.4  | 48 kHz           | 48 kHz              | None (or resample from source) |
+| BirdNET+ v3.0 | 32 kHz           | 48 kHz              | Downsampled by router          |
+| Perch v2      | 32 kHz           | 48 kHz              | Downsampled by router          |
+| BattyBirdNET  | 48 kHz (pretend) | 96-384 kHz          | None (the slow-down trick)     |
+| BSG-BAT       | 384 kHz          | 192-384 kHz         | Upsampled if below 384 kHz     |
 
 ## Stage 2: Buffering
 
@@ -262,7 +264,7 @@ At flush time, the total hit count is the **sum across all models**. This means:
 - **Two models**: BirdNET (2 hits) + Perch (1 hit) = 3 total, threshold met
 - **Cross-model agreement**: When both models independently identify the same species, the combined evidence is stronger, reducing false positives from single-model artifacts
 
-The `BestModelID` field tracks which model produced the highest individual confidence score. This model is credited as the primary detector in the database record, while per-model contributions are stored separately in the `DetectionModelContribution` table.
+The `BestModelID` field tracks which model produced the highest individual confidence score. This model is credited as the top-scoring model in the database record, while per-model contributions are stored separately in the `DetectionModelContribution` table.
 
 ### Model Consensus Filter
 
@@ -308,8 +310,8 @@ flowchart LR
 
 ### Audio Export
 
-- **Bird detections** at high sample rates (192kHz, 256kHz from shared bat sources) are downsampled to 48kHz before encoding
-- **Bat detections** export at native rate (256kHz). If the configured format (MP3, Opus, AAC) cannot handle rates above 48kHz, the format silently falls back to WAV
+- **Bird detections** at high sample rates (96-384 kHz from shared ultrasonic sources) are downsampled to 48 kHz before encoding using `realtime.audio.export.type` (`aac`, `opus`, `flac`, `wav`, or `mp3`; see [Audio Formats](audio-formats.md))
+- **Bat detections** captured above 48 kHz always export losslessly at their native capture rate using `realtime.audio.export.ultrasonictype` (`flac` by default, or `wav`). Lossy formats (AAC, Opus, MP3) cannot store ultrasonic content and are never used for bat captures above 48 kHz
 - Audio is read from the `CaptureBuffer` ring buffer, which stores raw PCM at the original source rate
 
 ### JobQueue
@@ -321,7 +323,7 @@ The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQ
 ```mermaid
 flowchart TB
     subgraph Sources["Audio Sources"]
-        SC["Sound Card\n48-256 kHz"]
+        SC["Sound Card\n48-384 kHz"]
         RTSP["RTSP Stream\n48 kHz"]
     end
 

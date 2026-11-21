@@ -50,7 +50,7 @@ Self-hosted, 24/7, local AI inference. BirdNET-Go ingests soundcard input or net
 
 ## Highlights
 
-- **Multi-model AI gallery**: install BirdNET v2.4, Google Perch v2, BattyBirdNET regional bat classifiers, and the BirdNET Geomodel v3.0 from inside the app, no rebuild needed.
+- **Multi-model AI gallery**: install BirdNET v2.4, BirdNET+ v3.0, Google Perch v2, BattyBirdNET regional bat classifiers, BSG-BAT, and the BirdNET Geomodel v3.0 from inside the app, no rebuild needed.
 - **Run multiple models in parallel** against separate audio sources and let cross-model agreement boost confidence on shared detections.
 - **Live spectrogram streaming** and **detection heatmaps** rendered straight in the browser.
 - **Alert rules engine** that routes detections to Discord, Slack, Telegram, ntfy, Pushover, Gotify, Matrix, webhooks, browser push, MQTT (with Home Assistant discovery), shell scripts, and BirdWeather.
@@ -80,22 +80,22 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 ### Detection
 
 - **BirdNET v2.4** (default, embedded, 6,500+ bird species)
+- **BirdNET+ v3.0** via ONNX
 - **Google Perch v2** via ONNX (14,795 species across birds, insects, amphibians, and mammals) with taxonomy-based species names
-- **BattyBirdNET** bat classifiers, 11 regional models covering Africa, the Americas, East Asia, Europe, the Middle East, South Asia, Southeast Asia, and the USA (Linux + ultrasonic-capable device)
+- **BattyBirdNET** bat classifiers (11 regional models) and **BSG-BAT** (Linux + ultrasonic-capable device)
 - **BirdNET Geomodel v3.0** for location-based range filtering (12,012 species)
 - **Cross-model detection consensus**: agreement between models strengthens confidence and flags disagreements for review
 - **Custom classifiers**: bring your own TFLite model and label set
-- **Configurable false-positive filtering** for accurate results: Deep Detection (repeat-confirmation within a 15-second window), per-species dynamic thresholds, location-based range filter, privacy and dog-bark filters, and per-classifier bat false-positive levels ([guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET-Go-Guide#deep-detection))
+- **Configurable false-positive filtering** for accurate results: Deep Detection (repeat-confirmation within a configurable pending window, 12 seconds by default), per-species dynamic thresholds, location-based range filter, privacy and dog-bark filters, and per-classifier bat false-positive levels ([guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET-Go-Guide#deep-detection))
 - Per-model and per-source confidence thresholds
 
 ### Audio inputs
 
 - Soundcard capture and RTSP / RTSPS streams, including multiple sources in parallel with independent model assignment
-- Sample rates up to 256 kHz for ultrasonic bat detection
+- Sample rates up to 384 kHz for ultrasonic bat detection
 - Audio liveness watchdog with tiered recovery for flaky streams
 - Stream sample-rate probing and per-model recommendation banners in the UI
 - Audio equalizer, per-source quiet hours, daylight filter, and extended capture mode
-- Offline analysis of audio files
 
 ### Interface
 
@@ -126,7 +126,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
   only the tested LTS releases are supported (MySQL 8.4 and 9.7; MariaDB 10.11,
   11.4, 11.8 or 12.3), and MySQL Innovation releases are not supported
 - Automatic backups with real-time status polling
-- Format-aware audio clip export
+- Native audio clip export in AAC, Opus, FLAC, WAV, and MP3, with lossless FLAC/WAV for ultrasonic bat clips ([audio formats](https://github.com/tphakala/birdnet-go/wiki/audio-formats))
 - Embedded eBird/Clements taxonomy (2,374 genera, 254 families, 11,145 species) for fast offline lookups
 
 ### Operations
@@ -143,7 +143,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 
 - Linux, Windows, and macOS
 - Single static binary with the BirdNET TFLite model embedded
-- Optional ONNX Runtime for Perch, BattyBirdNET, and BirdNET Geomodel v3.0 ([install guide](https://github.com/tphakala/birdnet-go/wiki/ONNX-Runtime-Installation))
+- Optional ONNX Runtime for BirdNET+ v3.0, Perch v2, BattyBirdNET, BSG-BAT, and BirdNET Geomodel v3.0 ([install guide](https://github.com/tphakala/birdnet-go/wiki/ONNX-Runtime-Installation))
 - Multi-arch Docker images
 - Runs comfortably on a Raspberry Pi 4 or equivalent 64-bit single-board computer
 
@@ -153,6 +153,7 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 - [User guide](https://github.com/tphakala/birdnet-go/wiki/BirdNET-Go-Guide)
 - [Installation](https://github.com/tphakala/birdnet-go/wiki/installation)
 - [Hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/hardware)
+- [Audio formats](https://github.com/tphakala/birdnet-go/wiki/audio-formats)
 - [ONNX Runtime installation](https://github.com/tphakala/birdnet-go/wiki/ONNX-Runtime-Installation)
 - [Detection pipeline](https://github.com/tphakala/birdnet-go/wiki/detection-pipeline)
 - [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-Doctor)
@@ -174,7 +175,7 @@ cd birdnet-go
 # Linux: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 # macOS: brew install go-task
 
-task setup-dev    # installs Go 1.25, Node LTS, build tools, linters, Playwright
+task setup-dev    # installs Go 1.27, Node LTS, build tools, linters, Playwright
 task              # build
 task dev_server   # hot-reload dev server (or: air realtime)
 ```
@@ -202,7 +203,7 @@ Join the [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 
 ### Migration tools
 
-- [BirdNET-Pi2Go](https://github.com/tphakala/birdnet-pi2go): database converter for migrating from BirdNET-Pi (deprecated, not compatible with the current BirdNET-Go database schema; a native import is planned)
+- [BirdNET-Pi2Go](https://github.com/tphakala/birdnet-pi2go): database converter for migrating from BirdNET-Pi (deprecated, not compatible with the current BirdNET-Go database schema; an experimental built-in BirdNET-Pi importer is available under **System > Import / Export** on native Linux and container deployments)
 
 ### Hardware solutions
 
@@ -222,7 +223,7 @@ Contributions are welcome.
 
 For setup, workflow, and quality gates, see [CONTRIBUTING.md](CONTRIBUTING.md):
 
-- [TL;DR quick start](CONTRIBUTING.md#tldr---quick-start-for-experienced-developers): 5-minute setup
+- [TL;DR quick start](CONTRIBUTING.md#tldr---quick-start): 5-minute setup
 - [Development workflow](CONTRIBUTING.md#development-workflow): hot reload, git hooks, testing
 - [License and privacy](CONTRIBUTING.md#license-and-legal): CC BY-NC-SA 4.0, privacy by design
 
