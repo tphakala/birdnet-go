@@ -238,8 +238,9 @@ func TestRestartWithChangedCredentialsEndsSessions(t *testing.T) {
 }
 
 // lockWaitSettleTime is how long a test waits to see whether a call that should be
-// blocked on the save lock returns anyway.
-const lockWaitSettleTime = 100 * time.Millisecond
+// blocked on the save lock returns anyway. TESTING.md asks for at least 500 ms for
+// async waits, so a loaded CI runner still schedules the call inside the window.
+const lockWaitSettleTime = 500 * time.Millisecond
 
 // TestSignInRecordIsOnDiskBeforeCookie verifies that a sign-in writes its record
 // to the token file before it returns, so the cookie is never sent for a record
