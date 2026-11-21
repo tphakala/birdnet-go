@@ -14,6 +14,8 @@ on:
       - '.github/scripts/go-test-cache.sh'
       - '.github/actions/setup-tensorflow/**'
       - '.github/actions/setup-onnxruntime/**'
+      - 'scripts/fetch-onnxruntime.sh'
+      - 'scripts/onnxruntime-pins.sha256'
   pull_request:
     paths:
       - '**/*.go'
@@ -25,6 +27,8 @@ on:
       - '.github/scripts/go-test-cache.sh'
       - '.github/actions/setup-tensorflow/**'
       - '.github/actions/setup-onnxruntime/**'
+      - 'scripts/fetch-onnxruntime.sh'
+      - 'scripts/onnxruntime-pins.sha256'
 
 permissions:
   contents: read
@@ -147,7 +151,7 @@ jobs:
         if: env.GO_TEST_CACHE == 'true'
         env:
           SHARD: ${{ matrix.shard }}
-          CI_FILES_HASH: ${{ hashFiles('.github/workflows/golangci-test.yml', '.github/scripts/go-test-cache.sh', '.github/actions/setup-tensorflow/action.yml', '.github/actions/setup-onnxruntime/action.yml') }}
+          CI_FILES_HASH: ${{ hashFiles('.github/workflows/golangci-test.yml', '.github/scripts/go-test-cache.sh', '.github/actions/setup-tensorflow/action.yml', '.github/actions/setup-onnxruntime/action.yml', 'scripts/fetch-onnxruntime.sh', 'scripts/onnxruntime-pins.sha256') }}
         run: |
           .github/scripts/go-test-cache.sh key "$SHARD" >> "$GITHUB_OUTPUT"
           rm -rf "$(go env GOCACHE)"

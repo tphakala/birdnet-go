@@ -1678,15 +1678,19 @@ tasks:
             Linux_*) echo "{{.SYSTEM_LIB_DIR}}";;
             *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
           esac
-      ONNX_ARCHIVE:
+      ONNX_PLATFORM:
         sh: |
           case "{{.UNAME_S}}_{{.UNAME_M}}" in
-            Linux_x86_64) echo "onnxruntime-linux-x64-{{.ONNXRUNTIME_VERSION}}.tgz";;
-            Linux_aarch64|Linux_arm64) echo "onnxruntime-linux-aarch64-{{.ONNXRUNTIME_VERSION}}.tgz";;
-            Darwin_x86_64) echo "onnxruntime-osx-x86_64-{{.ONNXRUNTIME_VERSION}}.tgz";;
-            Darwin_arm64) echo "onnxruntime-osx-arm64-{{.ONNXRUNTIME_VERSION}}.tgz";;
+            Linux_x86_64) echo "linux-amd64";;
+            Linux_aarch64|Linux_arm64) echo "linux-arm64";;
+            Darwin_x86_64) echo "darwin-amd64";;
+            Darwin_arm64) echo "darwin-arm64";;
             *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
           esac
+      # Verified files and links are staged here, then copied to the system
+      # directory. The downloaded package stays in <dir>.download beside it, so
+      # a later run does not download it again. .cache/ is git-ignored.
+      ONNX_STAGE_DIR: '.cache/onnxruntime/{{.ONNXRUNTIME_VERSION}}/{{.ONNX_PLATFORM}}'
       ONNX_LIB_NAME:
         sh: |
           case "{{.UNAME_S}}" in
@@ -1695,8 +1699,9 @@ tasks:
             *) echo "unsupported: {{.UNAME_S}}" >&2; exit 1;;
           esac
       # Files to install: the library link and the versioned file it points to.
-      # The macOS archive holds libonnxruntime.dylib -> libonnxruntime.<ver>.dylib,
-      # so the pattern must match both names; the Linux pattern already does.
+      # The staged directory holds libonnxruntime.dylib -> libonnxruntime.<ver>.dylib
+      # on macOS, so the pattern must match both names; the Linux pattern already
+      # does.
       ONNX_LIB_GLOB:
         sh: |
           case "{{.UNAME_S}}" in
@@ -1706,13 +1711,10 @@ tasks:
           esac
     cmds:
       - |
-        echo "Downloading ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
-        curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v{{.ONNXRUNTIME_VERSION}}/{{.ONNX_ARCHIVE}}" \
-          -o /tmp/onnxruntime.tgz
-
-        mkdir -p /tmp/onnxruntime
-        tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-        rm /tmp/onnxruntime.tgz
+        # Download, verify against the SHA-256 pins and stage the library files.
+        # scripts/fetch-onnxruntime.sh holds the download source and the pins.
+        echo "Installing ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
+        sh scripts/fetch-onnxruntime.sh install "{{.ONNXRUNTIME_VERSION}}" "{{.ONNX_PLATFORM}}" "{{.ONNX_STAGE_DIR}}"
 
         # Create target directory if needed
         if [ ! -d "{{.ONNX_LIB_DIR}}" ]; then
@@ -1723,17 +1725,15 @@ tasks:
           fi
         fi
 
-        # Install library files. -P copies the archive's symlinks as symlinks. A
+        # Install library files. -P copies the staged symlinks as symlinks. A
         # plain cp writes through an existing libonnxruntime.so -> .so.1 ->
         # .so.1.<old> chain into the old versioned file, and BirdNET-Go reads the
         # version from that file name.
         if [ -w "{{.ONNX_LIB_DIR}}" ]; then
-          cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
+          cp -P {{.ONNX_STAGE_DIR}}/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
         else
-          sudo cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
+          sudo cp -P {{.ONNX_STAGE_DIR}}/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
         fi
-
-        rm -rf /tmp/onnxruntime
 
         # Update library cache on Linux
         if [ "{{.UNAME_S}}" = "Linux" ]; then

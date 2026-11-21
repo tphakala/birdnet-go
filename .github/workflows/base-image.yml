@@ -4,10 +4,11 @@ name: Container base image
 # library layer (Debian packages, ONNX Runtime, TFLite C, OpenVINO runtime, Intel
 # NEO/IGC) that the application image stacks on top of via `FROM ${BASE_IMAGE}`.
 #
-# The base tag is content-addressed from the Dockerfile itself
-# (base-<sha256(Dockerfile)[:12]>), so any change to the base recipe or its pins
-# yields a new tag and forces a rebuild, while unchanged recipes always resolve to
-# an already-published tag. Application releases dedup against the immutable base
+# The base tag is content-addressed from the Dockerfile and the two files its
+# ort-fetch stage copies (scripts/fetch-onnxruntime.sh and
+# scripts/onnxruntime-pins.sha256), so any change to the base recipe, its pins or
+# the ONNX Runtime download source yields a new tag and forces a rebuild, while
+# unchanged recipes always resolve to an already-published tag. Application releases dedup against the immutable base
 # blobs regardless of BuildKit cache state, which is the whole point of the split.
 #
 # Triggers:
@@ -69,10 +70,11 @@ jobs:
         run: |
           # Lowercase the owner/repo for a valid image ref, and append -base.
           BASE_REPO="ghcr.io/${GITHUB_REPOSITORY,,}-base"
-          # Content-address the tag on the Dockerfile. Any recipe/pin change yields
-          # a new tag; an unchanged Dockerfile always resolves to the same tag so
-          # normal app releases reuse the already-published base.
-          TAG="base-$(sha256sum Dockerfile | cut -c1-12)"
+          # Content-address the tag on every input of runtime-base: the Dockerfile
+          # and the ONNX Runtime fetch script and pins it copies. Any recipe, pin
+          # or source change yields a new tag; unchanged inputs always resolve to
+          # the same tag so normal app releases reuse the already-published base.
+          TAG="base-$(sha256sum Dockerfile scripts/fetch-onnxruntime.sh scripts/onnxruntime-pins.sha256 | sha256sum | cut -c1-12)"
           echo "base-repo=${BASE_REPO}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Base image: ${BASE_REPO}:${TAG}"

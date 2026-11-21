@@ -1,0 +1,11 @@
+# ONNX Runtime 1.32.0 SHA-256 pins, read by scripts/fetch-onnxruntime.sh.
+# Format: sha256sum lines, "<sha256>  <label>". Regenerate on a version bump with
+#   sh scripts/fetch-onnxruntime.sh pins <version> <download dir> > scripts/onnxruntime-pins.sha256
+a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  microsoft.ml.onnxruntime.1.32.0.nupkg
+4213d6d8c42ac4754865849cb139d31fc39127db6a326babf90bbc81a6eb52fc  1.32.0/linux-amd64/libonnxruntime.so
+8ef51f6bf2c621fc129f625b22241fa6f9a5870bc08eaf2fdd279169ec40d09a  1.32.0/linux-amd64/libonnxruntime_providers_shared.so
+fd1db07c49cb1ad11370ef4393a405eef959fa9622fb5b2880f85d025757e719  1.32.0/linux-arm64/libonnxruntime.so
+f91fa2b0a2b8dba9cbc319254d342fa8201fd94b5912b9ce717f82e2207ee3d5  1.32.0/linux-arm64/libonnxruntime_providers_shared.so
+21ff304871400e846a30c8a1165d15173add56598afb45f98227e2dfc716a497  1.32.0/darwin-arm64/libonnxruntime.dylib
+348c3d29d6995eee37e3451825eaddb7ea7400be3afda6ca2286b12bc775f042  1.32.0/windows-amd64/onnxruntime.dll
+6caf57ac07c9cf72fb4e73c5bb0fe156f02dd60bbbd7385530c9a5654f10f950  1.32.0/windows-amd64/onnxruntime_providers_shared.dll

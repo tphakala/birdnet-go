@@ -424,7 +424,8 @@ forces every unit test to run (on the next push).
   because Go identifies the files a test opens by size and mtime.
 - The cache key carries the TFLite and ONNX Runtime libraries and headers, the Go
   version, the runner image family and the files that define the job (the
-  workflow, `.github/scripts/go-test-cache.sh` and the two setup actions). A
+  workflow, `.github/scripts/go-test-cache.sh`, the two setup actions, and
+  `scripts/fetch-onnxruntime.sh` with its pin file `scripts/onnxruntime-pins.sha256`). A
   change to any of them runs everything.
 - The cache cannot see anything outside the repository (other runner software,
   binaries on `PATH`, the Mosquitto service), files a test reads only through a

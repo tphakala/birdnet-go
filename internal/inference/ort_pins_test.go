@@ -25,6 +25,16 @@ var (
 	// docPinRe matches the shipped version the install guides state: the
 	// VERSION= lines of the install snippets and the "ship X" sentences.
 	docPinRe = regexp.MustCompile(`(?m)(?:^\$?VERSION\s*=\s*"?|\bship )(\d+\.\d+\.\d+)`)
+	// docVersionAssignRe matches the VERSION assignment that opens each install
+	// snippet of a guide.
+	docVersionAssignRe = regexp.MustCompile(`(?m)^\$?VERSION\s*=`)
+	sha256HexRe        = regexp.MustCompile(`\b[0-9a-f]{64}\b`)
+	pinLineRe          = regexp.MustCompile(`^([0-9a-f]{64}) {2}(\S+)$`)
+)
+
+const (
+	fetchScriptPath = "../../scripts/fetch-onnxruntime.sh"
+	pinFilePath     = "../../scripts/onnxruntime-pins.sha256"
 )
 
 // installGuides are the user install guides that name the shipped ONNX Runtime
@@ -62,11 +72,14 @@ func TestORTPinsAgreeAndMeetMinimum(t *testing.T) {
 }
 
 // TestORTInstallGuidesMatchPin keeps the version the install guides tell users
-// to download in step with the native pin.
+// to download, and the package hash they tell them to check, in step with the
+// native pins.
 func TestORTInstallGuidesMatchPin(t *testing.T) {
 	t.Parallel()
 
 	pin := firstGroup(t, "../../Taskfile.yml", taskfilePinRe)
+	pkgPin := readPins(t)[packageLabel(pin)]
+	require.NotEmpty(t, pkgPin, "no package pin for %s", pin)
 	for _, guide := range installGuides {
 		data, err := os.ReadFile(guide)
 		require.NoError(t, err, "read install guide %s", guide)
@@ -75,6 +88,121 @@ func TestORTInstallGuidesMatchPin(t *testing.T) {
 		for _, m := range matches {
 			assert.Equal(t, pin, string(m[1]), "%s states %s, the Taskfile pins %s", guide, m[1], pin)
 		}
+
+		// Every snippet that downloads the package also checks it against the
+		// package pin, so the hashes are as many as the snippets.
+		hashes := sha256HexRe.FindAllString(string(data), -1)
+		for _, h := range hashes {
+			assert.Equal(t, pkgPin, h, "%s carries a hash that is not the package pin", guide)
+		}
+		assert.Len(t, hashes, len(docVersionAssignRe.FindAllString(string(data), -1)),
+			"%s: every snippet with a VERSION line needs the package hash check", guide)
+	}
+}
+
+// packageLabel is the pin label of the NuGet package at version.
+func packageLabel(version string) string {
+	return "microsoft.ml.onnxruntime." + version + ".nupkg"
+}
+
+// readPins parses the pin file into label to hash, failing on a malformed line
+// or a label pinned twice.
+func readPins(t *testing.T) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile(pinFilePath)
+	require.NoError(t, err, "read %s", pinFilePath)
+	pins := map[string]string{}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		m := pinLineRe.FindStringSubmatch(line)
+		require.NotNil(t, m, "malformed pin line %q", line)
+		_, dup := pins[m[2]]
+		require.False(t, dup, "label %s pinned twice", m[2])
+		pins[m[2]] = m[1]
+	}
+	return pins
+}
+
+// TestORTPinFileCoversPinnedVersion keeps the SHA-256 pin file complete for the
+// pinned ONNX Runtime version: the package and every library file of every
+// release platform, so a version bump without regenerated pins fails here and
+// not in the next uncached release build.
+func TestORTPinFileCoversPinnedVersion(t *testing.T) {
+	t.Parallel()
+
+	version := firstGroup(t, "../../Taskfile.yml", taskfilePinRe)
+	pins := readPins(t)
+
+	want := map[string]bool{packageLabel(version): true}
+	for _, p := range ortPlatforms {
+		if !p.release {
+			continue
+		}
+		for _, f := range p.files {
+			want[version+"/"+p.id+"/"+f] = true
+		}
+	}
+	for label := range want {
+		assert.Contains(t, pins, label, "pin file has no pin for %s", label)
+	}
+	// The github source also pins the Intel Mac library; nothing else belongs.
+	for label := range pins {
+		if want[label] {
+			continue
+		}
+		assert.Equal(t, version+"/darwin-amd64/libonnxruntime.dylib", label, "unexpected pin label")
+	}
+}
+
+// TestORTFetchScriptIsTheOnlyDownloader keeps every ONNX Runtime download behind
+// scripts/fetch-onnxruntime.sh, the one place that holds the source switch and
+// checks hashes.
+func TestORTFetchScriptIsTheOnlyDownloader(t *testing.T) {
+	t.Parallel()
+
+	callers := []string{
+		"../../Taskfile.yml",
+		"../../Dockerfile",
+		"../../.github/actions/setup-onnxruntime/action.yml",
+		"../../.github/workflows/windows-test.yml",
+	}
+	for _, path := range callers {
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), "fetch-onnxruntime.sh", "%s must install ONNX Runtime through the script", path)
+	}
+
+	workflows, err := filepath.Glob("../../.github/workflows/*.yml")
+	require.NoError(t, err)
+	actions, err := filepath.Glob("../../.github/actions/*/action.yml")
+	require.NoError(t, err)
+	require.NotEmpty(t, workflows)
+	require.NotEmpty(t, actions)
+	checked := append([]string{"../../Taskfile.yml", "../../Dockerfile"}, workflows...)
+	checked = append(checked, actions...)
+	forbidden := []string{"microsoft/onnxruntime/releases", "api.nuget.org", "ONNXRUNTIME_SOURCE"}
+	for _, path := range checked {
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		for _, f := range forbidden {
+			assert.NotContains(t, string(data), f, "%s must not carry its own download source", path)
+		}
+	}
+
+	// The published base image tag must change with every input of runtime-base.
+	data, err := os.ReadFile("../../.github/workflows/base-image.yml")
+	require.NoError(t, err)
+	var tagLine string
+	for line := range strings.SplitSeq(string(data), "\n") {
+		if strings.Contains(line, `TAG="base-`) {
+			tagLine = line
+		}
+	}
+	require.NotEmpty(t, tagLine, "base-image.yml has no TAG line")
+	for _, input := range []string{"Dockerfile", "scripts/fetch-onnxruntime.sh", "scripts/onnxruntime-pins.sha256"} {
+		assert.Contains(t, tagLine, input, "the base image tag must hash %s", input)
 	}
 }
 

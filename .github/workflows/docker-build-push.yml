@@ -63,7 +63,7 @@ permissions:
 
 jobs:
   # Ensure the heavy runtime base image exists before the app build. Content-
-  # addressed on the Dockerfile, so this is a no-op (manifest exists) on a normal
+  # addressed on the Dockerfile and the ONNX Runtime fetch files, so this is a no-op (manifest exists) on a normal
   # release and only builds when the base recipe changed or was never published.
   # Building it here (rather than on push-to-main) means the app build can never
   # race a missing base, and there is no separate trigger to keep two concurrent
