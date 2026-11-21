@@ -23,6 +23,30 @@
   // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
   const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
 
+  // Set on every Modal root, open or closed, so a closed Modal (always in the DOM with
+  // aria-modal) is not mistaken for another dialog
+  const MODAL_ROOT_ATTRIBUTE = 'data-modal-root';
+  const MODAL_ROOT_ATTRIBUTES = { [MODAL_ROOT_ATTRIBUTE]: '' };
+
+  // Open dialogs this component does not manage: a foreign aria-modal dialog that is not a
+  // Modal root, or a native dialog that is open. One selector, so an element that is both
+  // is counted once.
+  const FOREIGN_OPEN_DIALOG_SELECTOR = `${ARIA_MODAL_SELECTOR}:not([${MODAL_ROOT_ATTRIBUTE}]), dialog[open]`;
+
+  /**
+   * Number of dialogs open right now: the open Modals plus foreign open dialogs. Closed
+   * Modals do not count. Keyboard shortcuts stay off while this is above zero.
+   */
+  export function openDialogCount(): number {
+    if (typeof document === 'undefined') return openModals.length;
+    return openModals.length + document.querySelectorAll(FOREIGN_OPEN_DIALOG_SELECTOR).length;
+  }
+
+  /** Whether `element` is the root of an open Modal and no other dialog is open. A foreign dialog never matches. */
+  export function isOnlyOpenDialog(element: HTMLElement | null): boolean {
+    return openDialogCount() === 1 && openModals[0]?.dialog === element;
+  }
+
   // Ancestors that take their whole subtree out of the tab order
   const TAB_EXCLUDING_ANCESTOR_SELECTOR = '[inert], [hidden]';
 
@@ -567,6 +591,7 @@
   aria-describedby={describeBody && children ? bodyId : undefined}
   onclick={handleBackdropClick}
   {...rest}
+  {...MODAL_ROOT_ATTRIBUTES}
 >
   <div
     bind:this={modalElement}

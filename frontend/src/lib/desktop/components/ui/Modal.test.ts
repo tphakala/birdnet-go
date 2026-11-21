@@ -8,7 +8,7 @@ import {
 } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'svelte';
-import Modal from './Modal.svelte';
+import Modal, { openDialogCount, isOnlyOpenDialog } from './Modal.svelte';
 import ModalTestWrapper from './Modal.test.svelte';
 import ModalTrapHost from './Modal.trap.test.svelte';
 import ModalStackHost from './Modal.stack.test.svelte';
@@ -1582,6 +1582,63 @@ describe('Modal', () => {
 
       expect(onCloseSecond).toHaveBeenCalledTimes(1);
       expect(onCloseFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('open dialog count', () => {
+    afterEach(() => {
+      for (const foreign of document.querySelectorAll('[data-test-foreign]')) foreign.remove();
+    });
+
+    function modalRoot(name: string): HTMLElement {
+      return screen.getByRole('dialog', { name, hidden: true });
+    }
+
+    function addForeign(tag: string, attributes: Record<string, string>): HTMLElement {
+      const element = document.createElement(tag);
+      element.setAttribute('data-test-foreign', '');
+      for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+      document.body.append(element);
+      return element;
+    }
+
+    it('counts only open Modals and foreign dialogs, and identifies a single open Modal', async () => {
+      const host = createComponentTestFactory(ModalStackHost);
+      const view = host.render({ props: { firstOpen: false, secondOpen: false } });
+      const lower = modalRoot('Lower modal');
+      const upper = modalRoot('Upper modal');
+
+      // Closed Modals stay in the DOM with aria-modal but are not open dialogs
+      expect(openDialogCount()).toBe(0);
+
+      await view.rerender({ firstOpen: true, secondOpen: false });
+      expect(openDialogCount()).toBe(1);
+      expect(isOnlyOpenDialog(lower)).toBe(true);
+      expect(isOnlyOpenDialog(upper)).toBe(false);
+
+      await view.rerender({ firstOpen: true, secondOpen: true });
+      expect(openDialogCount()).toBe(2);
+      expect(isOnlyOpenDialog(lower)).toBe(false);
+
+      await view.rerender({ firstOpen: false, secondOpen: true });
+      expect(openDialogCount()).toBe(1);
+      expect(isOnlyOpenDialog(upper)).toBe(true);
+
+      await view.rerender({ firstOpen: false, secondOpen: false });
+      expect(openDialogCount()).toBe(0);
+
+      // A foreign modal dialog counts, and is not a Modal root
+      addForeign('div', { role: 'dialog', 'aria-modal': 'true' });
+      expect(openDialogCount()).toBe(1);
+      expect(isOnlyOpenDialog(lower)).toBe(false);
+
+      // A native dialog counts when open
+      addForeign('dialog', { open: '' });
+      expect(openDialogCount()).toBe(2);
+
+      // One element matching both selectors counts once
+      addForeign('dialog', { open: '', 'aria-modal': 'true' });
+      expect(openDialogCount()).toBe(3);
     });
   });
 });
