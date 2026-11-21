@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -390,15 +391,17 @@ func TestGetDetection_LazyFill_ClosesTheClipHandle(t *testing.T) {
 				handle = f
 				return tt.probe(f)
 			}
+			// Seek is the closed-handle check: on Windows File.Stat does not
+			// report os.ErrClosed for a closed file.
 			store.onFill = func() {
-				_, err := handle.Stat()
+				_, err := handle.Seek(0, io.SeekCurrent)
 				assert.ErrorIs(t, err, os.ErrClosed, "the handle is closed before the write")
 			}
 
 			getDetectionRate(t, e, h)
 
 			require.Equal(t, 1, probes, "the probe ran once")
-			_, err := handle.Stat()
+			_, err := handle.Seek(0, io.SeekCurrent)
 			require.ErrorIs(t, err, os.ErrClosed, "the handle is closed once the request has answered")
 			if tt.writes {
 				assert.Equal(t, 1, store.fills(), "the write ran, so the before-write check ran")
