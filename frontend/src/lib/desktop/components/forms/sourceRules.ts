@@ -1,5 +1,10 @@
 import type { AudioSourceConfig, StreamConfig } from '$lib/stores/settings';
-import { isStreamNameTooLong, isValidStreamUrl } from './streamOptions';
+import {
+  isStreamNameTooLong,
+  isValidStreamUrl,
+  type StreamNameProblem,
+  type StreamUrlProblem,
+} from './streamOptions';
 
 /**
  * Save rules of the sound card and stream lists. Pure functions of the form
@@ -101,8 +106,8 @@ export function problemSourceNames(
 
 /** What is wrong with one stream, by field. */
 export interface StreamProblem {
-  name?: 'required' | 'tooLong' | 'duplicate';
-  url?: 'required' | 'invalid' | 'duplicate' | 'untested';
+  name?: StreamNameProblem;
+  url?: StreamUrlProblem;
 }
 
 /**

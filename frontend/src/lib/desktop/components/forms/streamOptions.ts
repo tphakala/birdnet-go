@@ -2,7 +2,6 @@ import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
 import { validateProtocolURL } from '$lib/utils/security';
 import { StreamTypes, type ChannelAnalysis, type StreamType } from '$lib/stores/settings';
-import type { StreamProblem } from './sourceRules';
 
 /** Longest stream URL the editors accept. */
 export const MAX_STREAM_URL_LENGTH = 2048;
@@ -25,15 +24,21 @@ export function streamNameTooLongMessage(): string {
   return t('settings.audio.streams.errors.nameTooLong', { max: MAX_STREAM_NAME_LENGTH });
 }
 
+/** What the save rules can find wrong with a stream name. */
+export type StreamNameProblem = 'required' | 'tooLong' | 'duplicate';
+
+/** What the save rules can find wrong with a stream URL. */
+export type StreamUrlProblem = 'required' | 'invalid' | 'duplicate' | 'untested';
+
 /** The message for a name problem of the save rules, for the add form and the card. */
-export function streamNameProblemMessage(problem: NonNullable<StreamProblem['name']>): string {
+export function streamNameProblemMessage(problem: StreamNameProblem): string {
   if (problem === 'required') return t('settings.audio.streams.errors.nameRequired');
   if (problem === 'tooLong') return streamNameTooLongMessage();
   return t('settings.audio.streams.errors.duplicateName');
 }
 
 /** The message for a URL problem of the save rules, for the add form and the card. */
-export function streamUrlProblemMessage(problem: NonNullable<StreamProblem['url']>): string {
+export function streamUrlProblemMessage(problem: StreamUrlProblem): string {
   switch (problem) {
     case 'required':
       return t('settings.audio.streams.errors.urlRequired');
