@@ -1,12 +1,13 @@
 import type { AudioSourceConfig } from '$lib/stores/settings';
 
 /**
- * Save rules of the sound card and stream lists. Pure functions of the form
- * values, the saved values and (for streams) the set of tested URLs, so the page
- * can evaluate them whichever tab is open and the cards show the same messages.
+ * Save rules of the sound card list. Pure functions of the form values and the
+ * saved values, so the page can evaluate them whichever tab is open and the
+ * cards show the same messages.
  *
- * A problem that the saved configuration already has is never reported, so a
+ * A duplicate that the saved configuration already has is not reported, so a
  * stored oddity cannot block Save on other tabs; only what the user changed can.
+ * An empty name or device is always reported: the server refuses to save one.
  */
 
 /** What is wrong with one sound card source, by field. */

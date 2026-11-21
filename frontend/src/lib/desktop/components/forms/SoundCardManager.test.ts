@@ -69,6 +69,13 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
 import { getAvailableModels, watchModels } from '$lib/stores/models.svelte';
 import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
 
+/** The list a manager sent last through its onUpdateSources mock. */
+function lastSent(mock: ReturnType<typeof vi.fn<(_sources: AudioSourceConfig[]) => void>>) {
+  const call = mock.mock.calls.at(-1);
+  if (!call) throw new Error('the manager sent no list');
+  return call[0];
+}
+
 const USB_MIC = 'usb-mic';
 const SLOW_DEV = 'slow-dev';
 const FAST_DEV = 'fast-dev';
@@ -388,7 +395,7 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
       reason: 'none_installed',
     });
 
-    const onUpdateSources = vi.fn();
+    const onUpdateSources = vi.fn<(_sources: AudioSourceConfig[]) => void>();
     renderTyped(SoundCardManager, {
       props: {
         sources: [],
@@ -417,7 +424,7 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
     // One save, under the list field, carrying the whole array with the new source.
     expect(onUpdateSources).toHaveBeenCalledTimes(1);
     expect(onUpdateSources.mock.calls[0]).toHaveLength(1);
-    const savedSources = onUpdateSources.mock.calls[0][0] as AudioSourceConfig[];
+    const savedSources = lastSent(onUpdateSources);
     expect(savedSources).toHaveLength(1);
     // The saved source carries an empty model list; no default is invented.
     expect(savedSources[0].models).toEqual([]);
@@ -445,7 +452,7 @@ describe('SoundCardManager rows', () => {
   const sourceC: AudioSourceConfig = { name: 'C', device: 'dev-c', gain: 0, models: [] };
 
   function renderRows(sources: AudioSourceConfig[]) {
-    const onUpdateSources = vi.fn();
+    const onUpdateSources = vi.fn<(_sources: AudioSourceConfig[]) => void>();
     const view = createComponentTestFactory(SoundCardManager, {
       sources,
       audioDevices: devices,
@@ -487,12 +494,9 @@ describe('SoundCardManager rows', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  /** Opens the delete confirmation of the named source and returns the dialog. */
-  async function openDelete(name: string) {
-    const button = within(header(name).closest('div') as HTMLElement).getByRole('button', {
-      name: 'common.delete',
-    });
-    await fireEvent.click(button);
+  /** Opens the delete confirmation of the source at a position and returns the dialog. */
+  async function openDelete(position: number) {
+    await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[position]);
     return screen.getByRole('alertdialog');
   }
 
@@ -509,7 +513,7 @@ describe('SoundCardManager rows', () => {
     await fireEvent.click(header('B'));
 
     await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'B2' } });
-    const edited = onUpdateSources.mock.calls.at(-1)?.[0] as AudioSourceConfig[];
+    const edited = lastSent(onUpdateSources);
     expect(edited.map(source => source.name)).toEqual(['A', 'B2']);
 
     // The parent writes the list into the form and hands it back: same rows.
@@ -520,7 +524,7 @@ describe('SoundCardManager rows', () => {
   it('gives every row a fresh id when a list of the same length that it did not send replaces it', async () => {
     const { rerender } = renderRows([sourceA, sourceB]);
     await fireEvent.click(header('B'));
-    await openDelete('A');
+    await openDelete(0);
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
 
     await rerender({ sources: [sourceB, sourceC] });
@@ -543,7 +547,7 @@ describe('SoundCardManager rows', () => {
     const { rerender, onUpdateSources } = renderRows([sourceA, sourceB]);
 
     // Delete A, then add C: each list is sent by the manager and written back.
-    await confirmDelete(await openDelete('A'));
+    await confirmDelete(await openDelete(0));
     await rerender({ sources: [sourceB] });
     await fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
     await fireEvent.change(await screen.findByTestId(DEVICE_SELECT_TESTID), {
@@ -551,12 +555,12 @@ describe('SoundCardManager rows', () => {
     });
     await fireEvent.input(screen.getByTestId('new-soundcard-name'), { target: { value: 'C' } });
     await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
-    const added = onUpdateSources.mock.calls.at(-1)?.[0] as AudioSourceConfig[];
+    const added = lastSent(onUpdateSources);
     expect(added.map(source => source.name)).toEqual(['B', 'C']);
     await rerender({ sources: added });
 
     // C's delete confirmation is open when Reset brings the saved list back.
-    await openDelete('C');
+    await openDelete(1);
     await rerender({ sources: [sourceA, sourceB] });
 
     expect(screen.queryByRole('alertdialog')).toBeNull();
@@ -567,7 +571,7 @@ describe('SoundCardManager rows', () => {
   it('deletes a source after confirmation with one list update', async () => {
     const { onUpdateSources } = renderRows([sourceA, sourceB]);
 
-    await confirmDelete(await openDelete('A'));
+    await confirmDelete(await openDelete(0));
 
     expect(onUpdateSources).toHaveBeenCalledExactlyOnceWith([sourceB]);
   });
@@ -588,7 +592,7 @@ describe('SoundCardManager add', () => {
   afterEach(cleanup);
 
   it('appends the source, sends the list once and closes the form in the same call', async () => {
-    const onUpdateSources = vi.fn();
+    const onUpdateSources = vi.fn<(_sources: AudioSourceConfig[]) => void>();
     renderTyped(SoundCardManager, {
       props: {
         sources: [],
@@ -608,11 +612,124 @@ describe('SoundCardManager add', () => {
 
     expect(onUpdateSources).toHaveBeenCalledOnce();
     expect(onUpdateSources.mock.calls[0]).toHaveLength(1);
-    expect((onUpdateSources.mock.calls[0][0] as AudioSourceConfig[]).map(s => s.name)).toEqual([
-      'Mic 1',
-    ]);
+    expect(lastSent(onUpdateSources).map(source => source.name)).toEqual(['Mic 1']);
     // No wait for a save result: the form is gone and the button has no busy label.
     expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
     expect(screen.queryByText('settings.audio.soundCards.adding')).toBeNull();
+  });
+
+  describe('validation of the new source', () => {
+    const existing: AudioSourceConfig = { name: 'Garden', device: USB_MIC, gain: 0, models: [] };
+    const devices = [
+      { index: 0, name: 'USB Mic', id: USB_MIC },
+      { index: 1, name: 'Other Mic', id: 'other-mic' },
+    ];
+
+    function renderWith(sources: AudioSourceConfig[], savedSources: AudioSourceConfig[] = []) {
+      const onUpdateSources = vi.fn<(_sources: AudioSourceConfig[]) => void>();
+      renderTyped(SoundCardManager, {
+        props: {
+          sources,
+          savedSources,
+          audioDevices: devices,
+          audioDevicesLoading: false,
+          disabled: false,
+          onUpdateSources,
+          onRefreshDevices: vi.fn(),
+        },
+      });
+      return onUpdateSources;
+    }
+
+    async function fillAndAdd(name: string, device: string) {
+      await fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
+      if (device) {
+        // The open card has a device select of its own; the add form comes last.
+        const select = (await screen.findAllByTestId(DEVICE_SELECT_TESTID)).at(-1);
+        if (select) await fireEvent.change(select, { target: { value: device } });
+      }
+      await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: name } });
+      await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
+    }
+
+    it.each([
+      ['an empty name', '   ', 'other-mic', 'settings.audio.soundCards.errors.nameRequired'],
+      [
+        'a name that matches another source ignoring case',
+        ' garden ',
+        'other-mic',
+        'settings.audio.soundCards.errors.duplicateName',
+      ],
+    ])('refuses %s and says why at the name field', async (_label, name, device, message) => {
+      const onUpdateSources = renderWith([existing]);
+
+      await fillAndAdd(name, device);
+
+      expect(onUpdateSources).not.toHaveBeenCalled();
+      expect(screen.getByTestId(NAME_TESTID)).toHaveAccessibleDescription(message);
+    });
+
+    it('refuses an add with no device and keeps the form open', async () => {
+      const onUpdateSources = renderWith([existing]);
+
+      await fillAndAdd('Porch', '');
+      // The used device is not offered, so the form has no device and refuses.
+      expect(onUpdateSources).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'settings.audio.soundCards.errors.deviceRequired'
+      );
+      expect(screen.getByTestId(NAME_TESTID)).toHaveValue('Porch');
+    });
+
+    it('judges the new source against the current rows even when the saved list holds the same duplicate', async () => {
+      const onUpdateSources = renderWith(
+        [existing],
+        [existing, { ...existing, name: 'garden', device: 'dev-x' }]
+      );
+
+      await fillAndAdd('Garden', 'other-mic');
+
+      expect(onUpdateSources).not.toHaveBeenCalled();
+      expect(screen.getByTestId(NAME_TESTID)).toHaveAccessibleDescription(
+        'settings.audio.soundCards.errors.duplicateName'
+      );
+    });
+  });
+
+  describe('rows and the page save rules', () => {
+    const devicesForRows = [
+      { index: 0, name: 'Mic A', id: 'dev-a' },
+      { index: 1, name: 'Mic B', id: 'dev-b' },
+    ];
+    const rowA: AudioSourceConfig = { name: 'Same', device: 'dev-a', gain: 0, models: [] };
+    const rowB: AudioSourceConfig = { name: 'same', device: 'dev-b', gain: 0, models: [] };
+
+    function renderRows(savedSources: AudioSourceConfig[]) {
+      stubElementAnimate();
+      onTestFinished(restoreElementAnimate);
+      renderTyped(SoundCardManager, {
+        props: {
+          sources: [rowA, rowB],
+          savedSources,
+          audioDevices: devicesForRows,
+          audioDevicesLoading: false,
+          disabled: false,
+          onUpdateSources: vi.fn(),
+          onRefreshDevices: vi.fn(),
+        },
+      });
+    }
+
+    it('flags every card that now shares a name', () => {
+      renderRows([{ ...rowB, name: 'Other' }, rowA]);
+
+      expect(screen.getAllByText('settings.audio.validation.needsAttention')).toHaveLength(2);
+    });
+
+    it('flags nothing when the saved list already holds the duplicate', () => {
+      renderRows([rowA, rowB]);
+
+      expect(screen.queryByText('settings.audio.validation.needsAttention')).toBeNull();
+    });
   });
 });
