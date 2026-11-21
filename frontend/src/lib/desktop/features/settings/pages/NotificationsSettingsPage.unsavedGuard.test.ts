@@ -136,4 +136,33 @@ describe('NotificationsSettingsPage unsaved-changes guard', () => {
     });
     expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(false);
   });
+
+  it('keeps blocking an edited ntfy provider form after Test Connection', async () => {
+    providers = [NTFY_PROVIDER];
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'settings.notifications.push.providers.editButton',
+      })
+    );
+    await user.type(
+      await screen.findByLabelText('settings.notifications.push.form.name.label'),
+      'x'
+    );
+    await user.tab();
+    expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(true);
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'settings.notifications.push.services.ntfy.testConnection',
+      })
+    );
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    await screen.findByText(/settings\.notifications\.push\.services\.ntfy\./, {
+      selector: 'span.text-xs',
+    });
+    expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(true);
+  });
 });
