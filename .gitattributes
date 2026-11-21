@@ -1,3 +1,6 @@
 # Shell scripts must keep LF endings: Task runs scripts/build-version.sh on
 # every invocation, and a CRLF checkout (core.autocrlf=true) breaks sh parsing.
+# The ONNX Runtime pin file is read by such a script, so a CR would end up in
+# every label.
 *.sh text eol=lf
+scripts/onnxruntime-pins.sha256 text eol=lf

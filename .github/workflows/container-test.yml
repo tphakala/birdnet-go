@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "Dockerfile"
+      - "scripts/fetch-onnxruntime.sh"
+      - "scripts/onnxruntime-pins.sha256"
       - "Docker/**"
       - "**/*.go"
       - "go.mod"
@@ -18,6 +20,8 @@ on:
   pull_request:
     paths:
       - "Dockerfile"
+      - "scripts/fetch-onnxruntime.sh"
+      - "scripts/onnxruntime-pins.sha256"
       - "Docker/**"
       - "go.mod"
       - "go.sum"

@@ -99,38 +99,46 @@ This updates your user `PATH` only and does not require Administrator privileges
 
 ## Manual Download
 
-If you are building from source or need to install ONNX Runtime separately, download it from the official Microsoft releases.
+If you are building from source or need to install ONNX Runtime separately, download it from the official `Microsoft.ML.OnnxRuntime` NuGet package. It is one zip archive that holds the libraries for every platform. Each snippet below checks the package against its SHA-256 before using it.
 
 ### Linux (x86_64 / amd64)
 
 ```bash
 VERSION=1.32.0
 
-curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-x64-${VERSION}.tgz" \
-  -o onnxruntime.tgz
-
-mkdir -p onnxruntime-tmp
-tar xzf onnxruntime.tgz -C onnxruntime-tmp --strip-components=1
-sudo cp -P onnxruntime-tmp/lib/libonnxruntime*.so* /usr/lib/
-sudo ldconfig
-rm -rf onnxruntime.tgz onnxruntime-tmp
+curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
+  -o onnxruntime.nupkg
+echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c - && {
+  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime.so > libonnxruntime.so &&
+  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so &&
+  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}" &&
+  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/ &&
+  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1 &&
+  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so &&
+  sudo ldconfig &&
+  rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
+}
 ```
 
-`-P` keeps the archive's symlinks. A plain `cp` over an earlier install writes the new library into the old version's file name, and BirdNET-Go then reports the old version.
+The main library is installed as `libonnxruntime.so.${VERSION}` because BirdNET-Go reads the installed version from that file name. The two links point at it, so an update never writes through a link into an older version's file.
 
 ### Linux (aarch64 / arm64)
 
 ```bash
 VERSION=1.32.0
 
-curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-aarch64-${VERSION}.tgz" \
-  -o onnxruntime.tgz
-
-mkdir -p onnxruntime-tmp
-tar xzf onnxruntime.tgz -C onnxruntime-tmp --strip-components=1
-sudo cp -P onnxruntime-tmp/lib/libonnxruntime*.so* /usr/lib/
-sudo ldconfig
-rm -rf onnxruntime.tgz onnxruntime-tmp
+curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
+  -o onnxruntime.nupkg
+echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c - && {
+  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime.so > libonnxruntime.so &&
+  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so &&
+  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}" &&
+  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/ &&
+  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1 &&
+  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so &&
+  sudo ldconfig &&
+  rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
+}
 ```
 
 This covers Raspberry Pi 4/5 (64-bit OS), NVIDIA Jetson, and other ARM64 single-board computers.
@@ -140,42 +148,45 @@ This covers Raspberry Pi 4/5 (64-bit OS), NVIDIA Jetson, and other ARM64 single-
 ```bash
 VERSION=1.32.0
 
-curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-arm64-${VERSION}.tgz" \
-  -o onnxruntime.tgz
-
-# Extract (BSD tar needs special handling)
-mkdir -p onnxruntime-tmp
-tar xzf onnxruntime.tgz -C onnxruntime-tmp
-sudo cp -P onnxruntime-tmp/onnxruntime-*/lib/libonnxruntime*.dylib /usr/local/lib/
-sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true
-rm -rf onnxruntime.tgz onnxruntime-tmp
+curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
+  -o onnxruntime.nupkg
+echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | shasum -a 256 -c - && {
+  unzip -p onnxruntime.nupkg runtimes/osx-arm64/native/libonnxruntime.dylib > libonnxruntime.dylib &&
+  sudo mkdir -p /usr/local/lib &&
+  sudo install -m 755 libonnxruntime.dylib "/usr/local/lib/libonnxruntime.${VERSION}.dylib" &&
+  sudo ln -sf "libonnxruntime.${VERSION}.dylib" /usr/local/lib/libonnxruntime.dylib &&
+  { sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true; } &&
+  rm onnxruntime.nupkg libonnxruntime.dylib
+}
 ```
 
-For Intel Macs (x86_64), replace `arm64` with `x86_64` in the download URL:
-
-```bash
-VERSION=1.32.0
-
-curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-x86_64-${VERSION}.tgz" \
-  -o onnxruntime.tgz
-```
-
-Note: BirdNET-Go does not currently publish pre-built binaries for Intel Macs. You would need to build from source.
+The NuGet package has no Intel Mac (x86_64) build. BirdNET-Go does not publish pre-built binaries for Intel Macs either.
 
 ### Windows (x86_64 / amd64)
 
-Download from a browser or PowerShell:
+Download from PowerShell:
 
 ```powershell
 $VERSION = "1.32.0"
 
 Invoke-WebRequest `
-  -Uri "https://github.com/microsoft/onnxruntime/releases/download/v$VERSION/onnxruntime-win-x64-$VERSION.zip" `
-  -OutFile onnxruntime.zip
-
-Expand-Archive onnxruntime.zip -DestinationPath onnxruntime-tmp
-Copy-Item onnxruntime-tmp\onnxruntime-*\lib\onnxruntime.dll -Destination .
-Remove-Item -Recurse onnxruntime.zip, onnxruntime-tmp
+  -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$VERSION/microsoft.ml.onnxruntime.$VERSION.nupkg" `
+  -OutFile onnxruntime.nupkg
+if ((Get-FileHash onnxruntime.nupkg -Algorithm SHA256).Hash -eq "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db") {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead("$PWD\onnxruntime.nupkg")
+  try {
+    $entry = $zip.GetEntry("runtimes/win-x64/native/onnxruntime.dll")
+    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "$PWD\onnxruntime.dll", $true)
+  } catch {
+    throw
+  } finally {
+    $zip.Dispose()
+  }
+  Remove-Item onnxruntime.nupkg
+} else {
+  throw "onnxruntime.nupkg does not match the expected SHA-256"
+}
 ```
 
 Place `onnxruntime.dll` in the same directory as `birdnet-go.exe`.
@@ -188,7 +199,7 @@ If you have the BirdNET-Go source tree and [Task](https://taskfile.dev) installe
 task download-onnxruntime
 ```
 
-This automatically detects your platform, downloads the correct archive, and installs the library to the appropriate system path. It requires `sudo` on Linux.
+This automatically detects your platform, downloads the package, checks its SHA-256, and installs the library to the appropriate system path. It requires `sudo` on Linux.
 
 ## Platform Support Matrix
 
@@ -197,7 +208,7 @@ This automatically detects your platform, downloads the correct archive, and ins
 | Linux    | x86_64 (amd64)        |       Yes       |       Yes       |  Yes   |
 | Linux    | aarch64 (arm64)       |       Yes       |       Yes       |  Yes   |
 | macOS    | Apple Silicon (arm64) |       Yes       |       Yes       |   -    |
-| macOS    | Intel (x86_64)        |        -        |       Yes       |   -    |
+| macOS    | Intel (x86_64)        |        -        |        -        |   -    |
 | Windows  | x86_64 (amd64)        |       Yes       |       Yes       |   -    |
 
 Platforms marked with "-" are not officially supported but may work with manual setup.
@@ -322,6 +333,6 @@ If it shows `armv7l`, you are running a 32-bit OS and need to switch to a 64-bit
 
 ## Further Reading
 
-- [ONNX Runtime GitHub](https://github.com/microsoft/onnxruntime) - official releases and documentation
+- [ONNX Runtime NuGet package](https://www.nuget.org/packages/Microsoft.ML.OnnxRuntime) - official release packages
 - [BirdNET-Go documentation](https://github.com/tphakala/birdnet-go/wiki) - guides and reference
 - [BirdNET-Go GitHub](https://github.com/tphakala/birdnet-go) - issues and discussions

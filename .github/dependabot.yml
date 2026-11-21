@@ -14,7 +14,8 @@ updates:
       # onnxruntime_go v1.38.x is built for ONNX Runtime C API 31 and needs
       # native ONNX Runtime 1.31 or newer. A binding release that raises the API
       # level needs the native pin (Dockerfile, Taskfile.yml, setup-onnxruntime
-      # action) and minORTMinor in internal/inference/ort_status.go moved with
+      # action), the SHA-256 pins in scripts/onnxruntime-pins.sha256 and
+      # minORTMinor in internal/inference/ort_status.go moved with
       # it; TestORTMinimumMatchesBindingAPIVersion fails until minORTMinor matches
       # the binding. Newer bindings are held for a manual lockstep upgrade.
       - dependency-name: "github.com/yalue/onnxruntime_go"

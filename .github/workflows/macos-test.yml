@@ -25,6 +25,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'Taskfile.yml'
+      - 'scripts/fetch-onnxruntime.sh'
+      - 'scripts/onnxruntime-pins.sha256'
       - '.github/workflows/macos-test.yml'
       - '.github/actions/**'
 

@@ -24,6 +24,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'Taskfile.yml'
+      - 'scripts/fetch-onnxruntime.sh'
+      - 'scripts/onnxruntime-pins.sha256'
       - '.github/workflows/windows-test.yml'
       - '.github/actions/**'
 
@@ -111,18 +113,12 @@ jobs:
       - name: Setup ONNX Runtime
         run: |
           # Inlined instead of the setup-onnxruntime composite action. The action
-          # now caches under runner.temp, where actions/cache (Node) and Git Bash
-          # agree even on Windows, so it would work here too. This job still
-          # downloads into the workspace because it is simpler: no cache for a
-          # small zip, and the libs land next to the cygpath DLL-search wiring
-          # below. (Historically the action used /tmp, which diverged on Windows.)
-          curl -fsSL -o onnxruntime.zip \
-            "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip"
-          tmp="$(mktemp -d)"
-          unzip -q onnxruntime.zip -d "$tmp"
-          mkdir -p onnxruntime
-          cp -r "$tmp"/onnxruntime-*/* onnxruntime/
-          rm -rf "$tmp" onnxruntime.zip
+          # would work here too (it caches under runner.temp, where actions/cache
+          # and Git Bash agree), but this job is weekly and label-gated, so it
+          # stays uncached, and the libs land next to the cygpath DLL-search
+          # wiring below. The script downloads the package, checks it against the
+          # SHA-256 pins and writes the DLLs to onnxruntime/lib.
+          sh scripts/fetch-onnxruntime.sh install "${ONNXRUNTIME_VERSION}" windows-amd64 onnxruntime/lib
           ls -la onnxruntime/lib
 
       - name: Configure CGO and DLL search path
