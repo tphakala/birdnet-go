@@ -1711,6 +1711,9 @@ tasks:
           esac
     cmds:
       - |
+        # Stop at the first failure, so a failed download or pin check does not
+        # end with the success message below.
+        set -e
         # Download, verify against the SHA-256 pins and stage the library files.
         # scripts/fetch-onnxruntime.sh holds the download source and the pins.
         echo "Installing ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."

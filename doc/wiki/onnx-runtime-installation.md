@@ -175,9 +175,14 @@ Invoke-WebRequest `
 if ((Get-FileHash onnxruntime.nupkg -Algorithm SHA256).Hash -eq "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db") {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [System.IO.Compression.ZipFile]::OpenRead("$PWD\onnxruntime.nupkg")
-  $entry = $zip.GetEntry("runtimes/win-x64/native/onnxruntime.dll")
-  [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "$PWD\onnxruntime.dll", $true)
-  $zip.Dispose()
+  try {
+    $entry = $zip.GetEntry("runtimes/win-x64/native/onnxruntime.dll")
+    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "$PWD\onnxruntime.dll", $true)
+  } catch {
+    throw
+  } finally {
+    $zip.Dispose()
+  }
   Remove-Item onnxruntime.nupkg
 } else {
   throw "onnxruntime.nupkg does not match the expected SHA-256"
