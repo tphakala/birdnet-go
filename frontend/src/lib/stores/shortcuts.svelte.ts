@@ -104,7 +104,10 @@ export interface ShortcutStore {
   clearAnnouncement(): void;
   /** Page scopes in registration order, then the global scope. */
   readonly scopes: readonly ShortcutScope[];
-  /** Adds a scope; the returned function removes exactly that scope. */
+  /**
+   * Adds a scope; the returned function removes only that registration, so a scope object
+   * registered twice keeps its other one.
+   */
   register(scope: ShortcutScope): () => void;
   /** How to show a shortcut, or null when shortcuts are off or it is unknown or not visible. */
   hint(id: string): ShortcutHint | null;
