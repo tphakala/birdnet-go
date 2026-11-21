@@ -103,7 +103,6 @@ func TestAudioExportFormatCheck_Run(t *testing.T) {
 		get         func() AudioExportFormat
 		wantStatus  health.Status
 		wantMessage string
-		wantContain string
 	}{
 		{
 			name:       "nil provider",
@@ -116,7 +115,7 @@ func TestAudioExportFormatCheck_Run(t *testing.T) {
 				return AudioExportFormat{Enabled: false, Format: conf.AudioExportTypeMP3}
 			},
 			wantStatus:  health.StatusSkipped,
-			wantMessage: msgAudioExportDisabled,
+			wantMessage: "Clip export is disabled",
 		},
 		{
 			name: "export on with mp3",
@@ -124,7 +123,7 @@ func TestAudioExportFormatCheck_Run(t *testing.T) {
 				return AudioExportFormat{Enabled: true, Format: conf.AudioExportTypeMP3}
 			},
 			wantStatus:  health.StatusWarning,
-			wantMessage: msgAudioExportMP3,
+			wantMessage: "MP3 is an older format; use AAC or Opus for better quality",
 		},
 		{
 			name: "export on with opus",
@@ -132,7 +131,7 @@ func TestAudioExportFormatCheck_Run(t *testing.T) {
 				return AudioExportFormat{Enabled: true, Format: conf.AudioExportTypeOPUS}
 			},
 			wantStatus:  health.StatusHealthy,
-			wantContain: conf.AudioExportTypeOPUS,
+			wantMessage: "Clip export format: opus",
 		},
 	}
 
@@ -146,9 +145,6 @@ func TestAudioExportFormatCheck_Run(t *testing.T) {
 			assert.Equal(t, tt.wantStatus, result.Status)
 			if tt.wantMessage != "" {
 				assert.Equal(t, tt.wantMessage, result.Message)
-			}
-			if tt.wantContain != "" {
-				assert.Contains(t, result.Message, tt.wantContain)
 			}
 		})
 	}
