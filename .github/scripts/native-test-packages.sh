@@ -21,7 +21,7 @@
 # Environment:
 #   TEST_TAGS  required. The go -tags value, for example noembed,skipfrontend.
 #   DIFF_BASE  optional. A git revision; when set, rule (c) selects the packages
-#              touched by `git diff --name-only DIFF_BASE HEAD`. The workflows set
+#              touched by `git diff --name-only --no-renames DIFF_BASE HEAD`. The workflows set
 #              HEAD^1 on pull_request only (needs fetch-depth 2).
 #   GOOS, GOARCH  optional. Default to the runner; set them to simulate another
 #              platform from a Linux host.
@@ -73,7 +73,7 @@ shared_lines() { awk 'NR == FNR { seen[$0] = 1; next } NF && ($0 in seen)' <(pri
 # test everything, whatever the rules would have chosen.
 changed_files=""
 if [ -n "$DIFF_BASE" ]; then
-  if ! changed_files=$(git -c core.quotepath=false diff --name-only "$DIFF_BASE" HEAD | strip_cr); then
+  if ! changed_files=$(git -c core.quotepath=false diff --name-only --no-renames "$DIFF_BASE" HEAD | strip_cr); then
     log "warning: cannot read the diff against $DIFF_BASE, testing the whole module"
     printf '%s\n' "$WHOLE_MODULE" > "$OUT_FILE"
     exit 0
