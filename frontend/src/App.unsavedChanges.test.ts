@@ -204,6 +204,22 @@ describe('App unsaved-changes guard', () => {
     expect(window.location.pathname).toBe(DASHBOARD);
   });
 
+  it('discards the edit once a save that was in flight at Leave fails', async () => {
+    makeUnsavedEdit();
+    settingsStore.update(state => ({ ...state, isSaving: true }));
+    void navigation.navigate(DASHBOARD);
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'common.unsavedChanges.leave' })
+    );
+    await waitFor(() => expect(navigation.currentPath).toBe(DASHBOARD));
+    expect(editIsKept()).toBe(true);
+
+    // The save fails: the store clears isSaving and keeps the form as it was.
+    settingsStore.update(state => ({ ...state, isSaving: false }));
+
+    expect(get(settingsStore).formData).toEqual(get(settingsStore).originalData);
+  });
+
   it('keeps the edit when Settings is left while a save is in flight', async () => {
     makeUnsavedEdit();
     settingsStore.update(state => ({ ...state, isSaving: true }));

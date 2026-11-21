@@ -1,3 +1,8 @@
+<script module lang="ts">
+  // Shells currently mounted; a discard that waits for a save must not run over a new visit.
+  let liveShells = 0;
+</script>
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
@@ -62,12 +67,24 @@
   onMount(() => {
     settingsActions.loadSettings();
 
+    liveShells += 1;
+
     return () => {
+      liveShells -= 1;
       // The edits live in a store other pages read (dashboard cards) and the next visit reloads
-      // over them, so leaving discards them. A save in flight would otherwise send the reset data.
-      if (get(hasUnsavedChanges) && !get(settingsStore).isSaving) {
+      // over them, so leaving discards them.
+      if (!get(hasUnsavedChanges)) return;
+      if (!get(settingsStore).isSaving) {
         settingsActions.resetAllSettings();
+        return;
       }
+      // A save in flight would send the reset data, so wait for it. A failed save leaves the
+      // edits in the store; discard them then, unless Settings was opened again meanwhile.
+      const unsubscribe = settingsStore.subscribe(state => {
+        if (state.isSaving) return;
+        unsubscribe();
+        if (liveShells === 0 && get(hasUnsavedChanges)) settingsActions.resetAllSettings();
+      });
     };
   });
 </script>
