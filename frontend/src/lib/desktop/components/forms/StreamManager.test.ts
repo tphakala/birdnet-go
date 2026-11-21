@@ -6,7 +6,7 @@
  * are pinned in full below.
  */
 import { tick } from 'svelte';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { deferred } from '../../../../test/async-helpers';
 import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
@@ -101,9 +101,11 @@ const streamC: StreamConfig = { ...streamA, name: 'C', url: 'rtsp://c/stream' };
 const streamP: StreamConfig = { ...streamA, name: 'P', url: 'rtsp://p/live' };
 const streamQ: StreamConfig = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
 
+type UpdateSpy = Mock<(_streams: StreamConfig[]) => void>;
+
 function renderRows(streams: StreamConfig[], extra: Record<string, unknown> = {}) {
-  const onUpdateStreams = vi.fn();
-  const onUrlTested = vi.fn();
+  const onUpdateStreams: UpdateSpy = vi.fn();
+  const onUrlTested = vi.fn<(_url: string) => void>();
   const view = createComponentTestFactory(StreamManager, {
     streams,
     savedStreams: [],
@@ -124,9 +126,10 @@ function header(name: string): HTMLElement {
 /** Sends the list the manager sent last back as the new streams, as the page does. */
 async function echoLast(
   view: { rerender: (_props: { streams: StreamConfig[] }) => Promise<void> },
-  onUpdateStreams: ReturnType<typeof vi.fn>
+  onUpdateStreams: UpdateSpy
 ): Promise<StreamConfig[]> {
-  const sent = onUpdateStreams.mock.calls.at(-1)?.[0] as StreamConfig[];
+  const sent = onUpdateStreams.mock.calls.at(-1)?.[0];
+  if (!sent) throw new Error('the manager sent no list');
   await view.rerender({ streams: sent });
   return sent;
 }
@@ -249,7 +252,7 @@ describe('StreamManager row ids', () => {
     await fireEvent.click(
       screen.getAllByRole('switch', { name: 'settings.audio.streams.enabled' })[0]
     );
-    const sent = view.onUpdateStreams.mock.calls.at(-1)?.[0] as StreamConfig[];
+    const sent = view.onUpdateStreams.mock.calls.at(-1)?.[0] ?? [];
 
     // Same names and URLs; the server added defaults to the rows.
     await view.rerender({
@@ -576,6 +579,22 @@ describe('StreamManager add form', () => {
     expect(url).not.toHaveAttribute('aria-invalid');
   });
 
+  it('clears the URL error when the type select is changed', async () => {
+    renderRows([streamA]);
+    await fillAddForm('Gate', 'rtsp://a/stream');
+    await fireEvent.click(addFormTestButton());
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    const url = screen.getByTestId(URL_TESTID);
+    expect(url).toHaveAttribute('aria-invalid', 'true');
+
+    const typeSelects = screen.getAllByTestId('select-settings.audio.streams.typeLabel');
+    const addFormType = typeSelects.at(-1);
+    expect(addFormType).toBeDefined();
+    if (addFormType) await fireEvent.change(addFormType, { target: { value: 'http' } });
+
+    expect(url).not.toHaveAttribute('aria-invalid');
+  });
+
   it('limits the name of a new stream to what the server accepts', async () => {
     renderRows([]);
     await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
@@ -715,6 +734,55 @@ describe('StreamManager blocked actions', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: REFRESH_KEY })).not.toHaveAttribute('aria-disabled')
     );
+  });
+});
+
+describe('StreamManager passes the page state to its cards', () => {
+  const NEEDS_ATTENTION_KEY = 'settings.audio.validation.needsAttention';
+  const SAVING_KEY = 'settings.actions.saving';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it('marks a card whose URL is neither saved nor tested, and says a test is needed', () => {
+    renderRows([streamA], { savedStreams: [], testedUrls: new Set<string>() });
+
+    const url = screen.getByTestId(/-url$/);
+    expect(url).toHaveAttribute('aria-invalid', 'true');
+    expect(url).toHaveAccessibleDescription('settings.audio.streams.testRequired');
+    expect(screen.getByText(NEEDS_ATTENTION_KEY)).toBeInTheDocument();
+  });
+
+  it('leaves a card alone whose URL is saved, and one whose URL was tested', () => {
+    renderRows([streamA], { savedStreams: [streamA] });
+    expect(screen.queryByText(NEEDS_ATTENTION_KEY)).toBeNull();
+    cleanup();
+
+    renderRows([streamA], { savedStreams: [], testedUrls: new Set([streamA.url]) });
+    expect(screen.queryByText(NEEDS_ATTENTION_KEY)).toBeNull();
+  });
+
+  it('reports the URL of a successful card test to the page', async () => {
+    const { onUrlTested } = renderRows([streamA]);
+
+    await fireEvent.click(screen.getAllByTestId('stream-test-button')[0]);
+
+    expect(onUrlTested).toHaveBeenCalledExactlyOnceWith(streamA.url);
+  });
+
+  it('gives the cards the reason their delete button is blocked', () => {
+    renderRows([streamA, streamB], { disabled: true, disabledReason: SAVING_KEY });
+
+    const deletes = screen.getAllByRole('button', { name: 'common.delete' });
+    expect(deletes).toHaveLength(2);
+    for (const button of deletes) expect(button).toHaveAccessibleDescription(SAVING_KEY);
   });
 });
 

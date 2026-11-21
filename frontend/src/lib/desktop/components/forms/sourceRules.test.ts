@@ -186,6 +186,20 @@ describe('streamProblems', () => {
     expect(streamProblems(reverted, SAVED_STREAMS, tested)).toEqual([{}, {}]);
   });
 
+  it('asks for no test when only the type of a saved URL changes to another that fits it', () => {
+    const saved = [stream('Cam', 'http://cam/live.m3u8', 'http')];
+    const retyped = [stream('Cam', 'http://cam/live.m3u8', 'hls')];
+
+    expect(streamProblems(retyped, saved, NO_TESTS)).toEqual([{}]);
+  });
+
+  it('does not report a saved name that is longer than the server accepts', () => {
+    // 22 euro signs are 22 characters but 66 bytes.
+    const saved = [stream('\u20ac'.repeat(22), 'rtsp://cam/live')];
+
+    expect(streamProblems(saved, saved, NO_TESTS)).toEqual([{}]);
+  });
+
   it('asks for no test when two saved streams swap URLs', () => {
     const swapped = [stream('Front', 'rtsp://back/live'), stream('Back', 'rtsp://front/live')];
     expect(streamProblems(swapped, SAVED_STREAMS, NO_TESTS)).toEqual([{}, {}]);

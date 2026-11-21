@@ -439,17 +439,17 @@ describe('AudioSettingsPage streams tab saves with the page', () => {
     expect(screen.queryByText(STREAMS_REASON_KEY)).toBeNull();
   });
 
-  it('clears both stream blocks when the page unmounts', async () => {
+  it.each([
+    ['invalid', 'blank-name', STREAMS_ISSUE_KEY],
+    ['untested', 'new-url', STREAMS_UNTESTED_ISSUE_KEY],
+  ])('clears the %s stream block when the page unmounts', async (_kind, edit, key) => {
     const view = renderTab('streams');
-    await fireEvent.click(await screen.findByRole('button', { name: 'blank-name' }));
-    await waitFor(() => expect(get(settingsValidationErrors)).toContain(STREAMS_ISSUE_KEY));
-    await fireEvent.click(screen.getByRole('button', { name: 'new-url' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'blank-name' }));
+    await fireEvent.click(await screen.findByRole('button', { name: edit }));
+    await waitFor(() => expect(get(settingsValidationErrors)).toContain(key));
 
     view.unmount();
 
-    expect(get(settingsValidationErrors)).not.toContain(STREAMS_ISSUE_KEY);
-    expect(get(settingsValidationErrors)).not.toContain(STREAMS_UNTESTED_ISSUE_KEY);
+    expect(get(settingsValidationErrors)).not.toContain(key);
   });
 
   it('disables the manager while a save runs and says why', async () => {

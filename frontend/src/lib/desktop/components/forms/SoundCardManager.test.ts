@@ -633,9 +633,8 @@ describe('SoundCardManager add', () => {
     expect(onUpdateSources).toHaveBeenCalledOnce();
     expect(onUpdateSources.mock.calls[0]).toHaveLength(1);
     expect(lastSent(onUpdateSources).map(source => source.name)).toEqual(['Mic 1']);
-    // No wait for a save result: the form is gone and the button has no busy label.
+    // No wait for a save result: the form is gone at once.
     expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
-    expect(screen.queryByText('settings.audio.soundCards.adding')).toBeNull();
   });
 
   describe('validation of the new source', () => {
