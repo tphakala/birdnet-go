@@ -625,3 +625,46 @@ func TestWaitForHLSPlaylistDispatchesOnNative(t *testing.T) {
 	assert.Less(t, elapsed, hlsPlaylistWaitTimeout,
 		"readiness must come from the muxer, not from waiting out the file-poll timeout")
 }
+
+// TestNativeFeedLoopExitsOnConsumerClose reproduces the RTSP reconnect teardown
+// path (#5255): when AudioRouter removes a source's routes it closes the
+// hlsConsumer while the stream context is still live. Closing the consumer must
+// close the feed channel so runNativeAudioFeedLoop drains any buffered audio and
+// exits promptly, allowing the caller to cancel and clean up the stale stream.
+func TestNativeFeedLoopExitsOnConsumerClose(t *testing.T) {
+	h, _ := newNativeTestHandler(t)
+	stream := newEmptyNativeStream(t)
+	consumer, feed := newTestFeedConsumer(nativeHLSFeedQueueBytes)
+
+	writeFrame(t, consumer, soundCardFrameBytes, 1)
+
+	cleanupCalled := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		h.runNativeAudioFeedLoop(t.Context(), "native_src", stream, &audioFeedResources{
+			feed:    feed,
+			cleanup: func() { close(cleanupCalled) },
+		})
+	}()
+
+	require.NoError(t, consumer.Close())
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "runNativeAudioFeedLoop did not exit after consumer.Close() with an uncancelled context")
+	}
+
+	select {
+	case <-cleanupCalled:
+	default:
+		require.FailNow(t, "feed loop cleanup must run when the loop exits")
+	}
+	assert.Equal(t, int64(0), feed.queued.Load(),
+		"buffered chunks must be drained and released before the feed loop exits")
+	assert.Equal(t, int64(1), stream.firstDataTime.Load(),
+		"buffered chunk must be encoded before the loop exits on channel close")
+	assert.False(t, stream.mux.Stats().Failed,
+		"feed loop must exit via channel close, not a muxer failure")
+}

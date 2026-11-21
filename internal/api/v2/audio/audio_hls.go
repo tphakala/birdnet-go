@@ -931,7 +931,10 @@ func (f *audioFeed) release(n int) {
 // makeRoom's byte-budget loop and Write's slot-exhaustion arm both go through it.
 func (f *audioFeed) evictOldest() bool {
 	select {
-	case old := <-f.ch:
+	case old, ok := <-f.ch:
+		if !ok {
+			return false
+		}
 		f.release(len(old.data))
 		return true
 	default:
@@ -967,13 +970,14 @@ func (f *audioFeed) makeRoom(n int) int {
 // hlsConsumer implements audiocore.AudioConsumer for HLS streaming.
 // It forwards audio frames to a bounded feed queue (see audioFeed) for encoding.
 type hlsConsumer struct {
-	id       string
-	sourceID string
-	feed     *audioFeed
-	rate     int
-	depth    int
-	channels int
-	closed   atomic.Bool
+	id        string
+	sourceID  string
+	feed      *audioFeed
+	rate      int
+	depth     int
+	channels  int
+	closed    atomic.Bool
+	closeOnce sync.Once
 
 	// Drop tracking for diagnostics
 	dropCount   int64
@@ -1057,9 +1061,16 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 	return nil
 }
 
-// Close marks the consumer as closed.
+// Close marks the consumer as closed and closes its feed channel once so the
+// feed loop drains any buffered audio and exits. Callers must serialize Close
+// after all Write calls (guaranteed by AudioRouter.stopRoute).
 func (h *hlsConsumer) Close() error {
 	h.closed.Store(true)
+	h.closeOnce.Do(func() {
+		if h.feed != nil && h.feed.ch != nil {
+			close(h.feed.ch)
+		}
+	})
 	return nil
 }
 

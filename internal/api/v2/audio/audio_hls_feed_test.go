@@ -66,7 +66,10 @@ func writeFrame(tb testing.TB, h *hlsConsumer, size int, seq uint64) {
 func drainFeed(feed *audioFeed) (seqs []uint64, totalBytes int64) {
 	for {
 		select {
-		case chunk := <-feed.ch:
+		case chunk, ok := <-feed.ch:
+			if !ok {
+				return seqs, totalBytes
+			}
 			feed.release(len(chunk.data))
 			seqs = append(seqs, binary.BigEndian.Uint64(chunk.data))
 			totalBytes += int64(len(chunk.data))
@@ -243,4 +246,90 @@ func TestAudioFeedWriteRejectsAfterClose(t *testing.T) {
 	require.ErrorIs(t, err, audiocore.ErrConsumerClosed)
 	assert.Empty(t, feed.ch, "a closed consumer must not queue anything")
 	assert.Equal(t, int64(0), feed.queued.Load())
+}
+
+// TestAudioFeedCloseClosesChannel verifies that Close closes feed.ch after any
+// buffered chunks drain, is idempotent on repeated calls, and is safe when feed
+// or feed.ch is nil.
+func TestAudioFeedCloseClosesChannel(t *testing.T) {
+	t.Parallel()
+
+	t.Run("drains buffered chunks then observes closed channel", func(t *testing.T) {
+		t.Parallel()
+
+		h, feed := newTestFeedConsumer(nativeHLSFeedQueueBytes)
+		writeFrame(t, h, soundCardFrameBytes, 1)
+		writeFrame(t, h, soundCardFrameBytes, 2)
+
+		require.NoError(t, h.Close())
+
+		seqs, totalBytes := drainFeed(feed)
+		assert.Equal(t, []uint64{1, 2}, seqs, "buffered chunks must remain drainable after Close")
+		assert.Equal(t, int64(2*soundCardFrameBytes), totalBytes)
+		assert.Equal(t, int64(0), feed.queued.Load())
+
+		select {
+		case _, ok := <-feed.ch:
+			assert.False(t, ok, "feed.ch must be closed after Close and draining")
+		default:
+			require.FailNow(t, "feed.ch is still open after Close")
+		}
+	})
+
+	t.Run("idempotent on repeated calls", func(t *testing.T) {
+		t.Parallel()
+
+		h, feed := newTestFeedConsumer(nativeHLSFeedQueueBytes)
+		assert.NotPanics(t, func() {
+			assert.NoError(t, h.Close())
+			assert.NoError(t, h.Close())
+		})
+		select {
+		case _, ok := <-feed.ch:
+			assert.False(t, ok, "feed.ch must be closed after repeated Close calls")
+		default:
+			require.FailNow(t, "feed.ch is still open after repeated Close calls")
+		}
+	})
+
+	t.Run("nil-safe on nil feed or nil channel", func(t *testing.T) {
+		t.Parallel()
+
+		assert.NotPanics(t, func() {
+			assert.NoError(t, (&hlsConsumer{}).Close())
+			assert.NoError(t, (&hlsConsumer{feed: &audioFeed{}}).Close())
+		})
+	})
+}
+
+// TestAudioFeedEvictOldestAndMakeRoomOnClosedChannel verifies that evictOldest
+// returns false on a closed empty channel so makeRoom cannot spin infinitely.
+func TestAudioFeedEvictOldestAndMakeRoomOnClosedChannel(t *testing.T) {
+	t.Parallel()
+
+	t.Run("closed empty channel", func(t *testing.T) {
+		t.Parallel()
+
+		ch := make(chan audioChunk, 4)
+		close(ch)
+		feed := &audioFeed{ch: ch, maxBytes: 1024}
+		feed.queued.Store(2048) // simulate advisory queued count exceeding maxBytes
+
+		assert.False(t, feed.evictOldest(), "evictOldest must return false on a closed empty channel")
+		assert.Equal(t, int64(2048), feed.queued.Load())
+		assert.Equal(t, 0, feed.makeRoom(512), "makeRoom must exit cleanly when channel is closed and empty")
+	})
+
+	t.Run("closed channel with buffered chunk drains then stops", func(t *testing.T) {
+		t.Parallel()
+
+		ch := make(chan audioChunk, 4)
+		ch <- audioChunk{data: make([]byte, 512)}
+		close(ch)
+		feed := &audioFeed{ch: ch, maxBytes: 256}
+		feed.queued.Store(512)
+
+		assert.Equal(t, 1, feed.makeRoom(512), "makeRoom must evict the buffered chunk and stop when the closed channel empties")
+		assert.Equal(t, int64(0), feed.queued.Load())
+	})
 }
