@@ -217,7 +217,7 @@ There are several authentication methods available in BirdNET-Go:
 
    See [Security & Access Control](security.md) for Microsoft, generic OIDC, and allowed-user ID details.
 
-2. **Restart BirdNET-Go** for `config.yaml` edits to take effect (changes saved in **Settings > Security** hot-reload)
+2. **Restart BirdNET-Go** for `config.yaml` edits to take effect. When saving in **Settings > Security**, OAuth provider and basic-auth changes hot-reload without a restart, while changes to `host`, `baseurl`, `tlsMode`, `autoTls`, or `redirecttohttps` require restarting BirdNET-Go.
 
 ### Authentication Method Comparison
 

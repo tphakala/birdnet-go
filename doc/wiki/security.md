@@ -21,7 +21,7 @@ security:
 
 ### Social and OIDC Authentication
 
-BirdNET-Go supports OAuth2 and OIDC authentication through Google, GitHub, Microsoft, and generic OIDC identity providers. Configure providers under `security.oauthProviders` (the preferred format; legacy flat `googleauth`/`githubauth`/`microsoftauth` keys remain supported for backward compatibility) or in **Settings > Security**. Remember to set the Redirect URI in your provider's developer console to match `redirectUri`.
+BirdNET-Go supports OAuth2 and OIDC authentication through Google, GitHub, Microsoft, and generic OIDC identity providers. Configure providers under `security.oauthProviders` (the preferred format) or in **Settings > Security**. Legacy flat `googleauth`/`githubauth`/`microsoftauth` keys are migrated only when `security.oauthProviders` is empty; once migrated, changes to legacy keys are ignored and you must edit `security.oauthProviders` instead. Remember to set the Redirect URI in your provider's developer console to match `redirectUri`.
 
 ```yaml
 security:

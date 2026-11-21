@@ -86,7 +86,7 @@ Avoid **MP3**: it is an older format with lower audio quality than AAC and Opus 
 
 - **AAC (`.m4a`):** Best general-purpose lossy choice with the widest compatibility across browsers, phones, and players (default in `install.sh`).
 - **Opus (`.opus`):** Best audio quality with the smallest file sizes.
-- **FLAC (`.flac`):** Recommended if you plan to post-process clips in external audio editors or use them for training; lossless compression preserves exact audio quality with smaller files than WAV.
+- **FLAC (`.flac`):** Recommended if you plan to post-process clips in external audio editors or use them for training; lossless compression preserves the captured audio without lossy artifacts, with smaller files than WAV.
 - **WAV (`.wav`):** Uncompressed lossless PCM; largest files.
 - **Bat / ultrasonic recordings (above 48 kHz):** Only **FLAC** (default) and **WAV** are supported via `realtime.audio.export.ultrasonictype`, because lossy formats cannot store ultrasonic content.
 

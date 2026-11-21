@@ -236,28 +236,26 @@ BirdNET-Go supports several authentication methods that can be configured in the
        password: "your_password" # Password hash (will be auto-hashed)
    ```
 
-2. **Google OAuth2**:
+2. **OAuth2 / OIDC (Google, GitHub, Microsoft, or generic OIDC)**:
 
    ```yaml
    security:
      host: "yourdomain.com" # Your domain for the auth system
-     googleauth:
-       enabled: true # Enable Google authentication
-       clientid: "your_id" # From Google Cloud Console
-       clientsecret: "secret" # From Google Cloud Console
-       userid: "your_email" # Your Google account email
+     oauthProviders:
+       - provider: google
+         enabled: true # Enable Google authentication
+         clientId: "your_id" # From Google Cloud Console
+         clientSecret: "secret" # From Google Cloud Console
+         userId: "your_google_user_id" # Prefer provider user ID over email
+
+       - provider: github
+         enabled: true # Enable GitHub authentication
+         clientId: "your_id" # From GitHub Developer settings
+         clientSecret: "secret" # From GitHub Developer settings
+         userId: "your_github_user_id" # Prefer provider user ID over username
    ```
 
-3. **GitHub OAuth2**:
-   ```yaml
-   security:
-     host: "yourdomain.com" # Your domain for the auth system
-     githubauth:
-       enabled: true # Enable GitHub authentication
-       clientid: "your_id" # From GitHub Developer settings
-       clientsecret: "secret" # From GitHub Developer settings
-       userid: "username" # Your GitHub username
-   ```
+   See [Security & Access Control](security.md) for Microsoft, generic OIDC, and allowed-user ID details.
 
 ### Setting Up Authentication with Docker Compose
 

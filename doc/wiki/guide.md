@@ -170,7 +170,7 @@ birdnet:
   debug: false # Enable debug mode for BirdNET functionality
   sensitivity: 1.0 # Sigmoid sensitivity, 0.1 to 1.5
   threshold: 0.7 # Threshold for prediction confidence to report, 0.0 to 1.0
-  overlap: 1.5 # Overlap between chunks, 0.0 to 2.9
+  overlap: 1.5 # Overlap between chunks, 0.0 to 2.99 (BIRDNET_OVERLAP env var accepts 0.0 to 2.9)
   latitude: 60.1699 # Latitude of recording location for prediction filtering
   longitude: 24.9384 # Longitude of recording location for prediction filtering
   threads: 0 # Number of CPU threads to use (0 = use all available, automatically optimized for P-cores if detected)
@@ -390,7 +390,7 @@ security:
     accesstokenexp: 1h # No longer sets how long a browser stays signed in
   # Preferred format for OAuth2 / OIDC providers (Google, GitHub, Microsoft, generic OIDC):
   oauthProviders: []
-  # Legacy flat OAuth keys (still loaded for backward compatibility):
+  # Legacy flat OAuth keys (migrated only when oauthProviders is empty; ignored afterward):
   googleauth:
     enabled: false # Enable Google OAuth2
     clientid: "" # Google client ID
@@ -1067,7 +1067,7 @@ Bat models use their own separate `bat.falsepositivefilter.level` setting (0 to 
 - **No early approval**: Even if minimum detections are met early, the system waits for the full holding window
 - **Quality improvement**: Higher confidence detections within the window replace lower ones
 - **Memory efficient**: Only one pending detection per species is held at a time
-- **Runtime adaptable**: Changes to filter level, overlap, clip length, or pre-capture take effect without restarting
+- **Runtime adaptable**: Changes to filter level, overlap, clip length, or pre-capture saved via the web UI or settings API apply without restarting; `config.yaml` edits take effect after a restart
 
 ### Stage 4: Privacy and Behavioral Filters
 

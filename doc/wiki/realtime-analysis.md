@@ -72,7 +72,7 @@ Setting (**birdnet sensitivity**) controls sigmoid sensitivity of prediction in 
 
 Setting (**birdnet threshold**) controls minimum confidence of prediction result to be recorded for output, valid values are from 0.0 to 1.0. Low value may cause lot of incorrect detections, high value may cause model to miss many detections.
 
-Setting (**birdnet overlap**) controls overlap between consecutive 3-second analysis windows (0.0 to 2.9). Higher overlap runs inference more frequently and is used by [Deep Detection](guide.md#deep-detection) to reduce false positives.
+Setting (**birdnet overlap**) controls overlap between consecutive 3-second analysis windows (`0.0` to `2.99` in `config.yaml`; `0.0` to `2.9` via the `BIRDNET_OVERLAP` environment variable, where higher values are rejected). Higher overlap runs inference more frequently and is used by [Deep Detection](guide.md#deep-detection) to reduce false positives.
 
 The (**birdnet latitude**) and (**birdnet longitude**) settings enable location-based species occurrence filtering. This feature helps to exclude non-native species from your region in the results, thereby reducing incorrect detections. Setting these values to 00.000 disables location-based filtering. Valid values for these settings are required if Birdweather uploads are enabled.
 
