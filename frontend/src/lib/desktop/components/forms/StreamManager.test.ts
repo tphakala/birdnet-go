@@ -525,7 +525,7 @@ describe('StreamManager add form', () => {
     expect(add).toHaveAccessibleDescription('settings.actions.saving');
   });
 
-  it('counts a test for the URL that was sent, also when the field changed before the result arrived', async () => {
+  it('does not count a test result that arrives after the field moved to another URL', async () => {
     const { onUpdateStreams } = renderRows([]);
     await fillAddForm('Gate', 'rtsp://gate/live');
 
@@ -535,7 +535,7 @@ describe('StreamManager add form', () => {
     });
     await fireEvent.click(screen.getByTestId('stream-test-finish'));
 
-    // The result belongs to the first URL, so the second still needs a test.
+    // The result belongs to the first URL: neither URL counts as tested.
     const add = screen.getByRole('button', { name: ADD_KEY });
     expect(add).toHaveAttribute('aria-disabled', 'true');
     await fireEvent.click(add);
@@ -544,7 +544,32 @@ describe('StreamManager add form', () => {
     await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://gate/live' },
     });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
     expect(add).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('ignores a late probe result for an earlier URL: no detected channels, no analysis of the newer URL', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+
+    await fireEvent.click(screen.getByTestId('stream-test-start'));
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
+      target: { value: 'rtsp://gate/other' },
+    });
+    await fireEvent.click(screen.getByTestId('stream-test-finish'));
+
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-channels', '0');
+  });
+
+  it('keeps the result of the test of the URL the form holds', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-channels', '1');
   });
 
   it('refuses a name another stream has, describes the input with why, and clears it when the field is edited', async () => {
@@ -715,6 +740,20 @@ describe('StreamManager blocked actions', () => {
 
     pending.resolve([]);
     await waitFor(() => expect(refresh).not.toHaveAttribute('aria-disabled'));
+  });
+
+  it('says Refresh is loading while the first health load runs, linked to that text', async () => {
+    const pending = deferred<never[]>();
+    vi.mocked(api.get).mockReturnValueOnce(pending.promise);
+    renderRows([streamA, streamB]);
+
+    const refresh = screen.getByRole('button', { name: REFRESH_KEY });
+    expect(refresh).toHaveAttribute('aria-disabled', 'true');
+    expect(refresh).toHaveAccessibleDescription('common.loading');
+
+    pending.resolve([]);
+    await waitFor(() => expect(refresh).not.toHaveAttribute('aria-disabled'));
+    expect(refresh).not.toHaveAttribute('aria-describedby');
   });
 
   it('shows the reason with an empty list instead of an Add stream button that would do nothing', async () => {

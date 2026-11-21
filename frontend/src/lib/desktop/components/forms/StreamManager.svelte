@@ -418,6 +418,9 @@
     result: { sampleRate: number; channels: number } | null,
     testedUrl: string
   ) {
+    // A result for an earlier URL (a probe that finished after the field changed)
+    // says nothing about the URL the form holds now.
+    if (testedUrl.trim() !== newUrl.trim()) return;
     newTestResult = result;
     newTestedUrl = result ? testedUrl : null;
     if (!result) {
@@ -519,6 +522,11 @@
   const blockedReasonId = generateId('streams-blocked-reason');
   const addTestRequiredId = generateId('add-stream-test-required');
   let blockedReason = $derived(disabledReason ?? t('common.loading'));
+  /** Id of the loading text beside Refresh while a health load runs and nothing else blocks it. */
+  const refreshLoadingId = generateId('streams-refresh-loading');
+  let refreshDescribedBy = $derived(
+    disabled ? blockedReasonId : healthLoading ? refreshLoadingId : undefined
+  );
   let addDescribedBy = $derived(
     [disabled ? blockedReasonId : undefined, newNeedsTest ? addTestRequiredId : undefined]
       .filter(Boolean)
@@ -665,18 +673,23 @@
         {/if}
       </div>
 
-      <button
-        type="button"
-        class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
-        onclick={() => {
-          if (!disabled) void loadHealthStatus();
-        }}
-        aria-disabled={healthLoading || disabled ? 'true' : undefined}
-        aria-describedby={disabled ? blockedReasonId : undefined}
-      >
-        <RefreshCw class={cn('size-4', healthLoading && 'animate-spin')} />
-        {t('settings.audio.streams.refresh')}
-      </button>
+      <div class="flex items-center gap-2">
+        {#if healthLoading && !disabled}
+          <span id={refreshLoadingId} class="text-xs text-muted">{t('common.loading')}</span>
+        {/if}
+        <button
+          type="button"
+          class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+          onclick={() => {
+            if (!disabled) void loadHealthStatus();
+          }}
+          aria-disabled={healthLoading || disabled ? 'true' : undefined}
+          aria-describedby={refreshDescribedBy}
+        >
+          <RefreshCw class={cn('size-4', healthLoading && 'animate-spin')} />
+          {t('settings.audio.streams.refresh')}
+        </button>
+      </div>
     </div>
   {/if}
 
