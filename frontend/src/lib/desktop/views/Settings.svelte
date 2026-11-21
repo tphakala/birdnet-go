@@ -1,6 +1,14 @@
+<script module lang="ts">
+  // Shells currently mounted; a discard that waits for a save must not run over a new visit.
+  let liveShells = 0;
+</script>
+
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { settingsStore, settingsActions } from '$lib/stores/settings';
+  import { get } from 'svelte/store';
+  import { settingsStore, settingsActions, hasUnsavedChanges } from '$lib/stores/settings';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
+  import { isSettingsPath } from '$lib/utils/settingsAlias';
   import { safeGet } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -49,9 +57,40 @@
   // Get store values
   let store = $derived($settingsStore);
 
+  // Moving between settings sub-pages keeps this shell and the shared store, so only leaving
+  // Settings asks.
+  useUnsavedChangesGuard(() => get(hasUnsavedChanges), {
+    allows: to => isSettingsPath(to.path),
+  });
+
   // Load settings data on mount
   onMount(() => {
     settingsActions.loadSettings();
+
+    liveShells += 1;
+
+    return () => {
+      liveShells -= 1;
+      // The edits live in a store other pages read (dashboard cards) and the next visit reloads
+      // over them, so leaving discards them.
+      if (!get(hasUnsavedChanges)) return;
+      if (!get(settingsStore).isSaving) {
+        settingsActions.resetAllSettings();
+        return;
+      }
+      // A save in flight would send the reset data, so wait for it. isSaving going false only says
+      // one save ended: another may be queued behind it, so wait until the store is idle. A failed
+      // save leaves the edits in the store; discard them then, unless Settings was opened again.
+      const unsubscribe = settingsStore.subscribe(state => {
+        if (state.isSaving) return;
+        unsubscribe();
+        void settingsActions.whenIdle().then(() => {
+          if (!get(settingsStore).isSaving && liveShells === 0 && get(hasUnsavedChanges)) {
+            settingsActions.resetAllSettings();
+          }
+        });
+      });
+    };
   });
 </script>
 

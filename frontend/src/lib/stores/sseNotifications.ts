@@ -344,6 +344,7 @@ if (typeof window !== 'undefined') {
   // Initialize after a short delay to ensure the app is ready
   setTimeout(() => sseNotifications.connect(), SSE_INIT_DELAY_MS);
 
-  // Cleanup on page unload
-  window.addEventListener('beforeunload', () => sseNotifications.disconnect());
+  // Cleanup when the page goes. pagehide, not beforeunload: the leave prompt can be cancelled,
+  // and the stream must stay open then.
+  window.addEventListener('pagehide', () => sseNotifications.disconnect());
 }

@@ -31,6 +31,9 @@
 
   const logger = getLogger('dashboard');
 
+  // Built with join so proxy sub_filter rewriting of quoted '/ui/...' strings cannot corrupt it.
+  const DASHBOARD_PATH = ['', 'ui', 'dashboard'].join('/');
+
   interface Props {
     securityEnabled?: boolean;
     accessAllowed?: boolean;
@@ -79,9 +82,15 @@
 
   function handleEditDashboard() {
     isOpen = false;
+    // As for the reset: the leave prompt returns focus to the trigger, not to the unmounted item
+    buttonRef?.focus();
     resetDateToToday();
-    dashboardEditMode.set(true);
-    navigation.navigate('/ui/dashboard');
+    // Armed only once the move applies: after Stay, the next dashboard visit must not open in
+    // edit mode. The dashboard reads the flag reactively, so setting it just after the route
+    // change is equivalent to setting it first.
+    void navigation.navigate(DASHBOARD_PATH).then(applied => {
+      if (applied) dashboardEditMode.set(true);
+    });
   }
 
   const DEFAULT_LAYOUT: DashboardLayout = {
@@ -156,7 +165,7 @@
     }));
 
     showResetConfirm = false;
-    navigation.navigate('/ui/dashboard');
+    navigation.navigate(DASHBOARD_PATH);
   }
 
   // Click outside to close
@@ -259,6 +268,8 @@
         <button
           onclick={() => {
             isOpen = false;
+            // As for Edit dashboard: the leave prompt returns focus to the trigger
+            buttonRef?.focus();
             navigation.navigate('/ui/help/report-bug');
           }}
           class={MENU_ITEM_CLASS}

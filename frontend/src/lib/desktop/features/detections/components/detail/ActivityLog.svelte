@@ -26,6 +26,7 @@
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { generateId } from '$lib/utils/uuid';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
   import DetailCard from './DetailCard.svelte';
   import { replacedModelPick, toPercent } from './detailFormat';
   import { formatCalendarDateTime, inOffsetOf, wallClockTime } from './detailTime';
@@ -73,6 +74,8 @@
   const noteEmptyId = generateId('detail-note-empty');
 
   let note = $state('');
+  // A typed note is lost when the detection page is left; addNote clears it on success.
+  useUnsavedChangesGuard(() => note.trim() !== '');
   let saving = $state(false);
   let errorMessage = $state<string | null>(null);
   // Set when Add note is pressed with nothing written; cleared by typing.

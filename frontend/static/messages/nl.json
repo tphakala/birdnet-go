@@ -155,6 +155,12 @@
       "confirmAction": "Aktie bevestigen",
       "confirmMessage": "Weet je zeker dat je de aktie wilt uitvoeren"
     },
+    "unsavedChanges": {
+      "title": "Deze pagina verlaten?",
+      "message": "Je hebt niet-opgeslagen wijzigingen. Als je de pagina verlaat, gaan ze verloren.",
+      "leave": "Pagina verlaten",
+      "stay": "Blijven"
+    },
     "review": {
       "modalTitle": "Herkenning beoordelen: {species}",
       "status": {

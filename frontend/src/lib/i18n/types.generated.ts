@@ -145,6 +145,10 @@ export type TranslationKey =
   | 'common.values.unknown'
   | 'common.modal.confirmAction'
   | 'common.modal.confirmMessage'
+  | 'common.unsavedChanges.title'
+  | 'common.unsavedChanges.message'
+  | 'common.unsavedChanges.leave'
+  | 'common.unsavedChanges.stay'
   | 'common.review.modalTitle' // params: species
   | 'common.review.status.verifiedCorrect'
   | 'common.review.status.falsePositive'

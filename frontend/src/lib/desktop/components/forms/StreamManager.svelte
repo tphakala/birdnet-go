@@ -70,6 +70,8 @@
     AUDIO_GAIN_MAX_DB,
   } from '$lib/stores/settings';
   import StreamTestButton from './StreamTestButton.svelte';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
+  import { samePathAndQuery } from '$lib/stores/unsavedChanges.svelte';
   import StreamChannelControls from './StreamChannelControls.svelte';
   import {
     DEFAULT_SAMPLE_RATE,
@@ -201,6 +203,11 @@
   let newModels = $state<string[]>([]);
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let newChannelMode = $state<ChannelMode>('downmix');
+  // Only a typed name or URL counts: the other add-form fields have defaults and nothing worth
+  // keeping without them. The manager lives in the Streams tab, so a tab switch unmounts it.
+  useUnsavedChangesGuard(() => showAddForm && (newName.trim() !== '' || newUrl.trim() !== ''), {
+    allows: samePathAndQuery,
+  });
   let nameError = $state<string | null>(null);
   let urlError = $state<string | null>(null);
   let newTestResult = $state<{ sampleRate: number; channels: number } | null>(null);

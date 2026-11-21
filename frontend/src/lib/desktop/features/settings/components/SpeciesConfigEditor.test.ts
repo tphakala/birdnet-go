@@ -7,8 +7,10 @@
  * displayed label, even after a UI locale switch while the editor is open.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
+import { unsavedChanges, type NavigationTarget } from '$lib/stores/unsavedChanges.svelte';
 import SpeciesConfigEditor from './SpeciesConfigEditor.svelte';
 import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
 import type { Action } from '$lib/stores/settings';
@@ -161,5 +163,48 @@ describe('SpeciesConfigEditor execute-defaults option', () => {
     await fireEvent.click(screen.getByRole('button', { name: SAVE_BUTTON }));
 
     expect(onSave.mock.calls[0][0].actions[0].executeDefaults).toBe(now);
+  });
+});
+
+describe('SpeciesConfigEditor unsaved-changes guard', () => {
+  const PAGE = ['', 'ui', 'settings', 'species'].join('/');
+  const HERE: NavigationTarget = { path: PAGE, search: '?tab=config' };
+  const OTHER_TAB: NavigationTarget = { path: PAGE, search: '?tab=filters' };
+  const INTERVAL_LABEL = 'settings.species.customConfiguration.labels.intervalSeconds';
+  const CONFIGURE_ACTIONS = 'settings.species.customConfiguration.configureActions';
+
+  afterEach(() => {
+    unsavedChanges.resetForTesting();
+  });
+
+  it('does not block an untouched editor, also after expanding Configure Actions', async () => {
+    renderEditor();
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(false);
+
+    await fireEvent.click(screen.getByRole('button', { name: CONFIGURE_ACTIONS }));
+
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(false);
+  });
+
+  it('blocks a tab switch after a saved field changes', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+
+    await user.type(screen.getByLabelText(INTERVAL_LABEL), '5');
+
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(true);
+  });
+
+  it('does not block after typing in the species field and erasing back to the opening text', async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    const field = screen.getByRole('combobox');
+
+    await user.type(field, 'x');
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(true);
+
+    await user.type(field, '{Backspace}');
+    expect(field).toHaveValue('Tornipöllö');
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(false);
   });
 });

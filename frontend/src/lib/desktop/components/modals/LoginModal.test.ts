@@ -6,6 +6,8 @@ import {
   screen,
 } from '../../../../test/render-helpers';
 import LoginModal from './LoginModal.svelte';
+import { api } from '$lib/utils/api';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 // Mock the api module
 vi.mock('$lib/utils/api', () => ({
@@ -99,6 +101,172 @@ describe('LoginModal', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  // First in the file: the sign-in tests below leave 500 ms reload timers pending, and one firing
+  // during these tests would add a navigation they do not expect.
+  describe('hard navigations with an unsaved draft', () => {
+    let prevented: boolean[];
+    let unregister: (() => void) | undefined;
+
+    // A native leave prompt would run when the navigation starts, so the location stand-in
+    // fires beforeunload at the moment the page is told to go, and the test reads whether it
+    // would have been held.
+    function navigationProbe() {
+      const fire = () => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        prevented.push(event.defaultPrevented);
+      };
+      const location = mockWindowLocation();
+      Object.defineProperty(location, 'href', {
+        set: () => {
+          fire();
+        },
+        get: () => '',
+        configurable: true,
+      });
+      location.reload = vi.fn(fire);
+      return location;
+    }
+
+    function renderOpen() {
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+    }
+
+    beforeEach(() => {
+      prevented = [];
+      // Earlier sign-in tests set the allowance on the singleton; start from a clean one.
+      unsavedChanges.resetForTesting();
+      unregister = unsavedChanges.register({ isDirty: () => true });
+    });
+
+    afterEach(() => {
+      unregister?.();
+      unsavedChanges.resetForTesting();
+      vi.useRealTimers();
+    });
+
+    it('does not let the native prompt hold the start of an OAuth sign-in', async () => {
+      navigationProbe();
+      renderOpen();
+
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      expect(prevented).toEqual([false]);
+    });
+
+    it('does not let the native prompt hold the OAuth callback after a password sign-in', async () => {
+      navigationProbe();
+      vi.mocked(api.post).mockResolvedValueOnce({ success: true, redirectUrl: '/auth/callback' });
+      renderOpen();
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+
+      await waitFor(() => expect(prevented).toEqual([false]));
+    });
+
+    it('does not let the native prompt hold the reload after a password sign-in', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      navigationProbe();
+      vi.mocked(api.post).mockResolvedValueOnce({ success: true });
+      renderOpen();
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(prevented).toEqual([false]);
+    });
+
+    // The reload waits a moment after the sign-in; the page must stay blocked meanwhile, or an
+    // edit made in that window would be lost to the reload without a prompt.
+    it('keeps the modal open and undismissable until the reload after a password sign-in', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const location = navigationProbe();
+      vi.mocked(api.post).mockResolvedValueOnce({ success: true });
+      const onClose = vi.fn();
+      loginModalTest.render({
+        isOpen: true,
+        onClose,
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+      await vi.advanceTimersByTimeAsync(100);
+      await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(location.reload).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(400);
+
+      expect(location.reload).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('dismissing while a password sign-in is pending', () => {
+    // A dismissed modal whose request later succeeds would still reload the page past the leave
+    // prompt, so the modal stays until the attempt has an answer.
+    function startPendingSignIn() {
+      const onClose = vi.fn();
+      const onCancel = vi.fn();
+      vi.mocked(api.post).mockReturnValueOnce(new Promise(() => {}));
+      loginModalTest.render({
+        isOpen: true,
+        onClose,
+        onCancel,
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+      return { onClose, onCancel };
+    }
+
+    async function submitPassword() {
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+      await waitFor(() => expect(api.post).toHaveBeenCalled());
+    }
+
+    it('ignores the close button', async () => {
+      const { onClose, onCancel } = startPendingSignIn();
+      await submitPassword();
+
+      await fireEvent.click(screen.getByRole('button', { name: /close login dialog/i }));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('ignores Escape', async () => {
+      const { onClose, onCancel } = startPendingSignIn();
+      await submitPassword();
+
+      await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('still closes when no sign-in is pending', async () => {
+      const onCancel = vi.fn();
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        onCancel,
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /close login dialog/i }));
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Redirect URL Validation', () => {
@@ -1198,14 +1366,10 @@ describe('LoginModal', () => {
         );
       });
 
-      // Verify modal closes after successful login
-      await waitFor(() => {
-        expect(onCloseMock).toHaveBeenCalled();
-      });
-
-      // Verify page refresh is called (simulating successful login)
+      // The page reloads after a successful login; the modal stays open until then
       await new Promise(resolve => setTimeout(resolve, 600)); // Wait for timeout
       expect(mockLocation.reload).toHaveBeenCalled();
+      expect(onCloseMock).not.toHaveBeenCalled();
     });
 
     it('should handle OAuth callback redirect preserving original URL', async () => {

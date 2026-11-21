@@ -399,6 +399,29 @@ describe('TerminalPage detached window', () => {
     await waitFor(() => expect(created.terminals[2].focusCount).toBe(1));
   });
 
+  // A cancelled leave prompt must not close the popout of a page that stays.
+  it('keeps the popup open when the page only asks to unload', async () => {
+    const doc = await detach();
+    const popup = doc.defaultView;
+    if (!popup) throw new Error('popup has no window');
+    const close = vi.spyOn(popup, 'close').mockImplementation(() => {});
+
+    window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
+
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('closes the popup when the page goes away', async () => {
+    const doc = await detach();
+    const popup = doc.defaultView;
+    if (!popup) throw new Error('popup has no window');
+    const close = vi.spyOn(popup, 'close').mockImplementation(() => {});
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it('hands focus back to the terminal after the popup closes before it has settled', async () => {
     const popup = await startDetach();
 

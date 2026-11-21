@@ -17,6 +17,7 @@ import {
   DATE_RETENTION_MS,
 } from './datePersistence';
 import { getLocalDateString } from './date';
+import { navigation } from '$lib/stores/navigation.svelte';
 
 describe('Date Persistence Utilities', () => {
   const mockDate = '2024-01-15';
@@ -119,6 +120,15 @@ describe('Date Persistence Utilities', () => {
   });
 
   describe('updateURLWithDate', () => {
+    it('writes the query through the navigation store', () => {
+      const write = vi.spyOn(navigation, 'writeUrl').mockImplementation(() => {});
+
+      updateURLWithDate(mockDate);
+
+      expect(write).toHaveBeenCalledWith(expect.stringContaining(`${DATE_URL_PARAM}=${mockDate}`));
+      write.mockRestore();
+    });
+
     it('adds date parameter to URL', () => {
       const mockReplaceState = vi.fn();
       window.history.replaceState = mockReplaceState;

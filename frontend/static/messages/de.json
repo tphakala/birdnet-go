@@ -155,6 +155,12 @@
       "confirmAction": "Aktion bestätigen",
       "confirmMessage": "Sind Sie sicher, dass Sie diese Aktion ausführen möchten?"
     },
+    "unsavedChanges": {
+      "title": "Diese Seite verlassen?",
+      "message": "Sie haben ungespeicherte Änderungen. Wenn Sie die Seite verlassen, gehen sie verloren.",
+      "leave": "Seite verlassen",
+      "stay": "Bleiben"
+    },
     "review": {
       "modalTitle": "Erkennung überprüfen: {species}",
       "status": {

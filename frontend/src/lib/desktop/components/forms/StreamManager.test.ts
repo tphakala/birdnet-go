@@ -97,6 +97,7 @@ vi.mock('$lib/utils/ReconnectingEventSource', () => ({
 
 import { watchModels } from '$lib/stores/models.svelte';
 import { api } from '$lib/utils/api';
+import { unsavedChanges, type NavigationTarget } from '$lib/stores/unsavedChanges.svelte';
 import StreamManager from './StreamManager.svelte';
 import { analyzeStreamChannels } from './streamOptions';
 
@@ -1513,5 +1514,55 @@ describe('StreamManager health ownership of a row', () => {
     second.resolve([healthOf(streamA)]);
     await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
     expect(within(header('B')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+  });
+});
+
+describe('StreamManager unsaved-changes guard', () => {
+  const PAGE = ['', 'ui', 'settings', 'audio'].join('/');
+  const HERE: NavigationTarget = { path: PAGE, search: '?tab=streams' };
+  const OTHER_TAB: NavigationTarget = { path: PAGE, search: '?tab=soundcard' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    unsavedChanges.resetForTesting();
+  });
+
+  it('does not block an open add form that has nothing typed in', async () => {
+    renderRows([streamA]);
+    await openAddForm();
+
+    expect(screen.getByTestId(NAME_TESTID)).toBeInTheDocument();
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(false);
+  });
+
+  it('blocks a tab switch once only a name is typed into the add form', async () => {
+    renderRows([streamA]);
+    await openAddForm();
+
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Garden' } });
+
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(true);
+  });
+
+  it('does not block an add form that holds only whitespace', async () => {
+    renderRows([streamA]);
+    await openAddForm();
+
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: '   ' } });
+
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(false);
+  });
+
+  it('blocks a tab switch once a stream URL is typed into the add form', async () => {
+    renderRows([streamA]);
+    await openAddForm();
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: 'rtsp://new/one' } });
+
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(true);
   });
 });

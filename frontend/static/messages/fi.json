@@ -155,6 +155,12 @@
       "confirmAction": "Vahvista toiminto",
       "confirmMessage": "Haluatko varmasti suorittaa tämän toiminnon?"
     },
+    "unsavedChanges": {
+      "title": "Poistutaanko sivulta?",
+      "message": "Sinulla on tallentamattomia muutoksia. Jos poistut, ne menetetään.",
+      "leave": "Poistu sivulta",
+      "stay": "Pysy sivulla"
+    },
     "review": {
       "modalTitle": "Tarkista havainto: {species}",
       "status": {

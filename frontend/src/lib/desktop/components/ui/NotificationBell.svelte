@@ -276,6 +276,9 @@
   // Navigate to notifications page
   function navigateToNotifications() {
     dropdownOpen = false;
+    // The focused dropdown item unmounts with the dropdown; focus the trigger first so a leave
+    // prompt records it as the place to return to
+    buttonRef?.focus();
     if (onNavigateToNotifications) {
       onNavigateToNotifications();
     } else {

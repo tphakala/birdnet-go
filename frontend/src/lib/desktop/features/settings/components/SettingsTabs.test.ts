@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
 import { settingsActions } from '$lib/stores/settings';
 import { commitSetting, resetAutoSaveForTest } from '$lib/stores/settingsAutoSave.svelte';
+import { navigation } from '$lib/stores/navigation.svelte';
+import { samePathAndQuery, unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 import SettingsTabs, { type TabDefinition } from './SettingsTabs.svelte';
 
 const HAS_CHANGES_TEXT = 'settings.tabs.hasChanges';
@@ -213,5 +215,135 @@ describe('SettingsTabs save mode', () => {
 
     expect(screen.queryByText(NOTE_TEXT)).toBeNull();
     expect(screen.queryByRole('button', { name: SAVE_NAME })).toBeNull();
+  });
+});
+
+describe('SettingsTabs with an unsaved-changes guard', () => {
+  const originalLocation = window.location;
+  const PAGE = ['', 'ui', 'settings', 'audio'].join('/');
+  let unregister: (() => void) | undefined;
+
+  beforeEach(() => {
+    // The shared setup stubs window.location; selectTab reads it, so use JSDOM's own.
+    Object.defineProperty(window, 'location', { value: document.location, configurable: true });
+  });
+
+  afterEach(() => {
+    cleanup();
+    unregister?.();
+    unregister = undefined;
+    unsavedChanges.resetForTesting();
+    Object.defineProperty(window, 'location', { value: originalLocation, configurable: true });
+  });
+
+  it('does not navigate when the selected tab is clicked on a URL without the tab parameter', async () => {
+    navigation.redirect(PAGE);
+    const navigate = vi.spyOn(navigation, 'navigate');
+    renderTabs([tab('one', false), tab('two', false)]);
+
+    await fireEvent.click(screen.getByRole('tab', { name: 'Label one' }));
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(navigation.currentSearch).toBe('');
+    navigate.mockRestore();
+  });
+
+  it('keeps focus on the current tab while a guard holds the move, and moves it after Leave', async () => {
+    navigation.redirect(`${PAGE}?tab=one`);
+    unregister = unsavedChanges.register({ isDirty: () => true, allows: samePathAndQuery });
+    renderTabs([tab('one', false), tab('two', false)]);
+    const first = screen.getByRole('tab', { name: 'Label one' });
+    const second = screen.getByRole('tab', { name: 'Label two' });
+    first.focus();
+
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+
+    expect(unsavedChanges.prompting).toBe(true);
+    expect(second).not.toHaveFocus();
+    expect(first).toHaveAttribute('aria-selected', 'true');
+
+    unsavedChanges.leave();
+    await waitFor(() => expect(second).toHaveFocus());
+    expect(second).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('keeps focus and the selection on the current tab when the user chooses Stay', async () => {
+    navigation.redirect(`${PAGE}?tab=one`);
+    unregister = unsavedChanges.register({ isDirty: () => true, allows: samePathAndQuery });
+    renderTabs([tab('one', false), tab('two', false)]);
+    const first = screen.getByRole('tab', { name: 'Label one' });
+    const second = screen.getByRole('tab', { name: 'Label two' });
+    first.focus();
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+
+    unsavedChanges.stay();
+    // Let the promise chain behind the held move run out.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(second).not.toHaveFocus();
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(second).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('moves focus to the new tab at once when nothing holds the move', async () => {
+    navigation.redirect(`${PAGE}?tab=one`);
+    renderTabs([tab('one', false), tab('two', false)]);
+    const first = screen.getByRole('tab', { name: 'Label one' });
+    first.focus();
+
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+
+    expect(screen.getByRole('tab', { name: 'Label two' })).toHaveFocus();
+  });
+
+  it('reports a tab change to onTabChange only once the held move is allowed', async () => {
+    navigation.redirect(`${PAGE}?tab=one`);
+    unregister = unsavedChanges.register({ isDirty: () => true, allows: samePathAndQuery });
+    const onTabChange = vi.fn();
+    render(SettingsTabs, {
+      props: {
+        tabs: [tab('one', false), tab('two', false)],
+        activeTab: 'one',
+        showActions: false,
+        onTabChange,
+      },
+    });
+    const first = screen.getByRole('tab', { name: 'Label one' });
+
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+    unsavedChanges.stay();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onTabChange).not.toHaveBeenCalled();
+
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+    unsavedChanges.leave();
+    await waitFor(() => expect(onTabChange).toHaveBeenCalledWith('two'));
+  });
+
+  it('leaves the note link and the selection alone when the user chooses Stay on it', async () => {
+    navigation.redirect(`${PAGE}?tab=live`);
+    unregister = unsavedChanges.register({ isDirty: () => true, allows: samePathAndQuery });
+    render(SettingsTabs, {
+      props: {
+        tabs: [
+          { ...tab('live', false), saveMode: 'immediate' },
+          { ...tab('rec', true), saveMode: 'manual' },
+        ],
+        activeTab: 'live',
+        showActions: true,
+      },
+    });
+    const link = screen.getByRole('button', { name: 'Label rec' });
+    link.focus();
+
+    await fireEvent.click(link);
+    unsavedChanges.stay();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(screen.getByRole('tab', { name: 'Label rec' })).toHaveAttribute(
+      'aria-selected',
+      'false'
+    );
+    expect(screen.getByRole('tab', { name: 'Label rec' })).not.toHaveFocus();
   });
 });

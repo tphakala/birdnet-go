@@ -20,3 +20,8 @@ export const SETTINGS_DEFAULT_PATH = [SETTINGS_BASE_PATH, DEFAULT_SECTION].join(
 export function resolveSettingsAlias(path: string): string {
   return path === SETTINGS_BASE_PATH ? SETTINGS_DEFAULT_PATH : path;
 }
+
+/** True for the settings base path and every path under it. Expects a canonical path. */
+export function isSettingsPath(path: string): boolean {
+  return path === SETTINGS_BASE_PATH || path.startsWith(SETTINGS_BASE_PATH + '/');
+}

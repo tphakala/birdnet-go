@@ -13,6 +13,23 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
+/**
+ * Trigger a browser download for a URL the server serves as an attachment.
+ * An anchor with `download` keeps the page in place; assigning the URL to window.location
+ * would fire beforeunload and could raise the leave prompt. An empty url does nothing.
+ */
+export function downloadFromUrl(url: string): void {
+  // An empty href resolves to the current document, which the anchor would then save.
+  if (!url) return;
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 const DEFAULT_MAX_SIZE_BYTES = 1_048_576; // 1 MB
 
 /**

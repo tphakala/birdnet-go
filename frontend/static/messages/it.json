@@ -155,6 +155,12 @@
       "confirmAction": "Conferma azione",
       "confirmMessage": "Sei sicuro di voler eseguire questa azione?"
     },
+    "unsavedChanges": {
+      "title": "Lasciare questa pagina?",
+      "message": "Hai modifiche non salvate. Se esci, andranno perse.",
+      "leave": "Esci dalla pagina",
+      "stay": "Resta"
+    },
     "review": {
       "modalTitle": "Revisiona rilevamento: {species}",
       "status": {

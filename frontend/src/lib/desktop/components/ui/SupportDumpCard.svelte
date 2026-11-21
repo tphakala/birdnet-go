@@ -7,6 +7,8 @@
   import { loggers } from '$lib/utils/logger';
   import { api } from '$lib/utils/api';
   import { appState } from '$lib/stores/appState.svelte';
+  import { downloadFromUrl } from '$lib/utils/fileHelpers';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
 
   import type { HTMLAttributes } from 'svelte/elements';
 
@@ -91,6 +93,13 @@
     userMessage: '',
     uploadToSentry: true,
   });
+
+  // The message the last successful generate sent along. A typed message that differs from it
+  // would be lost when the page is left.
+  let submittedMessage = $state('');
+  useUnsavedChangesGuard(
+    () => supportDump.userMessage.trim() !== '' && supportDump.userMessage !== submittedMessage
+  );
 
   let normalizedGithubIssue = $derived(supportDump.githubIssueNumber.trim());
   let hasValidGithubIssue = $derived(/^#?\d+$/.test(normalizedGithubIssue));
@@ -182,6 +191,7 @@
       generating = false;
 
       if (data.success) {
+        submittedMessage = supportDump.userMessage;
         if (supportDump.uploadToSentry && data.uploaded_at) {
           if (data.dump_id) {
             updateStatus(
@@ -206,7 +216,7 @@
           );
           const downloadUrl = data.download_url;
           safeTimeout(() => {
-            window.location.href = downloadUrl;
+            downloadFromUrl(downloadUrl);
           }, 500);
         } else {
           updateStatus(

@@ -3,6 +3,7 @@
  * Provides hybrid URL + localStorage persistence with configurable expiration
  */
 
+import { navigation } from '$lib/stores/navigation.svelte';
 import { getLocalDateString, isBeyondTomorrow, parseLocalDateString } from './date';
 import { loggers } from './logger';
 
@@ -83,7 +84,7 @@ export function updateURLWithDate(date: string, urlParam: string = DATE_URL_PARA
     }
 
     // Update URL without reload using History API
-    window.history.replaceState(null, '', url.toString());
+    navigation.writeUrl(url.toString());
   } catch (error) {
     logger.error('Error updating URL with date', error);
   }

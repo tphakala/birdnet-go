@@ -5,6 +5,7 @@
   import RootLayout from './lib/desktop/layouts/RootLayout.svelte';
   import DashboardPage from './lib/desktop/features/dashboard/pages/DashboardPage.svelte'; // Keep dashboard for initial load
   import LoginModal from './lib/desktop/components/modals/LoginModal.svelte';
+  import ConfirmModal from './lib/desktop/components/modals/ConfirmModal.svelte';
   import type { Component } from 'svelte';
   import { getLogger } from './lib/utils/logger';
   import { createSafeMap } from './lib/utils/security';
@@ -21,6 +22,7 @@
     getSpeciesDictVersion,
   } from './lib/stores/appState.svelte';
   import { navigation } from './lib/stores/navigation.svelte';
+  import { unsavedChanges } from './lib/stores/unsavedChanges.svelte';
   import { buildAppUrl } from './lib/utils/urlHelpers';
   import { resolveLoginRedirect, DEFAULT_LOGIN_TARGET } from './lib/utils/loginRedirect';
   import { resolveAnalyticsRedirect } from './lib/desktop/features/analytics/registry/analyticsRouting';
@@ -794,17 +796,32 @@
 
   // Use $effect for browser back/forward navigation with automatic cleanup
   $effect(() => {
-    const handlePopState = () => {
-      navigation.handlePopState();
+    const handlePopState = (event: Event) => {
       // The reactive routing effect above will handle the actual routing
-      // when navigation.currentPath updates
+      // when navigation.currentPath updates. A pop held for the unsaved-changes prompt is
+      // stopped here, so route pages' own popstate listeners never see it.
+      if (!navigation.handlePopState()) event.stopImmediatePropagation();
     };
 
-    window.addEventListener('popstate', handlePopState);
+    // Capture phase: runs before the listeners route pages add on window.
+    window.addEventListener('popstate', handlePopState, { capture: true });
 
     return () => {
-      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('popstate', handlePopState, { capture: true });
     };
+  });
+
+  // A page restored from the back/forward cache closed its streams on pagehide and kept one-way
+  // flags (unload allowance, 401 redirect guard), so it starts over with a reload. The leave
+  // prompt must not hold that reload.
+  $effect(() => {
+    const handlePageShow = (event: Event & { persisted?: boolean }) => {
+      if (!event.persisted) return;
+      unsavedChanges.allowUnload();
+      window.location.reload();
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
   });
 </script>
 
@@ -938,4 +955,18 @@
   </RootLayout>
 
   <WizardDialog />
+{/if}
+
+<!-- Outside the branch chain above, so a branch switch cannot unmount an open prompt. Mounted only
+     while open: Modal keeps its dialog element in the DOM when closed. -->
+{#if unsavedChanges.prompting}
+  <ConfirmModal
+    isOpen={true}
+    title={t('common.unsavedChanges.title')}
+    message={t('common.unsavedChanges.message')}
+    confirmLabel={t('common.unsavedChanges.leave')}
+    cancelLabel={t('common.unsavedChanges.stay')}
+    onConfirm={() => unsavedChanges.leave()}
+    onClose={() => unsavedChanges.stay()}
+  />
 {/if}

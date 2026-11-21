@@ -155,6 +155,12 @@
       "confirmAction": "Confirmer l'action",
       "confirmMessage": "Êtes-vous sûr de vouloir effectuer cette action ?"
     },
+    "unsavedChanges": {
+      "title": "Quitter cette page ?",
+      "message": "Vous avez des modifications non enregistrées. Si vous quittez la page, elles seront perdues.",
+      "leave": "Quitter la page",
+      "stay": "Rester"
+    },
     "review": {
       "modalTitle": "Examiner la détection : {species}",
       "status": {

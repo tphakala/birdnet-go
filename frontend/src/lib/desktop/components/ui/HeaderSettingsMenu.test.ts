@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
+import { get } from 'svelte/store';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
+import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
 import { theme } from '$lib/stores/theme';
 import { tick } from 'svelte';
 import { shortcuts } from '$lib/stores/shortcuts.svelte';
@@ -114,7 +117,7 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
 
     it('confirming resets the layout, goes to the dashboard and returns focus to the menu button', async () => {
       const patch = vi.spyOn(api, 'patch').mockResolvedValue({});
-      const navigate = vi.spyOn(navigation, 'navigate').mockImplementation(() => {});
+      const navigate = vi.spyOn(navigation, 'navigate').mockResolvedValue(true);
       const menu = await renderAndOpen({ securityEnabled: false });
       await pressWithKeyboard(menu.getByRole<HTMLButtonElement>('button', { name: RESET_LABEL }));
       const dialog = await screen.findByRole('dialog');
@@ -193,5 +196,70 @@ describe('HeaderSettingsMenu keyboard shortcuts item', () => {
     await tick();
     expect(shortcuts.helpOpen).toBe(false);
     await waitFor(() => expect(gear).toHaveFocus());
+  });
+});
+
+describe('HeaderSettingsMenu Edit dashboard while a guard holds the move', () => {
+  const SETTINGS_PAGE = ['', 'ui', 'settings', 'main'].join('/');
+  let unregister: (() => void) | undefined;
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    dashboardEditMode.set(false);
+    navigation.redirect(SETTINGS_PAGE);
+    unregister = unsavedChanges.register({ isDirty: () => true });
+  });
+
+  afterEach(() => {
+    cleanup();
+    unregister?.();
+    unsavedChanges.resetForTesting();
+    dashboardEditMode.set(false);
+    vi.restoreAllMocks();
+  });
+
+  // The prompt is mounted by App and records the focused element as the place to return to;
+  // the focused menu item unmounts with the menu, so the trigger must hold focus by then.
+  it('moves focus to the menu button when the prompt opens', async () => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+    const item = menu.getByText(EDIT_LABEL).closest('button');
+    if (!item) throw new Error('Edit dashboard item not found');
+    item.focus();
+
+    await fireEvent.click(item);
+
+    expect(unsavedChanges.prompting).toBe(true);
+    expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus();
+  });
+
+  it('moves focus to the menu button when Report bug opens the prompt', async () => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+    const item = menu.getByText(REPORT_BUG_LABEL).closest('button');
+    if (!item) throw new Error('Report bug item not found');
+    item.focus();
+
+    await fireEvent.click(item);
+
+    expect(unsavedChanges.prompting).toBe(true);
+    expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus();
+  });
+
+  it.each([
+    { answer: 'stay', editMode: false },
+    { answer: 'leave', editMode: true },
+  ])('$answer leaves edit mode $editMode', async ({ answer, editMode }) => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+
+    await fireEvent.click(menu.getByText(EDIT_LABEL));
+    expect(unsavedChanges.prompting).toBe(true);
+    // Nothing is armed while the prompt is open.
+    expect(get(dashboardEditMode)).toBe(false);
+
+    if (answer === 'leave') unsavedChanges.leave();
+    else unsavedChanges.stay();
+
+    await waitFor(() => expect(unsavedChanges.prompting).toBe(false));
+    await waitFor(() => expect(get(dashboardEditMode)).toBe(editMode));
   });
 });

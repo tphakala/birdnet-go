@@ -155,6 +155,12 @@
       "confirmAction": "Bekræft handling",
       "confirmMessage": "Er du sikker på, at du vil udføre denne handling?"
     },
+    "unsavedChanges": {
+      "title": "Forlade denne side?",
+      "message": "Du har ugemte ændringer. Hvis du forlader siden, går de tabt.",
+      "leave": "Forlad siden",
+      "stay": "Bliv"
+    },
     "review": {
       "modalTitle": "Gennemgå detektion: {species}",
       "status": {

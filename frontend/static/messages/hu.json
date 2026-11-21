@@ -155,6 +155,12 @@
       "confirmAction": "Művelet megerősítése",
       "confirmMessage": "Biztosan végre szeretné hajtani ezt a műveletet?"
     },
+    "unsavedChanges": {
+      "title": "Elhagyja ezt az oldalt?",
+      "message": "Mentetlen módosításai vannak. Ha elhagyja az oldalt, elvesznek.",
+      "leave": "Oldal elhagyása",
+      "stay": "Maradás"
+    },
     "review": {
       "modalTitle": "Észlelés áttekintése: {species}",
       "status": {

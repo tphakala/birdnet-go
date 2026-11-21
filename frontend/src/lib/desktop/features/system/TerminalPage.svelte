@@ -760,17 +760,18 @@
     return cleanup;
   });
 
-  // Close the popup window when the main page unloads (navigation, tab close).
+  // Close the popup window when the main page goes away (navigation, tab close). pagehide, not
+  // beforeunload: the leave prompt can be cancelled, and the popup must stay open then.
   // This is separate from cleanup() because cleanup() runs on every $effect
   // re-evaluation (including detach), while this only runs on true teardown.
   $effect(() => {
-    function onBeforeUnload() {
+    function onPageHide() {
       if (popoutWindow && !popoutWindow.closed) {
         popoutWindow.close();
       }
     }
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
   });
 </script>
 
