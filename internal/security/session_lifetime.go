@@ -94,9 +94,9 @@ func (s *OAuth2Server) liveCredentialsID(settings *conf.Settings) string {
 // under. It persists the result before it returns, so a restart cannot bring
 // the sessions back. A store that has never recorded credentials has issued
 // nothing under any (every save follows a sync), so it adopts the live ones
-// without ending anything. Every read of a session record and every write of a
-// record or code goes through it first (liveRecord, GenerateAuthCode,
-// ExchangeAuthCode, StartProviderSession). It reads the live settings snapshot
+// without ending anything. Every lookup that decides whether a request is signed
+// in, and every write of a new record or code, goes through it first
+// (liveRecord, GenerateAuthCode, ExchangeAuthCode, StartProviderSession). It reads the live settings snapshot
 // itself while holding s.mutex, so concurrent callers cannot write an older ID
 // after a newer one, and it returns the snapshot it synced against: the one
 // the calling operation should use for any other settings read. It returns nil
