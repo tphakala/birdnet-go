@@ -229,7 +229,7 @@
   let verdictGroup = $state<HTMLDivElement | null>(null);
 
   // What a keyboard shortcut can ask of the panel. The methods read live state when called.
-  // Reasons come in the order statusText gives them: a save out first, then the rest.
+  // A missing review permission is reported first, then a save out, then the reason for the action.
   const controls: ReviewControls = {
     blockedReason: (action: ReviewShortcutAction): string => {
       if (!canReview) return t('detections.detail.review.loginRequired');

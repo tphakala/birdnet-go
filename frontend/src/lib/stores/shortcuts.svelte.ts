@@ -11,8 +11,8 @@
  * 1. shortcuts are off: return
  * 2. the event was handled already, is part of an input method composition, or has Ctrl,
  *    Meta or Alt held: return
- * 3. the target takes typed text: return
- * 4. no definition has a matching binding (page scopes first, then global): return
+ * 3. no definition has a matching binding (page scopes first, then global): return
+ * 4. the target takes typed text: return
  * 5. an arrow key on a widget that uses arrow keys, or Space on an interactive element:
  *    return, the element keeps the key
  * 6. a dialog is open and the definition does not allow it: return

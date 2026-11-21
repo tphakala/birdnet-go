@@ -171,7 +171,10 @@ export type ReviewShortcutAction = 'correct' | 'falsePositive' | 'wrongSpecies' 
 
 /** What the review panel offers a keyboard shortcut. The methods read live state when called. */
 export interface ReviewControls {
-  /** Why the action cannot run now, in the order the panel's status line gives; empty when it can. */
+  /**
+   * Why the action cannot run now: a missing review permission first, then a save out, then
+   * the reason for the action itself; empty when it can.
+   */
   blockedReason(action: ReviewShortcutAction): string;
   /** Runs the action on the detection the panel shows; a no-op when the panel itself refuses it. */
   run(action: ReviewShortcutAction): void;
