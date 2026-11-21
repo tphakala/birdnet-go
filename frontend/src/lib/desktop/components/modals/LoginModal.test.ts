@@ -183,6 +183,33 @@ describe('LoginModal', () => {
 
       expect(prevented).toEqual([false]);
     });
+
+    // The reload waits a moment after the sign-in; the page must stay blocked meanwhile, or an
+    // edit made in that window would be lost to the reload without a prompt.
+    it('keeps the modal open and undismissable until the reload after a password sign-in', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const location = navigationProbe();
+      vi.mocked(api.post).mockResolvedValueOnce({ success: true });
+      const onClose = vi.fn();
+      loginModalTest.render({
+        isOpen: true,
+        onClose,
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+      await vi.advanceTimersByTimeAsync(100);
+      await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(location.reload).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(400);
+
+      expect(location.reload).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('dismissing while a password sign-in is pending', () => {
@@ -1339,14 +1366,10 @@ describe('LoginModal', () => {
         );
       });
 
-      // Verify modal closes after successful login
-      await waitFor(() => {
-        expect(onCloseMock).toHaveBeenCalled();
-      });
-
-      // Verify page refresh is called (simulating successful login)
+      // The page reloads after a successful login; the modal stays open until then
       await new Promise(resolve => setTimeout(resolve, 600)); // Wait for timeout
       expect(mockLocation.reload).toHaveBeenCalled();
+      expect(onCloseMock).not.toHaveBeenCalled();
     });
 
     it('should handle OAuth callback redirect preserving original URL', async () => {

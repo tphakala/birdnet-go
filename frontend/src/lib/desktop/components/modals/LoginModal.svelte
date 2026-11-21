@@ -225,12 +225,9 @@
         return; // Exit early - OAuth callback will handle the rest
       }
 
-      // If no redirectUrl, try a simple page refresh to trigger auth state update
-
-      // Close modal first
-      onClose();
-
-      // Give a moment for modal to close, then refresh
+      // If no redirectUrl, refresh the page to pick up the signed-in state. The modal stays
+      // open (and undismissable, since the sign-in is still pending) until the reload, so no
+      // edit can be made in the moment before it that the reload would then discard.
       setTimeout(() => {
         unsavedChanges.allowUnload();
         window.location.reload();
