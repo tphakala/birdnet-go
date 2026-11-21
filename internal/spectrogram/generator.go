@@ -63,31 +63,56 @@ func (o *generateOptions) settingsOr(current func() *conf.Settings) *conf.Settin
 // ErrSourceChanged marks a render whose audio file differs from the state the
 // caller supplied with WithSourceState: the clip was still being written or was
 // replaced, so the image would not match the file as it stands. Nothing is
-// published; a later request decides from the current bytes.
+// published; a later request decides from the current bytes. StatSource also
+// returns it, wrapped, for a file whose identity could not be read.
 var ErrSourceChanged = errors.NewStd("audio file changed during spectrogram generation")
 
 // SourceState is an audio file as the caller's readiness check judged it ready
 // to render: its identity, size and modification time, plus the upper bound of
 // the memory its decode needs.
 type SourceState struct {
-	info         os.FileInfo
+	info os.FileInfo
+	// pinned reports that the file's identity was read when the state was
+	// created. A state whose identity could not be read never matches: on Windows
+	// a later read would take the identity of whatever file is at the path then.
+	pinned       bool
 	decodedBytes int64
+}
+
+// StatSource stats the audio file at path and reads its identity straight away.
+// On Windows os.Stat of a regular file defers the file id to the first
+// os.SameFile call, which reads it from the path at that moment (loadFileId in
+// Go's os/types_windows.go), so a state built from a plain os.Stat can take the
+// id of a file renamed over the path later. A file whose identity cannot be read
+// is returned as an error wrapping ErrSourceChanged.
+func StatSource(path string) (os.FileInfo, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !os.SameFile(info, info) {
+		return nil, fmt.Errorf("%w: identity of %s could not be read", ErrSourceChanged, filepath.Base(path))
+	}
+	return info, nil
 }
 
 // NewSourceState captures info, the os.FileInfo of the audio file at the moment
 // it was judged ready, and decodedBytes, the most bytes its decode can hold
 // (transcode.ProbeInfo.DecodedBytes), which sizes the render's memory budget.
+// Obtain info from StatSource: it reads the identity at stat time, which
+// NewSourceState cannot do after the fact.
 func NewSourceState(info os.FileInfo, decodedBytes int64) SourceState {
-	return SourceState{info: info, decodedBytes: decodedBytes}
+	return SourceState{info: info, pinned: info != nil && os.SameFile(info, info), decodedBytes: decodedBytes}
 }
 
 // DecodedBytes returns the decoded-size bound the state was created with.
 func (s SourceState) DecodedBytes() int64 { return s.decodedBytes }
 
 // Matches reports whether now describes the same file content as the snapshot:
-// the same file (os.SameFile), size and modification time.
+// the same file (os.SameFile), size and modification time. A state whose
+// identity could not be read when it was created matches nothing.
 func (s SourceState) Matches(now os.FileInfo) bool {
-	return now != nil && os.SameFile(s.info, now) && s.info.Size() == now.Size() && s.info.ModTime().Equal(now.ModTime())
+	return s.pinned && now != nil && os.SameFile(s.info, now) && s.info.Size() == now.Size() && s.info.ModTime().Equal(now.ModTime())
 }
 
 // WithSourceState makes GenerateFromFile compare the audio file with state before
