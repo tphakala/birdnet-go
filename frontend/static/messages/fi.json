@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Syötä salasanasi",
     "enterPassword": "Syötä salasana",
     "continue": "Jatka",
+    "rememberBrowser": "Muista tämä selain",
+    "rememberBrowserHelp": "Pysy kirjautuneena tässä selaimessa. Jätä valitsematta jaetulla tietokoneella.",
     "or": "tai",
     "loginWithGoogle": "Kirjaudu Googlella",
     "loginWithGithub": "Kirjaudu GitHubilla",

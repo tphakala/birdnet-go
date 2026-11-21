@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Geben Sie Ihr Passwort ein",
     "enterPassword": "Passwort eingeben",
     "continue": "Weiter",
+    "rememberBrowser": "Diesen Browser merken",
+    "rememberBrowserHelp": "In diesem Browser angemeldet bleiben. Auf einem gemeinsam genutzten Computer nicht anhaken.",
     "or": "oder",
     "loginWithGoogle": "Mit Google anmelden",
     "loginWithGithub": "Mit GitHub anmelden",

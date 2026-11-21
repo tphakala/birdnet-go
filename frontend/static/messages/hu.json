@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Adja meg a jelszavát",
     "enterPassword": "Adja meg a jelszavát",
     "continue": "Folytatás",
+    "rememberBrowser": "Böngésző megjegyzése",
+    "rememberBrowserHelp": "Maradjon bejelentkezve ebben a böngészőben. Megosztott számítógépen hagyja bejelöletlenül.",
     "or": "vagy",
     "loginWithGoogle": "Bejelentkezés Google-lal",
     "loginWithGithub": "Bejelentkezés GitHub-bal",

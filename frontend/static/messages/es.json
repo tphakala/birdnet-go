@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Ingresa tu contraseña",
     "enterPassword": "Ingresa tu contraseña",
     "continue": "Continuar",
+    "rememberBrowser": "Recordar este navegador",
+    "rememberBrowserHelp": "Mantener la sesión iniciada en este navegador. Déjalo sin marcar en un ordenador compartido.",
     "or": "o",
     "loginWithGoogle": "Iniciar sesión con Google",
     "loginWithGithub": "Iniciar sesión con GitHub",

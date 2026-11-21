@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Skriv inn passordet ditt",
     "enterPassword": "Skriv inn passordet ditt",
     "continue": "Fortsett",
+    "rememberBrowser": "Husk denne nettleseren",
+    "rememberBrowserHelp": "Forbli innlogget i denne nettleseren. La stå uavkrysset på en delt datamaskin.",
     "or": "eller",
     "loginWithGoogle": "Logg inn med Google",
     "loginWithGithub": "Logg inn med GitHub",

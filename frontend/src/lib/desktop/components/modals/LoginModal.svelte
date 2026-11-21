@@ -17,6 +17,7 @@
   import { t } from '$lib/i18n';
   import { X, ShieldCheck, KeyRound } from '@lucide/svelte';
   import { getEnabledProviders, getProvider } from '$lib/auth';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import type { AuthConfig } from '../../../../app.d';
 
   // SECURITY: Define maximum password length to prevent DoS
@@ -24,6 +25,14 @@
 
   // Status the server answers with once the login attempt limit is used up
   const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
+
+  // Whether "Remember this browser" starts ticked; the maintainer's choice of
+  // default lives in this one constant.
+  const REMEMBER_BROWSER_DEFAULT = true;
+
+  // Query parameter that carries the "Remember this browser" choice to the
+  // provider sign-in route (see security.RememberQueryParam in the backend)
+  const REMEMBER_QUERY_PARAM = 'remember';
 
   // Logger for authentication debugging
   const logger = loggers.auth;
@@ -63,6 +72,7 @@
   }
 
   let password = $state('');
+  let rememberBrowser = $state(REMEMBER_BROWSER_DEFAULT);
   let error = $state('');
   let loadingState = $state<LoadingState>('idle');
 
@@ -177,6 +187,7 @@
       password: trimmedPassword, // Use the already trimmed password
       redirectUrl: finalRedirectUrl, // Pass the relative redirect URL to avoid duplication
       basePath: currentBasePath, // Send the detected base path
+      rememberBrowser, // Keep this browser signed in (persistent session cookie)
     };
 
     try {
@@ -263,7 +274,11 @@
     // UI is served behind a path-prefixing proxy such as Home Assistant Ingress.
     // buildAppUrl is idempotent and open-redirect guarded, and the endpoint
     // validation above has already restricted this to a relative path.
-    window.location.href = buildAppUrl(endpoint);
+    // The endpoint may already carry a query string when it is overridden.
+    const target = rememberBrowser
+      ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}${REMEMBER_QUERY_PARAM}=1`
+      : endpoint;
+    window.location.href = buildAppUrl(target);
   }
 
   function handleSubmit(event: Event) {
@@ -320,6 +335,7 @@
       password = '';
       error = '';
       loadingState = 'idle';
+      rememberBrowser = REMEMBER_BROWSER_DEFAULT;
 
       // Clean up focus trap
       if (focusTrap) {
@@ -375,6 +391,16 @@
           </p>
         </div>
 
+        {#snippet rememberCheckbox()}
+          <Checkbox
+            bind:checked={rememberBrowser}
+            id="loginRememberBrowser"
+            label={t('auth.rememberBrowser')}
+            helpText={t('auth.rememberBrowserHelp')}
+            disabled={isAnyLoading}
+          />
+        {/snippet}
+
         <!-- Password login section -->
         {#if authConfig.basicEnabled}
           <div class="space-y-4">
@@ -411,6 +437,8 @@
               {/if}
             </div>
 
+            {@render rememberCheckbox()}
+
             <button
               type="submit"
               class="btn btn-primary w-full"
@@ -435,6 +463,9 @@
         <!-- OAuth providers -->
         {#if hasOAuthProviders}
           <div class="space-y-3">
+            {#if !authConfig.basicEnabled}
+              {@render rememberCheckbox()}
+            {/if}
             {#each enabledProviders as provider (provider.id)}
               {@const Icon = provider.icon}
               {@const isLoading = loadingState === provider.id}
