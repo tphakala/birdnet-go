@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -311,8 +312,16 @@ func TestEndSessionLogsFailedSave(t *testing.T) {
 		server.EndSession(httptest.NewRecorder(), sessionRequest(token))
 	})
 
-	assert.Contains(t, output, "level=ERROR")
-	assert.Contains(t, output, "Failed to persist the end of a session")
+	// saveTokens logs its own write failure at error level too, so the level is
+	// checked on the logout line itself.
+	var logoutLine string
+	for line := range strings.SplitSeq(output, "\n") {
+		if strings.Contains(line, "Failed to persist the end of a session") {
+			logoutLine = line
+		}
+	}
+	require.NotEmpty(t, logoutLine, "the failed logout save must be logged")
+	assert.Contains(t, logoutLine, "level=ERROR")
 	assert.NotContains(t, output, token, "a session token must never be logged")
 }
 
