@@ -134,6 +134,10 @@ type Processor struct {
 	preRenderer      PreRendererSubmit  // Spectrogram pre-renderer for background generation
 	preRendererOnce  sync.Once          // Ensures pre-renderer is initialized only once
 	startOnce        sync.Once          // Ensures Start() is called only once
+	// preRendererSFS is the SecureFS root initPreRenderer opened for the
+	// pre-renderer. The processor owns it: PreRenderer.Stop never closes an
+	// injected SecureFS, so stopPreRenderer closes it, once, via Swap.
+	preRendererSFS atomic.Pointer[securefs.SecureFS]
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -3061,7 +3065,9 @@ func (p *Processor) cancelThresholdLifecycle(ctx context.Context) {
 }
 
 // ShutdownWithContext gracefully stops all processor components, respecting
-// the provided context deadline for all internal waits.
+// the provided context deadline for all internal waits. It also stops the
+// spectrogram pre-renderer and releases the export directory handle opened for
+// it (see stopPreRenderer).
 func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Stop discovery debounce timer to prevent late publishes during shutdown
 	p.discoveryDebounceMu.Lock()
@@ -3113,10 +3119,8 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 		p.workerCancel()
 	}
 
-	// Stop the spectrogram pre-renderer
-	if p.preRenderer != nil {
-		p.preRenderer.Stop()
-	}
+	// Stop the spectrogram pre-renderer and release its export directory handle
+	p.stopPreRenderer()
 
 	// Release the Silero VAD detector (privacy filter). The gate mutex makes this
 	// block until any in-flight inference completes before the ONNX session is
@@ -3256,8 +3260,31 @@ func generateRandomHex(length int) string {
 	return hex
 }
 
+// stopPreRenderer stops the spectrogram pre-renderer, then closes the SecureFS
+// root initPreRenderer opened for it. The pre-renderer never closes an injected
+// SecureFS, so without this the export directory handle stays open until the
+// process exits, and Windows refuses to rename or delete that directory
+// meanwhile. It is safe to call more than once and from concurrent callers:
+// Stop is idempotent and the root is closed by whichever caller swaps it out
+// first. p.preRenderer is only read, never cleared, because actions read it
+// without a lock.
+func (p *Processor) stopPreRenderer() {
+	if p.preRenderer != nil {
+		p.preRenderer.Stop()
+	}
+	if sfs := p.preRendererSFS.Swap(nil); sfs != nil {
+		if err := sfs.Close(); err != nil {
+			GetLogger().Warn("Failed to close pre-renderer SecureFS",
+				logger.Error(err),
+				logger.String("operation", "prerenderer_close_securefs"))
+		}
+	}
+}
+
 // initPreRenderer initializes the spectrogram pre-renderer if enabled.
 // This is called during processor initialization if spectrogram pre-rendering is enabled in settings.
+// The processor owns the SecureFS it opens for the pre-renderer and closes it in
+// stopPreRenderer.
 func (p *Processor) initPreRenderer() {
 	p.preRendererOnce.Do(func() {
 		// Validate export path
@@ -3306,6 +3333,7 @@ func (p *Processor) initPreRenderer() {
 		pr.Start()
 
 		p.preRenderer = pr
+		p.preRendererSFS.Store(sfs)
 
 		GetLogger().Info("Spectrogram pre-renderer initialized",
 			logger.String("size", p.Settings.Realtime.Dashboard.Spectrogram.Size),
