@@ -62,6 +62,8 @@ describe('Settings Store - whenIdle', () => {
       .mockReset()
       .mockImplementation(async () => JSON.parse(JSON.stringify(server)));
     vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    // Deliberately partial fixture: only main.name is edited here, and loadSettings()
+    // below loads the full settings from the mocked API.
     settingsStore.set({
       formData: { main: { name: '' } } as unknown as SettingsFormData,
       originalData: { main: { name: '' } } as unknown as SettingsFormData,
