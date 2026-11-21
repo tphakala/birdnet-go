@@ -357,7 +357,7 @@ tasks:
         echo "    - macOS: Homebrew must be installed first"
         echo ""
         echo "This will install:"
-        echo "  • Go {{.GO_VERSION}}"
+        echo "  • Go {{ regexFind "^[0-9]+[.][0-9]+" .GO_VERSION }}.x (the latest patch release)"
         echo "  • Node.js LTS"
         echo "  • Build tools (gcc, git, wget, etc.)"
         echo "  • Go dev tools (golangci-lint, air)"
@@ -434,7 +434,7 @@ tasks:
           INSTALL_GO=false
 
           if ! command -v go >/dev/null 2>&1; then
-            echo "📥 Go not found, installing Go ${GO_VERSION}..."
+            echo "📥 Go not found, installing the latest Go ${REQUIRED_GO_MINOR}.x..."
             INSTALL_GO=true
           else
             CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
@@ -449,7 +449,7 @@ tasks:
                 echo "   Current: ${CURRENT_GO_VERSION}"
                 echo "   Required: ${REQUIRED_GO_MINOR}.x"
                 echo ""
-                printf "   Upgrade to Go ${GO_VERSION}? (y/N) "
+                printf "   Upgrade to the latest Go ${REQUIRED_GO_MINOR}.x? (y/N) "
                 read REPLY
                 case "$REPLY" in
                   [Yy]|[Yy][Ee][Ss]) INSTALL_GO=true ;;
@@ -460,7 +460,7 @@ tasks:
           fi
 
           if [ "$INSTALL_GO" = true ]; then
-            echo "📥 Installing Go ${GO_VERSION}..."
+            echo "📥 Installing the latest Go ${REQUIRED_GO_MINOR}.x..."
             case "$(uname -m)" in
               x86_64) GO_ARCH="amd64";;
               aarch64|arm64) GO_ARCH="arm64";;
