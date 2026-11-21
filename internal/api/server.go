@@ -1205,7 +1205,10 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 		ProviderUserID: user.UserID,
 		IDToken:        user.IDToken,
 	}
-	s.oauth2Server.StartProviderSession(c.Response(), req, &identity, remember)
+	if err := s.oauth2Server.StartProviderSession(c.Response(), req, &identity, remember); err != nil {
+		log.Error("OAuth login failed: could not start session", logger.Error(err))
+		return c.String(http.StatusInternalServerError, "Authentication failed")
+	}
 
 	log.Info("OAuth login successful, session established, redirecting to dashboard",
 		logger.Username(userId),

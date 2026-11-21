@@ -93,8 +93,8 @@ func TestSessionCheckRecordReusedByGetters(t *testing.T) {
 	adapter := NewSecurityAdapter(server)
 
 	signIn := httptest.NewRecorder()
-	server.StartProviderSession(signIn, httptest.NewRequest(http.MethodGet, "/", http.NoBody),
-		&security.AccessToken{Provider: security.ProviderGoogle, UserID: user, ProviderUserID: "sub"}, false)
+	require.NoError(t, server.StartProviderSession(signIn, httptest.NewRequest(http.MethodGet, "/", http.NoBody),
+		&security.AccessToken{Provider: security.ProviderGoogle, UserID: user, ProviderUserID: "sub"}, false))
 	cookies := signIn.Result().Cookies()
 	require.NotEmpty(t, cookies)
 

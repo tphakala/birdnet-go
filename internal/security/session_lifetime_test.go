@@ -476,9 +476,9 @@ func TestEverySignInGetsAFreshToken(t *testing.T) {
 	assert.False(t, rec.Remember, "the new sign-in's choice applies, not the old one")
 
 	w := httptest.NewRecorder()
-	server.StartProviderSession(w, sessionRequest(second.Value), &AccessToken{
+	require.NoError(t, server.StartProviderSession(w, sessionRequest(second.Value), &AccessToken{
 		Provider: ProviderGoogle, UserID: testUser, ProviderUserID: testProviderSub, IDToken: "id",
-	}, true)
+	}, true))
 	third := findCookie(w, SessionCookieName)
 	require.NotNil(t, third)
 	assert.NotEqual(t, second.Value, third.Value)
@@ -489,6 +489,29 @@ func TestEverySignInGetsAFreshToken(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ProviderGoogle, social.Provider)
 	assert.Equal(t, "id", social.IDToken)
+}
+
+// TestStartProviderSessionRefusesEmptyProvider verifies that an identity without
+// a provider issues no record and no cookie: such a record would pass for a
+// password session and a Bearer token.
+func TestStartProviderSessionRefusesEmptyProvider(t *testing.T) {
+	server, _ := newSessionTestServer(t, false, nil)
+
+	for name, identity := range map[string]*AccessToken{
+		"empty provider": {UserID: testUser, ProviderUserID: testProviderSub},
+		"nil identity":   nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			err := server.StartProviderSession(w, sessionRequest(""), identity, true)
+
+			require.ErrorIs(t, err, ErrSessionProviderMissing)
+			assert.Nil(t, findCookie(w, SessionCookieName))
+			server.mutex.RLock()
+			defer server.mutex.RUnlock()
+			assert.Empty(t, server.accessTokens)
+		})
+	}
 }
 
 // TestEndSessionClearsCookie verifies logout deletes the record and tells the

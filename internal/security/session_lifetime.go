@@ -16,6 +16,7 @@ import (
 	"github.com/markbates/goth/gothic"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -290,11 +291,19 @@ func (s *OAuth2Server) StartSession(w http.ResponseWriter, r *http.Request, toke
 	return nil
 }
 
+// ErrSessionProviderMissing is returned by StartProviderSession for an identity
+// without a Provider: such a record would pass for a password session.
+var ErrSessionProviderMissing = errors.NewStd("session identity has no provider")
+
 // StartProviderSession starts the browser session for a social sign-in. It
 // issues a record carrying the identity (Provider, UserID, ProviderUserID and
 // IDToken of identity), revokes the browser's previous record and sends the
-// cookie. Every sign-in gets a fresh token.
-func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Request, identity *AccessToken, remember bool) {
+// cookie. Every sign-in gets a fresh token. It refuses a nil identity or one
+// without a Provider with ErrSessionProviderMissing and issues nothing.
+func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Request, identity *AccessToken, remember bool) error {
+	if identity == nil || identity.Provider == "" {
+		return ErrSessionProviderMissing
+	}
 	s.syncCredentials()
 
 	token := newOpaqueToken(AccessTokenByteLength)
@@ -309,6 +318,7 @@ func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Reque
 	go s.persistTokensIfEnabled()
 
 	writeSessionCookie(w, r, token, remember)
+	return nil
 }
 
 // EndSession ends the request's session: the record is deleted and the

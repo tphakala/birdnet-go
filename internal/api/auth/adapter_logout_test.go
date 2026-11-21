@@ -136,7 +136,7 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 			identity.IDToken = logoutTestIDToken
 		}
 		rec := httptest.NewRecorder()
-		server.StartProviderSession(rec, req, &identity, false)
+		require.NoError(t, server.StartProviderSession(rec, req, &identity, false))
 		for _, cookie := range rec.Result().Cookies() {
 			req.AddCookie(cookie)
 		}
