@@ -83,17 +83,19 @@ fi
 # go list needs CGO_ENABLED=1 explicitly: Go turns cgo off by default when GOOS
 # differs from the host, which would drop every cgo file from the comparison.
 # Listing does not compile anything, so no C toolchain is needed for the linux run.
+golist() { CGO_ENABLED=1 go list -tags "$TEST_TAGS" -f "$1" ./... | strip_cr; }
 mod=$(go list -m | strip_cr)
 
 # One line per package: import path plus the file sets compared by rule (a).
 readonly SET_FORMAT='{{.ImportPath}} {{join .GoFiles ","}}|{{join .CgoFiles ","}}|{{join .TestGoFiles ","}}|{{join .XTestGoFiles ","}}|{{join .SFiles ","}}'
-native_sets=$(CGO_ENABLED=1 go list -tags "$TEST_TAGS" -f "$SET_FORMAT" ./... | strip_cr | sort -u)
-linux_sets=$(GOOS=linux CGO_ENABLED=1 go list -tags "$TEST_TAGS" -f "$SET_FORMAT" ./... | strip_cr | sort -u)
+native_sets=$(golist "$SET_FORMAT")
+linux_sets=$(GOOS=linux golist "$SET_FORMAT")
 
 # One tab-separated line per package for rules (b) and (c) and the guards:
-# import path, 1 if it has test files, imports of package and tests, all deps.
-readonly INFO_FORMAT='{{.ImportPath}}{{"\t"}}{{if or .TestGoFiles .XTestGoFiles}}1{{else}}0{{end}}{{"\t"}}{{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}{{"\t"}}{{join .Deps " "}}'
-info=$(CGO_ENABLED=1 go list -tags "$TEST_TAGS" -f "$INFO_FORMAT" ./... | strip_cr)
+# import path, 1 if it has test files, imports of package and tests, and the
+# deps of packages with tests (the only ones the guards read).
+readonly INFO_FORMAT='{{.ImportPath}}{{"\t"}}{{if or .TestGoFiles .XTestGoFiles}}1{{else}}0{{end}}{{"\t"}}{{join .Imports " "}} {{join .TestImports " "}} {{join .XTestImports " "}}{{"\t"}}{{if or .TestGoFiles .XTestGoFiles}}{{join .Deps " "}}{{end}}'
+info=$(golist "$INFO_FORMAT")
 
 # Rule (a): packages whose file sets exist only natively (this also catches
 # packages absent on linux).
@@ -162,7 +164,8 @@ if [ -n "$changed_files" ]; then
 fi
 
 selected=$(printf '%s\n%s\n%s\n' "$rule_a" "$rule_b" "$rule_c" | awk 'NF' | sort -u)
-packages=$(printf '%s\n' "$selected" | awk -F'\t' 'NF { print $1 }' | sort -u)
+selected_packages() { printf '%s\n' "$selected" | awk -F'\t' 'NF { print $1 }' | sort -u; }
+packages=$(selected_packages)
 
 # Guards: the run must exercise the native setup whatever the diff says. A run
 # with no go-tflite package would never load the TFLite DLL or dylib; add one
@@ -175,13 +178,9 @@ if [ -z "$(shared_lines "$packages" "$tflite_pkgs")" ]; then
   fi
   log "guard: adding $extra (no selected package links go-tflite)"
   selected=$(printf '%s\n%s\tguard: links go-tflite\n' "$selected" "$extra" | awk 'NF' | sort -u)
-  packages=$(printf '%s\n%s\n' "$packages" "$extra" | awk 'NF' | sort -u)
+  packages=$(selected_packages)
 fi
 
-if [ -z "$packages" ]; then
-  log "error: no packages selected"
-  exit 1
-fi
 if ! printf '%s\n' "$packages" | grep -Fxq "$mod/$VAD_DIR"; then
   log "error: $mod/$VAD_DIR is not selected (it loads the real ONNX Runtime)"
   exit 1

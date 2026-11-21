@@ -92,22 +92,10 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
-          # setup-go saves its cache in a post step that runs only when the job
-          # succeeded, and this job's tests always fail, so it never saved one.
-          # The cache is restored and saved explicitly below instead.
+          # Restored and saved explicitly below: setup-go's post step saves only
+          # when the job succeeded, and this job's tests always fail.
           cache: false
       - run: go version
-
-      - name: Resolve Go cache paths
-        id: go-cache
-        run: |
-          # cygpath -m gives forward-slash Windows paths, the form actions/cache
-          # and the other steps in this job use.
-          {
-            echo "gocache=$(cygpath -m "$(go env GOCACHE)")"
-            echo "gomodcache=$(cygpath -m "$(go env GOMODCACHE)")"
-            echo "goversion=$(go env GOVERSION)"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Resolve tool versions from Taskfile
         run: |
@@ -121,6 +109,29 @@ jobs:
             echo "ONNXRUNTIME_VERSION=${onnx}"
           } >> "$GITHUB_ENV"
 
+      - name: Resolve Go cache paths and key
+        id: go-cache
+        env:
+          GO_SUM_HASH: ${{ hashFiles('go.sum') }}
+        run: |
+          # cygpath -m gives forward-slash Windows paths, the form actions/cache
+          # and the other steps in this job use.
+          # cgo objects depend on the TFLite headers, which Go's build cache does
+          # not fingerprint, so the TFLite version, runner image, Go version and
+          # race mode are part of the key. The scope is too, so a subset entry
+          # cannot take the key a later full run would save under; a subset run
+          # may still start from a full entry through the second restore key.
+          prefix="native-go-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS}-$(go env GOVERSION)-tflite-${TFLITE_VERSION}-race-${NATIVE_TEST_RACE}-"
+          {
+            echo "gocache=$(cygpath -m "$(go env GOCACHE)")"
+            echo "gomodcache=$(cygpath -m "$(go env GOMODCACHE)")"
+            echo "key=${prefix}${NATIVE_TEST_SCOPE}-${GO_SUM_HASH}"
+            echo "restore-keys<<EOF"
+            echo "${prefix}${NATIVE_TEST_SCOPE}-"
+            echo "${prefix}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Restore Go cache
         id: go-cache-restore
         uses: actions/cache/restore@v6
@@ -128,15 +139,8 @@ jobs:
           path: |
             ${{ steps.go-cache.outputs.gocache }}
             ${{ steps.go-cache.outputs.gomodcache }}
-          # cgo objects depend on the TFLite headers, which Go's build cache does
-          # not fingerprint, so the TFLite version, runner image, Go version and
-          # race mode are part of the key. The scope is too, so a subset entry
-          # cannot take the key a later full run would save under; a subset run
-          # may still start from a full entry through the second restore key.
-          key: native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-
-            native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-
+          key: ${{ steps.go-cache.outputs.key }}
+          restore-keys: ${{ steps.go-cache.outputs.restore-keys }}
 
       - name: Add mingw gcc to PATH
         run: |
@@ -303,4 +307,4 @@ jobs:
           path: |
             ${{ steps.go-cache.outputs.gocache }}
             ${{ steps.go-cache.outputs.gomodcache }}
-          key: native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-${{ hashFiles('go.sum') }}
+          key: ${{ steps.go-cache.outputs.key }}

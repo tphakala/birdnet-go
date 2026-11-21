@@ -82,6 +82,11 @@ jobs:
       # inputs, so it falls through to the full suite with -race.
       NATIVE_TEST_SCOPE: ${{ github.event_name == 'pull_request' && 'subset' || inputs.scope || 'full' }}
       NATIVE_TEST_RACE: ${{ github.event_name == 'pull_request' && 'on' || inputs.race || 'on' }}
+      CGO_ENABLED: 1
+      CGO_CFLAGS: -I${{ github.workspace }}/.cache/tensorflow
+      # rpath is baked into the test binaries so dyld finds libtensorflowlite_c
+      # even though SIP strips DYLD_* from the child processes `go test` spawns.
+      CGO_LDFLAGS: -L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib
     steps:
       - uses: actions/checkout@v7
         with:
@@ -91,21 +96,10 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
-          # setup-go saves its cache in a post step that runs only when the job
-          # succeeded, and it saves under the pull request's own ref, which no
-          # other pull request can read. The cache is restored and saved
-          # explicitly below instead, whatever the test result.
+          # Restored and saved explicitly below: setup-go's post step saves only
+          # when the job succeeded, under the pull request's own ref.
           cache: false
       - run: go version
-
-      - name: Resolve Go cache paths
-        id: go-cache
-        run: |
-          {
-            echo "gocache=$(go env GOCACHE)"
-            echo "gomodcache=$(go env GOMODCACHE)"
-            echo "goversion=$(go env GOVERSION)"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Resolve tool versions from Taskfile
         run: |
@@ -121,6 +115,27 @@ jobs:
             echo "ONNXRUNTIME_VERSION=${onnx}"
           } >> "$GITHUB_ENV"
 
+      - name: Resolve Go cache paths and key
+        id: go-cache
+        env:
+          GO_SUM_HASH: ${{ hashFiles('go.sum') }}
+        run: |
+          # cgo objects depend on the TFLite headers, which Go's build cache does
+          # not fingerprint, so the TFLite version, runner image, Go version and
+          # race mode are part of the key. The scope is too, so a subset entry
+          # cannot take the key a later full run would save under; a subset run
+          # may still start from a full entry through the second restore key.
+          prefix="native-go-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS}-$(go env GOVERSION)-tflite-${TFLITE_VERSION}-race-${NATIVE_TEST_RACE}-"
+          {
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "key=${prefix}${NATIVE_TEST_SCOPE}-${GO_SUM_HASH}"
+            echo "restore-keys<<EOF"
+            echo "${prefix}${NATIVE_TEST_SCOPE}-"
+            echo "${prefix}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Restore Go cache
         id: go-cache-restore
         uses: actions/cache/restore@v6
@@ -128,15 +143,8 @@ jobs:
           path: |
             ${{ steps.go-cache.outputs.gocache }}
             ${{ steps.go-cache.outputs.gomodcache }}
-          # cgo objects depend on the TFLite headers, which Go's build cache does
-          # not fingerprint, so the TFLite version, runner image, Go version and
-          # race mode are part of the key. The scope is too, so a subset entry
-          # cannot take the key a later full run would save under; a subset run
-          # may still start from a full entry through the second restore key.
-          key: native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-
-            native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-
+          key: ${{ steps.go-cache.outputs.key }}
+          restore-keys: ${{ steps.go-cache.outputs.restore-keys }}
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -175,18 +183,6 @@ jobs:
           # are not needed.
           sudo mkdir -p /usr/local/lib
           sudo cp -a "${RUNNER_TEMP}"/onnxruntime/lib/libonnxruntime*.dylib /usr/local/lib/
-
-      - name: Configure CGO
-        run: |
-          # Exported through GITHUB_ENV so the select, test and vet steps all see
-          # them, and only after the libraries they point at exist.
-          # rpath is baked into the test binaries so dyld finds libtensorflowlite_c
-          # even though SIP strips DYLD_* from the child processes `go test` spawns.
-          {
-            echo "CGO_ENABLED=1"
-            echo "CGO_CFLAGS=-I${GITHUB_WORKSPACE}/.cache/tensorflow"
-            echo "CGO_LDFLAGS=-L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib"
-          } >> "$GITHUB_ENV"
 
       - name: Select test packages
         id: select
@@ -290,7 +286,11 @@ jobs:
         # tests without linking. The full scope compiles everything already.
         if: ${{ !cancelled() && steps.select.outputs.scope == 'subset' }}
         run: |
-          if ! go vet -tags noembed,skipfrontend ./...; then
+          # Same race mode as the tests, so the vet build reuses their compiled
+          # dependencies from the Go build cache.
+          VET_RACE=()
+          if [ "$NATIVE_TEST_RACE" = "on" ]; then VET_RACE=(-race); fi
+          if ! go vet -tags noembed,skipfrontend ${VET_RACE[@]+"${VET_RACE[@]}"} ./...; then
             echo "## :x: Darwin compile check failed (go vet ./...), see the step log" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -315,4 +315,4 @@ jobs:
           path: |
             ${{ steps.go-cache.outputs.gocache }}
             ${{ steps.go-cache.outputs.gomodcache }}
-          key: native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-${{ hashFiles('go.sum') }}
+          key: ${{ steps.go-cache.outputs.key }}

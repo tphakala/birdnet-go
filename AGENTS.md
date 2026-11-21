@@ -191,8 +191,8 @@ These checks cover only the default build tags and your own OS:
   unless you read the job output. On a pull request they test the packages
   with OS-specific files, the native-library and SIMD boundary and the packages
   the pull request changes; the weekly and manual runs test the whole suite.
-  When you change OS-specific files
-  (`_windows.go`, `_darwin.go`), say so in the PR and ask for `full-ci`.
+  When you change OS-specific files (`_windows.go`, `_darwin.go`), say so in
+  the PR and ask for `full-ci`.
 
 ## PR Creation Rules
 
