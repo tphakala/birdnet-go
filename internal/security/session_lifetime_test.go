@@ -22,6 +22,9 @@ import (
 const (
 	testUser        = "user@example.com"
 	testProviderSub = "12345"
+
+	// testCachePrivate is the Cache-Control value a remembered renewal sets.
+	testCachePrivate = "private"
 )
 
 // newSessionTestServer returns a server on a real session store (HttpOnly,
@@ -68,8 +71,8 @@ func expiryOf(t *testing.T, s *OAuth2Server, token string) time.Time {
 }
 
 // TestSessionSlidingExpiry walks a session through renewals over fake time for
-// both remember values. Renewal only slides the server record: it never sends
-// the cookie again, whatever the state of the response.
+// both remember values. A remembered session's renewal also re-sends its cookie;
+// an unticked session's renewal only slides the server record.
 func TestSessionSlidingExpiry(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -95,15 +98,21 @@ func TestSessionSlidingExpiry(t *testing.T) {
 				assert.Equal(t, first, expiryOf(t, server, token))
 				assert.Nil(t, findCookie(rec, SessionCookieName))
 
-				// One after it extends to a full lifetime, without a cookie or
-				// cache header.
+				// One after it extends to a full lifetime.
 				time.Sleep(interval / 2)
 				ok, rec = authenticate(t, server, token, nil)
 				assert.True(t, ok)
 				extended := expiryOf(t, server, token)
 				assert.Equal(t, time.Now().Add(lifetime), extended)
-				assert.Nil(t, findCookie(rec, SessionCookieName), "renewal must not re-send the cookie")
-				assert.Empty(t, rec.Header().Get("Cache-Control"))
+				cookie := findCookie(rec, SessionCookieName)
+				if tt.remember {
+					require.NotNil(t, cookie, "a remembered renewal must re-send the cookie")
+					assert.Equal(t, int(RememberedCookieMaxAge.Seconds()), cookie.MaxAge)
+					assert.Equal(t, testCachePrivate, rec.Header().Get(echo.HeaderCacheControl))
+				} else {
+					assert.Nil(t, cookie, "an unticked renewal must not send a cookie")
+					assert.Empty(t, rec.Header().Get(echo.HeaderCacheControl))
+				}
 
 				// Two requests in the same instant extend once.
 				ok, _ = authenticate(t, server, token, nil)
@@ -119,10 +128,66 @@ func TestSessionSlidingExpiry(t *testing.T) {
 	}
 }
 
-// TestSessionRenewsOnAnyResponse verifies that renewal does not depend on the
-// response being able to carry a cookie: a committed response and a WebSocket
-// upgrade slide the record like any other request.
-func TestSessionRenewsOnAnyResponse(t *testing.T) {
+// TestRememberedSessionRenewalResendsCookie verifies what a remembered renewal
+// adds to its response: the session cookie again, so the cookie lasts as long as
+// the browser is used, and Cache-Control private so no shared cache stores the
+// Set-Cookie. A record that was revoked before the header is written (a sign-in
+// in another tab) gets neither.
+func TestRememberedSessionRenewalResendsCookie(t *testing.T) {
+	cacheControl := []struct {
+		name    string
+		handler string
+		want    string
+	}{
+		{"none set", "", testCachePrivate},
+		{"public max-age is replaced", "public, max-age=60", testCachePrivate},
+		{"no-store is kept", "no-store", "no-store"},
+	}
+	for _, tt := range cacheControl {
+		t.Run("Cache-Control "+tt.name, func(t *testing.T) {
+			server, _ := newSessionTestServer(t, false, nil)
+			synctest.Test(t, func(t *testing.T) {
+				token := seedSession(t, server, &AccessToken{Remember: true})
+				time.Sleep(rememberedSessionRenewInterval)
+
+				ok, rec := authenticate(t, server, token, func(_ *http.Request, c echo.Context) {
+					if tt.handler != "" {
+						c.Response().Header().Set(echo.HeaderCacheControl, tt.handler)
+					}
+				})
+				require.True(t, ok)
+				cookie := findCookie(rec, SessionCookieName)
+				require.NotNil(t, cookie)
+				assert.Equal(t, token, cookie.Value)
+				assert.Equal(t, int(RememberedCookieMaxAge.Seconds()), cookie.MaxAge)
+				assert.Equal(t, tt.want, rec.Header().Get(echo.HeaderCacheControl))
+			})
+		})
+	}
+
+	t.Run("a record revoked before the response is written gets no cookie", func(t *testing.T) {
+		server, _ := newSessionTestServer(t, false, nil)
+		synctest.Test(t, func(t *testing.T) {
+			token := seedSession(t, server, &AccessToken{Remember: true})
+			time.Sleep(rememberedSessionRenewInterval)
+
+			req := sessionRequest(token)
+			c, rec := sessionContext(req)
+			require.True(t, server.checkSession(c, testLogger{}))
+			require.True(t, server.revokeRequestSession(req, ""))
+			require.NoError(t, c.NoContent(http.StatusOK))
+
+			assert.Nil(t, findCookie(rec, SessionCookieName))
+			assert.Empty(t, rec.Header().Get(echo.HeaderCacheControl))
+		})
+	})
+}
+
+// TestRenewalOnCommittedResponseAndWebSocketUpgrade verifies that a response that
+// cannot carry the cookie renews an unticked session (server record only) and
+// does not renew a remembered one, whose renewal needs the cookie: the next
+// ordinary request renews it and sends the cookie.
+func TestRenewalOnCommittedResponseAndWebSocketUpgrade(t *testing.T) {
 	tests := []struct {
 		name string
 		prep func(*http.Request, echo.Context)
@@ -134,15 +199,33 @@ func TestSessionRenewsOnAnyResponse(t *testing.T) {
 		}},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name+" renews an unticked session", func(t *testing.T) {
+			server, _ := newSessionTestServer(t, false, nil)
+			synctest.Test(t, func(t *testing.T) {
+				token := seedSession(t, server, &AccessToken{})
+
+				time.Sleep(idleSessionRenewInterval)
+				ok, _ := authenticate(t, server, token, tt.prep)
+				assert.True(t, ok)
+				assert.Equal(t, time.Now().Add(sessionIdleTimeout), expiryOf(t, server, token))
+			})
+		})
+		t.Run(tt.name+" leaves a remembered session to the next ordinary request", func(t *testing.T) {
 			server, _ := newSessionTestServer(t, false, nil)
 			synctest.Test(t, func(t *testing.T) {
 				token := seedSession(t, server, &AccessToken{Remember: true})
+				first := expiryOf(t, server, token)
 
 				time.Sleep(rememberedSessionRenewInterval)
-				ok, _ := authenticate(t, server, token, tt.prep)
+				ok, rec := authenticate(t, server, token, tt.prep)
+				assert.True(t, ok)
+				assert.Equal(t, first, expiryOf(t, server, token), "no cookie can be sent, so the record is not extended")
+				assert.Nil(t, findCookie(rec, SessionCookieName))
+
+				ok, rec = authenticate(t, server, token, nil)
 				assert.True(t, ok)
 				assert.Equal(t, time.Now().Add(RememberedSessionDuration), expiryOf(t, server, token))
+				assert.NotNil(t, findCookie(rec, SessionCookieName))
 			})
 		})
 	}

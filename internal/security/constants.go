@@ -39,10 +39,11 @@ const (
 	// "Remember this browser" ticked lasts after its last renewal.
 	RememberedSessionDuration = 30 * 24 * time.Hour
 
-	// RememberedCookieMaxAge is the Max-Age of a remembered session's cookie,
-	// written once at sign-in: the longest lifetime browsers keep (400 days). The
-	// server record, not the cookie, decides when the session ends, so the cookie
-	// is never re-sent when the record is renewed.
+	// RememberedCookieMaxAge is the Max-Age of a remembered session's cookie: the
+	// longest lifetime browsers keep (400 days). The cookie is sent again each
+	// time the record is renewed, so an active browser keeps its 30 days and the
+	// 400 days is only how long an unused cookie lives; the server record decides
+	// when the session ends.
 	RememberedCookieMaxAge = 400 * 24 * time.Hour
 
 	// sessionIdleTimeout is how long a session that was signed in with

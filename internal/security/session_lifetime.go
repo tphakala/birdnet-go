@@ -7,9 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/sessions"
+	"github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth/gothic"
 
@@ -163,10 +165,11 @@ func sessionCookieOptions(r *http.Request) sessions.Options {
 	return *buildSessionOptions(true, 0)
 }
 
-// writeSessionCookie sends the session cookie for token, once, at sign-in. A
-// remembered session gets a persistent cookie with the longest lifetime browsers
-// keep; an unticked one a browser-session cookie. The server record, not the
-// cookie, decides when the session ends, so the cookie is never re-sent.
+// writeSessionCookie sends the session cookie for token, at sign-in and again
+// when a remembered session is renewed (renewSession). A remembered session gets
+// a persistent cookie with the longest lifetime browsers keep; an unticked one a
+// browser-session cookie. The server record decides when the session ends; the
+// renewal keeps the cookie of a browser that is in use from running out first.
 func writeSessionCookie(w http.ResponseWriter, r *http.Request, token string, remember bool) {
 	opts := sessionCookieOptions(r)
 	opts.MaxAge = 0
@@ -314,7 +317,7 @@ func (s *OAuth2Server) checkSession(c echo.Context, log SecurityLogger) bool {
 	}
 
 	log.Debug("User authenticated: valid session")
-	s.renewSession(token, &rec)
+	s.renewSession(c, token, &rec)
 	c.Set(sessionRecordContextKey, rec)
 	return true
 }
@@ -370,17 +373,66 @@ func sessionNeedsRenewal(expiresAt time.Time, remember bool) bool {
 	return time.Until(expiresAt) <= sessionLifetime(remember)-sessionRenewInterval(remember)
 }
 
-// renewSession slides the expiry of a live session on the server. The cookie is
-// not touched: a remembered session's cookie already outlives any record (see
-// RememberedCookieMaxAge), so renewal needs no response header and works for
-// committed responses and WebSocket upgrades alike.
-func (s *OAuth2Server) renewSession(token string, rec *AccessToken) {
+// Cache-Control directives renewSession looks at or sets.
+const (
+	cacheControlPrivate = "private"
+	cacheControlNoStore = "no-store"
+)
+
+// renewSession slides the expiry of a live session on the server. Renewing a
+// remembered session also re-sends its cookie, so a browser in daily use keeps
+// its 30 days instead of reaching the end of the cookie's own Max-Age (see
+// RememberedCookieMaxAge). A response that cannot carry a cookie (already
+// committed, or a WebSocket upgrade) does not renew a remembered session: the
+// next ordinary request does both. An unticked session's cookie has no Max-Age,
+// so its renewal touches only the server record.
+func (s *OAuth2Server) renewSession(c echo.Context, token string, rec *AccessToken) {
 	if !sessionNeedsRenewal(rec.ExpiresAt, rec.Remember) {
 		return
 	}
-	if s.extendToken(token) {
-		go s.persistTokensIfEnabled()
+	if rec.Remember && !responseCanCarryCookie(c) {
+		return
 	}
+	if !s.extendToken(token) {
+		return
+	}
+	if rec.Remember {
+		s.resendRememberedCookie(c, token)
+	}
+	go s.persistTokensIfEnabled()
+}
+
+// responseCanCarryCookie reports whether a Set-Cookie can still reach the
+// browser on c's response.
+func responseCanCarryCookie(c echo.Context) bool {
+	return !c.Response().Committed && !websocket.IsWebSocketUpgrade(c.Request())
+}
+
+// resendRememberedCookie adds the renewed session cookie to c's response when
+// its headers are written, and only if the record still exists: a sign-in in
+// another tab revokes the old record, and its cookie must not land after the new
+// one. The response is marked private (unless it is no-store) so a shared cache
+// never stores the Set-Cookie; this replaces a handler's own public directive.
+func (s *OAuth2Server) resendRememberedCookie(c echo.Context, token string) {
+	res, req := c.Response(), c.Request()
+	res.Before(func() {
+		if !s.recordExists(token) {
+			return
+		}
+		writeSessionCookie(res, req, token, true)
+		header := res.Header()
+		if !strings.Contains(header.Get(echo.HeaderCacheControl), cacheControlNoStore) {
+			header.Set(echo.HeaderCacheControl, cacheControlPrivate)
+		}
+	})
+}
+
+// recordExists reports whether a session record is stored for token.
+func (s *OAuth2Server) recordExists(token string) bool {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	_, ok := s.accessTokens[sessionTokenKey(token)]
+	return ok
 }
 
 // extendToken moves the expiry of the record for token to a full lifetime from
