@@ -246,6 +246,7 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 		// is gone. An unrecovered panic in go-aac, go-m4a or go-hls would take
 		// down detection and the web server along with the stream, so it is
 		// contained here and turned into a stream teardown.
+		var routeClosed bool
 		defer func() {
 			if r := recover(); r != nil {
 				apicore.GetLogger().Error("Native HLS feed panicked; tearing down the stream",
@@ -254,12 +255,17 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 			}
 			close(stream.feedDone)
 			if stream.ctx.Err() == nil {
-				apicore.GetLogger().Warn("Native audio feed exited unexpectedly, cancelling stream",
-					logger.String("source_id", sanitizedID))
+				if routeClosed {
+					apicore.GetLogger().Debug("Audio route removed, cancelling native HLS stream",
+						logger.String("source_id", sanitizedID))
+				} else {
+					apicore.GetLogger().Warn("Native audio feed exited unexpectedly, cancelling stream",
+						logger.String("source_id", sanitizedID))
+				}
 				stream.cancel()
 			}
 		}()
-		c.runNativeAudioFeedLoop(stream.ctx, sourceID, stream, feed)
+		routeClosed = c.runNativeAudioFeedLoop(stream.ctx, sourceID, stream, feed)
 	}()
 
 	c.watchHLSStreamContext(sourceID, stream)
@@ -291,8 +297,10 @@ func (c *Handler) prepareNativeAudioFeed(sourceID string) (*audioFeedResources, 
 }
 
 // runNativeAudioFeedLoop pumps PCM from the router into the muxer until the
-// stream context is cancelled or the muxer latches a failure.
-func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, stream *HLSStreamInfo, res *audioFeedResources) {
+// stream context is cancelled, the muxer latches a failure, or the router closes
+// the feed (a source restart or reconfigure removing its routes). It reports
+// whether the router closed the feed.
+func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, stream *HLSStreamInfo, res *audioFeedResources) bool {
 	defer res.cleanup()
 
 	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
@@ -346,7 +354,7 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 		case <-ctx.Done():
 			apicore.GetLogger().Debug("Native audio feed stopped due to context cancellation",
 				logger.String("source_id", sanitizedID))
-			return
+			return false
 		case <-heartbeat.C:
 			stats := stream.mux.Stats()
 			apicore.GetLogger().Debug("Native HLS feed heartbeat",
@@ -363,8 +371,11 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 			lastHeartbeatSegments = stats.Segments
 		case chunk, ok := <-res.feed.ch:
 			if !ok {
-				apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
-				return
+				// The router removed this route, so no audio will ever arrive. The
+				// caller cancels the stream so watchHLSStreamContext drops it and the
+				// next Play builds a fresh one on the restarted source.
+				apicore.GetLogger().Debug("Audio channel closed by the router", logger.String("source_id", sanitizedID))
+				return true
 			}
 			// Report the dequeue before anything can return early, so the
 			// producer's byte accounting cannot leak on a mid-loop exit.
@@ -397,7 +408,7 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 
 			if err := stream.mux.Write(data, ts); err != nil {
 				if c.handleNativeWriteError(ctx, sanitizedID, stream, err, &rejected, &lastRejectLog) {
-					return
+					return false
 				}
 				continue
 			}

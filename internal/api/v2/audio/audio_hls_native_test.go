@@ -20,7 +20,9 @@ import (
 	"github.com/tphakala/go-hls/aachls"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 const (
@@ -626,23 +628,29 @@ func TestWaitForHLSPlaylistDispatchesOnNative(t *testing.T) {
 		"readiness must come from the muxer, not from waiting out the file-poll timeout")
 }
 
-// TestNativeFeedLoopExitsOnConsumerClose reproduces the RTSP reconnect teardown
-// path (#5255): when AudioRouter removes a source's routes it closes the
-// hlsConsumer while the stream context is still live. Closing the consumer must
-// close the feed channel so runNativeAudioFeedLoop drains any buffered audio and
-// exits promptly, allowing the caller to cancel and clean up the stale stream.
+// TestNativeFeedLoopExitsOnConsumerClose covers the feed-loop half of the RTSP
+// reconnect teardown (#5255): when AudioRouter removes a source's routes it
+// closes the hlsConsumer while the stream context is still live. Closing the
+// consumer must make runNativeAudioFeedLoop drain buffered audio and exit,
+// reporting that the router closed the feed, so the caller can cancel the stale
+// stream.
 func TestNativeFeedLoopExitsOnConsumerClose(t *testing.T) {
+	// writeFrame stamps a frame with time.Unix(0, seq), so the chunk's capture
+	// time in nanoseconds equals its sequence tag.
+	const firstFrameSeq = 1
+
 	h, _ := newNativeTestHandler(t)
 	stream := newEmptyNativeStream(t)
 	consumer, feed := newTestFeedConsumer(nativeHLSFeedQueueBytes)
 
-	writeFrame(t, consumer, soundCardFrameBytes, 1)
+	writeFrame(t, consumer, soundCardFrameBytes, firstFrameSeq)
 
 	cleanupCalled := make(chan struct{})
 	done := make(chan struct{})
+	var routeClosed bool
 	go func() {
 		defer close(done)
-		h.runNativeAudioFeedLoop(t.Context(), "native_src", stream, &audioFeedResources{
+		routeClosed = h.runNativeAudioFeedLoop(t.Context(), "native_src", stream, &audioFeedResources{
 			feed:    feed,
 			cleanup: func() { close(cleanupCalled) },
 		})
@@ -650,21 +658,46 @@ func TestNativeFeedLoopExitsOnConsumerClose(t *testing.T) {
 
 	require.NoError(t, consumer.Close())
 
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "runNativeAudioFeedLoop did not exit after consumer.Close() with an uncancelled context")
-	}
-
-	select {
-	case <-cleanupCalled:
-	default:
-		require.FailNow(t, "feed loop cleanup must run when the loop exits")
-	}
+	testutil.WaitForChannel(t, done, testutil.DefaultTestTimeout,
+		"runNativeAudioFeedLoop did not exit after consumer.Close() with an uncancelled context")
+	testutil.WaitForChannel(t, cleanupCalled, testutil.DefaultTestTimeout, "feed loop cleanup must run when the loop exits")
+	assert.True(t, routeClosed, "the loop must report that the router closed the feed")
 	assert.Equal(t, int64(0), feed.queued.Load(),
 		"buffered chunks must be drained and released before the feed loop exits")
-	assert.Equal(t, int64(1), stream.firstDataTime.Load(),
+	assert.Equal(t, int64(firstFrameSeq), stream.firstDataTime.Load(),
 		"buffered chunk must be encoded before the loop exits on channel close")
 	assert.False(t, stream.mux.Stats().Failed,
 		"feed loop must exit via channel close, not a muxer failure")
+}
+
+// TestNativeStreamIsDroppedWhenRouterRemovesRoutes is the end-to-end form of
+// #5255: a source restart makes the engine remove the source's routes, and the
+// live stream built on them must be cancelled and unregistered instead of
+// serving stale segments until the container restarts.
+func TestNativeStreamIsDroppedWhenRouterRemovesRoutes(t *testing.T) {
+	h, _ := newNativeTestHandler(t)
+	eng := engine.New(t.Context(), &engine.Config{}, nil)
+	h.Engine.Store(eng)
+	const sourceID = "native_restart_src"
+
+	stream, err := h.createNativeHLSStream(sourceID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		stream.cancel()
+		hlsMgr.streamsMu.Lock()
+		delete(hlsMgr.streams, sourceID)
+		hlsMgr.streamsMu.Unlock()
+	})
+	require.True(t, eng.Router().HasConsumers(sourceID), "the stream must have registered its route")
+
+	eng.Router().RemoveAllRoutes(sourceID)
+
+	testutil.WaitForChannel(t, stream.ctx.Done(), testutil.DefaultTestTimeout,
+		"the stream must be cancelled once the router removes its route")
+	require.Eventually(t, func() bool {
+		hlsMgr.streamsMu.RLock()
+		defer hlsMgr.streamsMu.RUnlock()
+		_, registered := hlsMgr.streams[sourceID]
+		return !registered
+	}, testutil.DefaultTestTimeout, 10*time.Millisecond, "the cancelled stream must be unregistered")
 }
