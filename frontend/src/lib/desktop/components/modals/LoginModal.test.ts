@@ -103,6 +103,88 @@ describe('LoginModal', () => {
     vi.clearAllMocks();
   });
 
+  // First in the file: the sign-in tests below leave 500 ms reload timers pending, and one firing
+  // during these tests would add a navigation they do not expect.
+  describe('hard navigations with an unsaved draft', () => {
+    let prevented: boolean[];
+    let unregister: (() => void) | undefined;
+
+    // A native leave prompt would run when the navigation starts, so the location stand-in
+    // fires beforeunload at the moment the page is told to go, and the test reads whether it
+    // would have been held.
+    function navigationProbe() {
+      const fire = () => {
+        const event = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(event);
+        prevented.push(event.defaultPrevented);
+      };
+      const location = mockWindowLocation();
+      Object.defineProperty(location, 'href', {
+        set: () => {
+          fire();
+        },
+        get: () => '',
+        configurable: true,
+      });
+      location.reload = vi.fn(fire);
+      return location;
+    }
+
+    function renderOpen() {
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+    }
+
+    beforeEach(() => {
+      prevented = [];
+      // Earlier sign-in tests set the allowance on the singleton; start from a clean one.
+      unsavedChanges.resetForTesting();
+      unregister = unsavedChanges.register({ isDirty: () => true });
+    });
+
+    afterEach(() => {
+      unregister?.();
+      unsavedChanges.resetForTesting();
+      vi.useRealTimers();
+    });
+
+    it('does not let the native prompt hold the start of an OAuth sign-in', async () => {
+      navigationProbe();
+      renderOpen();
+
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      expect(prevented).toEqual([false]);
+    });
+
+    it('does not let the native prompt hold the OAuth callback after a password sign-in', async () => {
+      navigationProbe();
+      vi.mocked(api.post).mockResolvedValueOnce({ success: true, redirectUrl: '/auth/callback' });
+      renderOpen();
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+
+      await waitFor(() => expect(prevented).toEqual([false]));
+    });
+
+    it('does not let the native prompt hold the reload after a password sign-in', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      navigationProbe();
+      vi.mocked(api.post).mockResolvedValueOnce({ success: true });
+      renderOpen();
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(prevented).toEqual([false]);
+    });
+  });
+
   describe('Redirect URL Validation', () => {
     it('should accept valid relative URLs', () => {
       loginModalTest.render({
@@ -1354,86 +1436,6 @@ describe('LoginModal', () => {
       expect(screen.queryByLabelText('auth.password')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: /continueWithGoogle/i })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /continueWithGithub/i })).not.toBeInTheDocument();
-    });
-  });
-
-  describe('hard navigations with an unsaved draft', () => {
-    let prevented: boolean[];
-    let unregister: (() => void) | undefined;
-
-    // A native leave prompt would run when the navigation starts, so the location stand-in
-    // fires beforeunload at the moment the page is told to go, and the test reads whether it
-    // would have been held.
-    function navigationProbe() {
-      const fire = () => {
-        const event = new Event('beforeunload', { cancelable: true });
-        window.dispatchEvent(event);
-        prevented.push(event.defaultPrevented);
-      };
-      const location = mockWindowLocation();
-      Object.defineProperty(location, 'href', {
-        set: () => {
-          fire();
-        },
-        get: () => '',
-        configurable: true,
-      });
-      location.reload = vi.fn(fire);
-      return location;
-    }
-
-    function renderOpen() {
-      loginModalTest.render({
-        isOpen: true,
-        onClose: vi.fn(),
-        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
-      });
-    }
-
-    beforeEach(() => {
-      prevented = [];
-      // Earlier sign-in tests set the allowance on the singleton; start from a clean one.
-      unsavedChanges.resetForTesting();
-      unregister = unsavedChanges.register({ isDirty: () => true });
-    });
-
-    afterEach(() => {
-      unregister?.();
-      unsavedChanges.resetForTesting();
-      vi.useRealTimers();
-    });
-
-    it('does not let the native prompt hold the start of an OAuth sign-in', async () => {
-      navigationProbe();
-      renderOpen();
-
-      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
-
-      expect(prevented).toEqual([false]);
-    });
-
-    it('does not let the native prompt hold the OAuth callback after a password sign-in', async () => {
-      navigationProbe();
-      vi.mocked(api.post).mockResolvedValueOnce({ success: true, redirectUrl: '/auth/callback' });
-      renderOpen();
-      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
-
-      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
-
-      await waitFor(() => expect(prevented).toEqual([false]));
-    });
-
-    it('does not let the native prompt hold the reload after a password sign-in', async () => {
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      navigationProbe();
-      vi.mocked(api.post).mockResolvedValueOnce({ success: true });
-      renderOpen();
-      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
-
-      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
-      await vi.advanceTimersByTimeAsync(500);
-
-      expect(prevented).toEqual([false]);
     });
   });
 });
