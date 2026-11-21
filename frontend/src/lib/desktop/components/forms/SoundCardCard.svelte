@@ -227,7 +227,11 @@
   $effect(() => {
     const device = shownDevice;
     const pick = untrack(() => pendingDevice);
-    if (!expanded || !device) return;
+    if (!expanded || !device) {
+      // An aborted probe leaves the flag set: its finally block skips aborted runs.
+      untrack(() => (sampleRateLoading = false));
+      return;
+    }
     const controller = new AbortController();
     untrack(() => {
       sampleRateLoading = true;

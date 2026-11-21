@@ -286,6 +286,24 @@ describe('SoundCardCard device capability probe (issue #3593, open card)', () =>
     expect(view.onChange).not.toHaveBeenCalled();
   });
 
+  it('enables the rate select again when a pick on a card without a device is dropped mid-probe', async () => {
+    const view = renderCard(Number(RATE_48K.value), '');
+    await openCard(view);
+    const probe = holdNextProbe([RATE_48K, RATE_192K]);
+
+    await pickDevice(DEV2);
+    await waitFor(() => expect(rateSelect()).toBeDisabled());
+    // A save starts and drops the pick; the card shows no device again.
+    await view.rerender({ disabled: true, expanded: true });
+    probe.release();
+    await view.rerender({ disabled: false, expanded: true });
+    await settled();
+
+    expect(rateSelect()).not.toBeDisabled();
+    expect(screen.queryByText('settings.audio.soundCards.sampleRateProbing')).toBeNull();
+    expect(view.onChange).not.toHaveBeenCalled();
+  });
+
   it('writes nothing when the card is disabled by a running save before the probe returns', async () => {
     const view = renderCard();
     await openCard(view);

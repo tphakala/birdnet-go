@@ -421,7 +421,7 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
     // Complete the add flow via the Add button (not the heading of the same text).
     await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
 
-    // One save, under the list field, carrying the whole array with the new source.
+    // One write into the form, carrying the whole array with the new source.
     expect(onUpdateSources).toHaveBeenCalledTimes(1);
     expect(onUpdateSources.mock.calls[0]).toHaveLength(1);
     const savedSources = lastSent(onUpdateSources);

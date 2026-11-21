@@ -99,7 +99,8 @@ persists it. Its save rules (`soundCardProblems` in
 `$lib/desktop/components/forms/sourceRules.ts`) are pure functions of the form and
 the saved values, so the page evaluates them whichever tab is open and reports
 them through `setValidationIssues` under a fixed set of owned keys (never one key
-per row); a problem the saved configuration already has is not reported. The cards
+per row); a duplicate the saved configuration already has is not reported, while
+an empty name or device is always reported because the server refuses it. The cards
 use the same functions for their inline messages.
 
 What saves when:
