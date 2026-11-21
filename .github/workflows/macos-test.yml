@@ -9,9 +9,31 @@ name: macos-test
 # pre-existing macOS-specific test failures (Linux-only assumptions). The job
 # reports them for visibility; promote it to a required check once they are
 # fixed. See the cross-platform test-cleanup tracking issue.
+#
+# Scope: a pull request run tests a computed subset of packages (the ones with
+# macOS-specific files, the native-library and SIMD boundary, and the packages
+# the pull request changes; see .github/scripts/native-test-packages.sh) and
+# type-checks every package with go vet. The weekly run and a manual run test
+# every package. The subset is only safe because that full run exists, so keep
+# the schedule on the full scope.
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Packages to test: full (./...) or subset (the pull request selection)'
+        type: choice
+        options:
+          - full
+          - subset
+        default: full
+      race:
+        description: 'Run the tests with the race detector'
+        type: choice
+        options:
+          - 'on'
+          - 'off'
+        default: 'on'
   # Weekly instead of on every push to main: the job is advisory with known
   # failures, so a per-merge run cost runner time without blocking anything.
   schedule:
@@ -27,6 +49,7 @@ on:
       - 'Taskfile.yml'
       - 'scripts/fetch-onnxruntime.sh'
       - 'scripts/onnxruntime-pins.sha256'
+      - '.github/scripts/native-test-packages.sh'
       - '.github/workflows/macos-test.yml'
       - '.github/actions/**'
 
@@ -42,24 +65,47 @@ concurrency:
 jobs:
   unit-tests-macos:
     name: unit-tests (macos-arm64)
-    # Demoted off the per-commit PR critical path: this native run is slow (~20m)
-    # and already advisory (continue-on-error). It runs weekly and on
+    # Demoted off the per-commit PR critical path: the full native run is slow
+    # (~20m) and already advisory (continue-on-error). It runs weekly and on
     # workflow_dispatch; on a PR it runs only when the `full-ci` label is
-    # present. A skipped job reports as success, so adding it as a
-    # required check later will not deadlock label-less PRs.
+    # present, and then tests the package subset. A skipped job reports as
+    # success, so adding it as a required check later will not deadlock
+    # label-less PRs.
     if: >-
       github.event_name != 'pull_request' ||
       contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: macos-latest
     # Non-blocking until the pre-existing macOS test failures are fixed.
     continue-on-error: true
+    env:
+      # A pull request tests the subset with the race detector; schedule has no
+      # inputs, so it falls through to the full suite with -race.
+      NATIVE_TEST_SCOPE: ${{ github.event_name == 'pull_request' && 'subset' || inputs.scope || 'full' }}
+      NATIVE_TEST_RACE: ${{ github.event_name == 'pull_request' && 'on' || inputs.race || 'on' }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          # HEAD^1 (the base side of the merge commit) is the diff base for the
+          # package selection on a pull request.
+          fetch-depth: 2
       - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
-          cache: true
+          # setup-go saves its cache in a post step that runs only when the job
+          # succeeded, and it saves under the pull request's own ref, which no
+          # other pull request can read. The cache is restored and saved
+          # explicitly below instead, whatever the test result.
+          cache: false
       - run: go version
+
+      - name: Resolve Go cache paths
+        id: go-cache
+        run: |
+          {
+            echo "gocache=$(go env GOCACHE)"
+            echo "gomodcache=$(go env GOMODCACHE)"
+            echo "goversion=$(go env GOVERSION)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Resolve tool versions from Taskfile
         run: |
@@ -74,6 +120,23 @@ jobs:
             echo "TFLITE_VERSION=${tflite}"
             echo "ONNXRUNTIME_VERSION=${onnx}"
           } >> "$GITHUB_ENV"
+
+      - name: Restore Go cache
+        id: go-cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.gocache }}
+            ${{ steps.go-cache.outputs.gomodcache }}
+          # cgo objects depend on the TFLite headers, which Go's build cache does
+          # not fingerprint, so the TFLite version, runner image, Go version and
+          # race mode are part of the key. The scope is too, so a subset entry
+          # cannot take the key a later full run would save under; a subset run
+          # may still start from a full entry through the second restore key.
+          key: native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-
+            native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -113,14 +176,45 @@ jobs:
           sudo mkdir -p /usr/local/lib
           sudo cp -a "${RUNNER_TEMP}"/onnxruntime/lib/libonnxruntime*.dylib /usr/local/lib/
 
+      - name: Configure CGO
+        run: |
+          # Exported through GITHUB_ENV so the select, test and vet steps all see
+          # them, and only after the libraries they point at exist.
+          # rpath is baked into the test binaries so dyld finds libtensorflowlite_c
+          # even though SIP strips DYLD_* from the child processes `go test` spawns.
+          {
+            echo "CGO_ENABLED=1"
+            echo "CGO_CFLAGS=-I${GITHUB_WORKSPACE}/.cache/tensorflow"
+            echo "CGO_LDFLAGS=-L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib"
+          } >> "$GITHUB_ENV"
+
+      - name: Select test packages
+        id: select
+        env:
+          # Only a pull request has a meaningful diff base; a manual or scheduled
+          # run selects without rule (c), or skips selection for the full scope.
+          DIFF_BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
+        run: |
+          if [ "$NATIVE_TEST_SCOPE" = "full" ]; then
+            echo './...' > native-test-packages.txt
+          elif ! TEST_TAGS=noembed,skipfrontend bash .github/scripts/native-test-packages.sh native-test-packages.txt; then
+            echo "## :x: Package selection failed, see the Select test packages step log" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          # The script falls back to ./... when it cannot read the diff, so the
+          # scope reported to the later steps comes from the file, not from the input.
+          if [ "$(cat native-test-packages.txt)" = "./..." ]; then
+            echo "scope=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "scope=subset" >> "$GITHUB_OUTPUT"
+            echo "count=$(awk 'END { print NR }' native-test-packages.txt)" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run unit tests
         env:
           CI: true
-          CGO_ENABLED: 1
-          CGO_CFLAGS: -I${{ github.workspace }}/.cache/tensorflow
-          # rpath is baked into the test binaries so dyld finds libtensorflowlite_c
-          # even though SIP strips DYLD_* from the child processes `go test` spawns.
-          CGO_LDFLAGS: -L/opt/homebrew/lib -ltensorflowlite_c -Wl,-rpath,/opt/homebrew/lib
+          SELECTED_SCOPE: ${{ steps.select.outputs.scope }}
+          SELECTED_COUNT: ${{ steps.select.outputs.count }}
         run: |
           # GitHub runs steps as `bash -eo pipefail`, so a failing `go test`
           # pipeline would abort here before PIPESTATUS is captured and the failure
@@ -136,6 +230,9 @@ jobs:
           # under runner load (goroutine dump at timeout was idle, i.e. cumulative
           # race-instrumented work, not a deadlock). 900s adds headroom and stays
           # under the 20m step cap below.
+          # -count=1: Go's test cache cannot see the dylibs a test loads at run
+          # time (the ONNX smoke test), so a restored cache must never replay a
+          # result.
           #
           # Write the -json stream to a file and take pass/fail from go test's own
           # exit code. We do NOT pipe through gotestfmt: go wraps the macOS cgo
@@ -151,14 +248,27 @@ jobs:
           # and actually EXECUTING the kernels on Apple silicon.
           # Note this job is advisory: it is continue-on-error and runs on a PR only
           # with the full-ci label, so it informs rather than gates.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
+          PKGS=()
+          while IFS= read -r pkg; do PKGS+=("$pkg"); done < native-test-packages.txt
+          RACE_ARGS=()
+          if [ "$NATIVE_TEST_RACE" = "on" ]; then RACE_ARGS=(-race); fi
+          if [ "$SELECTED_SCOPE" = "full" ]; then
+            SCOPE_DESC="full suite (./...)"
+          else
+            SCOPE_DESC="subset of ${SELECTED_COUNT} packages"
+          fi
+          SCOPE_DESC="${SCOPE_DESC}, -race ${NATIVE_TEST_RACE}"
+          echo "Testing: ${SCOPE_DESC}"
+          printf '%s\n' "${PKGS[@]}"
+
+          go test -tags noembed,skipfrontend ${RACE_ARGS[@]+"${RACE_ARGS[@]}"} -count=1 -json -v -short -timeout 900s "${PKGS[@]}" > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 
           if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo "::error title=Test Failure::macOS unit tests failed - see job summary for details"
             {
-              echo "## :x: macOS Test Run Failed"
+              echo "## :x: macOS Test Run Failed (${SCOPE_DESC})"
               echo ""
               echo "Exit code: $TEST_EXIT_CODE"
               echo ""
@@ -170,8 +280,21 @@ jobs:
             exit "$TEST_EXIT_CODE"
           fi
 
-          echo "## :white_check_mark: All macOS Tests Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "## :white_check_mark: macOS tests passed (${SCOPE_DESC})" >> "$GITHUB_STEP_SUMMARY"
         timeout-minutes: 20
+
+      - name: Darwin compile check
+        # A subset run no longer compiles every package for darwin the way
+        # `go test ./...` does, and cross-platform-build.yml cannot cover
+        # darwin/arm64 (it needs cgo). go vet type-checks every package and its
+        # tests without linking. The full scope compiles everything already.
+        if: ${{ !cancelled() && steps.select.outputs.scope == 'subset' }}
+        run: |
+          if ! go vet -tags noembed,skipfrontend ./...; then
+            echo "## :x: Darwin compile check failed (go vet ./...), see the step log" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+        timeout-minutes: 10
 
       - name: Upload test log
         uses: actions/upload-artifact@v7
@@ -180,3 +303,16 @@ jobs:
           name: test-log-macos
           path: gotest.log
           if-no-files-found: warn
+
+      - name: Save Go cache
+        # Not gated on the tests passing: the build cache is valid either way. A
+        # run that failed before or during package selection saves nothing. A
+        # cache service error must not fail the run.
+        if: ${{ !cancelled() && steps.select.outcome == 'success' && steps.go-cache-restore.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.gocache }}
+            ${{ steps.go-cache.outputs.gomodcache }}
+          key: native-go-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ steps.go-cache.outputs.goversion }}-tflite-${{ env.TFLITE_VERSION }}-race-${{ env.NATIVE_TEST_RACE }}-${{ env.NATIVE_TEST_SCOPE }}-${{ hashFiles('go.sum') }}
