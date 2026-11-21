@@ -644,6 +644,80 @@ describe('StreamManager add form', () => {
   });
 });
 
+describe('StreamManager blocked actions', () => {
+  const REFRESH_KEY = 'settings.audio.streams.refresh';
+  const SAVING_KEY = 'settings.actions.saving';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it('says why Add stream and Refresh are blocked while a save runs, and ignores a Refresh click', async () => {
+    const view = renderRows([streamA, streamB]);
+    // The first health load keeps Refresh inert too, so let it finish before the block starts.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: REFRESH_KEY })).not.toHaveAttribute('aria-disabled')
+    );
+    expect(api.get).toHaveBeenCalledOnce();
+
+    await view.rerender({
+      streams: [streamA, streamB],
+      disabled: true,
+      disabledReason: SAVING_KEY,
+    });
+
+    for (const name of [ADD_KEY, REFRESH_KEY]) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).toHaveAccessibleDescription(SAVING_KEY);
+    }
+    await fireEvent.click(screen.getByRole('button', { name: REFRESH_KEY }));
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    expect(api.get).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
+  });
+
+  it('shows the reason with an empty list instead of an Add stream button that would do nothing', async () => {
+    const view = renderRows([]);
+    expect(screen.getByRole('button', { name: ADD_KEY })).toBeInTheDocument();
+
+    await view.rerender({ streams: [], disabled: true, disabledReason: SAVING_KEY });
+
+    expect(screen.getByText(SAVING_KEY)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: ADD_KEY })).toBeNull();
+  });
+
+  it('falls back to the loading reason when the caller gives none, for the add form too', async () => {
+    const view = renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+
+    await view.rerender({ streams: [], disabled: true });
+
+    expect(screen.getByRole('button', { name: ADD_KEY })).toHaveAccessibleDescription(
+      'common.loading'
+    );
+  });
+
+  it('shows no reason and keeps the buttons usable while nothing is blocked', async () => {
+    renderRows([streamA, streamB], { disabledReason: SAVING_KEY });
+
+    expect(screen.queryByText(SAVING_KEY)).toBeNull();
+    expect(screen.getByRole('button', { name: ADD_KEY })).not.toHaveAttribute('aria-disabled');
+    // Refresh is inert only while the first health load runs.
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: REFRESH_KEY })).not.toHaveAttribute('aria-disabled')
+    );
+  });
+});
+
 describe('StreamManager health follows the saved streams', () => {
   const healthOf = (stream: StreamConfig) => ({
     name: stream.name,

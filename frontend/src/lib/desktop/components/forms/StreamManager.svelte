@@ -515,14 +515,12 @@
   // ----- Add -----
 
   let addBlocked = $derived(disabled || newNeedsTest);
-  /** Ids of the reasons shown beside the add form's Add button while it is blocked. */
-  const addDisabledReasonId = generateId('add-stream-disabled-reason');
+  /** Id of the reason line shown below the manager while it is disabled, and of the add form's test reason. */
+  const blockedReasonId = generateId('streams-blocked-reason');
   const addTestRequiredId = generateId('add-stream-test-required');
+  let blockedReason = $derived(disabledReason ?? t('common.loading'));
   let addDescribedBy = $derived(
-    [
-      disabled && disabledReason ? addDisabledReasonId : undefined,
-      newNeedsTest ? addTestRequiredId : undefined,
-    ]
+    [disabled ? blockedReasonId : undefined, newNeedsTest ? addTestRequiredId : undefined]
       .filter(Boolean)
       .join(' ') || undefined
   );
@@ -669,9 +667,12 @@
 
       <button
         type="button"
-        class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick={loadHealthStatus}
-        disabled={healthLoading || disabled}
+        class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+        onclick={() => {
+          if (!disabled) void loadHealthStatus();
+        }}
+        aria-disabled={healthLoading || disabled ? 'true' : undefined}
+        aria-describedby={disabled ? blockedReasonId : undefined}
       >
         <RefreshCw class={cn('size-4', healthLoading && 'animate-spin')} />
         {t('settings.audio.streams.refresh')}
@@ -691,11 +692,9 @@
         t('settings.audio.streams.emptyState.hints.protocol'),
       ]}
       hintsTitle={t('settings.audio.streams.emptyState.hintsTitle')}
-      primaryAction={{
-        label: t('settings.audio.streams.addStream'),
-        icon: Plus,
-        onclick: openAddForm,
-      }}
+      primaryAction={disabled
+        ? undefined
+        : { label: t('settings.audio.streams.addStream'), icon: Plus, onclick: openAddForm }}
     />
   {:else}
     <div class="space-y-3">
@@ -857,11 +856,6 @@
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
               <div class="mr-auto flex min-w-0 flex-col gap-1">
-                {#if disabled && disabledReason}
-                  <p id={addDisabledReasonId} class="text-sm text-[var(--text-subtle)]">
-                    {disabledReason}
-                  </p>
-                {/if}
                 {#if newNeedsTest}
                   <p id={addTestRequiredId} class="text-xs text-muted">
                     {t('settings.audio.streams.testRequired')}
@@ -894,13 +888,18 @@
       <button
         bind:this={addButton}
         type="button"
-        class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
         onclick={openAddForm}
-        {disabled}
+        aria-disabled={disabled ? 'true' : undefined}
+        aria-describedby={disabled ? blockedReasonId : undefined}
       >
         <Plus class="size-4" />
         {t('settings.audio.streams.addStream')}
       </button>
     {/if}
+  {/if}
+
+  {#if disabled}
+    <p id={blockedReasonId} class="text-sm text-[var(--text-subtle)]">{blockedReason}</p>
   {/if}
 </div>
