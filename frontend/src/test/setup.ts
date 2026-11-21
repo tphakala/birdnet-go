@@ -240,6 +240,7 @@ const translations: Record<string, string> = {
   'notifications.timeAgo.daysAgo': '{days}d ago',
   'forms.networkAddressList.remove': 'Remove {address}',
   'media.audio.seekValueText': '{current} of {total}',
+  'shortcuts.withKey': '{label} ({keys})',
   'settings.audio.soundCards.deleteConfirm': 'Remove sound card source "{name}"?',
   'settings.audio.streams.deleteConfirm': 'Remove stream "{name}"?',
 };

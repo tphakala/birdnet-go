@@ -256,3 +256,14 @@ export function describeBinding(
     .join(ARIA_ALTERNATIVE_SEPARATOR);
   return { aria, keys, display: keys.join(DISPLAY_JOINER), label };
 }
+
+/**
+ * A `title` text that names the key, such as `Play (P)`, or undefined without a hint. Every
+ * control that shows a shortcut hint formats its title through this, so they read alike.
+ */
+export function shortcutTitle(
+  label: string,
+  hint: ShortcutHint | null | undefined
+): string | undefined {
+  return hint ? t('shortcuts.withKey', { label, keys: hint.display }) : undefined;
+}

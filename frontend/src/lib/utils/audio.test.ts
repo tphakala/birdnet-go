@@ -3,6 +3,7 @@ import {
   DASHBOARD_AUDIO_RETRY_DELAYS_MS,
   MAX_AUDIO_PROBE_RETRY_AFTER_MS,
   pendingRetryDelayMs,
+  playButtonAction,
   playButtonLabelKey,
   probeAudioSource,
 } from './audio';
@@ -16,6 +17,36 @@ describe('playButtonLabelKey', () => {
   it('reads as pause when playing and play otherwise', () => {
     expect(playButtonLabelKey(false, true)).toBe('media.audio.pause');
     expect(playButtonLabelKey(false, false)).toBe('media.audio.play');
+  });
+});
+
+describe('playButtonAction', () => {
+  it.each([
+    {
+      name: 'full clip playing, selection present',
+      isPlaying: true,
+      sel: false,
+      has: true,
+      out: 'toggle',
+    },
+    {
+      name: 'full clip playing, no selection',
+      isPlaying: true,
+      sel: false,
+      has: false,
+      out: 'toggle',
+    },
+    { name: 'selection playing', isPlaying: true, sel: true, has: true, out: 'stopSelection' },
+    {
+      name: 'idle with a selection',
+      isPlaying: false,
+      sel: false,
+      has: true,
+      out: 'playSelection',
+    },
+    { name: 'idle without a selection', isPlaying: false, sel: false, has: false, out: 'toggle' },
+  ])('$name gives $out', ({ isPlaying, sel, has, out }) => {
+    expect(playButtonAction({ isPlaying, isPlayingSelection: sel, hasSelection: has })).toBe(out);
   });
 });
 

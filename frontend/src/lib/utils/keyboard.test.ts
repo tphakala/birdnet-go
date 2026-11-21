@@ -8,6 +8,7 @@ import {
   isInteractiveTarget,
   isTextEntryTarget,
   matchesBinding,
+  shortcutTitle,
 } from './keyboard';
 import { t } from '$lib/i18n';
 
@@ -232,5 +233,14 @@ describe('describeBinding', () => {
     expect(hint.aria).toBe('?');
     expect(hint.keys).toEqual(['?']);
     expect(hint.label).toBe(t('shortcuts.keys.questionMark'));
+  });
+});
+
+describe('shortcutTitle', () => {
+  it('names the key after the label, and gives no title without a hint', () => {
+    const hint = describeBinding({ key: 'c' }, false);
+    expect(shortcutTitle('Mark as correct', hint)).toBe('Mark as correct (C)');
+    expect(shortcutTitle('Mark as correct', null)).toBeUndefined();
+    expect(shortcutTitle('Mark as correct', undefined)).toBeUndefined();
   });
 });
