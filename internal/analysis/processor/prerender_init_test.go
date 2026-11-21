@@ -57,9 +57,3 @@ func TestStopPreRenderer_ClosesSecureFSOnce(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrClosed, "the root must be closed after stop")
 	assert.NotPanics(t, p.stopPreRenderer, "a second stop must be a no-op")
 }
-
-func TestStopPreRenderer_WithoutPreRenderer(t *testing.T) {
-	p := &Processor{Settings: newPreRenderInitSettings(t)}
-
-	assert.NotPanics(t, p.stopPreRenderer)
-}

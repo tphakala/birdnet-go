@@ -3261,13 +3261,9 @@ func generateRandomHex(length int) string {
 }
 
 // stopPreRenderer stops the spectrogram pre-renderer, then closes the SecureFS
-// root initPreRenderer opened for it. The pre-renderer never closes an injected
-// SecureFS, so without this the export directory handle stays open until the
-// process exits, and Windows refuses to rename or delete that directory
-// meanwhile. It is safe to call more than once and from concurrent callers:
-// Stop is idempotent and the root is closed by whichever caller swaps it out
-// first. p.preRenderer is only read, never cleared, because actions read it
-// without a lock.
+// root initPreRenderer opened for it, which Windows would otherwise keep from
+// renaming or deleting the export directory until exit. Safe to call repeatedly
+// and concurrently. p.preRenderer is not cleared: actions read it without a lock.
 func (p *Processor) stopPreRenderer() {
 	if p.preRenderer != nil {
 		p.preRenderer.Stop()
