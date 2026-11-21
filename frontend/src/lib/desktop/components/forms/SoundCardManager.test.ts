@@ -673,7 +673,7 @@ describe('SoundCardManager add', () => {
       const onUpdateSources = renderWith([existing]);
 
       await fillAndAdd('Porch', '');
-      // The used device is not offered, so the form has no device and refuses.
+      // The helper picks no device, so the form has none and refuses.
       expect(onUpdateSources).not.toHaveBeenCalled();
       expect(screen.getByRole('alert')).toHaveTextContent(
         'settings.audio.soundCards.errors.deviceRequired'
