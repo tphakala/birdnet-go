@@ -53,16 +53,24 @@ func TestStatSource(t *testing.T) {
 	})
 }
 
-// TestSourceState_UnpinnedNeverMatches pins that a state whose identity could not
-// be read when it was created matches no file, the one it was built from
-// included. NewSourceState leaves pinned false only for an info whose id cannot
-// be loaded (a case Linux does not produce), so the state is built directly.
+// notFileStat wraps an os.FileInfo so that os.SameFile cannot compare it.
+type notFileStat struct{ os.FileInfo }
+
+// TestSourceState_UnpinnedNeverMatches pins that NewSourceState pins an info only
+// when its identity can be read, and that a state that is not pinned matches no
+// file, the one it was built from included. A nil info or an info os.SameFile
+// cannot compare leaves a state unpinned on every OS; on Windows so does an id
+// that cannot be loaded. The Matches guard is reached only by building the state
+// directly: for those infos os.SameFile already makes Matches false.
 func TestSourceState_UnpinnedNeverMatches(t *testing.T) {
 	clip := filepath.Join(t.TempDir(), "clip.wav")
 	require.NoError(t, os.WriteFile(clip, make([]byte, sourceStateClipBytes), 0o600))
 	info, err := StatSource(clip)
 	require.NoError(t, err)
 
+	assert.True(t, NewSourceState(info, 0).pinned, "a readable identity pins the state")
+	assert.False(t, NewSourceState(nil, 0).pinned, "a nil info leaves the state unpinned")
+	assert.False(t, NewSourceState(notFileStat{info}, 0).pinned, "an info os.SameFile cannot compare leaves the state unpinned")
 	assert.True(t, NewSourceState(info, 0).Matches(info), "a pinned state matches the file it describes")
 	assert.False(t, SourceState{info: info}.Matches(info), "an unpinned state matches nothing")
 }
