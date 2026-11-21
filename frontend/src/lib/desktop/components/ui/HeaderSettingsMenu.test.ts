@@ -219,6 +219,32 @@ describe('HeaderSettingsMenu Edit dashboard while a guard holds the move', () =>
     vi.restoreAllMocks();
   });
 
+  // The prompt is mounted by App and records the focused element as the place to return to;
+  // the focused menu item unmounts with the menu, so the trigger must hold focus by then.
+  it('moves focus to the menu button when the prompt opens', async () => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+    const item = menu.getByText(EDIT_LABEL).closest('button');
+    if (!item) throw new Error('Edit dashboard item not found');
+    item.focus();
+
+    await fireEvent.click(item);
+
+    expect(unsavedChanges.prompting).toBe(true);
+    expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus();
+  });
+
+  it('moves focus to the menu button when Report bug opens the prompt', async () => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+    const item = menu.getByText(REPORT_BUG_LABEL).closest('button');
+    if (!item) throw new Error('Report bug item not found');
+    item.focus();
+
+    await fireEvent.click(item);
+
+    expect(unsavedChanges.prompting).toBe(true);
+    expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus();
+  });
+
   it.each([
     { answer: 'stay', editMode: false },
     { answer: 'leave', editMode: true },

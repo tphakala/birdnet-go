@@ -82,6 +82,8 @@
 
   function handleEditDashboard() {
     isOpen = false;
+    // As for the reset: the leave prompt returns focus to the trigger, not to the unmounted item
+    buttonRef?.focus();
     resetDateToToday();
     // Armed only once the move applies: after Stay, the next dashboard visit must not open in
     // edit mode. The dashboard reads the flag reactively, so setting it just after the route
@@ -266,6 +268,8 @@
         <button
           onclick={() => {
             isOpen = false;
+            // As for Edit dashboard: the leave prompt returns focus to the trigger
+            buttonRef?.focus();
             navigation.navigate('/ui/help/report-bug');
           }}
           class={MENU_ITEM_CLASS}
