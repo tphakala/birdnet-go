@@ -19,6 +19,7 @@ import {
 import type { AudioSourceConfig, StreamConfig } from '$lib/stores/settings';
 import { t } from '$lib/i18n';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
+import { deferred } from '../../../../../test/async-helpers';
 import { serveConfirmedSettings } from '../../../../../test/settings-store-helpers';
 import { serverSettings } from '../../../../../test/settings-helpers';
 import AudioSettingsPage from './AudioSettingsPage.svelte';
@@ -467,6 +468,32 @@ describe('AudioSettingsPage streams tab saves with the page', () => {
 
     await waitFor(() => expect(state).toHaveAttribute('data-disabled', 'true'));
     expect(state).toHaveTextContent('settings.actions.saving');
+  });
+
+  it('keeps the edit, the unsaved state and the mounted manager while a delayed save runs', async () => {
+    const pending = deferred<undefined>();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(pending.promise);
+    renderTab('streams');
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
+    const state = screen.getByTestId('manager-state');
+    const mount = state.getAttribute('data-mount');
+
+    await fireEvent.click(saveButton());
+    await waitFor(() => expect(settingsAPI.save).toHaveBeenCalledOnce());
+
+    // The save's rebase on the server snapshot has run and the PUT is still open.
+    expect(get(settingsStore).isSaving).toBe(true);
+    expect(formStreams()).toEqual([{ ...STREAM, gain: 1 }]);
+    expect(get(hasUnsavedChanges)).toBe(true);
+    expect(screen.getByTestId('manager-state')).toBe(state);
+    expect(state).toHaveAttribute('data-mount', mount);
+    expect(state).toHaveAttribute('data-disabled', 'true');
+
+    pending.resolve(undefined);
+    await waitFor(() => expect(get(settingsStore).isSaving).toBe(false));
+    expect(formStreams()).toEqual([{ ...STREAM, gain: 1 }]);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(state).toHaveAttribute('data-mount', mount);
   });
 
   it('remounts the manager when the form is reset', async () => {
