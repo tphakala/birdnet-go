@@ -203,7 +203,7 @@ func TestStartMigration_PrerequisiteGate(t *testing.T) {
 			wantState: "idle",
 		},
 		{
-			name: "the re-run checks outlast the preflight limit",
+			name: "the preflight limit expired before the re-run checks",
 			prepare: func(t *testing.T, c *Handler) {
 				t.Helper()
 				seedPassingResult(t, c)

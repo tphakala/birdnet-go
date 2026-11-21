@@ -280,39 +280,33 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 
 	stop := make(chan struct{})
 	firstFrame := make(chan struct{})
+	abort := make(chan struct{})
 	flipErr := make(chan error, 1)
 	var wg sync.WaitGroup
+	// A failed require in the main loop ends the test without reaching wg.Wait;
+	// the cleanup stops the goroutines before the router is closed.
+	t.Cleanup(func() {
+		close(abort)
+		wg.Wait()
+	})
 	wg.Go(func() {
 		defer close(stop)
-		flip := 0
-		flipOnce := func() error {
-			err := router.UpdateGain(gainUpdateSource, gains[flip%len(gains)])
-			flip++
-			return err
-		}
-		for range gainUpdateFlips {
-			if err := flipOnce(); err != nil {
+		// Flip the fixed count, then keep flipping until the main loop has seen a
+		// frame, so a frame is always delivered while the gain is still changing.
+		for i := 0; ; i++ {
+			if i >= gainUpdateFlips {
+				select {
+				case <-firstFrame:
+					return
+				case <-abort:
+					return
+				default:
+					runtime.Gosched()
+				}
+			}
+			if err := router.UpdateGain(gainUpdateSource, gains[i%len(gains)]); err != nil {
 				flipErr <- err
 				return
-			}
-		}
-		// Keep flipping until the main loop has seen a frame, so a frame is always
-		// delivered while the gain is still changing. The timer only ends a run in
-		// which no frame can be delivered at all, which assert.Positive then reports.
-		timer := time.NewTimer(gainUpdateWaitTimeout)
-		defer timer.Stop()
-		for {
-			select {
-			case <-firstFrame:
-				return
-			case <-timer.C:
-				return
-			default:
-				if err := flipOnce(); err != nil {
-					flipErr <- err
-					return
-				}
-				runtime.Gosched()
 			}
 		}
 	})
