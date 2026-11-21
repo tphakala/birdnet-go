@@ -225,7 +225,7 @@ describe('StreamManager row ids', () => {
   });
 
   // A list the manager sent itself and got back keeps every card and its open
-  // state; any other list is foreign, and every row gets a fresh id.
+  // state; a list with another name and URL sequence is foreign, and every row gets a fresh id.
 
   it('keeps a card open while its own name and URL edits come back as the list', async () => {
     const view = renderRows([streamA, streamB]);

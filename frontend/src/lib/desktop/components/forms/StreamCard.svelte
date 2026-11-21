@@ -8,9 +8,10 @@
   settings in groups and the diagnostics.
 
   Editing:
-  - Every control writes only the key it changes, as the complete stream,
-    through onChange. A name and a URL are written as typed and trimmed when the
-    field is left. A connection change reconnects the stream when it is saved.
+  - Every control writes the complete stream with the key it changes (the URL
+    field also sets the type its scheme names) through onChange. A name and a
+    URL are written as typed and trimmed when the field is left. A connection
+    change reconnects the stream when it is saved.
   - A URL that is not in the saved configuration is saved only after a
     successful test of exactly that URL; until then the field says so and the
     page blocks Save (the rules are in sourceRules.ts).

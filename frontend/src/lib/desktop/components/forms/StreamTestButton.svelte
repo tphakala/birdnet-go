@@ -35,7 +35,7 @@
     models: ModelOption[];
     selectedModels: string[];
     disabled?: boolean;
-    /** Receives the result and the trimmed URL that was tested (or changed away from). */
+    /** Receives the result and the trimmed URL it belongs to: the tested URL, or the new URL when an edit cleared the result. */
     onResult?: (_result: ProbeResult | null, _url: string) => void;
   }
 
