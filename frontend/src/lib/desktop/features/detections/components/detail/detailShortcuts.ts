@@ -13,6 +13,7 @@
 import { t } from '$lib/i18n';
 import type { ShortcutDefinition, ShortcutStatus } from '$lib/stores/shortcuts.svelte';
 import type { PlaybackControls } from '$lib/utils/audio';
+import { KEYS } from '$lib/utils/keyboard';
 import { SEEK_STEP_SECONDS } from '$lib/utils/seek';
 import { stepBlockedLabel } from './detailFormat';
 import type { DetectionNeighbors, ReviewControls, ReviewShortcutAction } from './detailTypes';
@@ -37,17 +38,12 @@ export const DETAIL_SHORTCUT_IDS = {
   seekForward: 'detail.seekForward',
 } as const;
 
-const KEY_ARROW_LEFT = 'ArrowLeft';
-const KEY_ARROW_RIGHT = 'ArrowRight';
-const KEY_SPACE = ' ';
 const KEY_CORRECT = 'c';
 const KEY_FALSE_POSITIVE = 'f';
 const KEY_WRONG_SPECIES = 'w';
 const KEY_KEEP = 'k';
 const KEY_FOCUS_REVIEW = 'r';
 const KEY_PLAY = 'p';
-const KEY_SEEK_BACK = ',';
-const KEY_SEEK_FORWARD = '.';
 const KEY_BACK_TO_LIST = 'b';
 
 /** The route of the detection list, and the route of one detection without its id. */
@@ -158,7 +154,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
   return [
     stepDefinition(
       DETAIL_SHORTCUT_IDS.older,
-      { key: KEY_ARROW_LEFT },
+      { key: KEYS.arrowLeft },
       neighbors => neighbors.previous,
       () => t('detections.detail.nav.older'),
       () => t('detections.detail.nav.older'),
@@ -166,7 +162,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
     ),
     stepDefinition(
       DETAIL_SHORTCUT_IDS.newer,
-      { key: KEY_ARROW_RIGHT },
+      { key: KEYS.arrowRight },
       neighbors => neighbors.next,
       () => t('detections.detail.nav.newer'),
       () => t('detections.detail.nav.newer'),
@@ -174,7 +170,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
     ),
     stepDefinition(
       DETAIL_SHORTCUT_IDS.olderSpecies,
-      { key: KEY_ARROW_LEFT, shift: true },
+      { key: KEYS.arrowLeft, shift: true },
       neighbors => neighbors.previousSameSpecies,
       () => t('shortcuts.detectionDetail.olderSpecies'),
       () => t('detections.detail.nav.olderSpecies', { species: species() }),
@@ -182,7 +178,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
     ),
     stepDefinition(
       DETAIL_SHORTCUT_IDS.newerSpecies,
-      { key: KEY_ARROW_RIGHT, shift: true },
+      { key: KEYS.arrowRight, shift: true },
       neighbors => neighbors.nextSameSpecies,
       () => t('shortcuts.detectionDetail.newerSpecies'),
       () => t('detections.detail.nav.newerSpecies', { species: species() }),
@@ -225,7 +221,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
       id: DETAIL_SHORTCUT_IDS.playPause,
       group: 'audio',
       binding: { key: KEY_PLAY },
-      secondaryBinding: { key: KEY_SPACE },
+      secondaryBinding: { key: KEYS.space },
       description: () => t('shortcuts.detectionDetail.playPause'),
       status: audioStatus,
       run: () => ctx.playback()?.togglePlayback(),
@@ -233,7 +229,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
     {
       id: DETAIL_SHORTCUT_IDS.seekBack,
       group: 'audio',
-      binding: { key: KEY_SEEK_BACK },
+      binding: { key: KEYS.comma },
       allowRepeat: true,
       description: () => t('shortcuts.detectionDetail.seekBack'),
       status: audioStatus,
@@ -242,7 +238,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
     {
       id: DETAIL_SHORTCUT_IDS.seekForward,
       group: 'audio',
-      binding: { key: KEY_SEEK_FORWARD },
+      binding: { key: KEYS.period },
       allowRepeat: true,
       description: () => t('shortcuts.detectionDetail.seekForward'),
       status: audioStatus,

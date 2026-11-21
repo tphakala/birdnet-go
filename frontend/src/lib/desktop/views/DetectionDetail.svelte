@@ -257,7 +257,7 @@
       speciesName: () => displayName,
       review: () => reviewControls,
       playback: () => playbackControls,
-      go: path => navigation.navigate(buildAppUrl(path)),
+      go: path => navigation.navigate(path),
     }),
   });
 

@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
 import {
+  FAKE_MEDIA_DURATION_SECONDS,
   installFakeMediaElement,
   fakeAudioNodeChain,
   settle,
@@ -15,7 +16,6 @@ import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import { getAudioContext } from '$lib/utils/audioContextManager';
 import { AUDIO_RETRY_DELAY_MS, dbToGain, type PlaybackControls } from '$lib/utils/audio';
 import { describeBinding } from '$lib/utils/keyboard';
-import { FAKE_MEDIA_DURATION_SECONDS } from '../../../../test/fakeMediaElement';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({

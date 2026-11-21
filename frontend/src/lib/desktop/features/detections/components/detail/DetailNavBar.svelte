@@ -64,10 +64,6 @@
     shortcutHints,
   }: Props = $props();
 
-  function blockedLabel(label: string, emptyLabel: string): string {
-    return stepBlockedLabel(label, emptyLabel, neighbors, failed);
-  }
-
   // The species steps differ from the all-detections steps only by a modifier, which the
   // arrows alone do not show: its cap leads the group, ahead of the arrows it applies to.
   let speciesModifierKeys = $derived(shortcutHints?.olderSpecies?.keys.slice(0, -1) ?? []);
@@ -95,7 +91,7 @@
   older: boolean,
   hint: ShortcutHint | null | undefined
 )}
-  {@const name = id === null ? blockedLabel(label, emptyLabel) : label}
+  {@const name = id === null ? stepBlockedLabel(label, emptyLabel, neighbors, failed) : label}
   <a
     class="dd-nav-step focus-ring"
     href={id === null ? undefined : buildAppUrl(`/ui/detections/${id}`)}
