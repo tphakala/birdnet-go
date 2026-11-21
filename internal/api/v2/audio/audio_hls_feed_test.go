@@ -328,6 +328,9 @@ func TestAudioFeedWriteConcurrentWithClose(t *testing.T) {
 	for range rounds {
 		h, feed := newTestFeedConsumer(nativeHLSFeedQueueBytes)
 
+		// Each writer reports the error that ended it; assertions stay on the
+		// test goroutine.
+		stopErrs := make(chan error, writers)
 		var started, finished sync.WaitGroup
 		started.Add(writers)
 		finished.Add(writers)
@@ -337,7 +340,7 @@ func TestAudioFeedWriteConcurrentWithClose(t *testing.T) {
 				started.Done()
 				for {
 					if err := h.Write(frame); err != nil {
-						assert.ErrorIs(t, err, audiocore.ErrConsumerClosed)
+						stopErrs <- err
 						return
 					}
 				}
@@ -347,6 +350,10 @@ func TestAudioFeedWriteConcurrentWithClose(t *testing.T) {
 
 		require.NoError(t, h.Close())
 		finished.Wait()
+		close(stopErrs)
+		for err := range stopErrs {
+			require.ErrorIs(t, err, audiocore.ErrConsumerClosed)
+		}
 		drainFeed(feed)
 		requireFeedClosed(t, feed, "feed.ch must be closed once the writers have stopped")
 	}
