@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import ReviewPanel from './ReviewPanel.svelte';
 import { toastActions } from '$lib/stores/toast';
 import type { DetectionDetailData, ReviewControls, ReviewShortcutAction } from './detailTypes';
+import type { ShortcutHint } from '$lib/utils/keyboard';
 
 const detection: DetectionDetailData = {
   id: 7,
@@ -655,5 +656,43 @@ describe('ReviewPanel shortcut controls', () => {
     unmount();
 
     expect(detach).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ReviewPanel shortcut badges', () => {
+  afterEach(() => cleanup());
+
+  const hint = (key: string): ShortcutHint => ({
+    aria: key,
+    keys: [key],
+    display: key,
+    label: key,
+  });
+
+  it('shows the keys on the verdict buttons without changing their names', () => {
+    render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+        shortcutHints: { correct: hint('C'), falsePositive: hint('F'), wrongSpecies: hint('W') },
+      },
+    });
+
+    const cases = [
+      ['detections.detail.review.correct', 'C'],
+      ['detections.detail.review.falsePositive', 'F'],
+      ['detections.detail.review.wrongSpecies', 'W'],
+    ] as const;
+    for (const [name, key] of cases) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveAttribute('aria-keyshortcuts', key);
+      const badge = button.querySelector('kbd');
+      expect(badge).toHaveTextContent(key);
+      expect(badge).toHaveAttribute('aria-hidden', 'true');
+    }
   });
 });

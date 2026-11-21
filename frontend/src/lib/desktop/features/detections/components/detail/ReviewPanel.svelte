@@ -18,11 +18,13 @@
   import { ArrowLeftRight, Check, Lock, X } from '@lucide/svelte';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
+  import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
   import { t } from '$lib/i18n';
   import { toastActions } from '$lib/stores/toast';
   import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
+  import type { ShortcutHint } from '$lib/utils/keyboard';
   import DetailCard from './DetailCard.svelte';
   import type {
     DetectionDetailData,
@@ -55,6 +57,18 @@
      * unmount and before attaching to a new callback.
      */
     onControls?: (_controls: ReviewControls) => () => void;
+    /**
+     * Opt-in: the shortcut key of each verdict button. A button with a hint shows the key as
+     * a badge and names it in `aria-keyshortcuts`; without one it shows neither.
+     */
+    shortcutHints?: ReviewShortcutHints;
+  }
+
+  /** Key hints for the three verdict buttons. */
+  interface ReviewShortcutHints {
+    correct?: ShortcutHint | null;
+    falsePositive?: ShortcutHint | null;
+    wrongSpecies?: ShortcutHint | null;
   }
 
   let {
@@ -66,6 +80,7 @@
     onWrongSpecies,
     onChanged,
     onControls,
+    shortcutHints = {},
   }: Props = $props();
 
   const logger = loggers.ui;
@@ -254,6 +269,14 @@
   });
 </script>
 
+<!-- The key is visual only: the button's name already says what it does, and the key is in
+     aria-keyshortcuts -->
+{#snippet keyBadge(hint: ShortcutHint | null | undefined)}
+  {#if hint}
+    <Kbd keys={hint.keys} size="sm" />
+  {/if}
+{/snippet}
+
 <DetailCard title={t('detections.detail.review.title')} padding="snug" {grow}>
   {#snippet header()}
     <!-- Not a live region: blocked reasons are read through aria-describedby on the
@@ -285,10 +308,12 @@
       aria-pressed={detection.verified === 'correct'}
       aria-disabled={verdictUnavailable ? 'true' : undefined}
       aria-describedby={verdictUnavailable ? statusId : undefined}
+      aria-keyshortcuts={shortcutHints.correct?.aria}
       onclick={() => setVerdict('correct')}
     >
       <Check class="size-4" />
       {t('detections.detail.review.correct')}
+      {@render keyBadge(shortcutHints.correct)}
     </Button>
     <Button
       variant={detection.verified === 'false_positive' || saving === 'false_positive'
@@ -298,10 +323,12 @@
       aria-pressed={detection.verified === 'false_positive'}
       aria-disabled={verdictUnavailable ? 'true' : undefined}
       aria-describedby={verdictUnavailable ? statusId : undefined}
+      aria-keyshortcuts={shortcutHints.falsePositive?.aria}
       onclick={() => setVerdict('false_positive')}
     >
       <X class="size-4" />
       {t('detections.detail.review.falsePositive')}
+      {@render keyBadge(shortcutHints.falsePositive)}
     </Button>
     <Button
       variant="default"
@@ -309,10 +336,12 @@
       aria-haspopup="dialog"
       aria-disabled={wrongSpeciesBlocked ? 'true' : undefined}
       aria-describedby={wrongSpeciesBlocked ? statusId : undefined}
+      aria-keyshortcuts={shortcutHints.wrongSpecies?.aria}
       onclick={wrongSpecies}
     >
       <ArrowLeftRight class="size-4" />
       {t('detections.detail.review.wrongSpecies')}
+      {@render keyBadge(shortcutHints.wrongSpecies)}
     </Button>
   </div>
 
