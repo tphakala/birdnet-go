@@ -20,6 +20,7 @@ vi.mock('$lib/utils/logger', () => ({
 }));
 
 import { auth } from './auth';
+import { unsavedChanges } from './unsavedChanges.svelte';
 import { loggers } from '$lib/utils/logger';
 
 describe('Auth Store', () => {
@@ -108,6 +109,40 @@ describe('Auth Store', () => {
           'Content-Type': 'application/json',
         },
       });
+    });
+
+    it('does not let the native leave prompt hold the redirect after a successful logout', async () => {
+      // The prompt would run when the page is told to go, so the stand-in location fires
+      // beforeunload at that moment and records whether the page would have been held.
+      const prevented: boolean[] = [];
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          pathname: '/ui/dashboard',
+          set href(_url: string) {
+            const event = new Event('beforeunload', { cancelable: true });
+            window.dispatchEvent(event);
+            prevented.push(event.defaultPrevented);
+          },
+        },
+      });
+      // The earlier logout tests set the allowance on the singleton; start from a clean one.
+      unsavedChanges.resetForTesting();
+      const unregister = unsavedChanges.register({ isDirty: () => true });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true }),
+      });
+
+      try {
+        await auth.logout();
+      } finally {
+        unregister();
+        unsavedChanges.resetForTesting();
+      }
+
+      expect(prevented).toEqual([false]);
     });
 
     it('should clear auth state on successful logout', async () => {

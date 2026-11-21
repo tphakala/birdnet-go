@@ -266,4 +266,33 @@ describe('SettingsTabs with an unsaved-changes guard', () => {
     await waitFor(() => expect(second).toHaveFocus());
     expect(second).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('keeps focus and the selection on the current tab when the user chooses Stay', async () => {
+    navigation.redirect(`${PAGE}?tab=one`);
+    unregister = unsavedChanges.register({ isDirty: () => true, allows: samePathAndQuery });
+    renderTabs([tab('one', false), tab('two', false)]);
+    const first = screen.getByRole('tab', { name: 'Label one' });
+    const second = screen.getByRole('tab', { name: 'Label two' });
+    first.focus();
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+
+    unsavedChanges.stay();
+    // Let the promise chain behind the held move run out.
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(second).not.toHaveFocus();
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    expect(second).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('moves focus to the new tab at once when nothing holds the move', async () => {
+    navigation.redirect(`${PAGE}?tab=one`);
+    renderTabs([tab('one', false), tab('two', false)]);
+    const first = screen.getByRole('tab', { name: 'Label one' });
+    first.focus();
+
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+
+    expect(screen.getByRole('tab', { name: 'Label two' })).toHaveFocus();
+  });
 });

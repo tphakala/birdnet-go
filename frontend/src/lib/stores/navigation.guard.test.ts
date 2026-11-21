@@ -141,6 +141,20 @@ describe('navigation with an unsaved-changes guard', () => {
       expect(navigation.currentPath).toBe(START);
     });
 
+    it('restores the page URL with its query, hash and proxy prefix after a held Back', async () => {
+      setBasePath('/proxy');
+      await arrive(START, `${GUARDED}?tab=one#frag`);
+
+      const held = nextPop();
+      window.history.back();
+      await held;
+
+      expect(window.location.pathname).toBe(`/proxy${GUARDED}`);
+      expect(window.location.search).toBe('?tab=one');
+      expect(window.location.hash).toBe('#frag');
+      expect(navigation.currentSearch).toBe('?tab=one');
+    });
+
     it('keeps the page on Stay after Back', async () => {
       await arrive(START, GUARDED);
 
@@ -176,15 +190,20 @@ describe('navigation with an unsaved-changes guard', () => {
 
     it('answers an open prompt with Stay on a second Back and prompts for the new target', async () => {
       await arrive(START, MIDDLE, GUARDED);
+      const request = vi.spyOn(unsavedChanges, 'request');
 
       const first = nextPop();
       window.history.back();
       await first;
       expect(unsavedChanges.prompting).toBe(true);
+      const firstDecision = request.mock.results[0]?.value as Promise<boolean>;
 
       const second = nextPop();
       window.history.back();
       await expect(second).resolves.toBe(false);
+      // The first prompt was answered with Stay, and the second pop opened its own prompt.
+      await expect(Promise.race([firstDecision, Promise.resolve('open')])).resolves.toBe(false);
+      expect(request).toHaveBeenCalledTimes(2);
       expect(unsavedChanges.prompting).toBe(true);
       expect(window.location.pathname).toBe(GUARDED);
 

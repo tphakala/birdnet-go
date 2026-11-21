@@ -174,13 +174,51 @@ describe('App unsaved-changes guard', () => {
     expect(navigation.currentPath).toBe(DASHBOARD);
   });
 
-  it('holds browser Back while Settings has edits', async () => {
+  it('holds browser Back while Settings has edits, out of sight of the route pages', async () => {
+    makeUnsavedEdit();
+    // A route page's own listener (dashboard, detections) is added after App's.
+    const pageListener = vi.fn();
+    window.addEventListener('popstate', pageListener);
+
+    try {
+      window.history.back();
+
+      expect(await screen.findByText(DIALOG_TITLE)).toBeInTheDocument();
+      expect(navigation.currentPath).toBe(SETTINGS_MAIN);
+      expect(window.location.pathname).toBe(SETTINGS_MAIN);
+      expect(pageListener).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('popstate', pageListener);
+    }
+  });
+
+  it('goes back to the previous page on Leave after a held Back', async () => {
     makeUnsavedEdit();
 
     window.history.back();
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'common.unsavedChanges.leave' })
+    );
 
-    expect(await screen.findByText(DIALOG_TITLE)).toBeInTheDocument();
-    expect(navigation.currentPath).toBe(SETTINGS_MAIN);
-    expect(window.location.pathname).toBe(SETTINGS_MAIN);
+    await waitFor(() => expect(navigation.currentPath).toBe(DASHBOARD));
+    expect(window.location.pathname).toBe(DASHBOARD);
+  });
+
+  it('keeps the edit when Settings is left while a save is in flight', async () => {
+    makeUnsavedEdit();
+    settingsStore.update(state => ({ ...state, isSaving: true }));
+
+    try {
+      void navigation.navigate(DASHBOARD);
+      await fireEvent.click(
+        await screen.findByRole('button', { name: 'common.unsavedChanges.leave' })
+      );
+      await waitFor(() => expect(navigation.currentPath).toBe(DASHBOARD));
+
+      // The save in flight would otherwise send the reset data.
+      expect(editIsKept()).toBe(true);
+    } finally {
+      settingsStore.update(state => ({ ...state, isSaving: false }));
+    }
   });
 });

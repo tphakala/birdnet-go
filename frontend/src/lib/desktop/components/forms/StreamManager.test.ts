@@ -1539,6 +1539,24 @@ describe('StreamManager unsaved-changes guard', () => {
     expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(false);
   });
 
+  it('blocks a tab switch once only a name is typed into the add form', async () => {
+    renderRows([streamA]);
+    await openAddForm();
+
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Garden' } });
+
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(true);
+  });
+
+  it('does not block an add form that holds only whitespace', async () => {
+    renderRows([streamA]);
+    await openAddForm();
+
+    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: '   ' } });
+
+    expect(unsavedChanges.blocks(OTHER_TAB, HERE)).toBe(false);
+  });
+
   it('blocks a tab switch once a stream URL is typed into the add form', async () => {
     renderRows([streamA]);
     await openAddForm();
