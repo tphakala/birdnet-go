@@ -201,10 +201,6 @@ Join the [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 
 - [Cockpit BirdNET-Go](https://github.com/tphakala/cockpit-birdnet-go): web-based system management plugin using the Cockpit framework
 
-### Migration tools
-
-- [BirdNET-Pi2Go](https://github.com/tphakala/birdnet-pi2go): database converter for migrating from BirdNET-Pi (deprecated, not compatible with the current BirdNET-Go database schema; an experimental built-in BirdNET-Pi importer is available under **System > Import / Export** on native Linux and container deployments)
-
 ### Hardware solutions
 
 - [BirdNET-Go ESP32 RTSP Microphone](https://github.com/Sukecz/birdnetgo-esp32-rtsp-mic): ESP32-based RTSP streaming microphone
