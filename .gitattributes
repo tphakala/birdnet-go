@@ -1,3 +1,27 @@
+# Check text files out with LF on every OS. Tests read byte-exact fixtures and
+# docs (the Perch golden scores, the labels hash, the database doctor guide),
+# and a CRLF checkout (core.autocrlf=true on Windows) changes those bytes.
+# Files committed with CRLF stay as committed until they are re-added.
+* text=auto eol=lf
+
+# Binary types tracked in the repository. Git detects these as binary today;
+# the explicit lines keep a future binary file that happens to look like text
+# from being converted.
+*.bin binary
+*.onnx binary
+*.tflite binary
+*.wav binary
+*.mp3 binary
+*.pcm binary
+*.png binary
+*.PNG binary
+*.jpeg binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.gz binary
+*.woff2 binary
+
 # Shell scripts must keep LF endings: Task runs scripts/build-version.sh on
 # every invocation, and a CRLF checkout (core.autocrlf=true) breaks sh parsing.
 # The ONNX Runtime pin file is read by such a script, so a CR would end up in
