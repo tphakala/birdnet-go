@@ -30,7 +30,7 @@
   import StreamManager from '$lib/desktop/components/forms/StreamManager.svelte';
   import SoundCardManager from '$lib/desktop/components/forms/SoundCardManager.svelte';
   import { STREAMS_FIELD_PREFIX } from '$lib/desktop/components/forms/sourceFields';
-  import { soundCardProblems } from '$lib/desktop/components/forms/sourceRules';
+  import { problemSourceNames, soundCardProblems } from '$lib/desktop/components/forms/sourceRules';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -521,14 +521,10 @@
   let savedSources = $derived(store.originalData.realtime?.audio?.sources ?? []);
 
   let soundCardIssue = $derived.by(() => {
-    const problems = soundCardProblems(settings.audio.sources, savedSources);
-    const names = problems.flatMap((problem, index) =>
-      problem.name || problem.device
-        ? [
-            settings.audio.sources.at(index)?.name.trim() ||
-              t('settings.audio.validation.unnamedSource', { position: index + 1 }),
-          ]
-        : []
+    const names = problemSourceNames(
+      settings.audio.sources,
+      soundCardProblems(settings.audio.sources, savedSources),
+      position => t('settings.audio.validation.unnamedSource', { position })
     );
     return names.length > 0
       ? t('settings.audio.validation.soundCards', {

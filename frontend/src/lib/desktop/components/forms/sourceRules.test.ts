@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { AudioSourceConfig } from '$lib/stores/settings';
-import { soundCardProblems } from './sourceRules';
+import { problemSourceNames, soundCardProblems } from './sourceRules';
 
 function source(name: string, device: string): AudioSourceConfig {
   return { name, device, gain: 0, models: [] };
@@ -66,5 +66,30 @@ describe('soundCardProblems', () => {
       { name: 'duplicate' },
       { name: 'duplicate' },
     ]);
+  });
+});
+
+describe('problemSourceNames', () => {
+  const unnamed = (position: number) => `unnamed ${position}`;
+
+  it('names each source with a problem once, in list order', () => {
+    const sources = [source('Mic', 'hw:0'), source('Porch', 'hw:1'), source('Mic', 'hw:2')];
+    const problems = soundCardProblems(sources, SAVED);
+
+    expect(problems[0]).toEqual({ name: 'duplicate' });
+    expect(problems[2]).toEqual({ name: 'duplicate' });
+    expect(problemSourceNames(sources, problems, unnamed)).toEqual(['Mic']);
+  });
+
+  it('labels a source without a name by its position', () => {
+    const sources = [source('Garden', 'hw:0'), source('  ', 'hw:1')];
+
+    expect(problemSourceNames(sources, soundCardProblems(sources, SAVED), unnamed)).toEqual([
+      'unnamed 2',
+    ]);
+  });
+
+  it('lists nothing when no source has a problem', () => {
+    expect(problemSourceNames(SAVED, soundCardProblems(SAVED, SAVED), unnamed)).toEqual([]);
   });
 });

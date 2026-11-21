@@ -61,3 +61,23 @@ export function soundCardProblems(
     return problem;
   });
 }
+
+/**
+ * The names of the sources that have a problem, each listed once, in list order.
+ * Two cards that share a name are both flagged, but naming that name twice would
+ * not help the user find them. A source without a name is labelled by `unnamed`
+ * with its one-based position.
+ */
+export function problemSourceNames(
+  sources: readonly AudioSourceConfig[],
+  problems: readonly SoundCardProblem[],
+  unnamed: (position: number) => string
+): string[] {
+  const names = new Set<string>();
+  problems.forEach((problem, index) => {
+    if (!problem.name && !problem.device) return;
+    const name = sources.at(index)?.name.trim() ?? '';
+    names.add(name.length > 0 ? name : unnamed(index + 1));
+  });
+  return [...names];
+}
