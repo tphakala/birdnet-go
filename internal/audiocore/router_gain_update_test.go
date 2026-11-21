@@ -294,7 +294,8 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 	wg.Go(func() {
 		defer close(stop)
 		// Flip the fixed count, then keep flipping until the main loop has seen a
-		// frame, so a frame is always delivered while the gain is still changing.
+		// frame, so the flips cannot all finish before the first frame arrives.
+		// Dispatch keeps running alongside the flips either way.
 		for i := 0; ; i++ {
 			if i >= gainUpdateFlips {
 				select {
