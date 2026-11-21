@@ -1,9 +1,14 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { sseNotifications } from './sseNotifications';
 
 // A cancelled unload (the user stays on the page at the leave prompt) must not close the
 // notification stream for good, so it closes on pagehide, which only fires when the page goes.
 describe('sseNotifications unload handling', () => {
+  beforeEach(() => {
+    // The module opens its stream after a short delay; no stream is wanted here.
+    vi.spyOn(sseNotifications, 'connect').mockImplementation(() => {});
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -22,23 +27,5 @@ describe('sseNotifications unload handling', () => {
     window.dispatchEvent(new Event('pagehide'));
 
     expect(disconnect).toHaveBeenCalledTimes(1);
-  });
-
-  // A page restored from the back/forward cache ran pagehide when it was stored, so the stream
-  // is closed and nothing else would open it again.
-  it('reconnects when the page is restored from the back/forward cache', () => {
-    const connect = vi.spyOn(sseNotifications, 'connect').mockImplementation(() => {});
-
-    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
-
-    expect(connect).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not reconnect on an ordinary page show', () => {
-    const connect = vi.spyOn(sseNotifications, 'connect').mockImplementation(() => {});
-
-    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
-
-    expect(connect).not.toHaveBeenCalled();
   });
 });

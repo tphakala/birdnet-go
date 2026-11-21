@@ -347,10 +347,4 @@ if (typeof window !== 'undefined') {
   // Cleanup when the page goes. pagehide, not beforeunload: the leave prompt can be cancelled,
   // and the stream must stay open then.
   window.addEventListener('pagehide', () => sseNotifications.disconnect());
-
-  // A page restored from the back/forward cache closed its stream on pagehide and loads no
-  // module again, so it opens the stream here.
-  window.addEventListener('pageshow', event => {
-    if (event.persisted) sseNotifications.connect();
-  });
 }

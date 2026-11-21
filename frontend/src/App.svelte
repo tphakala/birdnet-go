@@ -810,6 +810,19 @@
       window.removeEventListener('popstate', handlePopState, { capture: true });
     };
   });
+
+  // A page restored from the back/forward cache closed its streams on pagehide and kept one-way
+  // flags (unload allowance, 401 redirect guard), so it starts over with a reload. The leave
+  // prompt must not hold that reload.
+  $effect(() => {
+    const handlePageShow = (event: Event & { persisted?: boolean }) => {
+      if (!event.persisted) return;
+      unsavedChanges.allowUnload();
+      window.location.reload();
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  });
 </script>
 
 <svelte:head>
