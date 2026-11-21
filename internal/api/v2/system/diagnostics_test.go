@@ -123,14 +123,7 @@ func TestRegisterHealthChecks_AudioExportFormatFollowsSettings(t *testing.T) {
 	h.registerHealthChecks()
 
 	run := func() health.Result {
-		results := h.healthRegistry.RunCategory(t.Context(), health.CategoryConfig)
-		for i := range results {
-			if results[i].Name == "audio_export_format" {
-				return results[i]
-			}
-		}
-		require.FailNow(t, "audio_export_format is not registered in the config category")
-		return health.Result{}
+		return findResult(t, h.healthRegistry.RunCategory(t.Context(), health.CategoryConfig), "audio_export_format")
 	}
 
 	assert.Equal(t, health.StatusWarning, run().Status, "export on with mp3 warns")
