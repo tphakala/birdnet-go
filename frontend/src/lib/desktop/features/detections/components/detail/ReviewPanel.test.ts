@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import ReviewPanel from './ReviewPanel.svelte';
 import { toastActions } from '$lib/stores/toast';
-import type { DetectionDetailData } from './detailTypes';
+import type { DetectionDetailData, ReviewControls, ReviewShortcutAction } from './detailTypes';
 
 const detection: DetectionDetailData = {
   id: 7,
@@ -476,5 +476,184 @@ describe('ReviewPanel verdict failure', () => {
 
     await rerender({ detection: { ...detection } });
     expect(screen.queryByText('common.review.errors.verificationFailed')).toBeNull();
+  });
+});
+
+describe('ReviewPanel shortcut controls', () => {
+  const LOGIN_REQUIRED = 'detections.detail.review.loginRequired';
+  const SAVING = 'detections.detail.review.saving';
+  const LOCKED_HELP = 'detections.detail.review.lockedHelp';
+  const SPECIES_REASON = 'detections.detail.review.legacyHelp';
+  const ACTIONS: ReviewShortcutAction[] = ['correct', 'falsePositive', 'wrongSpecies', 'keep'];
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  function renderWithControls(
+    overrides: {
+      detection?: DetectionDetailData;
+      canReview?: boolean;
+      speciesBlockedReason?: string;
+    } = {}
+  ) {
+    let controls: ReviewControls | undefined;
+    const onWrongSpecies = vi.fn();
+    render(ReviewPanel, {
+      props: {
+        detection: overrides.detection ?? detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: overrides.canReview ?? true,
+        speciesBlockedReason: overrides.speciesBlockedReason ?? SPECIES_REASON,
+        onWrongSpecies,
+        onChanged: vi.fn(),
+        onControls: (given: ReviewControls) => {
+          controls = given;
+          return () => {};
+        },
+      },
+    });
+    if (!controls) throw new Error('the panel never handed out its controls');
+    return { controls, onWrongSpecies };
+  }
+
+  function stubFetch(respond: () => Promise<Response>) {
+    const calls: { url: string; body: unknown }[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ url: String(input), body: JSON.parse(String(init?.body ?? 'null')) });
+        return respond();
+      })
+    );
+    return calls;
+  }
+
+  const okResponse = () =>
+    Promise.resolve(
+      new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    );
+
+  it.each([
+    {
+      name: 'a visitor without review permission',
+      options: { canReview: false },
+      expected: [LOGIN_REQUIRED, LOGIN_REQUIRED, LOGIN_REQUIRED, LOGIN_REQUIRED],
+    },
+    {
+      name: 'a visitor looking at a kept detection (login first)',
+      options: { canReview: false, detection: { ...detection, locked: true } },
+      expected: [LOGIN_REQUIRED, LOGIN_REQUIRED, LOGIN_REQUIRED, LOGIN_REQUIRED],
+    },
+    {
+      name: 'a kept detection',
+      options: { detection: { ...detection, locked: true } },
+      // Keep stays available: a kept detection can be released
+      expected: [LOCKED_HELP, LOCKED_HELP, SPECIES_REASON, ''],
+    },
+    {
+      name: 'an open detection with the species change blocked',
+      options: {},
+      expected: ['', '', SPECIES_REASON, ''],
+    },
+    {
+      name: 'a verdict that is already given',
+      options: { detection: { ...detection, verified: 'correct' as const } },
+      expected: ['', '', SPECIES_REASON, ''],
+    },
+  ])('gives the reasons for $name', ({ options, expected }) => {
+    const { controls } = renderWithControls(options);
+
+    expect(ACTIONS.map(action => controls.blockedReason(action))).toEqual(expected);
+  });
+
+  it('gives the saving text for every action, before the locked and species reasons, while an unlock is out', async () => {
+    stubFetch(() => new Promise<Response>(() => {}));
+    const { controls } = renderWithControls({ detection: { ...detection, locked: true } });
+    expect(controls.blockedReason('correct')).toBe(LOCKED_HELP);
+
+    controls.run('keep');
+
+    await waitFor(() => {
+      expect(controls.blockedReason('keep')).toBe(SAVING);
+    });
+    expect(ACTIONS.map(action => controls.blockedReason(action))).toEqual([
+      SAVING,
+      SAVING,
+      SAVING,
+      SAVING,
+    ]);
+  });
+
+  it('posts nothing for a verdict that is already given', async () => {
+    const calls = stubFetch(okResponse);
+    const { controls } = renderWithControls({
+      detection: { ...detection, verified: 'correct' },
+    });
+
+    controls.run('correct');
+    await Promise.resolve();
+
+    expect(calls).toEqual([]);
+  });
+
+  it('runs false positive and keep on the detection the panel shows', async () => {
+    const calls = stubFetch(okResponse);
+    const { controls } = renderWithControls();
+
+    controls.run('falsePositive');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]).toEqual({
+      url: '/api/v2/detections/7/review',
+      body: { verified: 'false_positive' },
+    });
+
+    // The save settles before Keep can run: a save out blocks it
+    await waitFor(() => expect(controls.blockedReason('keep')).toBe(''));
+    controls.run('keep');
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1]).toEqual({ url: '/api/v2/detections/7/lock', body: { locked: true } });
+  });
+
+  it('opens the species dialog for wrong species unless the page blocks it', () => {
+    const open = renderWithControls({ speciesBlockedReason: '' });
+    open.controls.run('wrongSpecies');
+    expect(open.onWrongSpecies).toHaveBeenCalledOnce();
+
+    cleanup();
+    const blocked = renderWithControls();
+    blocked.controls.run('wrongSpecies');
+    expect(blocked.onWrongSpecies).not.toHaveBeenCalled();
+  });
+
+  it('moves focus to the verdict group, not to a button', () => {
+    const { controls } = renderWithControls();
+
+    controls.focus();
+
+    const group = screen.getByRole('group', { name: 'detections.detail.review.title' });
+    expect(group).toHaveFocus();
+    expect(document.activeElement?.tagName).not.toBe('BUTTON');
+  });
+
+  it('detaches the controls when the panel unmounts', () => {
+    const detach = vi.fn();
+    const { unmount } = render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+        onControls: () => detach,
+      },
+    });
+    expect(detach).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(detach).toHaveBeenCalledTimes(1);
   });
 });

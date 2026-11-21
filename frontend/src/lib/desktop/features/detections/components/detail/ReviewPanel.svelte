@@ -14,6 +14,7 @@
   Keep row, shown only while it applies.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { ArrowLeftRight, Check, Lock, X } from '@lucide/svelte';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
@@ -23,7 +24,12 @@
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
   import DetailCard from './DetailCard.svelte';
-  import type { DetectionDetailData, SavedChange } from './detailTypes';
+  import type {
+    DetectionDetailData,
+    ReviewControls,
+    ReviewShortcutAction,
+    SavedChange,
+  } from './detailTypes';
 
   type Verdict = 'correct' | 'false_positive';
 
@@ -43,6 +49,12 @@
      * answer with a promise that settles when that reload does: false when it failed.
      */
     onChanged: (_change: SavedChange) => Promise<boolean> | void;
+    /**
+     * Opt-in: called once with the controls a keyboard shortcut can use, and again when this
+     * callback changes. Returns the function that detaches them; the panel calls it on
+     * unmount and before attaching to a new callback.
+     */
+    onControls?: (_controls: ReviewControls) => () => void;
   }
 
   let {
@@ -53,6 +65,7 @@
     grow = false,
     onWrongSpecies,
     onChanged,
+    onControls,
   }: Props = $props();
 
   const logger = loggers.ui;
@@ -196,6 +209,49 @@
   function wrongSpecies() {
     if (!wrongSpeciesBlocked) onWrongSpecies();
   }
+
+  let verdictGroup = $state<HTMLDivElement | null>(null);
+
+  // What a keyboard shortcut can ask of the panel. The methods read live state when called.
+  // Reasons come in the order statusText gives them: a save out first, then the rest.
+  const controls: ReviewControls = {
+    blockedReason: (action: ReviewShortcutAction): string => {
+      if (!canReview) return t('detections.detail.review.loginRequired');
+      if (busy) return t('detections.detail.review.saving');
+      switch (action) {
+        case 'correct':
+        case 'falsePositive':
+          return detection.locked ? t('detections.detail.review.lockedHelp') : '';
+        case 'wrongSpecies':
+          return speciesBlockedReason;
+        case 'keep':
+          // A kept detection can be released, so a lock never blocks Keep
+          return '';
+      }
+    },
+    run: (action: ReviewShortcutAction) => {
+      switch (action) {
+        case 'correct':
+          void setVerdict('correct');
+          break;
+        case 'falsePositive':
+          void setVerdict('false_positive');
+          break;
+        case 'wrongSpecies':
+          wrongSpecies();
+          break;
+        case 'keep':
+          void setLocked(!keepValue);
+          break;
+      }
+    },
+    focus: () => verdictGroup?.focus(),
+  };
+
+  $effect(() => {
+    const attach = onControls;
+    return attach ? untrack(() => attach(controls)) : undefined;
+  });
 </script>
 
 <DetailCard title={t('detections.detail.review.title')} padding="snug" {grow}>
@@ -216,7 +272,13 @@
     {t('detections.detail.review.question', { species: speciesName })}
   </p>
 
-  <div class="dd-verdicts" role="group" aria-label={t('detections.detail.review.title')}>
+  <div
+    bind:this={verdictGroup}
+    class="dd-verdicts"
+    role="group"
+    aria-label={t('detections.detail.review.title')}
+    tabindex="-1"
+  >
     <Button
       variant={detection.verified === 'correct' || saving === 'correct' ? 'success' : 'default'}
       size="md"
@@ -314,6 +376,15 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     margin-top: 0.5rem;
+    /* The group takes focus from a shortcut: a ring that hugs the buttons, not the whole row */
+    width: fit-content;
+    max-width: 100%;
+    border-radius: 0.5rem;
+  }
+
+  .dd-verdicts:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .dd-review-keep {
