@@ -186,6 +186,9 @@ type OAuth2Server struct {
 	// saveMu serialises saveTokens so an older snapshot cannot overwrite a
 	// newer file.
 	saveMu sync.Mutex
+	// afterSnapshot is a test seam: when set, saveTokens calls it right after it
+	// takes its snapshot and before it writes it. Production never sets it.
+	afterSnapshot func()
 
 	GithubConfig *oauth2.Config
 	GoogleConfig *oauth2.Config
@@ -1464,6 +1467,10 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	accessTokensCopy := maps.Clone(s.accessTokens)
 	credentialsID := s.credentialsID
 	s.mutex.RUnlock()
+
+	if s.afterSnapshot != nil {
+		s.afterSnapshot()
+	}
 
 	// Check context before marshaling/writing
 	select {

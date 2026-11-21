@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,6 +54,8 @@ func TestTokenPersistence(t *testing.T) {
 	tempDir := t.TempDir()
 	tokensFile := filepath.Join(tempDir, "tokens.json")
 	settings := persistenceTestSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 	server := newPersistingServer(tokensFile, settings)
 	validToken := seedSession(t, server, &AccessToken{Remember: true})
@@ -117,22 +120,52 @@ func TestTokenPersistenceIgnoresOldShape(t *testing.T) {
 }
 
 // TestEndSessionSurvivesRestartAfterRacingPersist verifies that a session ended
-// by EndSession stays ended in the file even when a persist that began before
-// the logout finishes after it.
+// by EndSession stays ended in the file even when a persist that took its
+// snapshot before the logout is still writing after it: the save lock makes the
+// logout's save wait for that persist, so the stale snapshot cannot be the last
+// one written. The first save pauses after its snapshot until the logout has
+// either finished (no save lock) or had time to block on the lock.
 func TestEndSessionSurvivesRestartAfterRacingPersist(t *testing.T) {
+	prevStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = prevStore })
 	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
 	tokensFile := filepath.Join(t.TempDir(), "tokens.json")
 	settings := persistenceTestSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 
 	server := newPersistingServer(tokensFile, settings)
 	token := seedSession(t, server, &AccessToken{})
 	require.NoError(t, server.saveTokens(ctx))
 
-	// A renewal persist starts, then the user logs out.
-	var wg sync.WaitGroup
-	wg.Go(server.persistTokensIfEnabled)
-	server.EndSession(httptest.NewRecorder(), sessionRequest(token))
-	wg.Wait()
+	// Only the first save after this point pauses; later ones pass through.
+	paused, release := make(chan struct{}), make(chan struct{})
+	var saves atomic.Int32
+	server.afterSnapshot = func() {
+		if saves.Add(1) == 1 {
+			close(paused)
+			<-release
+		}
+	}
+
+	// A renewal persist takes its snapshot, which still holds the session.
+	var persists sync.WaitGroup
+	persists.Go(server.persistTokensIfEnabled)
+	<-paused
+
+	// The user logs out while that persist is paused.
+	loggedOut := make(chan struct{})
+	go func() {
+		defer close(loggedOut)
+		server.EndSession(httptest.NewRecorder(), sessionRequest(token))
+	}()
+	select {
+	case <-loggedOut:
+	case <-time.After(lockWaitSettleTime):
+	}
+	close(release)
+	persists.Wait()
+	<-loggedOut
 
 	restarted := newPersistingServer(tokensFile, settings)
 	require.NoError(t, restarted.loadTokens(ctx))
@@ -140,9 +173,73 @@ func TestEndSessionSurvivesRestartAfterRacingPersist(t *testing.T) {
 	require.ErrorIs(t, err, ErrTokenNotFound, "a logged-out session must not come back after a restart")
 }
 
-// signInSettleTime is how long a test waits to see whether a call that should be
+// readStoredTokens returns what the token file at path holds.
+func readStoredTokens(t *testing.T, path string) tokenFile {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // test file path from t.TempDir()
+	require.NoError(t, err)
+	var stored tokenFile
+	require.NoError(t, json.Unmarshal(data, &stored))
+	return stored
+}
+
+// TestRestartWithChangedCredentialsEndsSessions verifies the startup path: a
+// server that loads a token file written under other basic-auth credentials ends
+// every session and code and saves the new credentials ID, and one that loads it
+// under the same credentials keeps them.
+func TestRestartWithChangedCredentialsEndsSessions(t *testing.T) {
+	tests := []struct {
+		name    string
+		changed bool
+	}{
+		{"changed credentials end the sessions", true},
+		{"unchanged credentials keep them", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokensFile := filepath.Join(t.TempDir(), "tokens.json")
+			before := persistenceTestSettings()
+			conftest.SetTestSettings(before)
+			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
+
+			server := newPersistingServer(tokensFile, before)
+			token := seedSession(t, server, &AccessToken{})
+			server.mutex.Lock()
+			server.authCodes["code"] = AuthCode{Code: "code", ExpiresAt: time.Now().Add(time.Hour)}
+			server.mutex.Unlock()
+			require.NoError(t, server.saveTokens(ctx))
+			require.Equal(t, basicCredentialsID(before), readStoredTokens(t, tokensFile).CredentialsID)
+
+			// The server restarts after the password changed (or did not).
+			after := conf.CloneSettings(before)
+			if tt.changed {
+				after.Security.BasicAuth.Password = "changed"
+			}
+			conftest.SetTestSettings(after)
+			restarted := newPersistingServer(tokensFile, after)
+			require.NoError(t, restarted.loadTokens(ctx))
+			restarted.syncCredentials()
+
+			_, err := restarted.liveRecord(token)
+			stored := readStoredTokens(t, tokensFile)
+			assert.Equal(t, basicCredentialsID(after), stored.CredentialsID, "the live credentials ID must be saved")
+			if tt.changed {
+				require.ErrorIs(t, err, ErrTokenNotFound)
+				assert.Empty(t, restarted.authCodes)
+				assert.Empty(t, stored.Sessions)
+				assert.Empty(t, stored.AuthCodes)
+				return
+			}
+			require.NoError(t, err)
+			assert.Len(t, restarted.authCodes, 1)
+			assert.Len(t, stored.Sessions, 1)
+		})
+	}
+}
+
+// lockWaitSettleTime is how long a test waits to see whether a call that should be
 // blocked on the save lock returns anyway.
-const signInSettleTime = 100 * time.Millisecond
+const lockWaitSettleTime = 100 * time.Millisecond
 
 // TestSignInRecordIsOnDiskBeforeCookie verifies that a sign-in writes its record
 // to the token file before it returns, so the cookie is never sent for a record
@@ -186,18 +283,15 @@ func TestSignInRecordIsOnDiskBeforeCookie(t *testing.T) {
 			case <-done:
 				server.saveMu.Unlock()
 				require.Fail(t, "the sign-in returned while the token file could not be written")
-			case <-time.After(signInSettleTime):
+			case <-time.After(lockWaitSettleTime):
 			}
 			server.saveMu.Unlock()
 			<-done
 
 			require.NoError(t, startErr)
 			require.NotNil(t, findCookie(w, SessionCookieName))
-			data, err := os.ReadFile(tokensFile) //nolint:gosec // test file path from t.TempDir()
-			require.NoError(t, err, "the record must be on disk when the sign-in returns")
-			var stored tokenFile
-			require.NoError(t, json.Unmarshal(data, &stored))
-			require.Len(t, stored.Sessions, 1)
+			stored := readStoredTokens(t, tokensFile)
+			require.Len(t, stored.Sessions, 1, "the record must be on disk when the sign-in returns")
 			if token != "" {
 				assert.Contains(t, stored.Sessions, sessionTokenKey(token))
 			}

@@ -32,7 +32,9 @@ func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 	settings.Security.BasicAuth.Enabled = true
 
-	s := NewOAuth2Server(t.Context(), false)
+	s := newOAuth2ServerForTesting(t, settings)
+	prevStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = prevStore })
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	token := seedSession(t, s, &AccessToken{})
@@ -98,7 +100,7 @@ func TestOAuth2Server(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewOAuth2Server(t.Context(), false)
+			s := newOAuth2ServerForTesting(t, &conf.Settings{})
 			tt.test(t, s)
 		})
 	}
@@ -357,8 +359,11 @@ func TestIsValidUserId(t *testing.T) {
 
 // TestValidateAccessToken tests the ValidateAccessToken method
 func TestValidateAccessToken(t *testing.T) {
+	settings := &conf.Settings{Security: conf.Security{BasicAuth: conf.BasicAuth{Enabled: true}}}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 	server := &OAuth2Server{
-		settings:     &conf.Settings{Security: conf.Security{BasicAuth: conf.BasicAuth{Enabled: true}}},
+		settings:     settings,
 		accessTokens: make(map[string]AccessToken),
 	}
 
@@ -403,6 +408,16 @@ func TestValidateAccessToken(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("password session is rejected once basic authentication is disabled", func(t *testing.T) {
+		require.NoError(t, server.ValidateAccessToken(validToken))
+
+		disabled := conf.CloneSettings(settings)
+		disabled.Security.BasicAuth.Enabled = false
+		conftest.SetTestSettings(disabled)
+
+		assert.ErrorIs(t, server.ValidateAccessToken(validToken), ErrTokenNotFound)
+	})
 }
 
 // TestGenerateAuthCode tests the GenerateAuthCode method

@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -98,26 +99,34 @@ func TestSessionSlidingExpiry(t *testing.T) {
 				assert.Equal(t, first, expiryOf(t, server, token))
 				assert.Nil(t, findCookie(rec, SessionCookieName))
 
-				// One after it extends to a full lifetime.
+				// Two renewals from the same copy of the record, read before either,
+				// extend once to a full lifetime: the re-check under the write lock
+				// stops the second, which a second later would extend further.
 				time.Sleep(interval / 2)
-				ok, rec = authenticate(t, server, token, nil)
-				assert.True(t, ok)
-				extended := expiryOf(t, server, token)
-				assert.Equal(t, time.Now().Add(lifetime), extended)
-				cookie := findCookie(rec, SessionCookieName)
+				stale, err := server.liveRecord(token)
+				require.NoError(t, err)
+				req := sessionRequest(token)
+				firstCtx, firstRec := sessionContext(req)
+				secondCtx, secondRec := sessionContext(req)
+				server.renewSession(firstCtx, token, &stale)
+				extendedAt := time.Now()
+				time.Sleep(time.Second)
+				server.renewSession(secondCtx, token, &stale)
+				require.NoError(t, firstCtx.NoContent(http.StatusOK))
+				require.NoError(t, secondCtx.NoContent(http.StatusOK))
+
+				assert.Equal(t, extendedAt.Add(lifetime), expiryOf(t, server, token), "the second renewal must not extend again")
+				cookie := findCookie(firstRec, SessionCookieName)
 				if tt.remember {
 					require.NotNil(t, cookie, "a remembered renewal must re-send the cookie")
 					assert.Equal(t, int(RememberedCookieMaxAge.Seconds()), cookie.MaxAge)
-					assert.Equal(t, testCachePrivate, rec.Header().Get(echo.HeaderCacheControl))
+					assert.Equal(t, testCachePrivate, firstRec.Header().Get(echo.HeaderCacheControl))
 				} else {
 					assert.Nil(t, cookie, "an unticked renewal must not send a cookie")
-					assert.Empty(t, rec.Header().Get(echo.HeaderCacheControl))
+					assert.Empty(t, firstRec.Header().Get(echo.HeaderCacheControl))
 				}
-
-				// Two requests in the same instant extend once.
-				ok, _ = authenticate(t, server, token, nil)
-				assert.True(t, ok)
-				assert.Equal(t, extended, expiryOf(t, server, token))
+				assert.Nil(t, findCookie(secondRec, SessionCookieName), "only the renewal that extended sends the cookie")
+				assert.Empty(t, secondRec.Header().Get(echo.HeaderCacheControl))
 
 				// Silence longer than the lifetime ends the session.
 				time.Sleep(lifetime + time.Second)
@@ -511,6 +520,39 @@ func TestStartProviderSessionRefusesEmptyProvider(t *testing.T) {
 			defer server.mutex.RUnlock()
 			assert.Empty(t, server.accessTokens)
 		})
+	}
+}
+
+// TestNewSessionExpiry verifies the initial expiry of a new session: a full
+// lifetime for its remember choice, for password and provider sign-ins.
+func TestNewSessionExpiry(t *testing.T) {
+	signIns := map[string]func(t *testing.T, s *OAuth2Server, remember bool) string{
+		"password": func(t *testing.T, s *OAuth2Server, remember bool) string {
+			t.Helper()
+			cookie, _ := signedInCookie(t, s, nil, remember)
+			return cookie.Value
+		},
+		"provider": func(t *testing.T, s *OAuth2Server, remember bool) string {
+			t.Helper()
+			w := httptest.NewRecorder()
+			require.NoError(t, s.StartProviderSession(w, sessionRequest(""), &AccessToken{
+				Provider: ProviderGoogle, UserID: testUser, ProviderUserID: testProviderSub,
+			}, remember))
+			cookie := findCookie(w, SessionCookieName)
+			require.NotNil(t, cookie)
+			return cookie.Value
+		},
+	}
+	for name, signIn := range signIns {
+		for _, remember := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s remember=%t", name, remember), func(t *testing.T) {
+				server, _ := newSessionTestServer(t, false, nil)
+				synctest.Test(t, func(t *testing.T) {
+					token := signIn(t, server, remember)
+					assert.Equal(t, time.Now().Add(sessionLifetime(remember)), expiryOf(t, server, token))
+				})
+			})
+		}
 	}
 }
 

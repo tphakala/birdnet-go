@@ -81,8 +81,8 @@ func TestAuthenticateBasicRefusesCodeWhenCredentialsChanged(t *testing.T) {
 
 // TestSessionCheckRecordReusedByGetters verifies that GetUsername and
 // GetAuthMethod read the record a successful session check left on the context
-// instead of checking the session again: they still answer after the cookie is
-// gone from the request, and answer nothing for a request with no session.
+// instead of checking the session again: they still answer after the record is
+// gone from the server, and answer nothing for a request with no session.
 func TestSessionCheckRecordReusedByGetters(t *testing.T) {
 	const user = "user@example.com"
 	settings := &conf.Settings{Security: conf.Security{
@@ -105,7 +105,8 @@ func TestSessionCheckRecordReusedByGetters(t *testing.T) {
 	c := echo.New().NewContext(req, httptest.NewRecorder())
 	require.NoError(t, adapter.CheckAccess(c))
 
-	req.Header.Del("Cookie")
+	// End the session on the server: a second session check would now fail.
+	server.EndSession(httptest.NewRecorder(), req)
 	assert.Equal(t, user, adapter.GetUsername(c))
 	assert.Equal(t, AuthMethodBrowserSession, adapter.GetAuthMethod(c))
 
