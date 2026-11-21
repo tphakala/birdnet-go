@@ -2,9 +2,9 @@
  * Number and label formatting shared by the detection detail panels. Numbers
  * follow the UI language chosen in the app, not the browser's.
  */
-import { getLocale } from '$lib/i18n';
+import { getLocale, t } from '$lib/i18n';
 import type { OriginalSpecies } from '$lib/types/detection.types';
-import type { DetectionDetailData } from './detailTypes';
+import type { DetectionDetailData, DetectionNeighbors } from './detailTypes';
 
 /** A share from 0 to 1 times this is a percentage. */
 export const PERCENT = 100;
@@ -113,4 +113,21 @@ export function replacedModelPick(
 export function formatModelLabel(name: string, version: string, variant?: string): string {
   const base = [name, version].filter(Boolean).join(' ');
   return variant && variant !== DEFAULT_MODEL_VARIANT ? `${base} (${variant})` : base;
+}
+
+/**
+ * The name of a step link that has nowhere to go, also the reason its keyboard shortcut
+ * announces. Every state keeps the link's own name so the four links stay distinguishable:
+ * while the neighbours are being looked up or when the lookup failed it adds that reason, and
+ * once they are known it states why there is nowhere to go (`emptyLabel`).
+ */
+export function stepBlockedLabel(
+  label: string,
+  emptyLabel: string,
+  neighbors: DetectionNeighbors | null,
+  failed: boolean
+): string {
+  if (failed) return t('detections.detail.nav.stepFailed', { label });
+  if (neighbors === null) return t('detections.detail.nav.stepLoading', { label });
+  return emptyLabel;
 }
