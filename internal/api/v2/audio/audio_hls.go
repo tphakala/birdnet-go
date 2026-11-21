@@ -1008,10 +1008,6 @@ func (h *hlsConsumer) Channels() int { return h.channels }
 //
 // The send never blocks. A feed loop that has fallen behind costs the stream
 // its oldest queued audio, not the router its dispatch goroutine.
-//
-// Write must not run concurrently with Close, which closes the queue's channel;
-// AudioRouter guarantees that by stopping the route's drainer before it closes
-// the consumer.
 func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
 	if h.closed.Load() {
 		return audiocore.ErrConsumerClosed
@@ -1068,8 +1064,9 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 }
 
 // Close marks the consumer as closed and closes its feed channel once, so the
-// feed loop drains any buffered audio and exits. It must follow the last Write
-// (see Write).
+// feed loop drains any buffered audio and exits. It must follow the last Write,
+// which AudioRouter guarantees by stopping the route's drainer before it closes
+// the consumer.
 func (h *hlsConsumer) Close() error {
 	h.closed.Store(true)
 	h.closeOnce.Do(func() { close(h.feed.ch) })
