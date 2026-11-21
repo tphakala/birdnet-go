@@ -25,7 +25,8 @@ vars:
     sh: uname -s
   UNAME_M:
     sh: uname -m
-  # Go version from go.mod (single source of truth)
+  # Go language floor from go.mod, for example 1.27.0. It names the minor line
+  # to install; installs and CI build with the latest patch of that line.
   GO_VERSION:
     sh: awk '/^go /{print $2; found=1} END{if(!found) exit 1}' go.mod
   # Sentry DSN baked into the binary at link time. Read from the SENTRY_DSN
@@ -356,7 +357,7 @@ tasks:
         echo "    - macOS: Homebrew must be installed first"
         echo ""
         echo "This will install:"
-        echo "  • Go {{.GO_VERSION}}"
+        echo "  • Go {{ regexFind "^[0-9]+[.][0-9]+" .GO_VERSION }}.x (the latest patch release)"
         echo "  • Node.js LTS"
         echo "  • Build tools (gcc, git, wget, etc.)"
         echo "  • Go dev tools (golangci-lint, air)"
@@ -433,7 +434,7 @@ tasks:
           INSTALL_GO=false
 
           if ! command -v go >/dev/null 2>&1; then
-            echo "📥 Go not found, installing Go ${GO_VERSION}..."
+            echo "📥 Go not found, installing the latest Go ${REQUIRED_GO_MINOR}.x..."
             INSTALL_GO=true
           else
             CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
@@ -448,7 +449,7 @@ tasks:
                 echo "   Current: ${CURRENT_GO_VERSION}"
                 echo "   Required: ${REQUIRED_GO_MINOR}.x"
                 echo ""
-                printf "   Upgrade to Go ${GO_VERSION}? (y/N) "
+                printf "   Upgrade to the latest Go ${REQUIRED_GO_MINOR}.x? (y/N) "
                 read REPLY
                 case "$REPLY" in
                   [Yy]|[Yy][Ee][Ss]) INSTALL_GO=true ;;
@@ -459,12 +460,21 @@ tasks:
           fi
 
           if [ "$INSTALL_GO" = true ]; then
-            echo "📥 Installing Go ${GO_VERSION}..."
+            echo "📥 Installing the latest Go ${REQUIRED_GO_MINOR}.x..."
             case "$(uname -m)" in
               x86_64) GO_ARCH="amd64";;
               aarch64|arm64) GO_ARCH="arm64";;
               *) echo "❌ Unsupported architecture: $(uname -m)"; exit 1;;
             esac
+            # go.mod only names the minor line (1.27.0 is the floor), so install the
+            # newest patch release of that line and fall back to the floor if the
+            # release feed cannot be read or does not answer in time. include=all
+            # keeps a minor line that has left the default feed findable; the feed
+            # lists releases newest first.
+            GO_LATEST=$(curl -fsSL --connect-timeout 10 --max-time 60 'https://go.dev/dl/?mode=json&include=all' 2>/dev/null \
+              | grep -oE "\"version\": \"go${REQUIRED_GO_MINOR}(\.[0-9]+)?\"" \
+              | head -n 1 | grep -oE '[0-9]+(\.[0-9]+)+' || true)
+            GO_VERSION="${GO_LATEST:-$GO_VERSION}"
             GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
             if ! wget "https://go.dev/dl/${GO_TARBALL}"; then
               echo "❌ Failed to download Go ${GO_VERSION} for ${GO_ARCH}"

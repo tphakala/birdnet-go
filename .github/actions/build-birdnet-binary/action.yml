@@ -41,10 +41,7 @@ runs:
   using: composite
   steps:
     - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version-file: 'go.mod'
-        check-latest: true
+      uses: ./.github/actions/setup-go
 
     # Linux and Windows targets cross-compile on the ubuntu runner and need the
     # cross toolchain; the darwin target runs on macOS and skips this.

@@ -31,10 +31,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Regenerate regional model catalog
         # Offline by design: the generator reads the vendored manifests and the

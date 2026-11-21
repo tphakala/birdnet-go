@@ -93,12 +93,11 @@ jobs:
           # HEAD^1 (the base side of the merge commit) is the diff base for the
           # package selection on a pull request.
           fetch-depth: 2
-      - uses: actions/setup-go@v7
+      - uses: ./.github/actions/setup-go
         with:
-          go-version-file: 'go.mod'
           # Restored and saved explicitly below: setup-go's post step saves only
           # when the job succeeded, under the pull request's own ref.
-          cache: false
+          cache: 'false'
       - run: go version
 
       - name: Resolve tool versions from Taskfile
