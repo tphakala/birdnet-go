@@ -568,8 +568,13 @@
 
   // ----- Change and delete -----
 
-  function changeStream(index: number, updated: StreamConfig) {
-    if (!streams.at(index)) return;
+  // A card writes by the row id it was rendered with. A write that arrives after
+  // its row went (a late analysis result of a deleted card, or of one a Reset
+  // replaced) finds no row and is dropped instead of landing on the stream that
+  // took its index.
+  function changeStream(id: string, updated: StreamConfig) {
+    const index = rowIds.indexOf(id);
+    if (index < 0 || !streams.at(index)) return;
     sendStreams(streams.map((stream, i) => (i === index ? updated : stream)));
   }
 
@@ -705,7 +710,7 @@
           onToggleExpanded={() => toggleRow(row.id)}
           problem={problems.at(row.index)}
           onUrlTested={url => onUrlTested?.(url)}
-          onChange={updated => changeStream(row.index, updated)}
+          onChange={updated => changeStream(row.id, updated)}
           onDelete={() => void deleteStream(row.index)}
         />
       {/each}

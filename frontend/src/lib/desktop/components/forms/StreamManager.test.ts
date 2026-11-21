@@ -399,6 +399,66 @@ describe('StreamManager row ids', () => {
   });
 });
 
+describe('StreamManager late writes from a card', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  async function startAnalysisOnFirstCard(view: ReturnType<typeof renderRows>) {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    await fireEvent.click(header('A'));
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+    view.onUpdateStreams.mockClear();
+    return async () => {
+      pending.resolve(LEFT_ANALYSIS);
+      await pending.promise;
+      await tick();
+    };
+  }
+
+  it('ignores a late channel analysis of a card that was deleted', async () => {
+    const view = renderRows([streamA, streamB]);
+    const finish = await startAnalysisOnFirstCard(view);
+
+    await confirmDelete(0);
+    await echoLast(view, view.onUpdateStreams);
+    view.onUpdateStreams.mockClear();
+    await finish();
+
+    // The result would otherwise overwrite B, which now sits at A's old index.
+    expect(view.onUpdateStreams).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late channel analysis of a card that a Reset replaced', async () => {
+    const view = renderRows([streamA, streamB]);
+    const finish = await startAnalysisOnFirstCard(view);
+
+    await view.rerender({ streams: [streamP, streamQ] });
+    await finish();
+
+    expect(view.onUpdateStreams).not.toHaveBeenCalled();
+  });
+
+  it('writes the channel analysis of a card that is still there', async () => {
+    const view = renderRows([streamA, streamB]);
+    const finish = await startAnalysisOnFirstCard(view);
+
+    await finish();
+
+    expect(view.onUpdateStreams).toHaveBeenCalledExactlyOnceWith([
+      { ...streamA, channelMode: 'left' },
+      streamB,
+    ]);
+  });
+});
+
 describe('StreamManager add form', () => {
   beforeEach(() => {
     vi.clearAllMocks();
