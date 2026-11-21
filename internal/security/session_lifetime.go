@@ -95,25 +95,33 @@ func (s *OAuth2Server) liveCredentialsID(settings *conf.Settings) string {
 // nothing under any (every save follows a sync), so it adopts the live ones
 // without ending anything. Every read of a session record and every write of a
 // record or code goes through it first (liveRecord, GenerateAuthCode,
-// ExchangeAuthCode, StartProviderSession). It must not be called with s.mutex
-// held.
-func (s *OAuth2Server) syncCredentials(settings *conf.Settings) {
-	if settings == nil {
-		return
-	}
-	id := s.liveCredentialsID(settings)
-
+// ExchangeAuthCode, StartProviderSession). It reads the live settings snapshot
+// itself while holding s.mutex, so concurrent callers cannot write an older ID
+// after a newer one, and it returns the snapshot it synced against: the one
+// the calling operation should use for any other settings read. It returns nil
+// when there are no settings. It must not be called with s.mutex held.
+func (s *OAuth2Server) syncCredentials() *conf.Settings {
 	s.mutex.RLock()
-	same := id == s.credentialsID
+	settings := s.currentSettings()
+	same := settings == nil || s.liveCredentialsID(settings) == s.credentialsID
 	s.mutex.RUnlock()
+	if settings == nil {
+		return nil
+	}
 	if same {
-		return
+		return settings
 	}
 
 	s.mutex.Lock()
+	settings = s.currentSettings()
+	if settings == nil {
+		s.mutex.Unlock()
+		return nil
+	}
+	id := s.liveCredentialsID(settings)
 	if id == s.credentialsID {
 		s.mutex.Unlock()
-		return
+		return settings
 	}
 	adopting := s.credentialsID == ""
 	hadEntries := len(s.accessTokens) > 0 || len(s.authCodes) > 0
@@ -128,6 +136,7 @@ func (s *OAuth2Server) syncCredentials(settings *conf.Settings) {
 		GetLogger().Info("Basic-auth credentials changed, all sign-in sessions ended")
 	}
 	s.persistTokensIfEnabled()
+	return settings
 }
 
 // newOpaqueToken returns a fresh random token of byteLen random bytes, encoded
@@ -221,8 +230,13 @@ func TakeRememberChoice(w http.ResponseWriter, r *http.Request, provider string)
 // sessions of changed credentials (syncCredentials). It returns ErrTokenNotFound
 // for an unknown token and ErrTokenExpired for an expired record.
 func (s *OAuth2Server) liveRecord(token string) (AccessToken, error) {
-	s.syncCredentials(s.currentSettings())
+	s.syncCredentials()
+	return s.lookupRecord(token)
+}
 
+// lookupRecord returns the unexpired session record for token, without syncing
+// credentials first: the caller has just done it (syncCredentials).
+func (s *OAuth2Server) lookupRecord(token string) (AccessToken, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	rec, ok := s.accessTokens[sessionTokenKey(token)]
@@ -281,7 +295,7 @@ func (s *OAuth2Server) StartSession(w http.ResponseWriter, r *http.Request, toke
 // IDToken of identity), revokes the browser's previous record and sends the
 // cookie. Every sign-in gets a fresh token.
 func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Request, identity *AccessToken, remember bool) {
-	s.syncCredentials(s.currentSettings())
+	s.syncCredentials()
 
 	token := newOpaqueToken(AccessTokenByteLength)
 	record := *identity
@@ -314,12 +328,17 @@ func (s *OAuth2Server) checkSession(c echo.Context, log SecurityLogger) bool {
 		log.Debug("No session cookie")
 		return false
 	}
-	rec, err := s.liveRecord(token)
+	settings := s.syncCredentials()
+	if settings == nil {
+		log.Debug("Settings unavailable")
+		return false
+	}
+	rec, err := s.lookupRecord(token)
 	if err != nil {
 		log.Debug("Session cookie names no live session")
 		return false
 	}
-	if !recordAllowed(s.currentSettings(), &rec, log) {
+	if !recordAllowed(settings, &rec, log) {
 		return false
 	}
 

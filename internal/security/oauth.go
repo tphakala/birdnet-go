@@ -314,6 +314,10 @@ var testConfigPath string
 var (
 	ErrTokenNotFound = errors.NewStd("token not found")
 	ErrTokenExpired  = errors.NewStd("token expired")
+
+	// ErrCredentialsChanged is returned by GenerateAuthCode when the credentials
+	// a password was verified against are not the live ones any more.
+	ErrCredentialsChanged = errors.NewStd("basic-auth credentials changed")
 )
 
 // NewOAuth2Server creates and initializes an OAuth2Server. The supplied context
@@ -351,7 +355,7 @@ func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 
 	// Set up token persistence
 	server.setupTokenPersistence()
-	server.syncCredentials(server.currentSettings())
+	server.syncCredentials()
 
 	// Clean up expired tokens every hour. The caller's context terminates the
 	// goroutine on application shutdown.
@@ -1084,19 +1088,32 @@ func isValidUserId(configuredIds, providedId string) bool {
 	return false
 }
 
-// GenerateAuthCode generates a new authorization code. remember is the
-// "Remember this browser" choice the session issued for the code inherits.
-func (s *OAuth2Server) GenerateAuthCode(remember bool) string {
+// GenerateAuthCode generates a new authorization code for a login verified
+// against the verified settings snapshot. It refuses with ErrCredentialsChanged
+// (and stores nothing) when those credentials are not the live ones any more,
+// so a code is never issued under credentials the password was not checked
+// against. remember is the "Remember this browser" choice the session issued
+// for the code inherits.
+func (s *OAuth2Server) GenerateAuthCode(verified *conf.Settings, remember bool) (string, error) {
 	secLog := GetLogger()
 	secLog.Debug("Generating new authorization code")
-	s.syncCredentials(s.currentSettings())
+	if verified == nil {
+		return "", ErrCredentialsChanged
+	}
+	s.syncCredentials()
 
 	authCode := newOpaqueToken(AuthCodeByteLength)
+	verifiedID := basicCredentialsID(verified)
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AuthCodeExp)
+	if verifiedID != s.credentialsID {
+		secLog.Warn("Authorization code refused: basic-auth credentials changed during sign-in")
+		return "", ErrCredentialsChanged
+	}
+
+	expiresAt := time.Now().Add(verified.Security.BasicAuth.AuthCodeExp)
 	s.authCodes[authCode] = AuthCode{
 		Code:      authCode,
 		ExpiresAt: expiresAt,
@@ -1105,7 +1122,7 @@ func (s *OAuth2Server) GenerateAuthCode(remember bool) string {
 	// Do not log the authCode itself
 	secLog.Info("Generated and stored new authorization code", logger.Time("expires_at", expiresAt))
 	go s.persistTokensIfEnabled() // Persist changes
-	return authCode
+	return authCode, nil
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token
@@ -1122,7 +1139,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 
 	secLog.Debug("Attempting to exchange authorization code")
 	// A code issued before a credentials change must not be exchanged after it.
-	s.syncCredentials(s.currentSettings())
+	s.syncCredentials()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -1171,12 +1188,17 @@ func (s *OAuth2Server) ValidateAccessToken(token string) error {
 	secLog := GetLogger()
 	secLog.Debug("Validating access token")
 
-	rec, err := s.liveRecord(token)
+	settings := s.syncCredentials()
+	if settings == nil {
+		secLog.Debug("Settings unavailable")
+		return ErrTokenNotFound
+	}
+	rec, err := s.lookupRecord(token)
 	if err != nil {
 		secLog.Debug("Access token is not live", logger.Bool("expired", errors.Is(err, ErrTokenExpired)))
 		return err
 	}
-	if rec.Provider != "" || !recordAllowed(s.currentSettings(), &rec, secLog) {
+	if rec.Provider != "" || !recordAllowed(settings, &rec, secLog) {
 		secLog.Debug("Access token not found")
 		return ErrTokenNotFound
 	}

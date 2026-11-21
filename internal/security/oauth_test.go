@@ -67,7 +67,8 @@ func TestOAuth2Server(t *testing.T) {
 				conftest.SetTestSettings(s.settings)
 
 				// Generate and immediately use the auth code
-				code := s.GenerateAuthCode(false)
+				code, err := s.GenerateAuthCode(s.settings, false)
+				require.NoError(t, err)
 
 				// Pass test context to ExchangeAuthCode
 				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -422,7 +423,8 @@ func TestGenerateAuthCode(t *testing.T) {
 		accessTokens: make(map[string]AccessToken),
 	}
 
-	code := server.GenerateAuthCode(false)
+	code, err := server.GenerateAuthCode(settings, false)
+	require.NoError(t, err)
 	assert.NotEmpty(t, code)
 
 	// Verify code was stored

@@ -205,7 +205,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		return "", a.handleAuthFailure(userMatch, username)
 	}
 
-	return a.generateAuthCodeOnSuccess(username, remember), nil
+	return a.generateAuthCodeOnSuccess(settings, username, remember)
 }
 
 // validateBasicAuthEnabled checks if basic auth is enabled. The enabled flag is
@@ -260,15 +260,21 @@ func (a *SecurityAdapter) handleAuthFailure(userMatch bool, username string) err
 	return ErrInvalidCredentials
 }
 
-// generateAuthCodeOnSuccess generates an auth code after successful authentication.
-func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string, remember bool) string {
+// generateAuthCodeOnSuccess generates an auth code after successful
+// authentication against settings, the snapshot the password was checked
+// against. It fails like a wrong password when the credentials changed since.
+func (a *SecurityAdapter) generateAuthCodeOnSuccess(settings *conf.Settings, username string, remember bool) (string, error) {
 	log := a.log()
 	log.Info("Credentials validated successfully", logger.Username(username))
 
-	authCode := a.OAuth2Server.GenerateAuthCode(remember)
+	authCode, err := a.OAuth2Server.GenerateAuthCode(settings, remember)
+	if err != nil {
+		log.Warn("Basic authentication failed: credentials changed during sign-in", logger.Username(username))
+		return "", ErrInvalidCredentials
+	}
 
 	log.Info("Basic authentication successful", logger.Username(username))
-	return authCode
+	return authCode, nil
 }
 
 // Logout ends the browser's session: the record is deleted and the cookie

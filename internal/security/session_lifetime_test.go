@@ -341,7 +341,8 @@ func TestCredentialsChangeEndsAllSessions(t *testing.T) {
 			server, settings := newSessionTestServer(t, false, nil)
 			password := seedSession(t, server, &AccessToken{})
 			social := seedSession(t, server, &AccessToken{Provider: ProviderGoogle, UserID: testUser})
-			code := server.GenerateAuthCode(false)
+			code, err := server.GenerateAuthCode(settings, false)
+			require.NoError(t, err)
 
 			// Settings snapshots are immutable, so a change is a new snapshot.
 			publish := func(changed bool) {
@@ -351,7 +352,7 @@ func TestCredentialsChangeEndsAllSessions(t *testing.T) {
 			}
 
 			publish(true)
-			_, err := server.ExchangeAuthCode(t.Context(), code)
+			_, err = server.ExchangeAuthCode(t.Context(), code)
 			require.Error(t, err, "a code issued before the change must not be exchanged after it")
 
 			for _, token := range []string{password, social} {
@@ -368,11 +369,40 @@ func TestCredentialsChangeEndsAllSessions(t *testing.T) {
 	}
 }
 
+// TestGenerateAuthCodeRefusesCredentialsChangedSinceVerification verifies that a
+// login whose password was checked against the old credentials gets no code
+// once the new ones are live, and that the old credentials never become the
+// server's again.
+func TestGenerateAuthCodeRefusesCredentialsChangedSinceVerification(t *testing.T) {
+	server, verified := newSessionTestServer(t, false, nil)
+
+	// The password changes while the login is in flight.
+	live := conf.CloneSettings(verified)
+	live.Security.BasicAuth.Password = "changed"
+	conftest.SetTestSettings(live)
+
+	code, err := server.GenerateAuthCode(verified, false)
+	require.ErrorIs(t, err, ErrCredentialsChanged)
+	assert.Empty(t, code)
+	server.mutex.RLock()
+	assert.Empty(t, server.authCodes, "no code may be stored for the stale credentials")
+	assert.Equal(t, basicCredentialsID(live), server.credentialsID, "the server keeps the live credentials")
+	server.mutex.RUnlock()
+
+	code, err = server.GenerateAuthCode(live, false)
+	require.NoError(t, err)
+	assert.NotEmpty(t, code, "a login verified against the live credentials still gets a code")
+
+	_, err = server.GenerateAuthCode(nil, false)
+	require.ErrorIs(t, err, ErrCredentialsChanged, "no verified snapshot means no code")
+}
+
 // signedInCookie signs a browser in with a password through the public flow and
 // returns the cookie the response sets.
 func signedInCookie(t *testing.T, s *OAuth2Server, prev *http.Request, remember bool) (cookie *http.Cookie, rawHeader string) {
 	t.Helper()
-	code := s.GenerateAuthCode(remember)
+	code, err := s.GenerateAuthCode(s.currentSettings(), remember)
+	require.NoError(t, err)
 	token, err := s.ExchangeAuthCode(t.Context(), code)
 	require.NoError(t, err)
 	if prev == nil {
@@ -417,7 +447,9 @@ func TestSessionCookieAttributes(t *testing.T) {
 			req        *http.Request
 			wantSecure bool
 		}{{listed, false}, {other, true}} {
-			token, err := server.ExchangeAuthCode(t.Context(), server.GenerateAuthCode(true))
+			code, err := server.GenerateAuthCode(server.currentSettings(), true)
+			require.NoError(t, err)
+			token, err := server.ExchangeAuthCode(t.Context(), code)
 			require.NoError(t, err)
 			rec := httptest.NewRecorder()
 			require.NoError(t, server.StartSession(rec, tc.req, token))

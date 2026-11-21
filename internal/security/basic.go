@@ -100,7 +100,11 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 
 	// Generate an auth code
 	secLog.Debug("Generating authorization code")
-	authCode := s.GenerateAuthCode(false)
+	authCode, err := s.GenerateAuthCode(settings, false)
+	if err != nil {
+		secLog.Warn("Basic authorization failed: credentials changed", logger.Error(err))
+		return c.String(http.StatusUnauthorized, "Unauthorized")
+	}
 
 	// DO NOT log the authCode itself
 	secLog.Info("Authorization code generated successfully, redirecting user")

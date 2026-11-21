@@ -55,6 +55,30 @@ func TestAuthenticateBasicHotReloadAfterEnable(t *testing.T) {
 	require.NotEmpty(t, authCode, "a non-empty auth code should be generated on success")
 }
 
+// TestAuthenticateBasicRefusesCodeWhenCredentialsChanged verifies that a login
+// whose password was checked against credentials that are no longer live fails
+// like a wrong password and issues no code.
+func TestAuthenticateBasicRefusesCodeWhenCredentialsChanged(t *testing.T) {
+	verified := &conf.Settings{Security: conf.Security{
+		SessionSecret: "test-secret",
+		BasicAuth:     conf.BasicAuth{Enabled: true, ClientID: "admin", Password: "old-password", AuthCodeExp: time.Minute},
+	}}
+	server := securitytest.NewOAuth2ServerForTesting(t, verified)
+	adapter := NewSecurityAdapter(server)
+
+	live := conf.CloneSettings(verified)
+	live.Security.BasicAuth.Password = "new-password"
+	conftest.SetTestSettings(live)
+
+	code, err := adapter.generateAuthCodeOnSuccess(verified, "admin", false)
+	require.ErrorIs(t, err, ErrInvalidCredentials)
+	assert.Empty(t, code)
+
+	code, err = adapter.generateAuthCodeOnSuccess(live, "admin", false)
+	require.NoError(t, err)
+	assert.NotEmpty(t, code)
+}
+
 // TestSessionCheckRecordReusedByGetters verifies that GetUsername and
 // GetAuthMethod read the record a successful session check left on the context
 // instead of checking the session again: they still answer after the cookie is
