@@ -45,4 +45,25 @@ describe('unsaved changes with an edit still being typed', () => {
 
     expect(unsavedChanges.prompting).toBe(true);
   });
+
+  it('keeps the field focused when nothing blocks the move', async () => {
+    // No guard is registered here; a plain field must not lose focus.
+    const other = document.createElement('input');
+    document.body.append(other);
+    other.focus();
+    unsavedChanges.request(TO, FROM);
+
+    expect(other).toHaveFocus();
+    other.remove();
+  });
+
+  it('puts the cursor back in the field when the user stays', async () => {
+    await typeWithoutLeavingTheField();
+    const field = screen.getByLabelText('Name');
+
+    void unsavedChanges.request(TO, FROM);
+    unsavedChanges.stay();
+
+    expect(field).toHaveFocus();
+  });
 });

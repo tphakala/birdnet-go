@@ -87,7 +87,8 @@ export function createUnsavedChanges(): UnsavedChanges {
 
   /**
    * Fields such as TextInput commit on change, so text still being typed is not in the draft yet.
-   * Leaving the focused field fires its change event synchronously and commits it.
+   * Leaving the focused field fires its change event synchronously and commits it; the field then
+   * gets its focus back, so the user keeps typing if the move is held or never blocked.
    */
   function commitPendingEdit(): void {
     if (typeof document === 'undefined') return;
@@ -98,6 +99,7 @@ export function createUnsavedChanges(): UnsavedChanges {
       field instanceof HTMLSelectElement
     ) {
       field.blur();
+      field.focus();
     }
   }
 
@@ -165,7 +167,10 @@ export function createUnsavedChanges(): UnsavedChanges {
 
     request(to, from) {
       if (prompting) return Promise.resolve(false);
-      commitPendingEdit();
+      // Only a guard that does not admit the move can be affected by a pending edit.
+      if ([...records].some(record => !(record.guard.allows ?? samePath)(to, from))) {
+        commitPendingEdit();
+      }
       const leavers = [...records].filter(record => isBlocking(record, to, from));
       if (leavers.length === 0) return null;
       return openPrompt(leavers, from.path);
@@ -173,7 +178,7 @@ export function createUnsavedChanges(): UnsavedChanges {
 
     confirmDiscard() {
       if (prompting) return Promise.resolve(false);
-      commitPendingEdit();
+      if (records.size > 0) commitPendingEdit();
       for (const record of records) {
         if (record.guard.isDirty()) return openPrompt([], '');
       }
