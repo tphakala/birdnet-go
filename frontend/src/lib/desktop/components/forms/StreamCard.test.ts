@@ -256,6 +256,18 @@ describe('StreamCard editing', () => {
     expect(onChange).toHaveBeenLastCalledWith({ ...baseStream, url: 'rtmp://host/live' });
   });
 
+  it('detects the type from the trimmed URL and keeps the typed text in the update', async () => {
+    const { onChange } = renderCard();
+
+    await fireEvent.input(urlInput(), { target: { value: '  http://host/live' } });
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({
+      ...baseStream,
+      url: '  http://host/live',
+      type: 'http',
+    });
+  });
+
   it('keeps the type while the typed URL names no scheme yet', async () => {
     const { onChange } = renderCard();
 

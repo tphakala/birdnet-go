@@ -354,7 +354,8 @@
     urlTouched = false;
     if (url === stream.url) return;
     // A URL that names its scheme picks the matching type, as in the add form.
-    change({ url, type: url.includes('://') ? detectStreamType(url) : stream.type });
+    const trimmed = url.trim();
+    change({ url, type: trimmed.includes('://') ? detectStreamType(trimmed) : stream.type });
   }
 
   function handleUrlBlur(url: string) {
