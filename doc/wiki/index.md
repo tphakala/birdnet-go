@@ -8,6 +8,7 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 - [BirdNET-Go Guide](guide.md) - Overview and basic concepts
 - [Installation Guide](installation.md) - Comprehensive installation instructions for all methods
 - [Recommended Hardware](hardware.md) - Hardware recommendations for optimal performance
+- [Audio Formats](audio-formats.md) - Supported clip and input formats, recommendations, and ultrasonic bat settings
 
 ## Installation Methods
 

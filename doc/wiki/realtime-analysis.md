@@ -72,7 +72,7 @@ Setting (**birdnet sensitivity**) controls sigmoid sensitivity of prediction in 
 
 Setting (**birdnet threshold**) controls minimum confidence of prediction result to be recorded for output, valid values are from 0.0 to 1.0. Low value may cause lot of incorrect detections, high value may cause model to miss many detections.
 
-Setting (**birdnet overlap**) is not used for real-time detection.
+Setting (**birdnet overlap**) controls overlap between consecutive 3-second analysis windows (0.0 to 2.9). Higher overlap runs inference more frequently and is used by [Deep Detection](guide.md#deep-detection) to reduce false positives.
 
 The (**birdnet latitude**) and (**birdnet longitude**) settings enable location-based species occurrence filtering. This feature helps to exclude non-native species from your region in the results, thereby reducing incorrect detections. Setting these values to 00.000 disables location-based filtering. Valid values for these settings are required if Birdweather uploads are enabled.
 
@@ -88,7 +88,9 @@ realtime:
     export:
       enabled: true
       path: clips/
-      type: wav
+      type: aac
+      ultrasonictype: flac
+      bitrate: 96k
   log:
     enabled: true
     path: birdnet.txt
@@ -98,7 +100,7 @@ Interval setting reduces log flooding by setting a minimum interval, in seconds,
 
 Setting (**processingtime: true**) prints the time it took for BirdNET analysis to process a 3-second audio chunk. These values should range from 50ms to 550ms, depending on the hardware you are running BirdNET-Go on. As long as the processingtime is less than 1500ms, audio is processed quickly enough to keep up with real-time capture and analysis.
 
-Setting (**audio export enabled: true**) allows 3-second audio clips containing identified bird calls to be saved to disk. The **type** setting picks the file format: **wav** and **flac** are lossless, while **mp3**, **aac** and **opus** are lossy. The default path for audio clip exports is **clips**, which is relative to the directory where BirdNET-Go is executed.
+Setting (**audio export enabled: true**) saves audio clips containing identified detections to disk. The **type** setting picks the file format: **aac** (widest compatibility) and **opus** (best quality with the smallest files) are the recommended lossy formats; **flac** (recommended if you plan to post-process clips in external editors) and **wav** are lossless; **mp3** is discouraged. For ultrasonic bat captures above 48 kHz, **ultrasonictype** saves clips losslessly as **flac** (default) or **wav** because lossy formats cannot store ultrasonic content. See [Audio Formats](audio-formats.md) for full details and bitrate guidance. The default path for audio clip exports is **clips**, which is relative to the directory where BirdNET-Go is executed.
 
 Setting (**log enabled: true**) saves the timestamp and common name of identified birds to a log file, which can be used as a chat log overlay in OBS.
 

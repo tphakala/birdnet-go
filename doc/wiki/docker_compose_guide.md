@@ -295,7 +295,7 @@ For additional security, consider enabling TLS:
 ```yaml
 security:
   host: "yourdomain.com" # Your domain
-  autotls: true # Enable automatic TLS certificate
+  tlsMode: "autotls" # Enable automatic TLS certificate via Let's Encrypt
   redirecttohttps: true # Redirect HTTP to HTTPS
 ```
 

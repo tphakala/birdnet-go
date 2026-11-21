@@ -187,7 +187,7 @@ There are several authentication methods available in BirdNET-Go:
 
    ```yaml
    security:
-     # Required for OAuth methods
+     # Required for OAuth/OIDC redirect URLs
      host: "birdnet.yourdomain.com" # Your Cloudflare domain
 
      # Option 1: Basic Password Authentication
@@ -195,19 +195,19 @@ There are several authentication methods available in BirdNET-Go:
        enabled: true
        password: "your_password" # Will be automatically hashed
 
-     # Option 2: Google OAuth (requires Google Cloud account)
-     googleauth:
-       enabled: true
-       clientid: "your_client_id" # From Google Cloud Console
-       clientsecret: "your_client_secret"
-       userid: "your_email@gmail.com"
+     # Option 2: OAuth2 / OIDC providers (google, github, microsoft, oidc)
+     oauthProviders:
+       - provider: google
+         enabled: true
+         clientId: "your_client_id" # From Google Cloud Console
+         clientSecret: "your_client_secret"
+         userId: "your_google_user_id" # Prefer provider user ID over email
 
-     # Option 3: GitHub OAuth
-     githubauth:
-       enabled: true
-       clientid: "your_client_id" # From GitHub developer settings
-       clientsecret: "your_client_secret"
-       userid: "your_github_username"
+       - provider: github
+         enabled: true
+         clientId: "your_client_id" # From GitHub developer settings
+         clientSecret: "your_client_secret"
+         userId: "your_github_user_id"
 
      # Optional: Allow local network access without auth
      allowsubnetbypass:
@@ -215,12 +215,14 @@ There are several authentication methods available in BirdNET-Go:
        subnet: "192.168.1.0/24,10.0.0.0/8" # Your local network ranges
    ```
 
-2. **Restart BirdNET-Go** for the changes to take effect
+   See [Security & Access Control](security.md) for Microsoft, generic OIDC, and allowed-user ID details.
+
+2. **Restart BirdNET-Go** for `config.yaml` edits to take effect (changes saved in **Settings > Security** hot-reload)
 
 ### Authentication Method Comparison
 
 - **Basic Password Authentication**: Simplest to set up, but offers the least security. Good for personal use.
-- **OAuth (Google/GitHub)**: More secure, requires fewer passwords to remember, and offers better protection against brute force attacks. Recommended for most users.
+- **OAuth2 / OIDC (Google, GitHub, Microsoft, or generic OIDC)**: More secure, requires fewer passwords to remember, and offers better protection against brute force attacks. Recommended for most users.
 - **Subnet Bypass**: Optional feature that allows unauthenticated access from your local network while requiring authentication from the internet. Useful for mixed home/remote usage.
 
 If you're sharing your BirdNET-Go instance with family or friends, consider using OAuth which makes it easier to control who has access without sharing passwords.

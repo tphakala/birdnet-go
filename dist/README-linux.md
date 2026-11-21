@@ -3,7 +3,7 @@
 ## Tarball Contents
 
 - `birdnet-go` - application binary
-- `libonnxruntime.so` - ONNX Runtime library (required for Perch v2, BattyBirdNET, and geomodel features)
+- `libonnxruntime.so` - ONNX Runtime library (required for BirdNET+ v3.0, Perch v2, BattyBirdNET, BSG-BAT, and geomodel features)
 - `libtensorflowlite_c.so` - TensorFlow Lite C library (required for BirdNET v2.4)
 
 ## Quick Install
