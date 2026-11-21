@@ -145,15 +145,17 @@ export function createShortcuts(deps: {
   let enabled = $state(getStoredValue(storageKey, true, isBoolean));
   let helpOpen = $state(false);
   let announcement = $state('');
-  // Raw, not deep state: a scope is matched and removed by identity
-  let registered = $state.raw<readonly ShortcutScope[]>([]);
+  // Raw, not deep state: a registration is removed by the identity of its own entry, so a
+  // scope object registered twice keeps its other registration when one is removed
+  let registered = $state.raw<readonly { readonly scope: ShortcutScope }[]>([]);
   let announceGeneration = 0;
 
   /** Page scopes in registration order, then the global scope. */
   function orderedScopes(): readonly ShortcutScope[] {
+    const scopes = registered.map(entry => entry.scope);
     return [
-      ...registered.filter(scope => scope.id !== GLOBAL_SHORTCUT_SCOPE),
-      ...registered.filter(scope => scope.id === GLOBAL_SHORTCUT_SCOPE),
+      ...scopes.filter(scope => scope.id !== GLOBAL_SHORTCUT_SCOPE),
+      ...scopes.filter(scope => scope.id === GLOBAL_SHORTCUT_SCOPE),
     ];
   }
 
@@ -177,7 +179,7 @@ export function createShortcuts(deps: {
   }
 
   function warnOnDuplicateBindings(scope: ShortcutScope): void {
-    for (const other of registered) {
+    for (const { scope: other } of registered) {
       for (const definition of scope.definitions) {
         for (const existing of other.definitions) {
           const clash = bindingsOf(definition).some(binding =>
@@ -266,9 +268,12 @@ export function createShortcuts(deps: {
     },
     register(scope: ShortcutScope) {
       warnOnDuplicateBindings(scope);
-      registered = [...registered, scope];
+      const registration = { scope };
+      registered = [...registered, registration];
       return () => {
-        registered = registered.filter(entry => entry !== scope);
+        // A repeated call finds its registration gone and leaves another page's reason alone
+        if (!registered.includes(registration)) return;
+        registered = registered.filter(entry => entry !== registration);
         // A reason a page gave is about that page: it leaves with it
         clearAnnouncement();
       };

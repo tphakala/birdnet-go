@@ -408,6 +408,52 @@ describe('shortcut store', () => {
       expect(secondRun).toHaveBeenCalledTimes(1);
     });
 
+    it('keeps the other registration when one registration of the same scope object is removed', () => {
+      const store = listeningStore();
+      const page = scope('page', [definition('correct', { key: 'c' })]);
+      const unregisterFirst = store.register(page);
+      const unregisterSecond = store.register(page);
+
+      unregisterFirst();
+
+      expect(store.scopes).toHaveLength(1);
+      press('c');
+      expect(run).toHaveBeenCalledTimes(1);
+      unregisterSecond();
+      expect(store.scopes).toHaveLength(0);
+    });
+
+    it('keeps the place of a scope registered twice when its later registration is removed', () => {
+      const store = listeningStore();
+      const shared = scope('shared', [definition('first', { key: 'a' })]);
+      const other = scope('other', [definition('second', { key: 'b' })]);
+      store.register(shared);
+      store.register(other);
+      const unregisterLater = store.register(shared);
+
+      unregisterLater();
+
+      expect(store.scopes.map(entry => entry.id)).toEqual(['shared', 'other']);
+    });
+
+    it('removes nothing and keeps the announcement when an unregister function is called a second time', async () => {
+      const store = listeningStore();
+      const shared = scope('shared', [
+        definition('first', { key: 'a' }, { status: () => ({ blocked: BLOCKED_REASON }) }),
+      ]);
+      const unregisterFirst = store.register(shared);
+      store.register(shared);
+      unregisterFirst();
+      press('a');
+      await tick();
+      expect(store.announcement).toBe(BLOCKED_REASON);
+
+      unregisterFirst();
+
+      expect(store.scopes).toHaveLength(1);
+      expect(store.announcement).toBe(BLOCKED_REASON);
+    });
+
     it('holds one entry after a register, unregister and register again', () => {
       const store = makeStore();
       const page = scope('page', [definition('correct', { key: 'c' })]);
