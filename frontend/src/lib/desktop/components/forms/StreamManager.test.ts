@@ -1255,15 +1255,69 @@ describe('StreamManager add form validation on blur', () => {
     expect(name).not.toHaveAttribute('aria-invalid');
   });
 
-  it('shows a malformed URL on blur ahead of the test reminder', async () => {
+  it('shows a malformed URL on blur, and no test reminder while the URL is not valid', async () => {
     renderRows([]);
     await fillAddForm('Gate', 'not a url');
     const url = screen.getByTestId(URL_TESTID);
-    expect(url).toHaveAccessibleDescription(TEST_REQUIRED_KEY);
 
     await fireEvent.blur(url);
 
     expect(url).toHaveAccessibleDescription('settings.audio.streams.errors.invalidUrl');
+    expect(screen.queryByText(TEST_REQUIRED_KEY)).toBeNull();
+    expect(screen.getByRole('button', { name: ADD_KEY })).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('shows the test reminder once the malformed URL is fixed', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', 'not a url');
+    await fireEvent.blur(screen.getByTestId(URL_TESTID));
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
+      target: { value: 'rtsp://gate/live' },
+    });
+
+    expect(screen.getAllByText(TEST_REQUIRED_KEY).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: ADD_KEY })).toHaveAccessibleDescription(
+      TEST_REQUIRED_KEY
+    );
+  });
+
+  it.each([
+    ['empty', '', 'settings.audio.streams.errors.nameRequired'],
+    ['duplicate', 'a', 'settings.audio.streams.errors.duplicateName'],
+  ])(
+    'shows a %s name error when Add is clicked with an untested URL',
+    async (_label, name, message) => {
+      const { onUpdateStreams } = renderRows([streamA]);
+      await fillAddForm(name, 'rtsp://gate/live');
+
+      await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+      expect(screen.getByTestId(NAME_TESTID)).toHaveAccessibleDescription(message);
+      expect(onUpdateStreams).not.toHaveBeenCalled();
+    }
+  );
+
+  it('shows a malformed URL error when Add is clicked, before the test gate', async () => {
+    const { onUpdateStreams } = renderRows([]);
+    await fillAddForm('Gate', 'not a url');
+
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    expect(screen.getByTestId(URL_TESTID)).toHaveAccessibleDescription(
+      'settings.audio.streams.errors.invalidUrl'
+    );
+    expect(onUpdateStreams).not.toHaveBeenCalled();
+  });
+
+  it('still blocks Add for a valid untested URL when the name is fine', async () => {
+    const { onUpdateStreams } = renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    expect(onUpdateStreams).not.toHaveBeenCalled();
+    expect(screen.getByTestId(NAME_TESTID)).not.toHaveAttribute('aria-invalid');
   });
 
   it('shows an empty URL as required on blur', async () => {

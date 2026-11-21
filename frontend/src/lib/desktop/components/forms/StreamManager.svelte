@@ -604,7 +604,10 @@
 
   // ----- Add -----
 
-  let addBlocked = $derived(disabled || newNeedsTest);
+  // The test reminder (and the Add block that goes with it) shows only while the URL is
+  // otherwise valid: an empty, malformed or duplicate URL has its own error to fix first.
+  let showTestReminder = $derived(newNeedsTest && !newStreamProblem(buildNewStream())?.url);
+  let addBlocked = $derived(disabled || showTestReminder);
   /** Id of the reason line shown below the manager while it is disabled, and of the add form's test reason. */
   const blockedReasonId = generateId('streams-blocked-reason');
   const addTestRequiredId = generateId('add-stream-test-required');
@@ -616,7 +619,7 @@
   let addEntryBlocked = $derived(disabled || healthLoading);
   let refreshDescribedBy = $derived(addEntryBlocked ? blockedReasonId : undefined);
   let addDescribedBy = $derived(
-    [disabled ? blockedReasonId : undefined, newNeedsTest ? addTestRequiredId : undefined]
+    [disabled ? blockedReasonId : undefined, showTestReminder ? addTestRequiredId : undefined]
       .filter(Boolean)
       .join(' ') || undefined
   );
@@ -657,7 +660,7 @@
   }
 
   function addStream() {
-    if (addBlocked) return;
+    if (disabled) return;
     clearErrors();
 
     const newStream = buildNewStream();
@@ -670,6 +673,8 @@
       urlError = streamUrlProblemMessage(problem.url);
       return;
     }
+    // Both fields are otherwise valid: the test gate decides. The reminder is showing.
+    if (newNeedsTest) return;
 
     const rowId = generateId(ROW_ID_PREFIX);
     rowIds = [...rowIds, rowId];
@@ -892,7 +897,7 @@
                 id="new-stream-url"
                 bind:value={newUrl}
                 placeholder="rtsp://user:password@192.168.1.100:554/stream"
-                helpText={urlError || newNeedsTest
+                helpText={urlError || showTestReminder
                   ? undefined
                   : t('settings.audio.streams.urlHelp')}
                 aria-required="true"
@@ -900,7 +905,7 @@
                 onblur={validateUrlOnBlur}
                 {disabled}
                 error={urlError ??
-                  (newNeedsTest ? t('settings.audio.streams.testRequired') : undefined)}
+                  (showTestReminder ? t('settings.audio.streams.testRequired') : undefined)}
               />
             </div>
 
@@ -1005,7 +1010,7 @@
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
               <div class="mr-auto flex min-w-0 flex-col gap-1">
-                {#if newNeedsTest}
+                {#if showTestReminder}
                   <p id={addTestRequiredId} class="text-xs text-muted">
                     {t('settings.audio.streams.testRequired')}
                   </p>
