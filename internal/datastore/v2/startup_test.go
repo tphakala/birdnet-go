@@ -691,7 +691,9 @@ func createLegacySQLite(t *testing.T, path string, recordCount int) {
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqlDB.Close() })
+	// Closed before the helper returns: Windows refuses to rename a file that a
+	// connection still holds open, and the tests hand this file to the promotion.
+	defer func() { require.NoError(t, sqlDB.Close()) }()
 
 	require.NoError(t, db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, source_node TEXT)").Error)
 	for i := range recordCount {

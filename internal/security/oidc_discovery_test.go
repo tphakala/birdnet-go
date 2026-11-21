@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -31,7 +32,22 @@ import (
 const (
 	testOIDCClientSecret = "oidc-client-secret-must-not-be-logged"
 	testOIDCRedirectURI  = "http://localhost/auth/openid-connect/callback"
+
+	// dialErrorOp is the Op of the *net.OpError a refused connection returns.
+	dialErrorOp = "dial"
 )
+
+// requireDialErrorText returns the text of the dial error in err's chain. The
+// wording of a refused connection depends on the OS and its language ("connection
+// refused" on Linux, "connectex: ..." on Windows), so tests take it from the
+// error instead of a fixed phrase.
+func requireDialErrorText(t *testing.T, err error) string {
+	t.Helper()
+	var opErr *net.OpError
+	require.ErrorAs(t, err, &opErr, "the redacted text must still unwrap to the dial error")
+	require.Equal(t, dialErrorOp, opErr.Op)
+	return opErr.Error()
+}
 
 // splitLogReaders reads the two files a split-log test logger writes.
 type splitLogReaders struct {
@@ -132,9 +148,9 @@ func TestOIDCDiscoveryFailure_RedactsURLUserinfo(t *testing.T) {
 	tests := []struct {
 		name     string
 		issuer   string
-		wantText string
+		wantText string // fixed text; empty means the dial error's own text
 	}{
-		{name: "transport failure", issuer: strings.Replace(closedURL, "http://", "http://"+username+":secretpw@", 1), wantText: "connection refused"},
+		{name: "transport failure", issuer: strings.Replace(closedURL, "http://", "http://"+username+":secretpw@", 1)},
 		{name: "unparseable URL", issuer: "http://" + username + ":secretpw@localhost:12x", wantText: errOIDCDiscoveryURLInvalid.Error()},
 	}
 	for _, tt := range tests {
@@ -160,12 +176,16 @@ func TestOIDCDiscoveryFailure_RedactsURLUserinfo(t *testing.T) {
 			err := ProviderRegistrationError(ProviderOIDC)
 			var urlErr *url.Error
 			require.ErrorAs(t, err, &urlErr, "the redacted text must still unwrap to the net/http error")
+			wantText := tt.wantText
+			if wantText == "" {
+				wantText = requireDialErrorText(t, err)
+			}
 			for name, content := range map[string]string{
 				"main log":     logs.main(),
 				"security log": logs.security(),
 				"recorded":     err.Error(),
 			} {
-				assert.Contains(t, content, tt.wantText, name)
+				assert.Contains(t, content, wantText, name)
 				assert.NotContains(t, content, username, name)
 				assert.NotContains(t, content, "secretpw", name)
 			}
@@ -505,10 +525,11 @@ func TestStartOIDCDiscovery_RedactsItsLogsAndReportsExhaustion(t *testing.T) {
 	assert.Contains(t, securityLog, "OIDC discovery retry failed")
 	require.Error(t, recorded)
 	require.NotErrorIs(t, recorded, errProviderNotRegistered, "the last failure must be the recorded cause")
-	assert.Contains(t, recorded.Error(), "connection refused")
+	dialText := requireDialErrorText(t, recorded)
+	assert.Contains(t, recorded.Error(), dialText)
 	for name, content := range map[string]string{"main log": mainLog, "security log": securityLog} {
 		assert.Contains(t, content, "OIDC discovery retries exhausted", name)
-		assert.Contains(t, content, "connection refused", name)
+		assert.Contains(t, content, dialText, name)
 		assert.NotContains(t, content, username, name)
 		assert.NotContains(t, content, password, name)
 	}

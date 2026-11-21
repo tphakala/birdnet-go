@@ -248,8 +248,13 @@ func TestProbeOpenFile_ClosedHandleAndCanceled(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 
 	require.NoError(t, f.Close())
+	// The OS decides what a closed handle reports: os.ErrClosed on Linux, an
+	// invalid handle errno on Windows. The probe must keep that cause in the chain.
+	_, statErr := f.Stat()
+	var closedErr *fs.PathError
+	require.ErrorAs(t, statErr, &closedErr)
 	_, err = ProbeOpenFile(t.Context(), f, path)
-	require.ErrorIs(t, err, os.ErrClosed)
+	require.ErrorIs(t, err, closedErr.Err)
 	require.NotErrorIs(t, err, ErrUnsupportedSource)
 	requireStatError(t, err, errors.CategoryFileIO)
 }

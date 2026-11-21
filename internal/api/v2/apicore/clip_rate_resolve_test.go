@@ -1,6 +1,7 @@
 package apicore
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,7 +38,8 @@ func TestResolveClipRel(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
+			// ValidateRelativePath returns an OS-separator path by design.
+			assert.Equal(t, filepath.FromSlash(tt.want), got)
 		})
 	}
 }
