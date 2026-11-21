@@ -12,7 +12,7 @@
 #       kernels that must execute on the runner CPU), golang.org/x/sys, and the
 #       onnxruntime_go importers under internal/inference;
 #   (c) when DIFF_BASE is set, the packages the pull request itself changes.
-# The weekly and manual runs keep testing everything; this selection is only safe
+# The weekly run and a manual run with scope=full keep testing everything; this selection is only safe
 # because that backstop exists.
 #
 # Usage:

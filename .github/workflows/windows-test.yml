@@ -12,14 +12,14 @@ name: windows-test
 # Scope: a pull request run tests a computed subset of packages (the ones with
 # Windows-specific files, the native-library and SIMD boundary, and the packages
 # the pull request changes; see .github/scripts/native-test-packages.sh). The
-# weekly run and a manual run test every package. The subset is only safe because
+# weekly run and a manual run with scope=full test every package. The subset is only safe because
 # that full run exists, so keep the schedule on the full scope.
 
 on:
   workflow_dispatch:
     inputs:
       scope:
-        description: 'Packages to test: full (./...) or subset (the pull request selection)'
+        description: 'Packages to test: full (./...) or subset (OS-specific and native-boundary packages; a pull request run also adds the packages it changes)'
         type: choice
         options:
           - full

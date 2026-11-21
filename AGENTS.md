@@ -190,9 +190,9 @@ These checks cover only the default build tags and your own OS:
   are advisory with known failures, so a green check there proves nothing
   unless you read the job output. On a pull request they test the packages
   with OS-specific files, the native-library and SIMD boundary and the packages
-  the pull request changes; the weekly and manual runs test the whole suite.
-  When you change OS-specific files (`_windows.go`, `_darwin.go`), say so in
-  the PR and ask for `full-ci`.
+  the pull request changes; the weekly run and a manual run with scope=full
+  test the whole suite. When you change OS-specific files (`_windows.go`,
+  `_darwin.go`), say so in the PR and ask for `full-ci`.
 
 ## PR Creation Rules
 
