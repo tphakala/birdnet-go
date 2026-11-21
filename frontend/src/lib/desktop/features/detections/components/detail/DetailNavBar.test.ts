@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import { getLocale, t } from '$lib/i18n';
 import DetailNavBar from './DetailNavBar.svelte';
+import type { ShortcutHint } from '$lib/utils/keyboard';
 import type { DetectionNeighbors } from './detailTypes';
 
 const NAV = 'detections.detail.nav';
@@ -15,9 +16,18 @@ const NONE: DetectionNeighbors = {
   nextSameSpecies: null,
 };
 
-function renderBar(neighbors: DetectionNeighbors | null, failed = false) {
+type StepHints = Partial<
+  Record<'older' | 'newer' | 'olderSpecies' | 'newerSpecies', ShortcutHint | null>
+>;
+
+function renderBar(
+  neighbors: DetectionNeighbors | null,
+  failed = false,
+  shortcutHints?: StepHints
+) {
   return render(DetailNavBar, {
     props: {
+      shortcutHints,
       speciesName: SPECIES,
       date: '2026-11-14',
       time: '02:57:03',
@@ -110,6 +120,80 @@ describe('DetailNavBar step links', () => {
     expect(labels[3]).toContain(`${NAV}.newerSpecies`);
     for (const link of links) expect(link).toHaveAttribute('aria-disabled', 'true');
     expect(container.querySelector('.dd-nav-groups')).not.toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('names the key of every step link, active or blocked, without changing its name', () => {
+    const hint = (key: string): ShortcutHint => ({
+      aria: key,
+      keys: [key],
+      display: key,
+      label: key,
+    });
+    const { container } = renderBar({ ...NONE, previous: 4, nextSameSpecies: 7 }, false, {
+      older: hint('OLDER'),
+      newer: hint('NEWER'),
+      olderSpecies: hint('OLDER-SPECIES'),
+      newerSpecies: hint('NEWER-SPECIES'),
+    });
+
+    const links = stepLinks(container);
+    expect(links.map(link => link.getAttribute('aria-keyshortcuts'))).toEqual([
+      'OLDER',
+      'NEWER',
+      'OLDER-SPECIES',
+      'NEWER-SPECIES',
+    ]);
+    // Active (older, newer species) and blocked (newer, older species) links alike
+    expect(links[0].getAttribute('title')).toContain('OLDER');
+    expect(links[1].getAttribute('title')).toContain('NEWER');
+    expect(links[2].getAttribute('title')).toContain('OLDER-SPECIES');
+    expect(links[3].getAttribute('title')).toContain('NEWER-SPECIES');
+    expect(links[1].getAttribute('title')).toContain(`${NAV}.noNewer`);
+    expect(links[0].getAttribute('title')).toContain(`${NAV}.older`);
+    // The accessible name stays the link's own text; the key is in aria-keyshortcuts
+    expect(links[0]).toHaveAttribute('aria-label', `${NAV}.older`);
+    expect(links[1]).toHaveAttribute('aria-label', `${NAV}.noNewer`);
+  });
+
+  it('leads the species group with the modifier cap of its steps, and no other group', () => {
+    const hint = (keys: string[]): ShortcutHint => ({
+      aria: keys.join('+'),
+      keys,
+      display: keys.join('+'),
+      label: keys.join(' '),
+    });
+    const { container } = renderBar({ ...NONE, previous: 4, previousSameSpecies: 6 }, false, {
+      older: hint(['LEFT']),
+      newer: hint(['RIGHT']),
+      olderSpecies: hint(['SHIFT', 'LEFT']),
+      newerSpecies: hint(['SHIFT', 'RIGHT']),
+    });
+
+    const groups = container.querySelectorAll('.dd-nav-group');
+    expect(groups[0].querySelector('kbd')).toBeNull();
+    const caps = groups[1].querySelectorAll('kbd');
+    expect(caps).toHaveLength(1);
+    expect(caps[0]).toHaveTextContent('SHIFT');
+    expect(caps[0]).toHaveAttribute('aria-hidden', 'true');
+    // The cap leads the group, ahead of the first step link
+    expect(groups[1].firstElementChild).toContainElement(caps[0]);
+    expect(stepLinks(container)[2]).not.toBe(groups[1].firstElementChild);
+  });
+
+  it('shows no modifier cap when the species steps have none or shortcuts are off', () => {
+    const plain: ShortcutHint = { aria: 'X', keys: ['X'], display: 'X', label: 'X' };
+    const withKeys = renderBar({ ...NONE, previous: 4 }, false, { olderSpecies: plain });
+    expect(withKeys.container.querySelector('kbd')).toBeNull();
+    cleanup();
+    const off = renderBar({ ...NONE, previous: 4 });
+    expect(off.container.querySelector('kbd')).toBeNull();
+  });
+
+  it('leaves the step links without a key hint when none is given', () => {
+    const { container } = renderBar({ ...NONE, previous: 4 });
+    for (const link of stepLinks(container)) {
+      expect(link).not.toHaveAttribute('aria-keyshortcuts');
+    }
   });
 
   it('adds no visible text for the blocked reasons', () => {

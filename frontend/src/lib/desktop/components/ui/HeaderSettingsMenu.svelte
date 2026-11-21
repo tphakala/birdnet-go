@@ -20,11 +20,14 @@
     Bug,
     MessageCircleQuestion,
     ExternalLink,
+    Keyboard,
   } from '@lucide/svelte';
   import GithubIcon from '$lib/desktop/components/ui/GithubIcon.svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { appState } from '$lib/stores/appState.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
+  import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
+  import { HELP_SHORTCUT_ID, shortcuts } from '$lib/stores/shortcuts.svelte';
 
   const logger = getLogger('dashboard');
 
@@ -100,6 +103,16 @@
     // confirmation records it as the place to return to
     buttonRef?.focus();
     showResetConfirm = true;
+  }
+
+  // The key that opens the cheat sheet; null while shortcuts are off
+  let helpHint = $derived(shortcuts.hint(HELP_SHORTCUT_ID));
+
+  function handleKeyboardShortcuts() {
+    isOpen = false;
+    // As for the reset: the sheet returns focus to the trigger, not to the unmounted item
+    buttonRef?.focus();
+    shortcuts.openHelp();
   }
 
   async function confirmResetDashboard() {
@@ -227,6 +240,20 @@
 
         <!-- Divider -->
         <div class="my-1 border-t border-[var(--color-base-content)]/10" aria-hidden="true"></div>
+
+        <!-- Keyboard shortcuts cheat sheet -->
+        <button
+          onclick={handleKeyboardShortcuts}
+          class={MENU_ITEM_CLASS}
+          aria-haspopup="dialog"
+          aria-keyshortcuts={helpHint?.aria}
+        >
+          <Keyboard class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
+          <span class="flex-1 whitespace-nowrap text-start">{t('shortcuts.menuItem')}</span>
+          {#if helpHint}
+            <Kbd keys={helpHint.keys} size="sm" className="text-[var(--color-base-content)]/70" />
+          {/if}
+        </button>
 
         <!-- Report Bug -->
         <button

@@ -6385,5 +6385,51 @@
       "patternTransient": "Īslaicīgs",
       "patternSustained": "Ilgstošs"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Īsinājumtaustiņi",
+    "modal": {
+      "title": "Īsinājumtaustiņi",
+      "enable": "Iespējot īsinājumtaustiņus",
+      "enableHelp": "Izslēdziet, ja viena taustiņa īsinājumi traucē ekrāna lasītājam, balss vadībai vai palīgtastatūrai.",
+      "offNote": "Īsinājumtaustiņi ir izslēgti. Tālāk norādītie taustiņi neko nedara, kamēr tos neieslēdzat.",
+      "or": "vai"
+    },
+    "scopes": {
+      "global": "Visas lapas"
+    },
+    "groups": {
+      "navigation": "Navigācija",
+      "review": "Pārskatīšana",
+      "audio": "Audio",
+      "general": "Vispārīgi"
+    },
+    "keys": {
+      "shift": "Shift",
+      "space": "Atstarpes taustiņš",
+      "arrowLeft": "Kreisā bultiņa",
+      "arrowRight": "Labā bultiņa",
+      "comma": "Komats",
+      "period": "Punkts",
+      "questionMark": "Jautājuma zīme",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Vecāka tās pašas sugas noteikšana",
+      "newerSpecies": "Jaunāka tās pašas sugas noteikšana",
+      "correct": "Atzīmēt kā pareizu",
+      "falsePositive": "Atzīmēt kā kļūdaini pozitīvu",
+      "wrongSpecies": "Mainīt sugu",
+      "keep": "Paturēt vai atbrīvot šo ierakstu",
+      "playPause": "Atskaņot vai apturēt",
+      "seekBack": "Viena sekunde atpakaļ",
+      "seekForward": "Viena sekunde uz priekšu",
+      "focusReview": "Pāriet uz pārskatīšanas pogām",
+      "backToList": "Atpakaļ uz noteikšanām"
+    },
+    "global": {
+      "help": "Rādīt vai paslēpt īsinājumtaustiņus"
+    }
   }
 }

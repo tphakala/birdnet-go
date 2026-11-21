@@ -13,9 +13,20 @@
   import { ArrowLeft, ChevronLeft, ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
+  import { shortcutTitle, type ShortcutHint } from '$lib/utils/keyboard';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { stepBlockedLabel } from './detailFormat';
   import { formatCalendarDate } from './detailTime';
   import type { DetectionNeighbors } from './detailTypes';
+
+  /** The hint of each of the four step links. */
+  interface StepShortcutHints {
+    older?: ShortcutHint | null;
+    newer?: ShortcutHint | null;
+    olderSpecies?: ShortcutHint | null;
+    newerSpecies?: ShortcutHint | null;
+  }
 
   interface Props {
     speciesName: string;
@@ -35,6 +46,11 @@
      * dimmed like the rest of the page. The step links stay as they are, so focus stays.
      */
     stale?: boolean;
+    /**
+     * Keys that step, shown as the link's `aria-keyshortcuts` and named in its title. A link
+     * without a hint has neither. Absent while shortcuts are off.
+     */
+    shortcutHints?: StepShortcutHints;
   }
 
   let {
@@ -45,16 +61,12 @@
     failed = false,
     available,
     stale = false,
+    shortcutHints,
   }: Props = $props();
 
-  // The name of a blocked step link. Every state keeps the link's own name so the four
-  // links stay distinguishable: while the neighbours are being looked up or when the lookup
-  // failed it adds that reason, and once they are known it states why there is nowhere to go.
-  function blockedLabel(label: string, emptyLabel: string): string {
-    if (failed) return t('detections.detail.nav.stepFailed', { label });
-    if (neighbors === null) return t('detections.detail.nav.stepLoading', { label });
-    return emptyLabel;
-  }
+  // The species steps differ from the all-detections steps only by a modifier, which the
+  // arrows alone do not show: its cap leads the group, ahead of the arrows it applies to.
+  let speciesModifierKeys = $derived(shortcutHints?.olderSpecies?.keys.slice(0, -1) ?? []);
 
   const listUrl = buildAppUrl('/ui/detections');
 
@@ -72,15 +84,23 @@
   }
 </script>
 
-{#snippet stepLink(id: number | null, label: string, emptyLabel: string, older: boolean)}
+{#snippet stepLink(
+  id: number | null,
+  label: string,
+  emptyLabel: string,
+  older: boolean,
+  hint: ShortcutHint | null | undefined
+)}
+  {@const name = id === null ? stepBlockedLabel(label, emptyLabel, neighbors, failed) : label}
   <a
     class="dd-nav-step focus-ring"
     href={id === null ? undefined : buildAppUrl(`/ui/detections/${id}`)}
     role={id === null ? 'link' : undefined}
     tabindex={id === null ? 0 : undefined}
     aria-disabled={id === null ? 'true' : undefined}
-    aria-label={id === null ? blockedLabel(label, emptyLabel) : label}
-    title={id === null ? blockedLabel(label, emptyLabel) : label}
+    aria-label={name}
+    aria-keyshortcuts={hint?.aria}
+    title={shortcutTitle(name, hint) ?? name}
     onclick={id === null ? blockClick : step}
   >
     {#if older}
@@ -114,14 +134,16 @@
           neighbors?.previous ?? null,
           t('detections.detail.nav.older'),
           t('detections.detail.nav.noOlder'),
-          true
+          true,
+          shortcutHints?.older
         )}
         <span class="dd-nav-group-label">{t('detections.detail.nav.allGroup')}</span>
         {@render stepLink(
           neighbors?.next ?? null,
           t('detections.detail.nav.newer'),
           t('detections.detail.nav.noNewer'),
-          false
+          false,
+          shortcutHints?.newer
         )}
       </div>
       <div
@@ -129,11 +151,15 @@
         role="group"
         aria-label={t('detections.detail.nav.speciesGroup', { species: speciesName })}
       >
+        {#if speciesModifierKeys.length > 0}
+          <Kbd keys={speciesModifierKeys} size="sm" className="dd-nav-modifier" />
+        {/if}
         {@render stepLink(
           neighbors?.previousSameSpecies ?? null,
           t('detections.detail.nav.olderSpecies', { species: speciesName }),
           t('detections.detail.nav.noOlderSpecies', { species: speciesName }),
-          true
+          true,
+          shortcutHints?.olderSpecies
         )}
         <span class="dd-nav-group-label dd-nav-group-species" title={speciesName}
           >{speciesName}</span
@@ -142,7 +168,8 @@
           neighbors?.nextSameSpecies ?? null,
           t('detections.detail.nav.newerSpecies', { species: speciesName }),
           t('detections.detail.nav.noNewerSpecies', { species: speciesName }),
-          false
+          false,
+          shortcutHints?.newerSpecies
         )}
       </div>
     </div>
@@ -271,6 +298,12 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
+  }
+
+  /* The modifier cap leads the species group; it borrows the label colour and adds no height. */
+  .dd-nav-group :global(.dd-nav-modifier) {
+    margin-inline-start: 0.375rem;
+    color: var(--text-subtle);
   }
 
   .dd-nav-step {

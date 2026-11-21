@@ -6385,5 +6385,51 @@
       "patternTransient": "Transitorio",
       "patternSustained": "Persistente"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Scorciatoie da tastiera",
+    "modal": {
+      "title": "Scorciatoie da tastiera",
+      "enable": "Attiva le scorciatoie da tastiera",
+      "enableHelp": "Disattivale se le scorciatoie a tasto singolo interferiscono con uno screen reader, il controllo vocale o una tastiera assistiva.",
+      "offNote": "Le scorciatoie da tastiera sono disattivate. I tasti qui sotto non fanno nulla finché non le attivi.",
+      "or": "o"
+    },
+    "scopes": {
+      "global": "Tutte le pagine"
+    },
+    "groups": {
+      "navigation": "Navigazione",
+      "review": "Revisione",
+      "audio": "Audio",
+      "general": "Generali"
+    },
+    "keys": {
+      "shift": "Maiusc",
+      "space": "Barra spaziatrice",
+      "arrowLeft": "Freccia sinistra",
+      "arrowRight": "Freccia destra",
+      "comma": "Virgola",
+      "period": "Punto",
+      "questionMark": "Punto interrogativo",
+      "combination": "{first} più {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Rilevamento precedente della stessa specie",
+      "newerSpecies": "Rilevamento successivo della stessa specie",
+      "correct": "Segna come corretto",
+      "falsePositive": "Segna come falso positivo",
+      "wrongSpecies": "Cambia la specie",
+      "keep": "Conserva o rilascia questa registrazione",
+      "playPause": "Riproduci o metti in pausa",
+      "seekBack": "Indietro di un secondo",
+      "seekForward": "Avanti di un secondo",
+      "focusReview": "Vai ai pulsanti di revisione",
+      "backToList": "Torna ai rilevamenti"
+    },
+    "global": {
+      "help": "Mostra o nascondi le scorciatoie da tastiera"
+    }
   }
 }

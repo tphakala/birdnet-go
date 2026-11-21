@@ -25,7 +25,8 @@
   import { dropdown } from '$lib/utils/transitions';
   import { computeAnchorPosition, type HorizontalAlign } from '$lib/utils/anchorPosition';
   import { t } from '$lib/i18n';
-  import { playButtonLabelKey } from '$lib/utils/audio';
+  import { playButtonAction, playButtonLabelKey } from '$lib/utils/audio';
+  import { shortcutTitle, type ShortcutHint } from '$lib/utils/keyboard';
   import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
   import { formatTime } from '$lib/utils/formatters';
   import {
@@ -74,6 +75,9 @@
     onDenoiseChange: (_preset: string) => void;
     onNormalizeToggle: () => void;
     onExport: (_format: string) => void;
+
+    /** Key hint for the play button: sets aria-keyshortcuts and names the key in the title */
+    playShortcut?: ShortcutHint | null;
   }
 
   let {
@@ -104,6 +108,7 @@
     onDenoiseChange,
     onNormalizeToggle,
     onExport,
+    playShortcut = null,
   }: Props = $props();
 
   let progressBarEl: HTMLDivElement;
@@ -172,24 +177,22 @@
 
   // Unified play handler: plays selection when selected, full audio otherwise
   function handlePlay() {
-    // If full audio is already playing, always allow pausing it
-    if (isPlaying && !isPlayingSelection) {
-      onPlayPause();
-      return;
-    }
-    if (hasSelection) {
-      if (isPlayingSelection) {
+    switch (playButtonAction({ isPlaying, isPlayingSelection, hasSelection })) {
+      case 'stopSelection':
         onStopSelection();
-      } else {
+        break;
+      case 'playSelection':
         onPlaySelection();
-      }
-    } else {
-      onPlayPause();
+        break;
+      case 'toggle':
+        onPlayPause();
+        break;
     }
   }
 
   // Unified playing state
   let isCurrentlyPlaying = $derived(isPlayingSelection || isPlaying);
+  let playLabel = $derived(t(playButtonLabelKey(isLoading, isCurrentlyPlaying)));
 
   // Gap between a menu and its dropdown wrapper, set as the menu's block margin
   const MENU_GAP_PX = 4;
@@ -310,7 +313,9 @@
         class="toolbar-btn play-btn"
         onclick={handlePlay}
         disabled={isLoading}
-        aria-label={t(playButtonLabelKey(isLoading, isCurrentlyPlaying))}
+        aria-label={playLabel}
+        aria-keyshortcuts={playShortcut?.aria}
+        title={shortcutTitle(playLabel, playShortcut)}
       >
         {#if isLoading}
           <Loader2 size={14} class="animate-spin" />

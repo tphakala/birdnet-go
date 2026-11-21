@@ -6385,5 +6385,51 @@
       "patternTransient": "Prechodný",
       "patternSustained": "Trvalý"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Klávesové skratky",
+    "modal": {
+      "title": "Klávesové skratky",
+      "enable": "Povoliť klávesové skratky",
+      "enableHelp": "Vypnite, ak vám skratky na jednej klávese prekážajú pri používaní čítača obrazovky, hlasového ovládania alebo asistenčnej klávesnice.",
+      "offNote": "Klávesové skratky sú vypnuté. Nižšie uvedené klávesy nerobia nič, kým ich nezapnete.",
+      "or": "alebo"
+    },
+    "scopes": {
+      "global": "Všetky stránky"
+    },
+    "groups": {
+      "navigation": "Navigácia",
+      "review": "Kontrola",
+      "audio": "Zvuk",
+      "general": "Všeobecné"
+    },
+    "keys": {
+      "shift": "Shift",
+      "space": "Medzerník",
+      "arrowLeft": "Šípka vľavo",
+      "arrowRight": "Šípka vpravo",
+      "comma": "Čiarka",
+      "period": "Bodka",
+      "questionMark": "Otáznik",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Staršia detekcia rovnakého druhu",
+      "newerSpecies": "Novšia detekcia rovnakého druhu",
+      "correct": "Označiť ako správne",
+      "falsePositive": "Označiť ako falošne pozitívne",
+      "wrongSpecies": "Zmeniť druh",
+      "keep": "Ponechať alebo uvoľniť túto nahrávku",
+      "playPause": "Prehrať alebo pozastaviť",
+      "seekBack": "O sekundu späť",
+      "seekForward": "O sekundu vpred",
+      "focusReview": "Prejsť na tlačidlá kontroly",
+      "backToList": "Späť na detekcie"
+    },
+    "global": {
+      "help": "Zobraziť alebo skryť klávesové skratky"
+    }
   }
 }

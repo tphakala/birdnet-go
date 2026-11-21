@@ -6385,5 +6385,51 @@
       "patternTransient": "Przejściowy",
       "patternSustained": "Utrzymujący się"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Skróty klawiszowe",
+    "modal": {
+      "title": "Skróty klawiszowe",
+      "enable": "Włącz skróty klawiszowe",
+      "enableHelp": "Wyłącz, jeśli skróty jednoklawiszowe przeszkadzają czytnikowi ekranu, sterowaniu głosowemu lub klawiaturze ułatwień dostępu.",
+      "offNote": "Skróty klawiszowe są wyłączone. Poniższe klawisze nic nie robią, dopóki ich nie włączysz.",
+      "or": "lub"
+    },
+    "scopes": {
+      "global": "Wszystkie strony"
+    },
+    "groups": {
+      "navigation": "Nawigacja",
+      "review": "Ocena",
+      "audio": "Dźwięk",
+      "general": "Ogólne"
+    },
+    "keys": {
+      "shift": "Shift",
+      "space": "Spacja",
+      "arrowLeft": "Strzałka w lewo",
+      "arrowRight": "Strzałka w prawo",
+      "comma": "Przecinek",
+      "period": "Kropka",
+      "questionMark": "Znak zapytania",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Starsza detekcja tego samego gatunku",
+      "newerSpecies": "Nowsza detekcja tego samego gatunku",
+      "correct": "Oznacz jako poprawne",
+      "falsePositive": "Oznacz jako fałszywie pozytywne",
+      "wrongSpecies": "Zmień gatunek",
+      "keep": "Zachowaj lub zwolnij to nagranie",
+      "playPause": "Odtwórz lub wstrzymaj",
+      "seekBack": "Cofnij o sekundę",
+      "seekForward": "Do przodu o sekundę",
+      "focusReview": "Przejdź do przycisków oceny",
+      "backToList": "Wróć do detekcji"
+    },
+    "global": {
+      "help": "Pokaż lub ukryj skróty klawiszowe"
+    }
   }
 }

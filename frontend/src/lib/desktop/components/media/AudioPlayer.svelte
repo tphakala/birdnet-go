@@ -30,7 +30,7 @@
 -->
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { Play, Pause, Download, XCircle } from '@lucide/svelte';
   import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
@@ -51,9 +51,12 @@
     AUDIO_RETRY_DELAY_MS,
     isPlayInterruptedError,
     pendingRetryDelayMs,
+    playButtonAction,
     playButtonLabelKey,
     probeAudioSource,
+    type PlaybackControls,
   } from '$lib/utils/audio';
+  import { shortcutTitle, type ShortcutHint } from '$lib/utils/keyboard';
   import { formatTime } from '$lib/utils/formatters';
   import {
     clampSeconds,
@@ -161,6 +164,14 @@
      * spectrogram, so rendering them never starts a denoise.
      */
     spectrogramFollowsDenoise?: boolean;
+    /**
+     * Opt-in: called once with the controls a keyboard shortcut can use, and again when this
+     * callback changes. Returns the function that detaches them; the player calls it on
+     * unmount and before attaching to a new callback.
+     */
+    onPlaybackControls?: (_controls: PlaybackControls) => () => void;
+    /** Key hint for the play button: sets aria-keyshortcuts and names the key in the title */
+    playShortcut?: ShortcutHint | null;
   }
 
   let {
@@ -182,6 +193,8 @@
     modelType = '',
     clipSampleRate,
     spectrogramFollowsDenoise = false,
+    onPlaybackControls,
+    playShortcut = null,
   }: Props = $props();
 
   // Audio and UI elements
@@ -1522,6 +1535,7 @@
   const seekMax = $derived(usableDuration(duration));
   const seekNow = $derived(clampSeconds(currentTime, seekMax));
   const seekValueText = $derived(seekSliderValueText(seekNow, seekMax));
+  const overlayPlayLabel = $derived(t(playButtonLabelKey(isLoading, isPlaying)));
 
   // What the screen reader status region says about the spectrogram. It follows the same
   // conditions as the visible overlays: a rate resolve or an in-flight load is loading, and a
@@ -1542,6 +1556,37 @@
     audioElement.currentTime = clampSeconds(seconds, seekMax);
     updateProgress();
   };
+
+  // What a keyboard shortcut can ask of the player. The methods read live state when called.
+  const playbackControls: PlaybackControls = {
+    togglePlayback: () => {
+      // The visible play button is the toolbar's with clip extraction, the overlay's without
+      if (enableClipExtraction) {
+        if (isLoading || isProcessing) return;
+        const action = playButtonAction({
+          isPlaying,
+          isPlayingSelection,
+          hasSelection: hasActiveSelection(),
+        });
+        if (action === 'stopSelection') stopSelection();
+        else if (action === 'playSelection') void playSelection();
+        else void handlePlayPause();
+        return;
+      }
+      if (isLoading) return;
+      void handlePlayPause();
+    },
+    seekBy: seconds => {
+      // The reactive time lags the element by up to PROGRESS_UPDATE_INTERVAL_MS
+      if (!audioElement) return;
+      seekTo(audioElement.currentTime + seconds);
+    },
+  };
+
+  $effect(() => {
+    const attach = onPlaybackControls;
+    return attach ? untrack(() => attach(playbackControls)) : undefined;
+  });
 
   const handleProgressKeydown = (event: KeyboardEvent) => {
     const action = seekKeyAction(event, seekNow, seekMax);
@@ -2892,7 +2937,9 @@
           class="text-white p-1 rounded-full hover:bg-white/20 shrink-0"
           onclick={handlePlayPause}
           disabled={isLoading}
-          aria-label={t(playButtonLabelKey(isLoading, isPlaying))}
+          aria-label={overlayPlayLabel}
+          aria-keyshortcuts={playShortcut?.aria}
+          title={shortcutTitle(overlayPlayLabel, playShortcut)}
         >
           {#if isLoading}
             <div
@@ -2991,6 +3038,7 @@
     onDenoiseChange={handleDenoiseChange}
     onNormalizeToggle={handleNormalizeToggle}
     onExport={handleToolbarExport}
+    {playShortcut}
   />
 {/if}
 

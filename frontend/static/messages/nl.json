@@ -6385,5 +6385,51 @@
       "patternTransient": "Voorbijgaand",
       "patternSustained": "Aanhoudend"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Sneltoetsen",
+    "modal": {
+      "title": "Sneltoetsen",
+      "enable": "Sneltoetsen inschakelen",
+      "enableHelp": "Schakel dit uit als sneltoetsen met één toets problemen geven met een schermlezer, spraakbesturing of een aangepast toetsenbord.",
+      "offNote": "Sneltoetsen staan uit. De onderstaande toetsen doen niets totdat je ze inschakelt.",
+      "or": "of"
+    },
+    "scopes": {
+      "global": "Alle pagina's"
+    },
+    "groups": {
+      "navigation": "Navigatie",
+      "review": "Beoordeling",
+      "audio": "Audio",
+      "general": "Algemeen"
+    },
+    "keys": {
+      "shift": "Shift",
+      "space": "Spatiebalk",
+      "arrowLeft": "Pijl-links",
+      "arrowRight": "Pijl-rechts",
+      "comma": "Komma",
+      "period": "Punt",
+      "questionMark": "Vraagteken",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Oudere detectie van dezelfde soort",
+      "newerSpecies": "Nieuwere detectie van dezelfde soort",
+      "correct": "Markeren als juist",
+      "falsePositive": "Markeren als fout-positief",
+      "wrongSpecies": "De soort wijzigen",
+      "keep": "Deze opname bewaren of vrijgeven",
+      "playPause": "Afspelen of pauzeren",
+      "seekBack": "Een seconde terug",
+      "seekForward": "Een seconde vooruit",
+      "focusReview": "Naar de beoordelingsknoppen gaan",
+      "backToList": "Terug naar detecties"
+    },
+    "global": {
+      "help": "Sneltoetsen tonen of verbergen"
+    }
   }
 }

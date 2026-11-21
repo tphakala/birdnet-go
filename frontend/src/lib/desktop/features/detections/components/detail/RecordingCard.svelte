@@ -14,7 +14,9 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
   import { t } from '$lib/i18n';
+  import type { PlaybackControls } from '$lib/utils/audio';
   import { isAuthenticated } from '$lib/utils/auth';
+  import type { ShortcutHint } from '$lib/utils/keyboard';
   import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import DetailCard from './DetailCard.svelte';
@@ -25,9 +27,13 @@
   interface Props {
     detection: DetectionDetailData;
     speciesName: string;
+    /** Receives the player's controls when it mounts; the function it returns detaches them. */
+    onPlaybackControls?: (_controls: PlaybackControls) => () => void;
+    /** The key that plays and pauses, shown on the player's play button. */
+    playShortcut?: ShortcutHint | null;
   }
 
-  let { detection, speciesName }: Props = $props();
+  let { detection, speciesName, onPlaybackControls, playShortcut = null }: Props = $props();
 
   const HERTZ_PER_KILOHERTZ = 1000;
 
@@ -148,6 +154,8 @@
           modelType={detection.modelType}
           clipSampleRate={detection.clipSampleRate}
           spectrogramFollowsDenoise={true}
+          {onPlaybackControls}
+          {playShortcut}
         />
       {:else}
         <SpectrogramImage

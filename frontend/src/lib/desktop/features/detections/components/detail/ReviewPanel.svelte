@@ -14,16 +14,24 @@
   Keep row, shown only while it applies.
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { ArrowLeftRight, Check, Lock, X } from '@lucide/svelte';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import Button from '$lib/desktop/components/ui/Button.svelte';
+  import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
   import { t } from '$lib/i18n';
   import { toastActions } from '$lib/stores/toast';
   import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
+  import type { ShortcutHint } from '$lib/utils/keyboard';
   import DetailCard from './DetailCard.svelte';
-  import type { DetectionDetailData, SavedChange } from './detailTypes';
+  import type {
+    DetectionDetailData,
+    ReviewControls,
+    ReviewShortcutAction,
+    SavedChange,
+  } from './detailTypes';
 
   type Verdict = 'correct' | 'false_positive';
 
@@ -43,6 +51,25 @@
      * answer with a promise that settles when that reload does: false when it failed.
      */
     onChanged: (_change: SavedChange) => Promise<boolean> | void;
+    /**
+     * Opt-in: called once with the controls a keyboard shortcut can use, and again when this
+     * callback changes. Returns the function that detaches them; the panel calls it on
+     * unmount and before attaching to a new callback.
+     */
+    onControls?: (_controls: ReviewControls) => () => void;
+    /**
+     * Opt-in: the shortcut key of each verdict button. A button with a hint shows the key as
+     * a badge and names it in `aria-keyshortcuts`; without one it shows neither.
+     */
+    shortcutHints?: ReviewShortcutHints;
+  }
+
+  /** Key hints for the three verdict buttons and the Keep switch. */
+  interface ReviewShortcutHints {
+    correct?: ShortcutHint | null;
+    falsePositive?: ShortcutHint | null;
+    wrongSpecies?: ShortcutHint | null;
+    keep?: ShortcutHint | null;
   }
 
   let {
@@ -53,6 +80,8 @@
     grow = false,
     onWrongSpecies,
     onChanged,
+    onControls,
+    shortcutHints = {},
   }: Props = $props();
 
   const logger = loggers.ui;
@@ -196,7 +225,58 @@
   function wrongSpecies() {
     if (!wrongSpeciesBlocked) onWrongSpecies();
   }
+
+  let verdictGroup = $state<HTMLDivElement | null>(null);
+
+  // What a keyboard shortcut can ask of the panel. The methods read live state when called.
+  // A missing review permission is reported first, then a save out, then the reason for the action.
+  const controls: ReviewControls = {
+    blockedReason: (action: ReviewShortcutAction): string => {
+      if (!canReview) return t('detections.detail.review.loginRequired');
+      if (busy) return t('detections.detail.review.saving');
+      switch (action) {
+        case 'correct':
+        case 'falsePositive':
+          return detection.locked ? t('detections.detail.review.lockedHelp') : '';
+        case 'wrongSpecies':
+          return speciesBlockedReason;
+        case 'keep':
+          // A kept detection can be released, so a lock never blocks Keep
+          return '';
+      }
+    },
+    run: (action: ReviewShortcutAction) => {
+      switch (action) {
+        case 'correct':
+          void setVerdict('correct');
+          break;
+        case 'falsePositive':
+          void setVerdict('false_positive');
+          break;
+        case 'wrongSpecies':
+          wrongSpecies();
+          break;
+        case 'keep':
+          void setLocked(!keepValue);
+          break;
+      }
+    },
+    focus: () => verdictGroup?.focus(),
+  };
+
+  $effect(() => {
+    const attach = onControls;
+    return attach ? untrack(() => attach(controls)) : undefined;
+  });
 </script>
+
+<!-- The key is visual only: the button's name already says what it does, and the key is in
+     aria-keyshortcuts -->
+{#snippet keyBadge(hint: ShortcutHint | null | undefined)}
+  {#if hint}
+    <Kbd keys={hint.keys} size="sm" />
+  {/if}
+{/snippet}
 
 <DetailCard title={t('detections.detail.review.title')} padding="snug" {grow}>
   {#snippet header()}
@@ -216,17 +296,25 @@
     {t('detections.detail.review.question', { species: speciesName })}
   </p>
 
-  <div class="dd-verdicts" role="group" aria-label={t('detections.detail.review.title')}>
+  <div
+    bind:this={verdictGroup}
+    class="dd-verdicts"
+    role="group"
+    aria-label={t('detections.detail.review.title')}
+    tabindex="-1"
+  >
     <Button
       variant={detection.verified === 'correct' || saving === 'correct' ? 'success' : 'default'}
       size="md"
       aria-pressed={detection.verified === 'correct'}
       aria-disabled={verdictUnavailable ? 'true' : undefined}
       aria-describedby={verdictUnavailable ? statusId : undefined}
+      aria-keyshortcuts={shortcutHints.correct?.aria}
       onclick={() => setVerdict('correct')}
     >
       <Check class="size-4" />
       {t('detections.detail.review.correct')}
+      {@render keyBadge(shortcutHints.correct)}
     </Button>
     <Button
       variant={detection.verified === 'false_positive' || saving === 'false_positive'
@@ -236,10 +324,12 @@
       aria-pressed={detection.verified === 'false_positive'}
       aria-disabled={verdictUnavailable ? 'true' : undefined}
       aria-describedby={verdictUnavailable ? statusId : undefined}
+      aria-keyshortcuts={shortcutHints.falsePositive?.aria}
       onclick={() => setVerdict('false_positive')}
     >
       <X class="size-4" />
       {t('detections.detail.review.falsePositive')}
+      {@render keyBadge(shortcutHints.falsePositive)}
     </Button>
     <Button
       variant="default"
@@ -247,10 +337,12 @@
       aria-haspopup="dialog"
       aria-disabled={wrongSpeciesBlocked ? 'true' : undefined}
       aria-describedby={wrongSpeciesBlocked ? statusId : undefined}
+      aria-keyshortcuts={shortcutHints.wrongSpecies?.aria}
       onclick={wrongSpecies}
     >
       <ArrowLeftRight class="size-4" />
       {t('detections.detail.review.wrongSpecies')}
+      {@render keyBadge(shortcutHints.wrongSpecies)}
     </Button>
   </div>
 
@@ -264,8 +356,13 @@
           value={keepValue}
           disabled={busy}
           describedBy={busy ? statusId : undefined}
+          ariaKeyshortcuts={shortcutHints.keep?.aria}
           onUpdate={setLocked}
-        />
+        >
+          {#snippet badges()}
+            {@render keyBadge(shortcutHints.keep)}
+          {/snippet}
+        </ToggleField>
       </div>
       <!-- A fixed slot: the button takes its place whether or not it is shown, so
            the switch beside it does not move when a verdict changes. Hidden, it is
@@ -314,6 +411,16 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     margin-top: 0.5rem;
+
+    /* The group takes focus from a shortcut: a ring that hugs the buttons, not the whole row */
+    width: fit-content;
+    max-width: 100%;
+    border-radius: 0.5rem;
+  }
+
+  .dd-verdicts:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
   }
 
   .dd-review-keep {

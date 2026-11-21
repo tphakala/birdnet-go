@@ -6385,5 +6385,51 @@
       "patternTransient": "Forbigående",
       "patternSustained": "Vedvarende"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Hurtigtaster",
+    "modal": {
+      "title": "Hurtigtaster",
+      "enable": "Slå på hurtigtaster",
+      "enableHelp": "Slå av dette hvis hurtigtaster med én tast kommer i veien for en skjermleser, stemmestyring eller et hjelpetastatur.",
+      "offNote": "Hurtigtastene er slått av. Tastene nedenfor gjør ingenting før du slår dem på.",
+      "or": "eller"
+    },
+    "scopes": {
+      "global": "Alle sider"
+    },
+    "groups": {
+      "navigation": "Navigasjon",
+      "review": "Gjennomgang",
+      "audio": "Lyd",
+      "general": "Generelt"
+    },
+    "keys": {
+      "shift": "Skift",
+      "space": "Mellomrom",
+      "arrowLeft": "Venstrepil",
+      "arrowRight": "Høyrepil",
+      "comma": "Komma",
+      "period": "Punktum",
+      "questionMark": "Spørsmålstegn",
+      "combination": "{first} pluss {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Eldre registrering av samme art",
+      "newerSpecies": "Nyere registrering av samme art",
+      "correct": "Merk som korrekt",
+      "falsePositive": "Merk som falsk positiv",
+      "wrongSpecies": "Endre arten",
+      "keep": "Behold eller frigi dette opptaket",
+      "playPause": "Spill av eller sett på pause",
+      "seekBack": "Ett sekund tilbake",
+      "seekForward": "Ett sekund frem",
+      "focusReview": "Gå til gjennomgangsknappene",
+      "backToList": "Tilbake til registreringer"
+    },
+    "global": {
+      "help": "Vis eller skjul hurtigtaster"
+    }
   }
 }

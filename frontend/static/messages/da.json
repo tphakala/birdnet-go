@@ -6385,5 +6385,51 @@
       "patternTransient": "Forbigående",
       "patternSustained": "Vedvarende"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Tastaturgenveje",
+    "modal": {
+      "title": "Tastaturgenveje",
+      "enable": "Slå tastaturgenveje til",
+      "enableHelp": "Slå dette fra, hvis genveje med én tast er i vejen for en skærmlæser, stemmestyring eller et hjælpetastatur.",
+      "offNote": "Tastaturgenveje er slået fra. Tasterne nedenfor gør ingenting, før du slår dem til.",
+      "or": "eller"
+    },
+    "scopes": {
+      "global": "Alle sider"
+    },
+    "groups": {
+      "navigation": "Navigering",
+      "review": "Gennemgang",
+      "audio": "Lyd",
+      "general": "Generelt"
+    },
+    "keys": {
+      "shift": "Skift",
+      "space": "Mellemrum",
+      "arrowLeft": "Venstrepil",
+      "arrowRight": "Højrepil",
+      "comma": "Komma",
+      "period": "Punktum",
+      "questionMark": "Spørgsmålstegn",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Ældre registrering af samme art",
+      "newerSpecies": "Nyere registrering af samme art",
+      "correct": "Markér som korrekt",
+      "falsePositive": "Markér som falsk positiv",
+      "wrongSpecies": "Skift art",
+      "keep": "Behold eller frigiv denne optagelse",
+      "playPause": "Afspil eller sæt på pause",
+      "seekBack": "Ét sekund tilbage",
+      "seekForward": "Ét sekund frem",
+      "focusReview": "Gå til gennemgangsknapperne",
+      "backToList": "Tilbage til registreringer"
+    },
+    "global": {
+      "help": "Vis eller skjul tastaturgenveje"
+    }
   }
 }

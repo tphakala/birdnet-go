@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { waitFor, cleanup, screen, fireEvent } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
@@ -6,6 +6,11 @@ import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
 import type { Detection } from '$lib/types/detection.types';
 import { appState } from '$lib/stores/appState.svelte';
 import { auth } from '$lib/stores/auth';
+import { navigation } from '$lib/stores/navigation.svelte';
+import { shortcuts, SHORTCUTS_ENABLED_STORAGE_KEY } from '$lib/stores/shortcuts.svelte';
+import type { PlaybackControls } from '$lib/utils/audio';
+import { isPlainObject } from '$lib/utils/security';
+import { SEEK_STEP_SECONDS } from '$lib/utils/seek';
 
 // Heavy / context-dependent children are not relevant to the page's data flow.
 vi.mock('$lib/desktop/components/media/AudioPlayer.svelte');
@@ -1706,5 +1711,329 @@ describe('DetectionDetail recording', () => {
     );
     expect(container.querySelector('a.dd-rec-download')).toBeNull();
     expect(vi.mocked(AudioPlayer)).not.toHaveBeenCalled();
+  });
+});
+
+describe('DetectionDetail keyboard shortcuts', () => {
+  const NAV = 'detections.detail.nav';
+  const REVIEW_SUFFIX = '/review';
+
+  /** The detection routes: the body of each detection (or its pending promise), its neighbours, saves. */
+  function stubDetections(answers: Record<number, Detection | Promise<Response>>): Call[] {
+    const bodies = new Map(Object.entries(answers));
+    return stubApi([
+      [
+        '/api/v2/detections/',
+        (call: Call) => {
+          const id = Number(/\/detections\/(\d+)/.exec(call.url)?.[1]);
+          if (call.url.endsWith('/neighbors'))
+            return Promise.resolve(jsonResponse(neighborsOf(id)));
+          if (call.url.endsWith(REVIEW_SUFFIX)) return Promise.resolve(jsonResponse({}));
+          if (/\/detections\/\d+$/.test(call.url)) {
+            const body = bodies.get(String(id));
+            if (body instanceof Promise) return body;
+            return Promise.resolve(jsonResponse(body ?? makeDetection({ id })));
+          }
+          return Promise.resolve(jsonResponse({}));
+        },
+      ],
+      ['/api/v2/species/stats', statsOf(0, 0)],
+    ]);
+  }
+
+  const reviewPosts = (calls: Call[]) =>
+    calls.filter(call => call.method === 'POST' && call.url.endsWith(REVIEW_SUFFIX));
+
+  /** Presses a key on the page body, as a real key press reaches it, then lets the page react. */
+  async function press(key: string, init: KeyboardEventInit = {}): Promise<KeyboardEvent> {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+    document.body.dispatchEvent(event);
+    await settle();
+    return event;
+  }
+
+  const stepLink = (name: string) => screen.getByRole('link', { name });
+
+  let navigate: MockInstance<(url: string) => void>;
+
+  beforeEach(() => {
+    navigate = vi.spyOn(navigation, 'navigate').mockImplementation(() => {});
+    window.addEventListener('keydown', shortcuts.handleKeydown);
+  });
+
+  afterEach(() => {
+    window.removeEventListener('keydown', shortcuts.handleKeydown);
+    navigate.mockRestore();
+    shortcuts.setEnabled(true);
+    shortcuts.closeHelp();
+    localStorage.removeItem(SHORTCUTS_ENABLED_STORAGE_KEY);
+  });
+
+  it('steps once per key press and ignores keys while the next detection loads', async () => {
+    let answerNext: ((_response: Response) => void) | undefined;
+    const nextAnswer = new Promise<Response>(resolve => {
+      answerNext = resolve;
+    });
+    const calls = stubDetections({ 2: nextAnswer });
+
+    const { container, rerender } = detailTest.render({ detectionId: '1' });
+    await waitFor(() =>
+      expect(stepLink(`${NAV}.newer`)).toHaveAttribute('href', '/ui/detections/2')
+    );
+
+    await press('ArrowRight');
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/ui/detections/2');
+
+    // The route changes the id; the old panel stays on screen, inert, while 2 loads.
+    await rerender({ detectionId: '2' });
+    await waitFor(() => expect(count(calls, '/api/v2/detections/2')).toBeGreaterThan(0));
+    const event = await press('ArrowRight');
+    await press('c');
+    // Held quietly: consumed, not announced, no step, and no verdict on either detection
+    expect(event.defaultPrevented).toBe(true);
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(shortcuts.announcement).toBe('');
+    expect(reviewPosts(calls)).toHaveLength(0);
+
+    answerNext?.(jsonResponse(makeDetection({ id: 2 })));
+    // Settled: the page is no longer inert, and the neighbours of detection 2 are in
+    await waitFor(() => expect(container.querySelector('[inert]')).toBeNull());
+    await waitFor(() =>
+      expect(stepLink(`${NAV}.newer`)).toHaveAttribute('href', '/ui/detections/3')
+    );
+    await press('ArrowRight');
+    expect(navigate).toHaveBeenLastCalledWith('/ui/detections/3');
+    expect(navigate).toHaveBeenCalledTimes(2);
+  });
+
+  it('reviews the detection shown after a step, never the one left', async () => {
+    const calls = stubDetections({
+      1: makeDetection({ id: 1, commonName: 'First bird' }),
+      2: makeDetection({ id: 2, commonName: 'Second bird' }),
+    });
+
+    const { container, rerender } = detailTest.render({ detectionId: '1' });
+    await waitFor(() => {
+      expect(container.querySelector('#species-heading')?.textContent).toContain('First bird');
+    });
+    await rerender({ detectionId: '2' });
+    await waitFor(() => {
+      expect(container.querySelector('#species-heading')?.textContent).toContain('Second bird');
+    });
+    await waitFor(() =>
+      expect(stepLink(`${NAV}.older`)).toHaveAttribute('href', '/ui/detections/1')
+    );
+
+    await press('c');
+
+    await waitFor(() => expect(reviewPosts(calls)).toHaveLength(1));
+    expect(reviewPosts(calls)[0].url).toContain('/api/v2/detections/2/review');
+  });
+
+  it('says why a step has nowhere to go and does not navigate', async () => {
+    stubApi([
+      [
+        '/neighbors',
+        {
+          detectionId: 3,
+          previous: null,
+          next: 4,
+          previousSameSpecies: null,
+          nextSameSpecies: null,
+        },
+      ],
+      ['/api/v2/detections/3', makeDetection({ id: 3 })],
+    ]);
+
+    detailTest.render({ detectionId: '3' });
+    await waitFor(() =>
+      expect(stepLink(`${NAV}.newer`)).toHaveAttribute('href', '/ui/detections/4')
+    );
+
+    const event = await press('ArrowLeft');
+
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(shortcuts.announcement).toBe(`${NAV}.noOlder`));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('empties the status region once the page moves to another detection', async () => {
+    stubApi([
+      [
+        '/neighbors',
+        {
+          detectionId: 3,
+          previous: null,
+          next: 4,
+          previousSameSpecies: null,
+          nextSameSpecies: null,
+        },
+      ],
+      ['/api/v2/detections/3', makeDetection({ id: 3 })],
+      ['/api/v2/detections/4', makeDetection({ id: 4 })],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '3' });
+    await waitFor(() =>
+      expect(stepLink(`${NAV}.newer`)).toHaveAttribute('href', '/ui/detections/4')
+    );
+    await press('ArrowLeft');
+    await waitFor(() => expect(shortcuts.announcement).toBe(`${NAV}.noOlder`));
+
+    await rerender({ detectionId: '4' });
+
+    await waitFor(() => expect(shortcuts.announcement).toBe(''));
+  });
+
+  it('leaves the arrow keys alone when the server cannot step between detections', async () => {
+    stubApi([
+      ['/neighbors', () => Promise.resolve(jsonResponse({ error: 'legacy' }, 409))],
+      ['/api/v2/detections/3', makeDetection({ id: 3 })],
+      ['/api/v2/species/stats', statsOf(0, 0)],
+    ]);
+
+    detailTest.render({ detectionId: '3' });
+    // The review panel names the legacy database once the 409 was applied to a loaded detection
+    await waitFor(() =>
+      expect(document.querySelector('.dd-review-status')).toHaveTextContent(
+        'detections.detail.review.legacyHelp'
+      )
+    );
+    expect(document.querySelector('.dd-nav-groups')).toBeNull();
+
+    const event = await press('ArrowRight');
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(shortcuts.announcement).toBe('');
+  });
+
+  it('says that stepping failed when the neighbours could not be loaded', async () => {
+    stubApi([
+      ['/neighbors', () => Promise.resolve(jsonResponse({ error: 'down' }, 500))],
+      ['/api/v2/detections/3', makeDetection({ id: 3 })],
+      ['/api/v2/species/stats', statsOf(0, 0)],
+    ]);
+
+    detailTest.render({ detectionId: '3' });
+    await waitFor(() =>
+      expect(screen.getAllByRole('link', { name: `${NAV}.stepFailed` })).toHaveLength(4)
+    );
+
+    const event = await press('ArrowLeft');
+
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(shortcuts.announcement).toContain(`${NAV}.stepFailed`));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('tells a visitor to log in, sends nothing and shows no review key hints', async () => {
+    auth.setSecurity(true, false);
+    const calls = stubDetections({});
+
+    detailTest.render({ detectionId: '8' });
+    const correct = await screen.findByRole('button', {
+      name: /detections\.detail\.review\.correct/,
+    });
+    await waitFor(() => expect(shortcuts.hint('detail.correct')).toBeNull());
+    expect(correct).not.toHaveAttribute('aria-keyshortcuts');
+    expect(correct.querySelector('kbd')).toBeNull();
+
+    await press('c');
+
+    await waitFor(() =>
+      expect(shortcuts.announcement).toBe('detections.detail.review.loginRequired')
+    );
+    expect(reviewPosts(calls)).toHaveLength(0);
+  });
+
+  it('opens the species dialog with w and then leaves the review keys alone behind it', async () => {
+    const calls = stubDetections({});
+
+    detailTest.render({ detectionId: '8' });
+    const wrongSpecies = await screen.findByRole('button', {
+      name: /detections\.detail\.review\.wrongSpecies/,
+    });
+    await waitFor(() => expect(wrongSpecies).not.toHaveAttribute('aria-disabled'));
+
+    await press('w');
+
+    const dialog = screen.getByRole('dialog', {
+      name: 'detections.detail.species.dialogTitle',
+      hidden: true,
+    });
+    await waitFor(() => expect(dialog).toHaveClass('visible'));
+    await press('c');
+    expect(reviewPosts(calls)).toHaveLength(0);
+  });
+
+  it('plays, seeks and goes back through the player controls the page was handed', async () => {
+    stubDetections({ 9: makeDetection({ id: 9, clipName: 'clip_9.m4a' }) });
+    const player = { togglePlayback: vi.fn(), seekBy: vi.fn() } satisfies PlaybackControls;
+
+    const { unmount } = detailTest.render({ detectionId: '9' });
+    await waitFor(() => expect(vi.mocked(AudioPlayer)).toHaveBeenCalled());
+    // A Svelte 5 component is called as (internals, props); read the call as a plain list.
+    const props: unknown = vi.mocked(AudioPlayer).mock.calls.at(-1)?.[1];
+    if (!isPlainObject(props) || typeof props.onPlaybackControls !== 'function') {
+      throw new Error('the player did not receive onPlaybackControls');
+    }
+    // The player attaches its controls on mount; the automock never does, so do it here.
+    props.onPlaybackControls(player);
+    // The hint is the play key, with Space as the second way.
+    expect(props.playShortcut).toMatchObject({ aria: 'P Space' });
+
+    await press('p');
+    const space = await press(' ');
+    await press(',');
+    await press('.');
+
+    expect(player.togglePlayback).toHaveBeenCalledTimes(2);
+    expect(space.defaultPrevented).toBe(true);
+    expect(player.seekBy.mock.calls).toEqual([[-SEEK_STEP_SECONDS], [SEEK_STEP_SECONDS]]);
+
+    unmount();
+    await press('p');
+    expect(player.togglePlayback).toHaveBeenCalledTimes(2);
+    expect(shortcuts.scopes).toHaveLength(0);
+  });
+
+  it('leaves Space to the page on a detection whose audio was removed', async () => {
+    stubDetections({ 10: makeDetection({ id: 10, clipName: '', spectrogramOnly: true }) });
+
+    const { container } = detailTest.render({ detectionId: '10' });
+    await waitFor(() => expect(container.querySelector('img.spectrogram-img')).not.toBeNull());
+
+    const space = await press(' ');
+    const play = await press('p');
+
+    expect(space.defaultPrevented).toBe(false);
+    expect(play.defaultPrevented).toBe(false);
+  });
+
+  it('shows the keys on the controls that have one and drops them when shortcuts are off', async () => {
+    stubDetections({ 11: makeDetection({ id: 11 }) });
+
+    detailTest.render({ detectionId: '11' });
+    const correct = await screen.findByRole('button', {
+      name: /detections\.detail\.review\.correct/,
+    });
+    const falsePositive = screen.getByRole('button', {
+      name: /detections\.detail\.review\.falsePositive/,
+    });
+    const wrongSpecies = screen.getByRole('button', {
+      name: /detections\.detail\.review\.wrongSpecies/,
+    });
+
+    await waitFor(() => expect(correct).toHaveAttribute('aria-keyshortcuts', 'C'));
+    expect(falsePositive).toHaveAttribute('aria-keyshortcuts', 'F');
+    expect(wrongSpecies).toHaveAttribute('aria-keyshortcuts', 'W');
+    expect(stepLink(`${NAV}.older`)).toHaveAttribute('aria-keyshortcuts', 'ArrowLeft');
+    expect(stepLink(`${NAV}.older`)).toHaveAttribute('title', `${NAV}.older (←)`);
+
+    shortcuts.setEnabled(false);
+
+    await waitFor(() => expect(correct).not.toHaveAttribute('aria-keyshortcuts'));
+    expect(stepLink(`${NAV}.older`)).not.toHaveAttribute('aria-keyshortcuts');
   });
 });

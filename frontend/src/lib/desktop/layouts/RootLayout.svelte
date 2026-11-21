@@ -11,6 +11,8 @@
   import OfflineBanner from '$lib/desktop/components/ui/OfflineBanner.svelte';
   import RestartBanner from '$lib/desktop/components/ui/RestartBanner.svelte';
   import { fetchRestartStatus } from '$lib/stores/restart.svelte';
+  import { shortcuts } from '$lib/stores/shortcuts.svelte';
+  import KeyboardShortcutsModal from '$lib/desktop/components/modals/KeyboardShortcutsModal.svelte';
 
   interface Props {
     title?: string;
@@ -184,6 +186,12 @@
 
 <!-- Global Toast Container -->
 <ToastContainer />
+
+<!-- Keyboard shortcuts: one key listener for every page, and the status region that says
+     why a shortcut did nothing. The region stays rendered so a change of its text is announced. -->
+<svelte:window onkeydown={shortcuts.handleKeydown} />
+<div role="status" class="sr-only">{shortcuts.announcement}</div>
+<KeyboardShortcutsModal />
 
 <style>
   /* =================================================================

@@ -6385,5 +6385,51 @@
       "patternTransient": "Transitório",
       "patternSustained": "Persistente"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Atalhos de teclado",
+    "modal": {
+      "title": "Atalhos de teclado",
+      "enable": "Ativar atalhos de teclado",
+      "enableHelp": "Desative se os atalhos de uma única tecla atrapalharem um leitor de tela, o controle por voz ou um teclado assistivo.",
+      "offNote": "Os atalhos de teclado estão desativados. As teclas abaixo não fazem nada até você ativá-los.",
+      "or": "ou"
+    },
+    "scopes": {
+      "global": "Todas as páginas"
+    },
+    "groups": {
+      "navigation": "Navegação",
+      "review": "Revisão",
+      "audio": "Áudio",
+      "general": "Geral"
+    },
+    "keys": {
+      "shift": "Shift",
+      "space": "Barra de espaço",
+      "arrowLeft": "Seta para a esquerda",
+      "arrowRight": "Seta para a direita",
+      "comma": "Vírgula",
+      "period": "Ponto",
+      "questionMark": "Ponto de interrogação",
+      "combination": "{first} mais {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Detecção mais antiga da mesma espécie",
+      "newerSpecies": "Detecção mais recente da mesma espécie",
+      "correct": "Marcar como correta",
+      "falsePositive": "Marcar como falso positivo",
+      "wrongSpecies": "Alterar a espécie",
+      "keep": "Manter ou liberar esta gravação",
+      "playPause": "Reproduzir ou pausar",
+      "seekBack": "Voltar um segundo",
+      "seekForward": "Avançar um segundo",
+      "focusReview": "Ir para os botões de revisão",
+      "backToList": "Voltar às detecções"
+    },
+    "global": {
+      "help": "Mostrar ou ocultar os atalhos de teclado"
+    }
   }
 }

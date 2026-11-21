@@ -29,6 +29,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 ### Feedback & Status
 
 - [Badge](#badge) - Status indicators and labels
+- [Kbd](#kbd) - Key caps for keyboard shortcuts
 - [ProgressBar](#progressbar) - Progress visualization with thresholds
 - [Meter](#meter) - Static measurement bar (disk, CPU, table size) on the data visualization tokens
 - [LoadingSpinner](#loadingspinner) - Loading state indicator
@@ -54,7 +55,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 
 - [AudioLevelIndicator](#audiolevelindicator) - Audio level visualization
 - [ThemeToggle](#themetoggle) - Theme switching component
-- [HeaderSettingsMenu](#headersettingsmenu) - Header dropdown menu with theme toggle, edit dashboard, and links
+- [HeaderSettingsMenu](#headersettingsmenu) - Header dropdown menu with theme toggle, edit dashboard, keyboard shortcuts, and links
 - [TimeOfDayIcon](#timeofdayicon) - Time-based icon display
 
 ### Advanced
@@ -644,6 +645,53 @@ data on screen, and a failed first load replaces the skeleton with an error.
 
 ---
 
+### Kbd
+
+**File**: `Kbd.svelte`
+
+Key caps for a keyboard shortcut: one key or a combination, one cap per key.
+
+```typescript
+interface Props extends HTMLAttributes<HTMLElement> {
+  keys: readonly string[]; // display tokens, one per cap, in press order
+  label?: string; // spoken form of the whole shortcut, read by screen readers
+  size?: 'sm' | 'md';
+  className?: string;
+}
+```
+
+**Usage:**
+
+```svelte
+<!-- In a shortcut list: the spoken words come from the caller -->
+<Kbd keys={['⇧', '←']} label={t('shortcuts.keys.combination', { first, second })} />
+
+<!-- As a badge inside a button whose own name says what it does -->
+<Button>
+  <Check class="size-4" />
+  {t('detections.detail.review.correct')}
+  <Kbd size="sm" keys={['C']} />
+</Button>
+```
+
+**Features:**
+
+- Each cap is a `<kbd aria-hidden="true">`, so arrows and single letters are never
+  read out as stray characters inside a control's name; `label` renders as
+  `sr-only` text. Pass it where the shortcut itself is the content, leave it out
+  for badges
+- `md` (default): a raised cap on `--surface-200` with a `--border-200` border and
+  a thicker `--border-300` bottom edge, text in `--color-base-content`
+- `sm`: a compact outline cap in the surrounding text colour, so it follows the
+  button it sits in (filled, pressed or dimmed by `aria-disabled`); 16 px high, so
+  it fits a `md` button line without changing the button's height
+- The cap shape is a border, not a shadow, so it stays visible in forced colours
+  mode
+- Takes display tokens only; `describeBinding()` in `$lib/utils/keyboard` builds
+  them, the spoken words and the `aria-keyshortcuts` value from one binding
+
+---
+
 ### EmptyState
 
 **File**: `EmptyState.svelte`
@@ -771,7 +819,7 @@ interface Props {
 
 ### HeaderSettingsMenu
 
-Cogwheel dropdown menu for the header bar. Contains theme toggle, edit dashboard (admin-only), and GitHub link.
+Cogwheel dropdown menu for the header bar. Contains theme toggle, edit and reset dashboard (admin-only), the keyboard shortcuts item, and the help and GitHub links. The keyboard shortcuts item opens the cheat sheet (`KeyboardShortcutsModal`, mounted in the root layout) and shows its `?` key while shortcuts are on; focus returns to the cogwheel when the sheet closes.
 
 #### Props
 

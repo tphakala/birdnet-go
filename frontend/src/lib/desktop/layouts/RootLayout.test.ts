@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cleanup, fireEvent } from '@testing-library/svelte';
+import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { renderTyped, screen } from '../../../test/render-helpers';
 import RootLayout from './RootLayout.svelte';
+import { shortcuts } from '$lib/stores/shortcuts.svelte';
 
 // The notification store connects on import; keep it inert so the test owns no timers.
 vi.mock('$lib/stores/sseNotifications', () => ({
@@ -68,5 +69,42 @@ describe('RootLayout drawer', () => {
     expect(checkbox.checked).toBe(false);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(onNavigate).toHaveBeenCalledWith('/ui/dashboard');
+  });
+});
+
+describe('RootLayout keyboard shortcuts', () => {
+  const BLOCKED_REASON = 'Nothing to do here';
+  let unregister: (() => void) | undefined;
+
+  afterEach(() => {
+    unregister?.();
+    unregister = undefined;
+    cleanup();
+  });
+
+  it('routes key presses to the shortcut store and announces a blocked key in a status region', async () => {
+    const run = vi.fn();
+    unregister = shortcuts.register({
+      id: 'layout-test',
+      label: () => 'layout-test',
+      definitions: [
+        {
+          id: 'layout-test.blocked',
+          group: 'general',
+          binding: { key: 'x' },
+          description: () => 'blocked',
+          status: () => ({ blocked: BLOCKED_REASON }),
+          run,
+        },
+      ],
+    });
+    renderTyped(RootLayout, { props: { onNavigate: vi.fn() } });
+
+    await fireEvent.keyDown(document.body, { key: 'x' });
+
+    await waitFor(() => {
+      expect(screen.getByText(BLOCKED_REASON)).toHaveAttribute('role', 'status');
+    });
+    expect(run).not.toHaveBeenCalled();
   });
 });

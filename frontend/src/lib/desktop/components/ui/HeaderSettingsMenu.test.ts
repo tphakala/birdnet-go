@@ -4,7 +4,10 @@ import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { theme } from '$lib/stores/theme';
+import { tick } from 'svelte';
+import { shortcuts } from '$lib/stores/shortcuts.svelte';
 import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
+import HeaderSettingsMenuShortcutsHost from './HeaderSettingsMenu.shortcuts.test.svelte';
 
 /**
  * Guards the fix for issue #4112: dashboard customization (Edit + Reset) is an
@@ -140,5 +143,55 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
         await waitFor(() => expect(trigger).toHaveFocus());
       }
     );
+  });
+});
+
+describe('HeaderSettingsMenu keyboard shortcuts item', () => {
+  afterEach(() => {
+    cleanup();
+    shortcuts.closeHelp();
+    shortcuts.setEnabled(true);
+    localStorage.clear();
+  });
+
+  it('shows the question mark key on the item while shortcuts are on', async () => {
+    render(HeaderSettingsMenuShortcutsHost);
+    await fireEvent.click(screen.getByRole('button', { name: MENU_LABEL }));
+
+    const item = screen.getByRole('button', { name: 'shortcuts.menuItem' });
+
+    expect(item).toHaveAttribute('aria-keyshortcuts', '?');
+    const cap = item.querySelector('kbd');
+    expect(cap).toHaveTextContent('?');
+    expect(cap).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('keeps the item, without a key hint, while shortcuts are off, and it still opens the sheet', async () => {
+    shortcuts.setEnabled(false);
+    render(HeaderSettingsMenuShortcutsHost);
+    await fireEvent.click(screen.getByRole('button', { name: MENU_LABEL }));
+
+    const item = screen.getByRole('button', { name: 'shortcuts.menuItem' });
+
+    expect(item).not.toHaveAttribute('aria-keyshortcuts');
+    expect(item.querySelector('kbd')).toBeNull();
+    await fireEvent.click(item);
+    expect(shortcuts.helpOpen).toBe(true);
+  });
+
+  it('closes the menu, opens the cheat sheet, and returns focus to the gear when it closes', async () => {
+    render(HeaderSettingsMenuShortcutsHost);
+    const gear = screen.getByRole('button', { name: MENU_LABEL });
+    await fireEvent.click(gear);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'shortcuts.menuItem' }));
+
+    expect(gear).toHaveAttribute('aria-expanded', 'false');
+    expect(shortcuts.helpOpen).toBe(true);
+    await tick();
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await tick();
+    expect(shortcuts.helpOpen).toBe(false);
+    await waitFor(() => expect(gear).toHaveFocus());
   });
 });

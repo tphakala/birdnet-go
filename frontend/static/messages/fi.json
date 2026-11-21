@@ -6385,5 +6385,51 @@
       "patternTransient": "Ohimenevä",
       "patternSustained": "Jatkuva"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Pikanäppäimet",
+    "modal": {
+      "title": "Pikanäppäimet",
+      "enable": "Ota pikanäppäimet käyttöön",
+      "enableHelp": "Poista käytöstä, jos yhden näppäimen pikanäppäimet häiritsevät ruudunlukijaa, puheohjausta tai apunäppäimistöä.",
+      "offNote": "Pikanäppäimet ovat pois käytöstä. Alla olevat näppäimet eivät tee mitään, ennen kuin otat ne käyttöön.",
+      "or": "tai"
+    },
+    "scopes": {
+      "global": "Kaikki sivut"
+    },
+    "groups": {
+      "navigation": "Navigointi",
+      "review": "Tarkistus",
+      "audio": "Ääni",
+      "general": "Yleiset"
+    },
+    "keys": {
+      "shift": "Vaihto",
+      "space": "Välilyönti",
+      "arrowLeft": "Vasen nuoli",
+      "arrowRight": "Oikea nuoli",
+      "comma": "Pilkku",
+      "period": "Piste",
+      "questionMark": "Kysymysmerkki",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Vanhempi havainto samasta lajista",
+      "newerSpecies": "Uudempi havainto samasta lajista",
+      "correct": "Merkitse oikeaksi",
+      "falsePositive": "Merkitse virheelliseksi havainnoksi",
+      "wrongSpecies": "Vaihda laji",
+      "keep": "Säilytä tai vapauta tämä tallenne",
+      "playPause": "Toista tai keskeytä",
+      "seekBack": "Sekunti taaksepäin",
+      "seekForward": "Sekunti eteenpäin",
+      "focusReview": "Siirry tarkistuspainikkeisiin",
+      "backToList": "Takaisin havaintoihin"
+    },
+    "global": {
+      "help": "Näytä tai piilota pikanäppäimet"
+    }
   }
 }

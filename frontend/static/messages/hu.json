@@ -6385,5 +6385,51 @@
       "patternTransient": "Átmeneti",
       "patternSustained": "Tartós"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Billentyűparancsok",
+    "modal": {
+      "title": "Billentyűparancsok",
+      "enable": "Billentyűparancsok engedélyezése",
+      "enableHelp": "Kapcsolja ki, ha az egybillentyűs parancsok zavarják a képernyőolvasót, a hangvezérlést vagy a kisegítő billentyűzetet.",
+      "offNote": "A billentyűparancsok ki vannak kapcsolva. Az alábbi billentyűk nem csinálnak semmit, amíg be nem kapcsolja őket.",
+      "or": "vagy"
+    },
+    "scopes": {
+      "global": "Minden oldal"
+    },
+    "groups": {
+      "navigation": "Navigáció",
+      "review": "Ellenőrzés",
+      "audio": "Hang",
+      "general": "Általános"
+    },
+    "keys": {
+      "shift": "Shift",
+      "space": "Szóköz",
+      "arrowLeft": "Balra nyíl",
+      "arrowRight": "Jobbra nyíl",
+      "comma": "Vessző",
+      "period": "Pont",
+      "questionMark": "Kérdőjel",
+      "combination": "{first} plusz {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Régebbi észlelés ugyanarról a fajról",
+      "newerSpecies": "Újabb észlelés ugyanarról a fajról",
+      "correct": "Megjelölés helyesként",
+      "falsePositive": "Megjelölés hamis pozitívként",
+      "wrongSpecies": "Faj módosítása",
+      "keep": "A felvétel megtartása vagy felszabadítása",
+      "playPause": "Lejátszás vagy szüneteltetés",
+      "seekBack": "Vissza egy másodpercet",
+      "seekForward": "Előre egy másodpercet",
+      "focusReview": "Ugrás az ellenőrző gombokra",
+      "backToList": "Vissza az észlelésekhez"
+    },
+    "global": {
+      "help": "Billentyűparancsok megjelenítése vagy elrejtése"
+    }
   }
 }

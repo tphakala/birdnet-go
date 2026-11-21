@@ -6385,5 +6385,51 @@
       "patternTransient": "Vorübergehend",
       "patternSustained": "Anhaltend"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Tastaturkürzel",
+    "modal": {
+      "title": "Tastaturkürzel",
+      "enable": "Tastaturkürzel aktivieren",
+      "enableHelp": "Deaktivieren Sie dies, wenn Kürzel mit nur einer Taste bei einem Screenreader, der Sprachsteuerung oder einer Eingabehilfe-Tastatur stören.",
+      "offNote": "Tastaturkürzel sind ausgeschaltet. Die folgenden Tasten bewirken nichts, bis Sie sie einschalten.",
+      "or": "oder"
+    },
+    "scopes": {
+      "global": "Alle Seiten"
+    },
+    "groups": {
+      "navigation": "Navigation",
+      "review": "Überprüfung",
+      "audio": "Audio",
+      "general": "Allgemein"
+    },
+    "keys": {
+      "shift": "Umschalt",
+      "space": "Leertaste",
+      "arrowLeft": "Pfeil links",
+      "arrowRight": "Pfeil rechts",
+      "comma": "Komma",
+      "period": "Punkt",
+      "questionMark": "Fragezeichen",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Ältere Erkennung derselben Art",
+      "newerSpecies": "Neuere Erkennung derselben Art",
+      "correct": "Als korrekt markieren",
+      "falsePositive": "Als falsch positiv markieren",
+      "wrongSpecies": "Art ändern",
+      "keep": "Diese Aufnahme behalten oder freigeben",
+      "playPause": "Abspielen oder pausieren",
+      "seekBack": "Eine Sekunde zurück",
+      "seekForward": "Eine Sekunde vor",
+      "focusReview": "Zu den Schaltflächen der Überprüfung springen",
+      "backToList": "Zurück zu den Erkennungen"
+    },
+    "global": {
+      "help": "Tastaturkürzel ein- oder ausblenden"
+    }
   }
 }

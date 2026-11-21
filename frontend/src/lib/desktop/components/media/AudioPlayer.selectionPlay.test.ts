@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
 import {
+  FAKE_MEDIA_DURATION_SECONDS,
   installFakeMediaElement,
   fakeAudioNodeChain,
   settle,
@@ -13,7 +14,8 @@ import {
 } from '../../../../test/fakeMediaElement';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import { getAudioContext } from '$lib/utils/audioContextManager';
-import { AUDIO_RETRY_DELAY_MS, dbToGain } from '$lib/utils/audio';
+import { AUDIO_RETRY_DELAY_MS, dbToGain, type PlaybackControls } from '$lib/utils/audio';
+import { describeBinding } from '$lib/utils/keyboard';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -381,5 +383,121 @@ describe('AudioPlayer selection play', () => {
     const selectStart = new Event('selectstart', { cancelable: true });
     document.dispatchEvent(selectStart);
     expect(selectStart.defaultPrevented).toBe(false);
+  });
+
+  describe('playback controls for keyboard shortcuts', () => {
+    const SEEK_FROM_SECONDS = 10;
+    const SEEK_DELTA_SECONDS = 5;
+    const BEYOND_CLIP_SECONDS = 1000;
+
+    // Collects what the player hands to onPlaybackControls and what it detaches
+    function controlsProbe() {
+      const received: PlaybackControls[] = [];
+      const detach = vi.fn();
+      const onPlaybackControls = vi.fn((controls: PlaybackControls) => {
+        received.push(controls);
+        return detach;
+      });
+      function current(): PlaybackControls {
+        const controls = received.at(-1);
+        if (!controls) throw new Error('the player never attached its controls');
+        return controls;
+      }
+      return { onPlaybackControls, detach, current };
+    }
+
+    it('toggles playback like the visible play button without clip extraction', async () => {
+      const probe = controlsProbe();
+      mount({ enableClipExtraction: false, onPlaybackControls: probe.onPlaybackControls });
+      ctl.completeLoad();
+      await settle();
+
+      probe.current().togglePlayback();
+      await settle();
+      expect(ctl.paused).toBe(false);
+
+      probe.current().togglePlayback();
+      await settle();
+      expect(ctl.paused).toBe(true);
+    });
+
+    it('plays the selection, not the whole clip, when the toolbar has one', async () => {
+      const probe = controlsProbe();
+      const { container } = mount({ onPlaybackControls: probe.onPlaybackControls });
+      ctl.completeLoad();
+      await settle();
+      await dragSelection(container);
+
+      probe.current().togglePlayback();
+      await settle();
+
+      expect(ctl.paused).toBe(false);
+      const selectionStartSec = (SELECTION_START_PX / WIDE_CONTAINER_PX) * ctl.element.duration;
+      expect(ctl.element.currentTime).toBeCloseTo(selectionStartSec);
+    });
+
+    it('does nothing while the play button is disabled for loading', async () => {
+      const probe = controlsProbe();
+      mount({ enableClipExtraction: false, onPlaybackControls: probe.onPlaybackControls });
+      // loadstart marks the clip as loading until canplay
+      ctl.dispatch('loadstart');
+      await settle();
+      expect(screen.getByLabelText('media.audio.loading')).toBeDisabled();
+
+      probe.current().togglePlayback();
+      await settle();
+
+      expect(ctl.play).not.toHaveBeenCalled();
+    });
+
+    it('does nothing while the toolbar play button is disabled for loading', async () => {
+      const probe = controlsProbe();
+      mount({ onPlaybackControls: probe.onPlaybackControls });
+      ctl.dispatch('loadstart');
+      await settle();
+      expect(screen.getByLabelText('media.audio.loading')).toBeDisabled();
+
+      probe.current().togglePlayback();
+      await settle();
+
+      expect(ctl.play).not.toHaveBeenCalled();
+    });
+
+    it('seeks from the live element time and clamps at both ends of the clip', async () => {
+      const probe = controlsProbe();
+      mount({ onPlaybackControls: probe.onPlaybackControls });
+      ctl.completeLoad();
+      await settle();
+      ctl.element.currentTime = SEEK_FROM_SECONDS;
+
+      probe.current().seekBy(SEEK_DELTA_SECONDS);
+      expect(ctl.element.currentTime).toBe(SEEK_FROM_SECONDS + SEEK_DELTA_SECONDS);
+
+      probe.current().seekBy(-BEYOND_CLIP_SECONDS);
+      expect(ctl.element.currentTime).toBe(0);
+
+      probe.current().seekBy(BEYOND_CLIP_SECONDS);
+      expect(ctl.element.currentTime).toBe(FAKE_MEDIA_DURATION_SECONDS);
+    });
+
+    it.each([
+      ['the overlay play button', false],
+      ['the toolbar play button', true],
+    ])('puts the play hint on %s', (_name, enableClipExtraction) => {
+      mount({ enableClipExtraction, playShortcut: describeBinding({ key: 'p' }, false) });
+
+      expect(screen.getByLabelText(PLAY_LABEL)).toHaveAttribute('aria-keyshortcuts', 'P');
+    });
+
+    it('detaches the controls when the player unmounts', async () => {
+      const probe = controlsProbe();
+      const { unmount } = mount({ onPlaybackControls: probe.onPlaybackControls });
+      expect(probe.onPlaybackControls).toHaveBeenCalledTimes(1);
+      expect(probe.detach).not.toHaveBeenCalled();
+
+      unmount();
+
+      expect(probe.detach).toHaveBeenCalledTimes(1);
+    });
   });
 });

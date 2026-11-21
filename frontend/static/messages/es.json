@@ -6385,5 +6385,51 @@
       "patternTransient": "Transitorio",
       "patternSustained": "Persistente"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Atajos de teclado",
+    "modal": {
+      "title": "Atajos de teclado",
+      "enable": "Activar atajos de teclado",
+      "enableHelp": "Desactívalo si los atajos de una sola tecla interfieren con un lector de pantalla, el control por voz o un teclado adaptado.",
+      "offNote": "Los atajos de teclado están desactivados. Las teclas de abajo no hacen nada hasta que los actives.",
+      "or": "o"
+    },
+    "scopes": {
+      "global": "Todas las páginas"
+    },
+    "groups": {
+      "navigation": "Navegación",
+      "review": "Revisión",
+      "audio": "Audio",
+      "general": "Generales"
+    },
+    "keys": {
+      "shift": "Mayús",
+      "space": "Barra espaciadora",
+      "arrowLeft": "Flecha izquierda",
+      "arrowRight": "Flecha derecha",
+      "comma": "Coma",
+      "period": "Punto",
+      "questionMark": "Signo de interrogación",
+      "combination": "{first} más {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Detección anterior de la misma especie",
+      "newerSpecies": "Detección más nueva de la misma especie",
+      "correct": "Marcar como correcta",
+      "falsePositive": "Marcar como falso positivo",
+      "wrongSpecies": "Cambiar la especie",
+      "keep": "Conservar o liberar esta grabación",
+      "playPause": "Reproducir o pausar",
+      "seekBack": "Retroceder un segundo",
+      "seekForward": "Avanzar un segundo",
+      "focusReview": "Ir a los botones de revisión",
+      "backToList": "Volver a las detecciones"
+    },
+    "global": {
+      "help": "Mostrar u ocultar los atajos de teclado"
+    }
   }
 }

@@ -6385,5 +6385,51 @@
       "patternTransient": "Övergående",
       "patternSustained": "Ihållande"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Kortkommandon",
+    "modal": {
+      "title": "Kortkommandon",
+      "enable": "Aktivera kortkommandon",
+      "enableHelp": "Stäng av detta om kortkommandon med en enda tangent stör en skärmläsare, röststyrning eller ett hjälpmedelstangentbord.",
+      "offNote": "Kortkommandon är avstängda. Tangenterna nedan gör ingenting förrän du aktiverar dem.",
+      "or": "eller"
+    },
+    "scopes": {
+      "global": "Alla sidor"
+    },
+    "groups": {
+      "navigation": "Navigering",
+      "review": "Granskning",
+      "audio": "Ljud",
+      "general": "Allmänt"
+    },
+    "keys": {
+      "shift": "Skift",
+      "space": "Blanksteg",
+      "arrowLeft": "Vänsterpil",
+      "arrowRight": "Högerpil",
+      "comma": "Komma",
+      "period": "Punkt",
+      "questionMark": "Frågetecken",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Äldre detektering av samma art",
+      "newerSpecies": "Nyare detektering av samma art",
+      "correct": "Markera som korrekt",
+      "falsePositive": "Markera som falskt positiv",
+      "wrongSpecies": "Ändra art",
+      "keep": "Behåll eller frigör denna inspelning",
+      "playPause": "Spela upp eller pausa",
+      "seekBack": "En sekund bakåt",
+      "seekForward": "En sekund framåt",
+      "focusReview": "Gå till granskningsknapparna",
+      "backToList": "Tillbaka till detekteringar"
+    },
+    "global": {
+      "help": "Visa eller dölj kortkommandon"
+    }
   }
 }

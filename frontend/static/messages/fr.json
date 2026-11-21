@@ -6385,5 +6385,51 @@
       "patternTransient": "Transitoire",
       "patternSustained": "Persistant"
     }
+  },
+  "shortcuts": {
+    "menuItem": "Raccourcis clavier",
+    "modal": {
+      "title": "Raccourcis clavier",
+      "enable": "Activer les raccourcis clavier",
+      "enableHelp": "Désactivez cette option si les raccourcis à une seule touche gênent un lecteur d'écran, la commande vocale ou un clavier adapté.",
+      "offNote": "Les raccourcis clavier sont désactivés. Les touches ci-dessous ne font rien tant que vous ne les activez pas.",
+      "or": "ou"
+    },
+    "scopes": {
+      "global": "Toutes les pages"
+    },
+    "groups": {
+      "navigation": "Navigation",
+      "review": "Vérification",
+      "audio": "Audio",
+      "general": "Général"
+    },
+    "keys": {
+      "shift": "Maj",
+      "space": "Espace",
+      "arrowLeft": "Flèche gauche",
+      "arrowRight": "Flèche droite",
+      "comma": "Virgule",
+      "period": "Point",
+      "questionMark": "Point d'interrogation",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Détection plus ancienne de la même espèce",
+      "newerSpecies": "Détection plus récente de la même espèce",
+      "correct": "Marquer comme correct",
+      "falsePositive": "Marquer comme faux positif",
+      "wrongSpecies": "Changer l'espèce",
+      "keep": "Conserver ou libérer cet enregistrement",
+      "playPause": "Lire ou mettre en pause",
+      "seekBack": "Reculer d'une seconde",
+      "seekForward": "Avancer d'une seconde",
+      "focusReview": "Aller aux boutons de vérification",
+      "backToList": "Retour aux détections"
+    },
+    "global": {
+      "help": "Afficher ou masquer les raccourcis clavier"
+    }
   }
 }

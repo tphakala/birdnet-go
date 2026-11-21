@@ -165,3 +165,19 @@ export interface TaxonomyHierarchy {
   genus?: string;
   species?: string;
 }
+
+/** A review action a keyboard shortcut can trigger on the review panel. */
+export type ReviewShortcutAction = 'correct' | 'falsePositive' | 'wrongSpecies' | 'keep';
+
+/** What the review panel offers a keyboard shortcut. The methods read live state when called. */
+export interface ReviewControls {
+  /**
+   * Why the action cannot run now: a missing review permission first, then a save out, then
+   * the reason for the action itself; empty when it can.
+   */
+  blockedReason(action: ReviewShortcutAction): string;
+  /** Runs the action on the detection the panel shows; a no-op when the panel itself refuses it. */
+  run(action: ReviewShortcutAction): void;
+  /** Moves focus to the verdict buttons as a group, not to one button. */
+  focus(): void;
+}

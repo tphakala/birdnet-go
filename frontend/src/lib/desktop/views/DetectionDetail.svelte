@@ -34,6 +34,11 @@
   import SpeciesStatsCard from '$lib/desktop/features/detections/components/detail/SpeciesStatsCard.svelte';
   import { formatModelLabel } from '$lib/desktop/features/detections/components/detail/detailFormat';
   import {
+    DETAIL_SHORTCUT_IDS,
+    DETAIL_SHORTCUT_SCOPE,
+    createDetailShortcuts,
+  } from '$lib/desktop/features/detections/components/detail/detailShortcuts';
+  import {
     isDailyCounts,
     isDetectionDetail,
     isDetectionNeighbors,
@@ -60,6 +65,7 @@
     DetectionPredictions,
     DetectionWeather,
     HourlyBucket,
+    ReviewControls,
     SavedChange,
     SpeciesRarity,
     SpeciesStats,
@@ -67,13 +73,17 @@
     TaxonomyHierarchy,
   } from '$lib/desktop/features/detections/components/detail/detailTypes';
   import { t } from '$lib/i18n';
+  import { navigation } from '$lib/stores/navigation.svelte';
+  import { shortcuts } from '$lib/stores/shortcuts.svelte';
   import type { ImageAttribution } from '$lib/types/detection.types';
+  import type { PlaybackControls } from '$lib/utils/audio';
   import { hasReviewPermission } from '$lib/utils/auth';
   import { isPlainObject } from '$lib/utils/security';
   import { getLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { useShortcuts } from '$lib/utils/useShortcuts.svelte';
 
   const logger = loggers.ui;
 
@@ -213,6 +223,59 @@
     );
   });
 
+  // Keyboard shortcuts. The review panel and the player hand over their controls on mount;
+  // these are plain variables, read only when a key is pressed and never by the template.
+  let reviewControls: ReviewControls | null = null;
+  let playbackControls: PlaybackControls | null = null;
+
+  // A control set is cleared only while the slot still holds it, so the teardown of a panel
+  // replaced by the next detection's cannot clear the new panel's controls.
+  function attachReviewControls(controls: ReviewControls): () => void {
+    reviewControls = controls;
+    return () => {
+      if (reviewControls === controls) reviewControls = null;
+    };
+  }
+
+  function attachPlaybackControls(controls: PlaybackControls): () => void {
+    playbackControls = controls;
+    return () => {
+      if (playbackControls === controls) playbackControls = null;
+    };
+  }
+
+  useShortcuts({
+    id: DETAIL_SHORTCUT_SCOPE,
+    label: () => t('pageTitle.detectionDetails'),
+    definitions: createDetailShortcuts({
+      settled: () => detection !== null && !isLoadingDetection,
+      loading: () => isLoadingDetection,
+      canReview: () => canReview,
+      steppingAvailable: () => steppingAvailable,
+      neighbors: () => neighbors,
+      neighborsFailed: () => neighborsFailed,
+      speciesName: () => displayName,
+      review: () => reviewControls,
+      playback: () => playbackControls,
+      go: path => navigation.navigate(path),
+    }),
+  });
+
+  // How each shortcut is shown on the controls; null while shortcuts are off.
+  let stepHints = $derived({
+    older: shortcuts.hint(DETAIL_SHORTCUT_IDS.older),
+    newer: shortcuts.hint(DETAIL_SHORTCUT_IDS.newer),
+    olderSpecies: shortcuts.hint(DETAIL_SHORTCUT_IDS.olderSpecies),
+    newerSpecies: shortcuts.hint(DETAIL_SHORTCUT_IDS.newerSpecies),
+  });
+  let reviewHints = $derived({
+    correct: shortcuts.hint(DETAIL_SHORTCUT_IDS.correct),
+    falsePositive: shortcuts.hint(DETAIL_SHORTCUT_IDS.falsePositive),
+    wrongSpecies: shortcuts.hint(DETAIL_SHORTCUT_IDS.wrongSpecies),
+    keep: shortcuts.hint(DETAIL_SHORTCUT_IDS.keep),
+  });
+  let playHint = $derived(shortcuts.hint(DETAIL_SHORTCUT_IDS.playPause));
+
   // Only alphanumeric characters, hyphens and underscores are valid in a detection ID.
   function isValidDetectionId(id: string): boolean {
     return /^[a-zA-Z0-9_-]+$/.test(id);
@@ -242,6 +305,12 @@
     detection = null;
     isLoadingDetection = false;
     detectionError = t('detections.errors.noIdProvided');
+  });
+
+  // A blocked-key reason is about the detection it was said on: stepping away clears it.
+  $effect(() => {
+    void resolvedDetectionId;
+    shortcuts.clearAnnouncement();
   });
 
   // Load the detection whenever the ID changes. Stepping to another detection
@@ -735,6 +804,7 @@
       failed={neighborsFailed}
       available={steppingAvailable}
       stale={isLoadingDetection}
+      shortcutHints={stepHints}
     />
 
     <!-- While the next detection loads, the previous one stays on screen, dimmed and
@@ -767,6 +837,8 @@
             grow
             onWrongSpecies={() => (speciesDialogOpen = true)}
             onChanged={onSaved}
+            onControls={attachReviewControls}
+            shortcutHints={reviewHints}
           />
         {/key}
       </div>
@@ -789,7 +861,12 @@
         inert={isLoadingDetection}
         aria-busy={isLoadingDetection}
       >
-        <RecordingCard {detection} speciesName={displayName} />
+        <RecordingCard
+          {detection}
+          speciesName={displayName}
+          onPlaybackControls={attachPlaybackControls}
+          playShortcut={playHint}
+        />
       </div>
     {/if}
 
