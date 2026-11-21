@@ -992,12 +992,15 @@
     savingPush = true;
     pushStatusMessage = '';
 
+    // What is sent becomes the saved baseline, so an edit made while the request is pending
+    // (provider toggles stay enabled) stays unsaved.
+    const submitted = JSON.parse(JSON.stringify(pushSettings));
     try {
       await api.patch('/api/v2/settings/notification', {
-        push: pushSettings,
+        push: submitted,
       });
 
-      originalPushSettings = JSON.parse(JSON.stringify(pushSettings));
+      originalPushSettings = submitted;
 
       pushStatusMessage = t('settings.notifications.templates.saveSuccess');
       pushStatusType = 'success';

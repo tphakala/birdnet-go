@@ -220,4 +220,33 @@ describe('NotificationsSettingsPage unsaved-changes guard', () => {
     // 'two' went out after the submitted text, so it is still unsaved.
     expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(true);
   });
+
+  it('keeps guarding a provider toggled while the push settings save is pending', async () => {
+    providers = [globalThis.structuredClone(NTFY_PROVIDER)];
+    let finishSave: () => void = () => {};
+    vi.mocked(api.patch).mockReturnValueOnce(
+      new Promise(resolve => {
+        finishSave = () => resolve({});
+      })
+    );
+    const user = userEvent.setup();
+    await renderLoaded();
+    const toggle = await screen.findByLabelText(
+      'settings.notifications.push.providers.enableToggle'
+    );
+    await user.click(toggle);
+    await user.click(
+      screen.getByRole('button', { name: /settings\.notifications\.templates\.saveButtonUnsaved/ })
+    );
+
+    // Toggled back while the save of the off state is still in flight.
+    await user.click(toggle);
+    finishSave();
+    await waitFor(() =>
+      expect(screen.queryByText('settings.notifications.templates.saveSuccess')).not.toBeNull()
+    );
+
+    // The server now holds the off state; the on state shown is not saved.
+    expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(true);
+  });
 });
