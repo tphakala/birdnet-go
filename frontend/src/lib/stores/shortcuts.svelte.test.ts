@@ -440,6 +440,44 @@ describe('shortcut store', () => {
     });
   });
 
+  describe('clearing the announcement', () => {
+    it('empties the region and cancels an announcement that is still pending', async () => {
+      const store = listeningStore();
+      store.register(
+        scope('page', [
+          definition('correct', { key: 'c' }, { status: () => ({ blocked: BLOCKED_REASON }) }),
+        ])
+      );
+
+      press('c');
+      store.clearAnnouncement();
+      await tick();
+      expect(store.announcement).toBe('');
+
+      press('c');
+      await tick();
+      expect(store.announcement).toBe(BLOCKED_REASON);
+      store.clearAnnouncement();
+      expect(store.announcement).toBe('');
+    });
+
+    it('empties the region when the scope that spoke is unregistered', async () => {
+      const store = listeningStore();
+      const unregister = store.register(
+        scope('page', [
+          definition('correct', { key: 'c' }, { status: () => ({ blocked: BLOCKED_REASON }) }),
+        ])
+      );
+
+      press('c');
+      await tick();
+      expect(store.announcement).toBe(BLOCKED_REASON);
+
+      unregister();
+      expect(store.announcement).toBe('');
+    });
+  });
+
   describe('the cheat sheet state', () => {
     it('opens, closes and toggles', () => {
       const store = makeStore();

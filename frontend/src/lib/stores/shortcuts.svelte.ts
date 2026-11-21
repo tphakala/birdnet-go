@@ -97,6 +97,8 @@ export interface ShortcutStore {
   toggleHelp(): void;
   /** The text of the status region: why the last blocked key did nothing. */
   readonly announcement: string;
+  /** Empties the status region, for when the page it spoke about is gone. */
+  clearAnnouncement(): void;
   /** Page scopes in registration order, then the global scope. */
   readonly scopes: readonly ShortcutScope[];
   /** Adds a scope; the returned function removes exactly that scope. */
@@ -203,6 +205,11 @@ export function createShortcuts(deps: {
     if (generation === announceGeneration) announcement = message;
   }
 
+  function clearAnnouncement(): void {
+    announceGeneration++;
+    announcement = '';
+  }
+
   const handleKeydown = (event: KeyboardEvent): void => {
     if (!enabled) return;
     if (event.defaultPrevented || isImeComposition(event) || hasCommandModifier(event)) return;
@@ -250,6 +257,7 @@ export function createShortcuts(deps: {
     get announcement() {
       return announcement;
     },
+    clearAnnouncement,
     get scopes() {
       return orderedScopes();
     },
@@ -258,6 +266,8 @@ export function createShortcuts(deps: {
       registered = [...registered, scope];
       return () => {
         registered = registered.filter(entry => entry !== scope);
+        // A reason a page gave is about that page: it leaves with it
+        clearAnnouncement();
       };
     },
     hint(id: string) {

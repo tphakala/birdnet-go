@@ -239,11 +239,14 @@ describe('detail shortcuts: review', () => {
     expect(byId(id).status?.()).toBe('hold');
   });
 
-  it('r focuses the review buttons, is always listed, and holds while not settled', () => {
+  it('r focuses the review buttons, is listed only with permission, and holds while not settled', () => {
     const { byId, state, fakes } = setup();
     const definition = byId(DETAIL_SHORTCUT_IDS.focusReview);
 
-    expect(definition.visible?.() ?? true).toBe(true);
+    expect(definition.visible?.()).toBe(true);
+    state.canReview = false;
+    expect(definition.visible?.()).toBe(false);
+    state.canReview = true;
     expect(definition.status?.()).toBe('ready');
     definition.run();
     expect(fakes.review.focus).toHaveBeenCalledOnce();

@@ -210,7 +210,8 @@ describe('describeBinding', () => {
     const hint = describeBinding({ key: KEYS.arrowLeft, shift: true }, true);
     expect(hint.aria).toBe('Shift+ArrowLeft');
     expect(hint.keys).toEqual(['⇧', '←']);
-    expect(hint.display).toBe('⇧+←');
+    // Apple glyphs sit together, as in the platform's own menus
+    expect(hint.display).toBe('⇧←');
   });
 
   it('describes a letter with an upper-case cap and aria value', () => {

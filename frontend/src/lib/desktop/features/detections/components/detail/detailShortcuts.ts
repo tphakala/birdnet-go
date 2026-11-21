@@ -217,6 +217,7 @@ export function createDetailShortcuts(ctx: DetailShortcutContext): ShortcutDefin
       group: 'review',
       binding: { key: KEY_FOCUS_REVIEW },
       description: () => t('shortcuts.detectionDetail.focusReview'),
+      visible: ctx.canReview,
       status: () => (ctx.settled() && ctx.review() ? 'ready' : 'hold'),
       run: () => ctx.review()?.focus(),
     },

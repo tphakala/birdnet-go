@@ -1857,6 +1857,34 @@ describe('DetectionDetail keyboard shortcuts', () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it('empties the status region once the page moves to another detection', async () => {
+    stubApi([
+      [
+        '/neighbors',
+        {
+          detectionId: 3,
+          previous: null,
+          next: 4,
+          previousSameSpecies: null,
+          nextSameSpecies: null,
+        },
+      ],
+      ['/api/v2/detections/3', makeDetection({ id: 3 })],
+      ['/api/v2/detections/4', makeDetection({ id: 4 })],
+    ]);
+
+    const { rerender } = detailTest.render({ detectionId: '3' });
+    await waitFor(() =>
+      expect(stepLink(`${NAV}.newer`)).toHaveAttribute('href', '/ui/detections/4')
+    );
+    await press('ArrowLeft');
+    await waitFor(() => expect(shortcuts.announcement).toBe(`${NAV}.noOlder`));
+
+    await rerender({ detectionId: '4' });
+
+    await waitFor(() => expect(shortcuts.announcement).toBe(''));
+  });
+
   it('opens the species dialog with w and then leaves the review keys alone behind it', async () => {
     const calls = stubDetections({});
 

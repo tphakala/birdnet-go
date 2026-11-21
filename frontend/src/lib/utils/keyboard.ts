@@ -97,6 +97,8 @@ const INTERACTIVE_SELECTOR = [
 
 /** Separator of the key tokens in a display string. */
 const DISPLAY_JOINER = '+';
+/** Apple glyphs sit together without a separator, as in the platform's own menus. */
+const APPLE_DISPLAY_JOINER = '';
 /** Separator of the keys in an `aria-keyshortcuts` modifier combination. */
 const ARIA_JOINER = '+';
 /** Separator of alternative bindings in an `aria-keyshortcuts` value. */
@@ -254,7 +256,7 @@ export function describeBinding(
   const aria = [binding, ...(secondary ? [secondary] : [])]
     .map(ariaForm)
     .join(ARIA_ALTERNATIVE_SEPARATOR);
-  return { aria, keys, display: keys.join(DISPLAY_JOINER), label };
+  return { aria, keys, display: keys.join(apple ? APPLE_DISPLAY_JOINER : DISPLAY_JOINER), label };
 }
 
 /**

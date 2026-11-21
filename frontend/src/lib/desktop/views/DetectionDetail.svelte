@@ -307,6 +307,12 @@
     detectionError = t('detections.errors.noIdProvided');
   });
 
+  // A blocked-key reason is about the detection it was said on: stepping away clears it.
+  $effect(() => {
+    void resolvedDetectionId;
+    shortcuts.clearAnnouncement();
+  });
+
   // Load the detection whenever the ID changes. Stepping to another detection
   // cancels what belongs to the one left behind, but not the species data: a step
   // within one species keeps it, and loadSpeciesData replaces it on a species change.
