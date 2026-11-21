@@ -328,6 +328,16 @@ func (c *Handler) registerHealthChecks() {
 			"data": filepath.Dir(c.CurrentSettings().Output.SQLite.Path),
 		}),
 		checks.NewStoragePersistenceCheck(c.storagePersistenceReport),
+		checks.NewAudioExportFormatCheck(func() checks.AudioExportFormat {
+			s := c.CurrentSettings()
+			if s == nil {
+				return checks.AudioExportFormat{}
+			}
+			return checks.AudioExportFormat{
+				Enabled: s.Realtime.Audio.Export.Enabled,
+				Format:  s.Realtime.Audio.Export.Type,
+			}
+		}),
 		checks.NewConfigConsistencyCheck(func() []string { return nil }),
 		checks.NewDiskBudgetCheck(
 			func() bool { return false }, // TODO: wire when disk budget feature exists

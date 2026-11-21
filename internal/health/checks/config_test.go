@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
@@ -92,4 +93,59 @@ func TestToolAvailabilityCheck_DetailsContent(t *testing.T) {
 	assert.Equal(t, "Sox", tools[1]["name"])
 	assert.Empty(t, tools[1]["path"])
 	assert.Equal(t, "missing", tools[1]["status"])
+}
+
+func TestAudioExportFormatCheck_Run(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		get         func() AudioExportFormat
+		wantStatus  health.Status
+		wantMessage string
+	}{
+		{
+			name:       "nil provider",
+			get:        nil,
+			wantStatus: health.StatusSkipped,
+		},
+		{
+			name: "export off with mp3",
+			get: func() AudioExportFormat {
+				return AudioExportFormat{Enabled: false, Format: conf.AudioExportTypeMP3}
+			},
+			wantStatus:  health.StatusSkipped,
+			wantMessage: "Clip export is disabled",
+		},
+		{
+			name: "export on with mp3",
+			get: func() AudioExportFormat {
+				return AudioExportFormat{Enabled: true, Format: conf.AudioExportTypeMP3}
+			},
+			wantStatus:  health.StatusWarning,
+			wantMessage: "MP3 is an older format; use AAC or Opus for better quality",
+		},
+		{
+			name: "export on with opus",
+			get: func() AudioExportFormat {
+				return AudioExportFormat{Enabled: true, Format: conf.AudioExportTypeOPUS}
+			},
+			wantStatus:  health.StatusHealthy,
+			wantMessage: "Clip export format: opus",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := NewAudioExportFormatCheck(tt.get).Run(t.Context())
+
+			assert.Equal(t, "audio_export_format", result.Name)
+			assert.Equal(t, health.CategoryConfig, result.Category)
+			assert.Equal(t, tt.wantStatus, result.Status)
+			if tt.wantMessage != "" {
+				assert.Equal(t, tt.wantMessage, result.Message)
+			}
+		})
+	}
 }

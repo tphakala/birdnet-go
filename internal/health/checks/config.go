@@ -7,7 +7,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/health"
+)
+
+// Messages of the audio export format check. The message is the only text the
+// System Health page shows for a check, so the recommendation stays short.
+const (
+	msgAudioExportDisabled = "Clip export is disabled"
+	msgAudioExportFormat   = "Clip export format: %s"
+	msgAudioExportMP3      = "MP3 is an older format; use AAC or Opus for better quality"
 )
 
 // ToolInfo holds the runtime availability status of an external tool (FFmpeg, etc.).
@@ -300,5 +309,60 @@ func (c *DiskBudgetCheck) Run(_ context.Context) health.Result {
 		},
 		DurationMS: float64(time.Since(start).Microseconds()) / 1000,
 		Timestamp:  time.Now(),
+	}
+}
+
+// AudioExportFormat is the clip export state the audio export format check
+// reports on. The API layer fills it from one settings snapshot per run; the
+// zero value reads as clip export disabled.
+type AudioExportFormat struct {
+	Enabled bool   // clip export is on (Realtime.Audio.Export.Enabled)
+	Format  string // configured clip format (Realtime.Audio.Export.Type)
+}
+
+// AudioExportFormatCheck warns when clip export is enabled with the MP3 format,
+// which is older than AAC and Opus.
+type AudioExportFormatCheck struct {
+	get func() AudioExportFormat
+}
+
+// NewAudioExportFormatCheck creates the check around a state provider that is
+// called on every run, so setting changes take effect without a restart.
+func NewAudioExportFormatCheck(get func() AudioExportFormat) *AudioExportFormatCheck {
+	return &AudioExportFormatCheck{get: get}
+}
+
+// Name returns the check identifier.
+func (c *AudioExportFormatCheck) Name() string { return "audio_export_format" }
+
+// Category returns the config category.
+func (c *AudioExportFormatCheck) Category() health.Category { return health.CategoryConfig }
+
+// Run reports Skipped when clip export is off, Warning when it uses MP3 and
+// Healthy for any other format.
+func (c *AudioExportFormatCheck) Run(_ context.Context) health.Result {
+	start := time.Now()
+	result := func(status health.Status, message string) health.Result {
+		return health.Result{
+			Name:       c.Name(),
+			Category:   c.Category(),
+			Status:     status,
+			Message:    message,
+			DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+			Timestamp:  time.Now(),
+		}
+	}
+
+	if c.get == nil {
+		return skippedResult(c.Name(), c.Category(), start)
+	}
+	info := c.get()
+	switch {
+	case !info.Enabled:
+		return result(health.StatusSkipped, msgAudioExportDisabled)
+	case info.Format == conf.AudioExportTypeMP3:
+		return result(health.StatusWarning, msgAudioExportMP3)
+	default:
+		return result(health.StatusHealthy, fmt.Sprintf(msgAudioExportFormat, info.Format))
 	}
 }
