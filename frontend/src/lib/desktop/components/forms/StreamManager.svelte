@@ -640,12 +640,12 @@
   // reminder that the URL needs a test.
   function validateNameOnBlur() {
     const problem = newStreamProblem(buildNewStream());
-    if (problem?.name) nameError = streamNameProblemMessage(problem.name);
+    nameError = problem?.name ? streamNameProblemMessage(problem.name) : null;
   }
 
   function validateUrlOnBlur() {
     const problem = newStreamProblem(buildNewStream());
-    if (problem?.url) urlError = streamUrlProblemMessage(problem.url);
+    urlError = problem?.url ? streamUrlProblemMessage(problem.url) : null;
   }
 
   function addStream() {
@@ -733,6 +733,17 @@
     untrack(adoptSavedUrls);
   });
 </script>
+
+<!-- The label of a TextInput, drawn here so the input need not carry the native required
+     attribute (its validation message is fixed English and would show beside ours). -->
+{#snippet requiredLabel(inputId: string, text: string)}
+  <label class="label justify-start" for={inputId}>
+    <span class="label-text capitalize">
+      {text}
+      <span class="ml-1 text-[var(--text-error)]" aria-hidden="true">*</span>
+    </span>
+  </label>
+{/snippet}
 
 <div class="space-y-4">
   <!-- Status Summary Bar -->
@@ -851,14 +862,14 @@
           <div class="space-y-4 mt-4">
             <!-- Stream Name -->
             <div>
+              {@render requiredLabel('new-stream-name', t('settings.audio.streams.nameLabel'))}
               <TextInput
                 id="new-stream-name"
                 bind:value={newName}
-                label={t('settings.audio.streams.nameLabel')}
                 placeholder={t('settings.audio.streams.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.streams.nameHelp')}
                 maxlength={MAX_STREAM_NAME_LENGTH}
-                required
+                aria-required="true"
                 {disabled}
                 error={nameError ?? undefined}
                 oninput={() => (nameError = null)}
@@ -868,15 +879,15 @@
 
             <!-- Stream URL -->
             <div>
+              {@render requiredLabel('new-stream-url', t('settings.audio.streams.urlLabel'))}
               <TextInput
                 id="new-stream-url"
                 bind:value={newUrl}
-                label={t('settings.audio.streams.urlLabel')}
                 placeholder="rtsp://user:password@192.168.1.100:554/stream"
                 helpText={urlError || newNeedsTest
                   ? undefined
                   : t('settings.audio.streams.urlHelp')}
-                required
+                aria-required="true"
                 oninput={handleUrlInput}
                 onblur={validateUrlOnBlur}
                 {disabled}

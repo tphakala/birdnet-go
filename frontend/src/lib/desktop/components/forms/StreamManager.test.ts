@@ -1213,6 +1213,31 @@ describe('StreamManager add form validation on blur', () => {
     restoreElementAnimate();
   });
 
+  it('marks the add form name and URL required for assistive technology without the native attribute', async () => {
+    renderRows([]);
+    await openAddForm();
+
+    for (const id of [NAME_TESTID, URL_TESTID]) {
+      const input = screen.getByTestId(id);
+      expect(input).toHaveAttribute('aria-required', 'true');
+      expect(input).not.toHaveAttribute('required');
+    }
+  });
+
+  it('clears a name error that no longer holds when the field is left again', async () => {
+    const view = renderRows([streamA]);
+    await fillAddForm('A', 'rtsp://gate/live');
+    const name = screen.getByTestId(NAME_TESTID);
+    await fireEvent.blur(name);
+    expect(name).toHaveAccessibleDescription('settings.audio.streams.errors.duplicateName');
+
+    // The other stream was renamed meanwhile.
+    await view.rerender({ streams: [{ ...streamA, name: 'A2' }] });
+    await fireEvent.blur(name);
+
+    expect(name).not.toHaveAttribute('aria-invalid');
+  });
+
   it('shows a malformed URL on blur ahead of the test reminder', async () => {
     renderRows([]);
     await fillAddForm('Gate', 'not a url');
@@ -1356,17 +1381,21 @@ describe('StreamManager health ownership of a row', () => {
     await fireEvent.input(screen.getByLabelText(/settings\.audio\.streams\.nameLabel/), {
       target: { value: 'A2' },
     });
-    await echoLast(view, view.onUpdateStreams);
+    const renamed = await echoLast(view, view.onUpdateStreams);
+    // The saved list is replaced by an equal one (a refresh, or a save that changed nothing here).
+    await view.rerender({
+      streams: renamed,
+      savedStreams: [{ ...streamA }, { ...streamB }],
+    });
 
     expect(within(header('A2')).getByText(CONNECTED_KEY)).toBeInTheDocument();
   });
 
   it('drops a health response that started before the saved list changed, and asks again', async () => {
     const first = deferred<ReturnType<typeof healthOf>[]>();
+    const second = deferred<ReturnType<typeof healthOf>[]>();
     vi.mocked(api.get).mockReset();
-    vi.mocked(api.get)
-      .mockReturnValueOnce(first.promise)
-      .mockResolvedValue([healthOf(streamA)]);
+    vi.mocked(api.get).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
     const view = renderRows([streamA, streamB], { savedStreams: [streamA] });
 
     // A save added B to the saved list while the first request is open.
@@ -1374,7 +1403,12 @@ describe('StreamManager health ownership of a row', () => {
     expect(api.get).toHaveBeenCalledOnce();
     first.resolve([healthOf(streamA), healthOf({ ...streamB, url: 'rtsp://b/old' })]);
 
+    // The old response is not applied; the newer request is the one that counts.
     await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+    expect(within(header('B')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+
+    second.resolve([healthOf(streamA)]);
     await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
     expect(within(header('B')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
   });

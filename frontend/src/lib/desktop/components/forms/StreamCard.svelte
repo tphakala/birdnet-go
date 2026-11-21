@@ -349,12 +349,23 @@
   // The result of the connection test of the current URL; any other URL clears it.
   let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
 
+  // The trimmed URL of the field at its last input.
+  let lastTrimmedUrl = untrack(() => stream.url.trim());
+
   function handleUrlInput(url: string) {
     urlEditing = true;
     urlTouched = false;
+    const trimmed = url.trim();
+    if (trimmed !== lastTrimmedUrl) {
+      lastTrimmedUrl = trimmed;
+      // A run, a result or a rejection of an earlier URL must not land on this one.
+      analysisSeq++;
+      isAnalyzing = false;
+      analysisResult = null;
+      analysisError = null;
+    }
     if (url === stream.url) return;
     // A URL that names its scheme picks the matching type, as in the add form.
-    const trimmed = url.trim();
     change({ url, type: trimmed.includes('://') ? detectStreamType(trimmed) : stream.type });
   }
 

@@ -19,6 +19,8 @@
     oninput?: (_value: string) => void;
     onblur?: (_value: string) => void;
     error?: string;
+    required?: boolean;
+    'aria-required'?: 'true' | 'false' | boolean;
     [key: string]: unknown;
   }
 
@@ -29,6 +31,8 @@
     oninput,
     onblur,
     error,
+    required,
+    'aria-required': ariaRequired,
   }: MockTextInputProps = $props();
 </script>
 
@@ -36,6 +40,8 @@
   data-testid={id}
   {id}
   {maxlength}
+  {required}
+  aria-required={ariaRequired}
   aria-invalid={error ? 'true' : undefined}
   aria-describedby={error ? `${id}-error` : undefined}
   bind:value

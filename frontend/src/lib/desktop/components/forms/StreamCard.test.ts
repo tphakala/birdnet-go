@@ -469,6 +469,38 @@ describe('StreamCard editing', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('does not let a late analysis rejection for an earlier URL show up when the URL is typed over', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    renderCard();
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+
+    await fireEvent.input(urlInput(), { target: { value: 'rtsp://host/other' } });
+    pending.reject(new Error('boom'));
+    await tick();
+    await tick();
+
+    const controls = screen.getByTestId('channel-controls');
+    expect(controls).toHaveAttribute('data-error', '');
+    expect(controls).toHaveAttribute('data-analyzing', 'false');
+  });
+
+  it('does not let an analysis of a URL land when the field went away and came back to it', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    const { onChange } = renderCard();
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+
+    await fireEvent.input(urlInput(), { target: { value: 'rtsp://host/other' } });
+    await fireEvent.input(urlInput(), { target: { value: baseStream.url } });
+    pending.resolve(LEFT_ANALYSIS);
+    await pending.promise;
+    await tick();
+
+    expect(onChange).not.toHaveBeenCalledWith({ ...baseStream, channelMode: 'left' });
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
+  });
+
   it('ignores a channel analysis of a URL the stream no longer holds', async () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
