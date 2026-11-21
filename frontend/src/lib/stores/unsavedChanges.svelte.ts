@@ -78,9 +78,13 @@ export function createUnsavedChanges(): UnsavedChanges {
   let blockers: GuardRecord[] = [];
   let leavingFrom = '';
 
+  function admits(record: GuardRecord, to: NavigationTarget, from: NavigationTarget): boolean {
+    return (record.guard.allows ?? samePath)(to, from);
+  }
+
   function isBlocking(record: GuardRecord, to: NavigationTarget, from: NavigationTarget): boolean {
     // Cheap checks first: isDirty can stringify a whole form.
-    if ((record.guard.allows ?? samePath)(to, from)) return false;
+    if (admits(record, to, from)) return false;
     if (record.leftAt !== null && from.path !== record.leftAt) return false;
     return record.guard.isDirty();
   }
@@ -99,12 +103,12 @@ export function createUnsavedChanges(): UnsavedChanges {
       field instanceof HTMLSelectElement
     ) {
       field.blur();
-      field.focus();
+      field.focus({ preventScroll: true });
     }
   }
 
   function handleBeforeUnload(event: BeforeUnloadEvent): void {
-    if (unloadAllowed) return;
+    if (unloadAllowed || records.size === 0) return;
     commitPendingEdit();
     for (const record of records) {
       if (record.guard.isDirty()) {
@@ -168,10 +172,9 @@ export function createUnsavedChanges(): UnsavedChanges {
     request(to, from) {
       if (prompting) return Promise.resolve(false);
       // Only a guard that does not admit the move can be affected by a pending edit.
-      if ([...records].some(record => !(record.guard.allows ?? samePath)(to, from))) {
-        commitPendingEdit();
-      }
-      const leavers = [...records].filter(record => isBlocking(record, to, from));
+      const candidates = [...records].filter(record => !admits(record, to, from));
+      if (candidates.length > 0) commitPendingEdit();
+      const leavers = candidates.filter(record => isBlocking(record, to, from));
       if (leavers.length === 0) return null;
       return openPrompt(leavers, from.path);
     },

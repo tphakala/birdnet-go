@@ -255,9 +255,7 @@
         url.searchParams.set(key, value);
       });
 
-      globalThis.window.history.replaceState({}, '', url.toString());
-      // The store keeps the address bar URL it restores after a held Back or Forward
-      navigation.syncFromLocation();
+      navigation.writeUrl(url.toString());
 
       // Trigger a custom event to notify the detections page of the search change
       globalThis.window.dispatchEvent(
@@ -330,9 +328,7 @@
     if (currentPage === 'detections') {
       const url = new URL(globalThis.window.location.href);
       url.searchParams.delete('search');
-      globalThis.window.history.replaceState({}, '', url.toString());
-      // The store keeps the address bar URL it restores after a held Back or Forward
-      navigation.syncFromLocation();
+      navigation.writeUrl(url.toString());
 
       globalThis.window.dispatchEvent(
         new CustomEvent('searchUpdate', {

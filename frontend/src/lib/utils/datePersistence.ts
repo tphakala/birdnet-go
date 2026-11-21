@@ -84,9 +84,7 @@ export function updateURLWithDate(date: string, urlParam: string = DATE_URL_PARA
     }
 
     // Update URL without reload using History API
-    window.history.replaceState(null, '', url.toString());
-    // The store keeps the address bar URL it restores after a held Back or Forward
-    navigation.syncFromLocation();
+    navigation.writeUrl(url.toString());
   } catch (error) {
     logger.error('Error updating URL with date', error);
   }

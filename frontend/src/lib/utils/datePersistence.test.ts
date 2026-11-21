@@ -120,14 +120,13 @@ describe('Date Persistence Utilities', () => {
   });
 
   describe('updateURLWithDate', () => {
-    it('tells the navigation store about the query it wrote', () => {
-      window.history.replaceState = vi.fn();
-      const sync = vi.spyOn(navigation, 'syncFromLocation').mockImplementation(() => {});
+    it('writes the query through the navigation store', () => {
+      const write = vi.spyOn(navigation, 'writeUrl').mockImplementation(() => {});
 
       updateURLWithDate(mockDate);
 
-      expect(sync).toHaveBeenCalledTimes(1);
-      sync.mockRestore();
+      expect(write).toHaveBeenCalledWith(expect.stringContaining(`${DATE_URL_PARAM}=${mockDate}`));
+      write.mockRestore();
     });
 
     it('adds date parameter to URL', () => {

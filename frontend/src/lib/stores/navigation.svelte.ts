@@ -44,10 +44,10 @@ export interface NavigationStore {
   /** Applies a browser Back/Forward. Returns false when the pop was held for the unsaved-changes prompt. */
   handlePopState: () => boolean;
   /**
-   * For pages that rewrite their own query with history.replaceState or pushState: records the
-   * address bar's query and URL as the current entry, so a held Back restores it.
+   * For pages that rewrite their own query on the current path: writes the URL to history without
+   * routing and records it as the current entry, so a held Back or Forward restores it.
    */
-  syncFromLocation: () => void;
+  writeUrl: (url: string, mode?: 'push' | 'replace') => void;
 }
 
 /**
@@ -264,8 +264,7 @@ export function createNavigation(): NavigationStore {
     }
     if (decision === null) {
       currentPath = target.path;
-      currentSearch = target.search;
-      committedUrl = window.location.pathname + window.location.search + window.location.hash;
+      syncFromLocation();
       return true;
     }
 
@@ -280,9 +279,15 @@ export function createNavigation(): NavigationStore {
   }
 
   function syncFromLocation(): void {
-    if (typeof window === 'undefined') return;
     currentSearch = window.location.search;
     committedUrl = window.location.pathname + window.location.search + window.location.hash;
+  }
+
+  function writeUrl(url: string, mode: 'push' | 'replace' = 'replace'): void {
+    if (typeof window === 'undefined') return;
+    if (mode === 'push') window.history.pushState(null, '', url);
+    else window.history.replaceState(null, '', url);
+    syncFromLocation();
   }
 
   return {
@@ -295,7 +300,7 @@ export function createNavigation(): NavigationStore {
     navigate,
     redirect,
     handlePopState,
-    syncFromLocation,
+    writeUrl,
   };
 }
 

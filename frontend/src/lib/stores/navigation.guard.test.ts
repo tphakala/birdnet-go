@@ -155,11 +155,10 @@ describe('navigation with an unsaved-changes guard', () => {
       expect(navigation.currentSearch).toBe('?tab=one');
     });
 
-    it('restores a query a page wrote itself once the store was told', async () => {
+    it('restores a query a page wrote through writeUrl', async () => {
       await arrive(START, GUARDED);
-      // A page rewrites its own query outside the store, then reports it.
-      window.history.replaceState(null, '', `${GUARDED}?date=2026-01-02`);
-      navigation.syncFromLocation();
+      // A page rewrites its own query without routing.
+      navigation.writeUrl(`${GUARDED}?date=2026-01-02`);
 
       const held = nextPop();
       window.history.back();
