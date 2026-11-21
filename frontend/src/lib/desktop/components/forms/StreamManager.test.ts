@@ -760,6 +760,17 @@ describe('StreamManager passes the page state to its cards', () => {
     expect(screen.getByText(NEEDS_ATTENTION_KEY)).toBeInTheDocument();
   });
 
+  it('flags only the card whose own URL needs a test', async () => {
+    renderRows([streamA, streamB], { savedStreams: [streamA] });
+    await fireEvent.click(header('A'));
+    await fireEvent.click(header('B'));
+
+    const [urlA, urlB] = screen.getAllByTestId(/-url$/);
+    expect(urlA).not.toHaveAttribute('aria-invalid');
+    expect(urlB).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getAllByText(NEEDS_ATTENTION_KEY)).toHaveLength(1);
+  });
+
   it('leaves a card alone whose URL is saved, and one whose URL was tested', () => {
     renderRows([streamA], { savedStreams: [streamA] });
     expect(screen.queryByText(NEEDS_ATTENTION_KEY)).toBeNull();
