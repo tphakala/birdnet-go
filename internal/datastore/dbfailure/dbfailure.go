@@ -263,9 +263,8 @@ func classifyServerError(number uint16) Failure {
 	}
 }
 
-// classifyFile maps SQLite and file system errors to a Failure. The Windows
-// errors that the POSIX syscall constants do not match are added through the
-// isPlatform helpers.
+// classifyFile maps SQLite and file system errors to a Failure. The isPlatform
+// helpers add the Windows errors that the POSIX syscall constants do not match.
 func classifyFile(err error) Failure {
 	sqliteErr, isSQLite := errors.AsType[sqlite3.Error](err)
 	switch {

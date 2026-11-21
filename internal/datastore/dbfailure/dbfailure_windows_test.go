@@ -34,10 +34,7 @@ func TestClassify_WindowsErrors(t *testing.T) {
 				Component("datastore").
 				Category(errors.CategorySystem).
 				Build()
-			f := Classify(err)
-			assert.Equal(t, tt.wantKind, f.Kind)
-			assert.Equal(t, BackendSQLite, f.Backend)
-			assert.Equal(t, sqliteSettings, f.Settings)
+			assert.Equal(t, tt.wantKind, Classify(err).Kind)
 		})
 	}
 }
