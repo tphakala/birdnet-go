@@ -252,25 +252,6 @@
     clearErrors();
 
     const trimmedName = newName.trim();
-
-    if (!trimmedName) {
-      nameError = t('settings.audio.soundCards.errors.nameRequired');
-      return;
-    }
-    // Check duplicate name (case-insensitive)
-    if (sources.some(s => s.name.toLowerCase() === trimmedName.toLowerCase())) {
-      nameError = t('settings.audio.soundCards.errors.duplicateName');
-      return;
-    }
-    if (!newDevice) {
-      deviceError = t('settings.audio.soundCards.errors.deviceRequired');
-      return;
-    }
-    if (sources.some(s => s.device === newDevice)) {
-      deviceError = t('settings.audio.soundCards.errors.duplicateDevice');
-      return;
-    }
-
     const newSource: AudioSourceConfig = {
       name: trimmedName,
       device: newDevice,
@@ -280,6 +261,23 @@
       equalizer: savedEqualizer(newEqualizer),
       quietHours: newQuietHours,
     };
+
+    // The new row against the current rows only: the saved list is not a reason to accept it.
+    const problem = soundCardProblems([...sources, newSource], []).at(-1);
+    if (problem?.name) {
+      nameError =
+        problem.name === 'required'
+          ? t('settings.audio.soundCards.errors.nameRequired')
+          : t('settings.audio.soundCards.errors.duplicateName');
+      return;
+    }
+    if (problem?.device) {
+      deviceError =
+        problem.device === 'required'
+          ? t('settings.audio.soundCards.errors.deviceRequired')
+          : t('settings.audio.soundCards.errors.duplicateDevice');
+      return;
+    }
 
     logger.debug('Adding sound card source', {
       component: 'SoundCardManager',

@@ -520,14 +520,14 @@
 
   let soundCardIssue = $derived.by(() => {
     const problems = soundCardProblems(settings.audio.sources, savedSources);
-    const names = settings.audio.sources
-      .map((source, index) =>
-        problems.at(index)?.name || problems.at(index)?.device
-          ? source.name.trim() ||
-            t('settings.audio.validation.unnamedSource', { position: index + 1 })
-          : undefined
-      )
-      .filter(name => name !== undefined);
+    const names = problems.flatMap((problem, index) =>
+      problem.name || problem.device
+        ? [
+            settings.audio.sources.at(index)?.name.trim() ||
+              t('settings.audio.validation.unnamedSource', { position: index + 1 }),
+          ]
+        : []
+    );
     return names.length > 0
       ? t('settings.audio.validation.soundCards', {
           tab: t('settings.audio.tabs.soundCard'),
