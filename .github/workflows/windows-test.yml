@@ -8,9 +8,30 @@ name: windows-test
 # cross-platform test-cleanup tracking issue. Runs the portable unit subset only:
 # the mosquitto service container and Docker testcontainer suites are not
 # available here, and MQTT tests self-skip (MQTT_TEST_BROKER unset).
+#
+# Scope: a pull request run tests a computed subset of packages (the ones with
+# Windows-specific files, the native-library and SIMD boundary, and the packages
+# the pull request changes; see .github/scripts/native-test-packages.sh). The
+# weekly run and a manual run with scope=full test every package. The subset is only safe because
+# that full run exists, so keep the schedule on the full scope.
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 'Packages to test: full (./...) or subset (OS-specific and native-boundary packages; a pull request run also adds the packages it changes)'
+        type: choice
+        options:
+          - full
+          - subset
+        default: full
+      race:
+        description: 'Run the tests with the race detector'
+        type: choice
+        options:
+          - 'on'
+          - 'off'
+        default: 'on'
   # Weekly instead of on every push to main: the job is advisory with known
   # failures, so a per-merge run cost runner time without blocking anything.
   schedule:
@@ -26,6 +47,7 @@ on:
       - 'Taskfile.yml'
       - 'scripts/fetch-onnxruntime.sh'
       - 'scripts/onnxruntime-pins.sha256'
+      - '.github/scripts/native-test-packages.sh'
       - '.github/workflows/windows-test.yml'
       - '.github/actions/**'
       # Line endings on the Windows checkout decide the result of some tests.
@@ -43,26 +65,38 @@ concurrency:
 jobs:
   unit-tests-windows:
     name: unit-tests (windows-amd64)
-    # Demoted off the per-commit PR critical path: this native run is slow (~25m)
-    # and already advisory (continue-on-error). It runs weekly and on
+    # Demoted off the per-commit PR critical path: the full native run is slow
+    # (~25m) and already advisory (continue-on-error). It runs weekly and on
     # workflow_dispatch; on a PR it runs only when the `full-ci` label is
-    # present. A skipped job reports as success, so adding it as a
-    # required check later will not deadlock label-less PRs.
+    # present, and then tests the package subset. A skipped job reports as
+    # success, so adding it as a required check later will not deadlock
+    # label-less PRs.
     if: >-
       github.event_name != 'pull_request' ||
       contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: windows-latest
     # Non-blocking until the native Windows CGO/DLL path is proven stable.
     continue-on-error: true
+    env:
+      # A pull request tests the subset with the race detector; schedule has no
+      # inputs, so it falls through to the full suite with -race.
+      NATIVE_TEST_SCOPE: ${{ github.event_name == 'pull_request' && 'subset' || inputs.scope || 'full' }}
+      NATIVE_TEST_RACE: ${{ github.event_name == 'pull_request' && 'on' || inputs.race || 'on' }}
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          # HEAD^1 (the base side of the merge commit) is the diff base for the
+          # package selection on a pull request.
+          fetch-depth: 2
       - uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
-          cache: true
+          # Restored and saved explicitly below: setup-go's post step saves only
+          # when the job succeeded, and this job's tests always fail.
+          cache: false
       - run: go version
 
       - name: Resolve tool versions from Taskfile
@@ -76,6 +110,39 @@ jobs:
             echo "TFLITE_VERSION=${tflite}"
             echo "ONNXRUNTIME_VERSION=${onnx}"
           } >> "$GITHUB_ENV"
+
+      - name: Resolve Go cache paths and key
+        id: go-cache
+        env:
+          GO_SUM_HASH: ${{ hashFiles('go.sum') }}
+        run: |
+          # cygpath -m gives forward-slash Windows paths, the form actions/cache
+          # and the other steps in this job use.
+          # cgo objects depend on the TFLite headers, which Go's build cache does
+          # not fingerprint, so the TFLite version, runner image, Go version and
+          # race mode are part of the key. The scope is too, so a subset entry
+          # cannot take the key a later full run would save under; a subset run
+          # may still start from a full entry through the second restore key.
+          prefix="native-go-${RUNNER_OS}-${RUNNER_ARCH}-${ImageOS}-$(go env GOVERSION)-tflite-${TFLITE_VERSION}-race-${NATIVE_TEST_RACE}-"
+          {
+            echo "gocache=$(cygpath -m "$(go env GOCACHE)")"
+            echo "gomodcache=$(cygpath -m "$(go env GOMODCACHE)")"
+            echo "key=${prefix}${NATIVE_TEST_SCOPE}-${GO_SUM_HASH}"
+            echo "restore-keys<<EOF"
+            echo "${prefix}${NATIVE_TEST_SCOPE}-"
+            echo "${prefix}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Restore Go cache
+        id: go-cache-restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.gocache }}
+            ${{ steps.go-cache.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.key }}
+          restore-keys: ${{ steps.go-cache.outputs.restore-keys }}
 
       - name: Add mingw gcc to PATH
         run: |
@@ -138,9 +205,33 @@ jobs:
           cygpath -w "$GITHUB_WORKSPACE/tflite_lib" >> "$GITHUB_PATH"
           cygpath -w "$GITHUB_WORKSPACE/onnxruntime/lib" >> "$GITHUB_PATH"
 
+      - name: Select test packages
+        id: select
+        env:
+          # Only a pull request has a meaningful diff base; a manual or scheduled
+          # run selects without rule (c), or skips selection for the full scope.
+          DIFF_BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || '' }}
+        run: |
+          if [ "$NATIVE_TEST_SCOPE" = "full" ]; then
+            echo './...' > native-test-packages.txt
+          elif ! TEST_TAGS=noembed,skipfrontend bash .github/scripts/native-test-packages.sh native-test-packages.txt; then
+            echo "## :x: Package selection failed, see the Select test packages step log" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          # The script falls back to ./... when it cannot read the diff, so the
+          # scope reported to the test step comes from the file, not from the input.
+          if [ "$(cat native-test-packages.txt)" = "./..." ]; then
+            echo "scope=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "scope=subset" >> "$GITHUB_OUTPUT"
+            echo "count=$(awk 'END { print NR }' native-test-packages.txt)" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run unit tests
         env:
           CI: true
+          SELECTED_SCOPE: ${{ steps.select.outputs.scope }}
+          SELECTED_COUNT: ${{ steps.select.outputs.count }}
         run: |
           # GitHub runs steps as `bash -eo pipefail`; turn errexit OFF (set +e) so
           # a failing test run does not abort before the summary renders. The
@@ -154,20 +245,36 @@ jobs:
           # runner with -race is much slower, and api/v2 (the largest package,
           # ~2000 tests) intermittently exceeded the old 600s per-package ceiling
           # under runner load (cumulative race-instrumented work, not a deadlock).
-          # 900s adds headroom and stays under the 25m step cap below.
+          # 900s adds headroom and stays under the 25m step cap below; the api/v2
+          # tests only run in the full scope or when a pull request touches it.
+          # -count=1: Go's test cache cannot see the DLLs a test loads at run time
+          # (the ONNX smoke test), so a restored cache must never replay a result.
           # go-aac's SIMD kernels are on by default (no build tag), so the AAC
           # tests compile the same kernel set the shipped windows/amd64 binary does.
           # Which kernel actually executes still depends on the runner's CPU
           # features (AVX2 for the trellis, AVX/SSE2 for AbsPow34).
           # This job is advisory: continue-on-error, and on a PR it needs full-ci.
-          go test -tags noembed,skipfrontend -race -json -v -short -timeout 900s ./... > gotest.log 2>&1
+          PKGS=()
+          while IFS= read -r pkg; do PKGS+=("$pkg"); done < native-test-packages.txt
+          RACE_ARGS=()
+          if [ "$NATIVE_TEST_RACE" = "on" ]; then RACE_ARGS=(-race); fi
+          if [ "$SELECTED_SCOPE" = "full" ]; then
+            SCOPE_DESC="full suite (./...)"
+          else
+            SCOPE_DESC="subset of ${SELECTED_COUNT} packages"
+          fi
+          SCOPE_DESC="${SCOPE_DESC}, -race ${NATIVE_TEST_RACE}"
+          echo "Testing: ${SCOPE_DESC}"
+          printf '%s\n' "${PKGS[@]}"
+
+          go test -tags noembed,skipfrontend ${RACE_ARGS[@]+"${RACE_ARGS[@]}"} -count=1 -json -v -short -timeout 900s "${PKGS[@]}" > gotest.log 2>&1
           TEST_EXIT_CODE=$?
           grep '"Action":"fail"' gotest.log | jq -r 'select(.Test) | "FAIL  \(.Package)  \(.Test)"' | sort -u || true
 
           if [ "$TEST_EXIT_CODE" -ne 0 ]; then
             echo "::error title=Test Failure::Windows unit tests failed - see job summary for details"
             {
-              echo "## :x: Windows Test Run Failed"
+              echo "## :x: Windows Test Run Failed (${SCOPE_DESC})"
               echo ""
               echo "Exit code: $TEST_EXIT_CODE"
               echo ""
@@ -179,7 +286,7 @@ jobs:
             exit "$TEST_EXIT_CODE"
           fi
 
-          echo "## :white_check_mark: All Windows Tests Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "## :white_check_mark: Windows tests passed (${SCOPE_DESC})" >> "$GITHUB_STEP_SUMMARY"
         timeout-minutes: 25
 
       - name: Upload test log
@@ -189,3 +296,17 @@ jobs:
           name: test-log-windows
           path: gotest.log
           if-no-files-found: warn
+
+      - name: Save Go cache
+        # Not gated on the tests passing: this job's tests fail by design, and the
+        # build cache is valid either way. A run that failed before or during
+        # package selection saves nothing. A cache service error must not fail
+        # the run.
+        if: ${{ !cancelled() && steps.select.outcome == 'success' && steps.go-cache-restore.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ steps.go-cache.outputs.gocache }}
+            ${{ steps.go-cache.outputs.gomodcache }}
+          key: ${{ steps.go-cache.outputs.key }}
