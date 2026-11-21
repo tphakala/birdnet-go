@@ -2,11 +2,11 @@
 // (MySQL or MariaDB server rejections, unreachable servers, unusable SQLite
 // paths, low disk space) into a typed Failure that names the settings to check.
 //
-// It is a leaf package: it imports only the standard library, internal/errors
-// and the two database drivers, so the startup code and the API layer can both
-// use it. The Error text of a StartError is built from constants only and never
-// carries driver text, which holds the user name, the client address and the
-// database name.
+// It is a leaf package: it imports only the standard library, internal/errors,
+// the two database drivers and, on Windows, golang.org/x/sys/windows, so the
+// startup code and the API layer can both use it. The Error text of a
+// StartError is built from constants only and never carries driver text, which
+// holds the user name, the client address and the database name.
 package dbfailure
 
 import (
@@ -263,17 +263,21 @@ func classifyServerError(number uint16) Failure {
 	}
 }
 
-// classifyFile maps SQLite and file system errors to a Failure.
+// classifyFile maps SQLite and file system errors to a Failure. The Windows
+// errors that the POSIX syscall constants do not match are added through the
+// isPlatform helpers.
 func classifyFile(err error) Failure {
 	sqliteErr, isSQLite := errors.AsType[sqlite3.Error](err)
 	switch {
 	case errors.Is(err, ErrInsufficientDiskSpace), errors.Is(err, syscall.ENOSPC),
+		isPlatformDiskFull(err),
 		isSQLite && sqliteErr.Code == sqlite3.ErrFull:
 		return newFailure(KindSQLiteDiskSpace)
 	case isSQLite && (sqliteErr.Code == sqlite3.ErrCantOpen || sqliteErr.Code == sqlite3.ErrPerm ||
 		sqliteErr.Code == sqlite3.ErrReadonly),
 		errors.Is(err, fs.ErrPermission), errors.Is(err, fs.ErrNotExist),
-		errors.Is(err, syscall.ENOTDIR), errors.Is(err, syscall.EROFS):
+		errors.Is(err, syscall.ENOTDIR), errors.Is(err, syscall.EROFS),
+		isPlatformPathUnusable(err):
 		return newFailure(KindSQLitePathUnusable)
 	default:
 		return unknownFailure
