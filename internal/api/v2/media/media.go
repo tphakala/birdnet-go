@@ -1705,9 +1705,12 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	if noteID == "" {
 		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
 	}
-	if _, err := strconv.ParseUint(noteID, 10, 64); err != nil {
+	parsedID, parseErr := strconv.ParseUint(noteID, 10, 64)
+	if parseErr != nil {
 		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
 	}
+	// Canonical decimal form: equivalent IDs ("40", "040") share one clip lookup and cache key.
+	noteID = strconv.FormatUint(parsedID, 10)
 
 	var req AudibleBatsRequest
 	if err := ctx.Bind(&req); err != nil {

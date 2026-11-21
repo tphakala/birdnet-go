@@ -517,4 +517,14 @@ func TestAudibleBatsByID_GuestClampsCustomFilters(t *testing.T) {
 	custom := postJSON(e, "/api/v2/audio/40/audible-bats", `{"expansion": 10, "denoise": "heavy", "normalize": true, "gain_db": 12}`)
 	require.Equal(t, http.StatusOK, custom.Code, custom.Body.String())
 	assert.Equal(t, plain.Body.Bytes(), custom.Body.Bytes())
+
+	// Leading-zero aliases ("040", "0040") must canonicalize to "40" for both
+	// clip lookup and processingCache so guests cannot bypass the cache.
+	alias := postJSON(e, "/api/v2/audio/040/audible-bats", `{"expansion": 10}`)
+	require.Equal(t, http.StatusOK, alias.Code, alias.Body.String())
+	assert.Equal(t, plain.Body.Bytes(), alias.Body.Bytes())
+
+	entries, err := os.ReadDir(filepath.Join(tempDir, processingCacheDirName))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "clamped filters and leading-zero ID aliases must share a single processing cache entry")
 }
