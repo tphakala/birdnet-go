@@ -265,6 +265,18 @@ describe('SoundCardCard editing', () => {
     expect(input).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('shows a duplicate from another card after a save interrupted an edit of the name', async () => {
+    const view = renderCard();
+    // Typing, then a save disables the field: focus leaves without a blur event.
+    await fireEvent.input(nameInput(), { target: { value: 'Typed' } });
+    await view.rerender({ disabled: true });
+    await view.rerender({ disabled: false });
+
+    await view.rerender({ problem: { name: 'duplicate' } });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('shows a problem at once on a card that opens with one, and flags the header', async () => {
     renderCard({ problem: { name: 'duplicate' } });
 

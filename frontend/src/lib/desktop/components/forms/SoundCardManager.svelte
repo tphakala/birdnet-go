@@ -199,6 +199,8 @@
 
   /** Id of the reason shown beside the add form's Add button while it is disabled. */
   const addDisabledReasonId = generateId('add-source-disabled-reason');
+  /** Id of the add form's device error, which describes the device select. */
+  const addDeviceErrorId = generateId('add-source-device-error');
 
   // ----- Rows -----
 
@@ -442,6 +444,7 @@
               <TextInput
                 id="new-soundcard-name"
                 bind:value={newName}
+                oninput={() => (nameError = null)}
                 label={t('settings.audio.soundCards.nameLabel')}
                 placeholder={t('settings.audio.soundCards.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.soundCards.nameHelp')}
@@ -460,12 +463,17 @@
                 options={deviceOptions}
                 required
                 {disabled}
-                onChange={value => (newDevice = value as string)}
+                aria-invalid={Boolean(deviceError)}
+                aria-describedby={deviceError ? addDeviceErrorId : undefined}
+                onChange={value => {
+                  newDevice = value as string;
+                  deviceError = null;
+                }}
                 groupBy={false}
                 menuSize="sm"
               />
               {#if deviceError}
-                <p role="alert" class="text-xs text-[var(--text-error)] mt-1">
+                <p id={addDeviceErrorId} role="alert" class="text-xs text-[var(--text-error)] mt-1">
                   {deviceError}
                 </p>
               {/if}

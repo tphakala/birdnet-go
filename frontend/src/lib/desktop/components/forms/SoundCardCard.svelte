@@ -224,9 +224,14 @@
     });
   });
 
-  // A collapsed or disabled card (a save is running) holds no pending pick.
+  // A collapsed or disabled card (a save is running) holds no pending pick, and
+  // its name field is not being edited: the field can lose focus without a blur
+  // event when it is disabled or unmounted.
   $effect(() => {
-    if (!expanded || disabled) untrack(() => (pendingDevice = null));
+    if (!expanded || disabled) {
+      untrack(() => (pendingDevice = null));
+      nameEditing = false;
+    }
   });
 
   // Probes the shown device while the body is open to fill the rate list. Only

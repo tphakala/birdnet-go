@@ -701,6 +701,31 @@ describe('SoundCardManager add', () => {
       expect(screen.getByTestId(NAME_TESTID)).toHaveValue('Porch');
     });
 
+    it('marks the add form device select invalid with its message and clears it on a pick', async () => {
+      renderWith([existing]);
+
+      await fillAndAdd('Porch', '');
+      const select = (await screen.findAllByTestId(DEVICE_SELECT_TESTID)).at(-1);
+      expect(select).toHaveAttribute('aria-invalid', 'true');
+      expect(select).toHaveAccessibleDescription('settings.audio.soundCards.errors.deviceRequired');
+
+      if (select) await fireEvent.change(select, { target: { value: 'other-mic' } });
+      expect(select).not.toHaveAttribute('aria-invalid');
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+
+    it('clears the add form name error when the name is edited', async () => {
+      renderWith([existing]);
+
+      await fillAndAdd('   ', 'other-mic');
+      expect(screen.getByTestId(NAME_TESTID)).toHaveAccessibleDescription(
+        'settings.audio.soundCards.errors.nameRequired'
+      );
+
+      await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Porch' } });
+      expect(screen.getByTestId(NAME_TESTID)).not.toHaveAttribute('aria-invalid');
+    });
+
     it('judges the new source against the current rows even when the saved list holds the same duplicate', async () => {
       const onUpdateSources = renderWith(
         [existing],
