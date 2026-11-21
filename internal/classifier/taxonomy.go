@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 //go:embed data/eBird_taxonomy_codes_2021E.json
@@ -79,10 +80,11 @@ func CreateScientificNameIndex(taxonomyMap TaxonomyMap) ScientificNameIndex {
 			parts := strings.SplitN(taxonName, "_", 2)
 			if len(parts) == 2 {
 				scientificName := strings.TrimSpace(parts[0])
-				index[scientificName] = taxonCode
+				index[scientificName] = RemapLegacyCode(taxonCode)
 			}
 		}
 	}
+	openfauna.ExpandScientificCodeMap(index)
 	return index
 }
 

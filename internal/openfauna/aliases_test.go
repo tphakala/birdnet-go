@@ -82,3 +82,20 @@ func TestCanonicalName_EmbeddedMapIsSingleHop(t *testing.T) {
 		require.Falsef(t, chained, "alias %q -> %q chains into another alias", from, to)
 	}
 }
+
+func TestExpandScientificCodeMap_BidirectionalAndDirectPrecedence(t *testing.T) {
+	t.Parallel()
+
+	m := map[string]string{
+		"Coccothraustes vespertinus": "evegro",     // forward -> Hesperiphona vespertina
+		"Dryophytes versicolor":      "t-11124704", // reverse -> Hyla versicolor
+		"Streptopelia senegalensis":  "laudov1",
+		"Spilopelia senegalensis":    "direct-code", // must not be overwritten
+	}
+
+	ExpandScientificCodeMap(m)
+
+	require.Equal(t, "evegro", m["Hesperiphona vespertina"])
+	require.Equal(t, "t-11124704", m["Hyla versicolor"])
+	require.Equal(t, "direct-code", m["Spilopelia senegalensis"])
+}

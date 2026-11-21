@@ -194,3 +194,20 @@ func TestLabelSplitters_AgreeOnScientificName(t *testing.T) {
 	sciB, _ := SplitSpeciesName("Domestic_animals_and_pets")
 	assert.NotEqual(t, sciA, sciB)
 }
+
+func TestGetSpeciesCodeFromName_OpenFaunaAliasesAndLegacyCode(t *testing.T) {
+	t.Parallel()
+
+	taxonomyMap, scientificIndex, err := LoadTaxonomyData("")
+	require.NoError(t, err, "failed to load embedded taxonomy data")
+
+	code, found := GetSpeciesCodeFromName(taxonomyMap, scientificIndex, "Hesperiphona vespertina_Evening Grosbeak")
+	require.True(t, found, "canonical Hesperiphona vespertina must resolve via alias")
+	assert.Equal(t, "evegro", code)
+
+	code2, found2 := GetSpeciesCodeFromName(taxonomyMap, scientificIndex, "Hyla versicolor")
+	require.True(t, found2, "legacy Hyla versicolor must resolve via reverse alias")
+	assert.Equal(t, "t-11124704", code2)
+
+	assert.Equal(t, "amhgul1", scientificIndex["Larus argentatus"], "scientificIndex must normalize retired hergul to amhgul1")
+}

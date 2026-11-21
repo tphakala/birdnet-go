@@ -2713,3 +2713,22 @@ func TestMergeContribution_Stats(t *testing.T) {
 		assert.InDelta(t, 2.1, *dst.ConfidenceSum, 1e-9)
 	})
 }
+
+func TestBuildSpeciesCodeMap_CanonicalAliasFallback(t *testing.T) {
+	t.Parallel()
+
+	src := map[string]string{
+		"Coccothraustes vespertinus": "evegro",
+		"Dryophytes versicolor":      "t-11124704",
+		"Streptopelia senegalensis":  "laudov1",
+		"Spilopelia senegalensis":    "direct-code",
+	}
+
+	got := buildSpeciesCodeMap(src)
+
+	assert.Equal(t, "evegro", got["Coccothraustes vespertinus"])
+	assert.Equal(t, "evegro", got["Hesperiphona vespertina"])
+	assert.Equal(t, "t-11124704", got["Hyla versicolor"])
+	assert.Equal(t, "direct-code", got["Spilopelia senegalensis"], "direct entry must take precedence over alias fallback")
+	assert.NotContains(t, src, "Hesperiphona vespertina", "source map must not be mutated")
+}

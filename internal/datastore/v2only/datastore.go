@@ -41,6 +41,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
@@ -301,11 +302,9 @@ func New(cfg *Config) (*Datastore, error) {
 		tz = time.Local
 	}
 
-	// Use species code map from taxonomy data (injected via config).
-	speciesCodeMap := cfg.SpeciesCodeMap
-	if speciesCodeMap == nil {
-		speciesCodeMap = make(map[string]string)
-	}
+	// Copy species code map from taxonomy data and index canonical OpenFauna aliases
+	// so species stored under updated scientific names still resolve their eBird code.
+	speciesCodeMap := buildSpeciesCodeMap(cfg.SpeciesCodeMap)
 
 	ds := &Datastore{
 		manager:             cfg.Manager,
@@ -4573,4 +4572,13 @@ func convertAppEvents(v2Events []entities.AppEvent) []datastore.AppEvent {
 		result = append(result, ae)
 	}
 	return result
+}
+
+// buildSpeciesCodeMap copies src and expands missing OpenFauna alias entries
+// in both directions without mutating src. Direct entries in src take precedence.
+func buildSpeciesCodeMap(src map[string]string) map[string]string {
+	out := make(map[string]string, len(src))
+	maps.Copy(out, src)
+	openfauna.ExpandScientificCodeMap(out)
+	return out
 }
