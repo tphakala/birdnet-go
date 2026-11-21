@@ -2,6 +2,7 @@ package audio
 
 import (
 	"encoding/binary"
+	"sync"
 	"testing"
 	"time"
 
@@ -308,4 +309,45 @@ func TestAudioFeedEvictOldestOnClosedChannel(t *testing.T) {
 	require.False(t, feed.evictOldest(), "evictOldest must return false on a closed empty channel")
 	assert.Equal(t, int64(2048), feed.queued.Load())
 	assert.Equal(t, 0, feed.makeRoom(512), "makeRoom must exit cleanly when the channel is closed and empty")
+}
+
+// TestAudioFeedWriteConcurrentWithClose verifies that a Write racing Close
+// returns normally instead of sending on the closed feed channel, whatever the
+// caller's ordering. Writers keep running while Close lands, so a Write that
+// has passed the closed check when Close closes the channel would panic. The
+// window is narrow, so the race is repeated over fresh consumers.
+func TestAudioFeedWriteConcurrentWithClose(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rounds  = 300
+		writers = 4
+	)
+	frame := audiocore.AudioFrame{Data: make([]byte, soundCardFrameBytes)}
+
+	for range rounds {
+		h, feed := newTestFeedConsumer(nativeHLSFeedQueueBytes)
+
+		var started, finished sync.WaitGroup
+		started.Add(writers)
+		finished.Add(writers)
+		for range writers {
+			go func() {
+				defer finished.Done()
+				started.Done()
+				for {
+					if err := h.Write(frame); err != nil {
+						assert.ErrorIs(t, err, audiocore.ErrConsumerClosed)
+						return
+					}
+				}
+			}()
+		}
+		started.Wait()
+
+		require.NoError(t, h.Close())
+		finished.Wait()
+		drainFeed(feed)
+		requireFeedClosed(t, feed, "feed.ch must be closed once the writers have stopped")
+	}
 }

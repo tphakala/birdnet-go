@@ -972,14 +972,18 @@ func (f *audioFeed) makeRoom(n int) int {
 // hlsConsumer implements audiocore.AudioConsumer for HLS streaming.
 // It forwards audio frames to a bounded feed queue (see audioFeed) for encoding.
 type hlsConsumer struct {
-	id        string
-	sourceID  string
-	feed      *audioFeed
-	rate      int
-	depth     int
-	channels  int
-	closed    atomic.Bool
-	closeOnce sync.Once
+	id       string
+	sourceID string
+	feed     *audioFeed
+	rate     int
+	depth    int
+	channels int
+
+	// mu orders Close against Write: Write holds the read lock while it sends,
+	// Close takes the write lock to close feed.ch, so a send never meets a closed
+	// channel. closed is guarded by mu.
+	mu     sync.RWMutex
+	closed bool
 
 	// Drop tracking for diagnostics
 	dropCount   int64
@@ -1009,7 +1013,9 @@ func (h *hlsConsumer) Channels() int { return h.channels }
 // The send never blocks. A feed loop that has fallen behind costs the stream
 // its oldest queued audio, not the router its dispatch goroutine.
 func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
-	if h.closed.Load() {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.closed {
 		return audiocore.ErrConsumerClosed
 	}
 
@@ -1064,12 +1070,15 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 }
 
 // Close marks the consumer as closed and closes its feed channel once, so the
-// feed loop drains any buffered audio and exits. It must follow the last Write,
-// which AudioRouter guarantees by stopping the route's drainer before it closes
-// the consumer.
+// feed loop drains any buffered audio and exits. It waits for a Write in flight
+// and is safe to call more than once.
 func (h *hlsConsumer) Close() error {
-	h.closed.Store(true)
-	h.closeOnce.Do(func() { close(h.feed.ch) })
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.closed {
+		h.closed = true
+		close(h.feed.ch)
+	}
 	return nil
 }
 
