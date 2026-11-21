@@ -108,13 +108,13 @@ VERSION=1.32.0
 curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
   -o onnxruntime.nupkg
 echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c - && {
-  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime.so > libonnxruntime.so
-  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so
-  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}"
-  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/
-  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1
-  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so
-  sudo ldconfig
+  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime.so > libonnxruntime.so &&
+  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so &&
+  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}" &&
+  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/ &&
+  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1 &&
+  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so &&
+  sudo ldconfig &&
   rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
 }
 ```
@@ -129,13 +129,13 @@ VERSION=1.32.0
 curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
   -o onnxruntime.nupkg
 echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c - && {
-  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime.so > libonnxruntime.so
-  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so
-  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}"
-  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/
-  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1
-  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so
-  sudo ldconfig
+  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime.so > libonnxruntime.so &&
+  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so &&
+  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}" &&
+  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/ &&
+  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1 &&
+  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so &&
+  sudo ldconfig &&
   rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
 }
 ```
@@ -150,10 +150,10 @@ VERSION=1.32.0
 curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
   -o onnxruntime.nupkg
 echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | shasum -a 256 -c - && {
-  unzip -p onnxruntime.nupkg runtimes/osx-arm64/native/libonnxruntime.dylib > libonnxruntime.dylib
-  sudo install -m 755 libonnxruntime.dylib "/usr/local/lib/libonnxruntime.${VERSION}.dylib"
-  sudo ln -sf "libonnxruntime.${VERSION}.dylib" /usr/local/lib/libonnxruntime.dylib
-  sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true
+  unzip -p onnxruntime.nupkg runtimes/osx-arm64/native/libonnxruntime.dylib > libonnxruntime.dylib &&
+  sudo install -m 755 libonnxruntime.dylib "/usr/local/lib/libonnxruntime.${VERSION}.dylib" &&
+  sudo ln -sf "libonnxruntime.${VERSION}.dylib" /usr/local/lib/libonnxruntime.dylib &&
+  { sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true; } &&
   rm onnxruntime.nupkg libonnxruntime.dylib
 }
 ```
