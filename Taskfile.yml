@@ -468,9 +468,10 @@ tasks:
             esac
             # go.mod only names the minor line (1.27.0 is the floor), so install the
             # newest patch release of that line and fall back to the floor if the
-            # release feed cannot be read. include=all keeps a minor line that has
-            # left the default feed findable; the feed lists releases newest first.
-            GO_LATEST=$(curl -fsSL 'https://go.dev/dl/?mode=json&include=all' 2>/dev/null \
+            # release feed cannot be read or does not answer in time. include=all
+            # keeps a minor line that has left the default feed findable; the feed
+            # lists releases newest first.
+            GO_LATEST=$(curl -fsSL --connect-timeout 10 --max-time 60 'https://go.dev/dl/?mode=json&include=all' 2>/dev/null \
               | grep -oE "\"version\": \"go${REQUIRED_GO_MINOR}(\.[0-9]+)?\"" \
               | head -n 1 | grep -oE '[0-9]+(\.[0-9]+)+' || true)
             GO_VERSION="${GO_LATEST:-$GO_VERSION}"
