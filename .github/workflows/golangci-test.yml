@@ -14,6 +14,7 @@ on:
       - '.github/scripts/go-test-cache.sh'
       - '.github/actions/setup-tensorflow/**'
       - '.github/actions/setup-onnxruntime/**'
+      - '.github/actions/setup-go/**'
       - 'scripts/fetch-onnxruntime.sh'
       - 'scripts/onnxruntime-pins.sha256'
   pull_request:
@@ -27,6 +28,7 @@ on:
       - '.github/scripts/go-test-cache.sh'
       - '.github/actions/setup-tensorflow/**'
       - '.github/actions/setup-onnxruntime/**'
+      - '.github/actions/setup-go/**'
       - 'scripts/fetch-onnxruntime.sh'
       - 'scripts/onnxruntime-pins.sha256'
 
