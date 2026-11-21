@@ -703,6 +703,20 @@ describe('StreamManager blocked actions', () => {
     expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
   });
 
+  it('keeps Refresh inert while a health load runs, so a click starts no second load', async () => {
+    const pending = deferred<never[]>();
+    vi.mocked(api.get).mockReturnValueOnce(pending.promise);
+    renderRows([streamA, streamB]);
+    const refresh = screen.getByRole('button', { name: REFRESH_KEY });
+    expect(refresh).toHaveAttribute('aria-disabled', 'true');
+
+    await fireEvent.click(refresh);
+    expect(api.get).toHaveBeenCalledOnce();
+
+    pending.resolve([]);
+    await waitFor(() => expect(refresh).not.toHaveAttribute('aria-disabled'));
+  });
+
   it('shows the reason with an empty list instead of an Add stream button that would do nothing', async () => {
     const view = renderRows([]);
     expect(screen.getByRole('button', { name: ADD_KEY })).toBeInTheDocument();
