@@ -74,7 +74,7 @@ For each class folder:
 - BirdNET Analyzer supports a wide range of audio formats - you can mix formats like AAC, MP3, WAV, FLAC, etc. within and across folders
 - Ensure each folder has sufficient samples (minimum 10-20 clips recommended)
 
-_Personal preference note: I use uncompressed FLAC files as they provide the best flexibility for audio post-processing (noise suppression, filtering, etc.) if needed later. However, compressed formats like MP3 and AAC work perfectly fine for training._
+_Personal preference note: I use lossless FLAC files as they provide the best flexibility for audio post-processing (noise suppression, filtering, etc.) if needed later. However, lossy formats like AAC and Opus work fine for training as well._
 
 ## Step 1: Prepare Your Audio Data
 

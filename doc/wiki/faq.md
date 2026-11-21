@@ -1,6 +1,6 @@
 # Frequently Asked Questions
 
-Common questions, problems, and fixes for BirdNET-Go. For step-by-step guides see the [Installation Guide](installation.md), [Recommended Hardware](hardware.md), [RTSP Troubleshooting](rtsp-troubleshooting.md), [Detection Pipeline](detection-pipeline.md), and [Remote Access / Cloudflare Tunnel](cloudflare_tunnel_guide.md).
+Common questions, problems, and fixes for BirdNET-Go. For step-by-step guides see the [Installation Guide](installation.md), [Recommended Hardware](hardware.md), [Audio Formats](audio-formats.md), [RTSP Troubleshooting](rtsp-troubleshooting.md), [Detection Pipeline](detection-pipeline.md), and [Remote Access / Cloudflare Tunnel](cloudflare_tunnel_guide.md).
 
 If your problem isn't covered here, generate a support dump from **Settings > Support** (it bundles your config and logs) and open a [discussion](https://github.com/tphakala/birdnet-go/discussions) or [issue](https://github.com/tphakala/birdnet-go/issues).
 
@@ -58,15 +58,15 @@ BirdNET-Go displays times in the timezone of the server/container it runs in, no
 
 ### My USB sound card stops working after a reboot (I have to reselect it every time)
 
-This is a known limitation. Linux assigns ALSA card numbers in USB enumeration order at boot, so your USB mic can come up as a different card number on different boots. BirdNET-Go currently saves the device by that card number, so after a renumber the saved selection no longer matches and capture fails. A startup delay does **not** help, because the device is present, just under a different number.
+Linux assigns ALSA card numbers in USB enumeration order at boot, so a USB mic can come up under a different card number on different boots. Recent BirdNET-Go builds match USB sound cards by stable USB hardware identity (bus path or `vendor:product:serial`) so the saved selection survives reboots; update to a current build and reselect the card once.
 
-Workaround: pin the card to a fixed ALSA index on the host. Find the USB IDs with `lsusb`, then create `/etc/modprobe.d/alsa-birdnet.conf`:
+If you are on an older build, or have identical USB sound cards without unique serial numbers, pin the card to a fixed ALSA index on the host. Find the USB IDs with `lsusb`, then create `/etc/modprobe.d/alsa-birdnet.conf`:
 
 ```
 options snd-usb-audio index=0 vid=0x16d0 pid=0x06f3
 ```
 
-(Replace the IDs with yours; drop `vid`/`pid` if it is your only USB sound card.) Then `sudo update-initramfs -u`, reboot, and reselect the card once. Host-level pinning carries into the Docker container through `--device /dev/snd`. A proper fix (matching the card on a stable USB hardware id) is planned.
+(Replace the IDs with yours; drop `vid`/`pid` if it is your only USB sound card.) Then `sudo update-initramfs -u`, reboot, and reselect the card once. Host-level pinning carries into the Docker container through `--device /dev/snd`.
 
 ### I can't add an audio device, the Save button stays greyed out
 
@@ -78,7 +78,19 @@ See [Recommended Hardware](hardware.md). Popular community choices: a Clippy/Pri
 
 ### Can I save recordings to an external USB drive?
 
-Yes. Set an absolute path in **Settings > Audio > Export > Clips Folder** (e.g. `/mnt/usb/birds/`). Because install.sh runs BirdNET-Go in a container, you must also mount the drive on the host and bind-mount it into the container's systemd service (`sudo systemctl edit birdnet-go.service --full`, add `-v /mnt/usb:/mnt/usb`), then make sure the mount is writable by UID 1000.
+Yes. Set an absolute path in **Settings > Audio > Recording** (**File Settings > Clips Folder**, e.g. `/mnt/usb/birds/`). Because install.sh runs BirdNET-Go in a container, you must also mount the drive on the host and bind-mount it into the container's systemd service (`sudo systemctl edit birdnet-go.service --full`, add `-v /mnt/usb:/mnt/usb`), then make sure the mount is writable by UID 1000.
+
+### Which audio format should I use for saved clips?
+
+Avoid **MP3**: it is an older format with lower audio quality than AAC and Opus at the same bitrate (**System > Health** reports a warning when MP3 clip export is enabled). Instead choose based on how you use the clips:
+
+- **AAC (`.m4a`):** Best general-purpose lossy choice with the widest compatibility across browsers, phones, and players (default in `install.sh`).
+- **Opus (`.opus`):** Best audio quality with the smallest file sizes.
+- **FLAC (`.flac`):** Recommended if you plan to post-process clips in external audio editors or use them for training; lossless compression preserves the captured audio without lossy artifacts, with smaller files than WAV.
+- **WAV (`.wav`):** Uncompressed lossless PCM; largest files.
+- **Bat / ultrasonic recordings (above 48 kHz):** Only **FLAC** (default) and **WAV** are supported via `realtime.audio.export.ultrasonictype`, because lossy formats cannot store ultrasonic content.
+
+See [Audio Formats](audio-formats.md) for bitrate ranges, denoising notes, and input format details.
 
 ## RTSP cameras and streams
 
@@ -113,11 +125,11 @@ The canonical recipe is FFmpeg plus MediaMTX on the Pi. Install FFmpeg, download
 ```yaml
 paths:
   stream:
-    runOnInit: ffmpeg -f alsa -i default -acodec libmp3lame -f rtsp -rtsp_transport tcp rtsp://localhost:8554/stream
+    runOnInit: ffmpeg -f alsa -ar 48000 -ac 1 -i default -acodec pcm_s16be -f rtsp -rtsp_transport tcp rtsp://localhost:8554/stream
     runOnInitRestart: yes
 ```
 
-Point BirdNET-Go at `rtsp://<pi-ip>:8554/stream`. Prefer PCM over MP3 for better analysis quality, and use `-i hw:1,0` (find devices with `arecord -l`) if `default` doesn't work. There are also community ESP32 RTSP-mic firmware projects listed in the README.
+Point BirdNET-Go at `rtsp://<pi-ip>:8554/stream`. Prefer lossless PCM (`pcm_s16be` / L16 over RTSP) over lossy codecs like MP3 for better analysis quality, and use `-i hw:1,0` (find devices with `arecord -l`) if `default` doesn't work. There are also community ESP32 RTSP-mic firmware projects listed in the README.
 
 ## Models and detection (multi-model)
 
@@ -125,7 +137,7 @@ See the [Detection Pipeline](detection-pipeline.md) for how audio flows through 
 
 ### What models are available and how do I use more than one?
 
-BirdNET-Go ships with **BirdNET v2.4** (the default, lightest model). From **Settings > Analysis > Models** you can also install **Google Perch v2** (a much larger multi-taxa model) and **BattyBirdNET** (regional bat classifiers). After installing a model, go to **Settings > Audio** and assign which models each source runs. One source can run several models, and detections of the same species from different models are merged, so cross-model agreement makes a detection more trustworthy.
+BirdNET-Go ships with **BirdNET v2.4** (the built-in, lightest model). From **Settings > Analysis > Models** you can also install **BirdNET+ v3.0**, **Google Perch v2** (a much larger multi-taxa model), **BattyBirdNET** (regional bat classifiers), and **BSG-BAT**. After installing a model, go to **Settings > Audio** and assign which models each source runs. One source can run several models, and detections of the same species from different models are merged, so cross-model agreement makes a detection more trustworthy.
 
 ### Should I run Perch on its own?
 
@@ -158,7 +170,7 @@ birdnet:
 
 ### How do I do bat detection?
 
-Bats need an **ultrasonic-capable mic** (e.g. an AudioMoth) capturing at **192 kHz or higher**, and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model and assign it to that source. Bats only run at night by default, and clips with no bat-like ultrasonic activity (no ultrasonic energy, or only broadband clicks and rustling) are flagged **"Unlikely"**. Flagged detections are saved by default; turning on **Discard Unlikely Detections** in the bat settings drops them instead, and dropped detections cannot be recovered. Bat spectrograms render at the clip's own sample rate and show up to half of it (a 192 kHz clip shows 0 to 96 kHz, a 384 kHz clip 0 to 192 kHz), so you can check a call in the detection view. Bat clips also keep their full sample rate, so you can download one and open it in a tool like Audacity.
+Bats need an **ultrasonic-capable mic** (e.g. an AudioMoth) capturing at **96 kHz or higher** (192 kHz recommended for BattyBirdNET; 192 kHz minimum and 384 kHz recommended for BSG-BAT), and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model or BSG-BAT and assign it to that source. Bats only run at night by default, and clips with no bat-like ultrasonic activity (no ultrasonic energy, or only broadband clicks and rustling) are flagged **"Unlikely"**. Flagged detections are saved by default; turning on **Discard Unlikely Detections** in the bat settings drops them instead, and dropped detections cannot be recovered. Bat spectrograms render at the clip's own sample rate and show up to half of it (a 192 kHz clip shows 0 to 96 kHz, a 384 kHz clip 0 to 192 kHz), so you can check a call in the detection view. Bat clips above 48 kHz are always saved losslessly at their full sample rate using **FLAC** (default) or **WAV** (`realtime.audio.export.ultrasonictype`), since lossy formats cannot store ultrasonic content; see [Audio Formats](audio-formats.md). You can download a clip and open it in a tool like Audacity.
 
 ### Where did the Sensitivity and Overlap settings go?
 
@@ -205,7 +217,7 @@ It is marginal and RAM-limited; it cannot run the Perch or bat models, and is no
 
 ### Can I import my BirdNET-Pi detection history?
 
-There is no official importer yet. The old `BirdNET-Pi2Go` tool is abandoned and does **not** work with the current database schema, so don't rely on it. A community member's Python merge script has been used to merge BirdNET-Pi data into a BirdNET-Go database (see the migration discussions), but it is community-maintained and untested at scale. The simplest way to compare the two is to run both in parallel for a while, feeding them the same audio.
+Yes. BirdNET-Go includes an experimental built-in BirdNET-Pi importer under **System > Import / Export** for native Linux installs and container deployments (using an external media mount; see [External Media](external-media.md)). It reads your BirdNET-Pi `birds.db` SQLite database, tags imported detections with `birdnet-pi`, and skips duplicates automatically. The old standalone `BirdNET-Pi2Go` tool is abandoned and does **not** work with the current database schema.
 
 ### Tips for getting good accuracy after coming from BirdNET-Pi
 
@@ -242,7 +254,7 @@ Set `security.redirecttohttps: false` and restart. With it enabled, session cook
 
 - A basic-auth change that doesn't take effect: update to the latest nightly (auth now reads live config); on older builds, restart.
 - OIDC sign-in says the provider is not available (older builds: "no provider for openid-connect exists"): BirdNET-Go could not reach the provider's discovery document. The cause is printed in the console or container log and in `logs/security.log` as an `OIDC discovery failed` line. The **Issuer URL** is the provider's base URL, without `/.well-known/openid-configuration` (for example `https://auth.example.com/realms/myrealm`). Correct it and save: provider changes apply at once, with no restart. Discovery runs in the background and is retried for five minutes after startup or after a provider settings change. If it still fails once that time has passed and the settings are correct, restart BirdNET-Go when the provider is reachable. Requests to the provider time out after ten seconds. For a certificate error with a provider signed by a private certificate authority, see [OIDC identity provider with a private certificate authority](security.md#oidc-identity-provider-with-a-private-certificate-authority).
-- **Let's Encrypt / AutoTLS is currently broken** (it binds the wrong port and doesn't persist certificates). Until it is fixed, disable built-in TLS and terminate TLS at a reverse proxy instead.
+- **Let's Encrypt / AutoTLS** requires bridge networking (mapping host ports 80 and 443 to container ports 8080 and 8443; it cannot be used with host networking) and a publicly reachable domain set in `security.host` with `security.tlsMode: "autotls"`. For most setups, putting BirdNET-Go behind a reverse proxy or Cloudflare Tunnel is still simpler and recommended.
 
 ### I locked myself out of authentication
 
@@ -274,7 +286,7 @@ This was a server compression bug, update to the latest nightly. It is not a Clo
 
 ### Audio and spectrograms 404 after an upgrade, or spectrograms never generate
 
-Update to the latest nightly (there were path-validation and Windows-specific spectrogram fixes). Make sure clip recording is enabled (**Settings > Audio > Recording**) and the format is WAV or FLAC. If old clips are 404ing, they may be in a `data/2026/` folder instead of `data/clips/2026/`, move them under `clips/`.
+Update to the latest nightly (there were path-validation and Windows-specific spectrogram fixes). Make sure clip recording is enabled (**Settings > Audio > Recording**). If old clips are 404ing, they may be in a `data/2026/` folder instead of `data/clips/2026/`, move them under `clips/`.
 
 ### Dashboard search only finds scientific names
 
@@ -300,4 +312,4 @@ No, it is built for real-time stream and sound-card analysis. For offline file a
 
 ### How do I back up my data?
 
-Use the SQLite backup button under **System > Database**, or simply copy your data directory while running (SQLite's WAL mode allows consistent reads). For install.sh setups that's `~/birdnet-go-app/data/`, back up the `.db` files plus `config.yaml`. Scheduled/automated backups are planned but not yet available.
+Use the SQLite backup button under **System > Database**, or configure scheduled backups via `backup.enabled` and `backup.schedules` in `config.yaml` (see [Configuration Reference](configuration-reference.md)). You can also copy your data directory while running (SQLite's WAL mode allows consistent reads). For `install.sh` setups that is `~/birdnet-go-app/data/`; back up the `.db` files plus `config.yaml`.

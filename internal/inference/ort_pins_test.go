@@ -40,7 +40,6 @@ const (
 // installGuides are the user install guides that name the shipped ONNX Runtime
 // version.
 var installGuides = []string{
-	"../../doc/ONNX-Runtime-Installation.md",
 	"../../doc/wiki/onnx-runtime-installation.md",
 }
 

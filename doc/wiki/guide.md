@@ -4,14 +4,14 @@ BirdNET-Go is an application inspired by BirdNET-Pi and BirdNET Analyzer. It aim
 
 ## BirdNET-Go Features
 
-- Audio analysis based on the BirdNET 2.4 tflite model
-- 24/7 real-time analysis of soundcard capture
+- Multi-model audio analysis: built-in BirdNET v2.4 plus installable ONNX models (BirdNET+ v3.0, Google Perch v2, BattyBirdNET regional bat classifiers, BSG-BAT, and BirdNET Geomodel v3.0)
+- 24/7 real-time analysis of soundcard capture and RTSP / network audio streams
 - Real-time analysis output compatible with OBS chat log input for wildlife streams
 - BirdWeather API support for real-time analysis
 - Analysis output options: SQLite or MySQL/MariaDB database
-- Localized species labels, with extensive language support (over 30 languages)
+- Localized species labels, with extensive language support (over 40 languages)
 - Runs on Windows, Linux (including Raspberry Pi), and macOS
-- Minimal runtime dependencies; the BirdNET TensorFlow Lite model and other supporting files are embedded in the executable
+- Minimal runtime dependencies; release archives bundle the TensorFlow Lite C and ONNX Runtime libraries, and the BirdNET v2.4 model is embedded in the executable
 - Web dashboard with visualization capabilities
 - Weather integration through OpenWeather or Yr.no
 - MQTT support for IoT integration
@@ -105,13 +105,15 @@ BirdNET-Go has minimal external dependencies, but requires a few specific tools 
 
 For manual installations, you'll need to install these dependencies separately on your system.
 
-#### TensorFlow Lite C library
+#### TensorFlow Lite C and ONNX Runtime libraries
 
-In addition to BirdNET-Go executable you also need TensorFlow Lite C library which is available for download at https://github.com/tphakala/tflite_c/releases. Download library for your target platform and install it in proper library path for your system:
+Pre-compiled release archives from the [releases page](https://github.com/tphakala/birdnet-go/releases) already bundle both the TensorFlow Lite C library and the ONNX Runtime library next to the executable (see [Manual Binary Installation](installation.md#manual-binary-installation-all-platforms) and [ONNX Runtime Installation](onnx-runtime-installation.md)).
+
+If you are building from source or installing the TensorFlow Lite C library manually, download it from https://github.com/tphakala/tflite_c/releases and install it in the library path for your system:
 
 - On Linux copy **libtensorflowlite_c.so** to **/usr/local/lib** and run "**sudo ldconfig**"
-- On macOS **libtensorflowlite_c.dylib** to **/usr/local/lib**
-- On Windows copy **libtensorflowlite_c.so** to BirdNET-Go executable directory or any other directory in system PATH
+- On macOS copy **libtensorflowlite_c.dylib** to **/usr/local/lib**
+- On Windows copy **tensorflowlite_c.dll** to the BirdNET-Go executable directory or any directory in your system PATH
 
 > **Note**: For optimal performance using the XNNPACK delegate (enabled by default via `usexnnpack: true` in config), ensure you have downloaded version `v2.17.1` or newer of the TensorFlow Lite C library. If a compatible library is not found, BirdNET-Go will fall back to standard CPU processing.
 
@@ -156,7 +158,7 @@ logging:
     level: info # Log level for console output
   file_output:
     enabled: true # Enable file output
-    path: logs/application.log # Path to log file
+    path: logs/birdnet.log # Path to log file
     level: info # Log level for file output
     max_size: 100 # Maximum size in MB before rotation (0 = disabled)
     max_age: 30 # Maximum age in days to keep rotated logs (0 = no limit)
@@ -167,18 +169,18 @@ logging:
 birdnet:
   debug: false # Enable debug mode for BirdNET functionality
   sensitivity: 1.0 # Sigmoid sensitivity, 0.1 to 1.5
-  threshold: 0.8 # Threshold for prediction confidence to report, 0.0 to 1.0
-  overlap: 0.0 # Overlap between chunks, 0.0 to 2.9
+  threshold: 0.7 # Threshold for prediction confidence to report, 0.0 to 1.0
+  overlap: 1.5 # Overlap between chunks, 0.0 to 2.99 (BIRDNET_OVERLAP env var accepts 0.0 to 2.9)
   latitude: 60.1699 # Latitude of recording location for prediction filtering
   longitude: 24.9384 # Longitude of recording location for prediction filtering
   threads: 0 # Number of CPU threads to use (0 = use all available, automatically optimized for P-cores if detected)
-  locale: en-uk # Language to use for labels
+  locale: en-us # Language to use for labels
   modelpath: "" # Path to external model file (empty for embedded)
   labelpath: "" # Path to external label file (empty for embedded)
   usexnnpack: true # Use XNNPACK delegate for inference acceleration
   rangefilter:
     debug: false # Enable debug mode for range filter
-    model: "" # Range filter model to use. "" (default) uses V2, "legacy" uses V1. An installed BirdNET Geomodel v3.0 replaces the stock models.
+    model: latest # Range filter model to use: "latest" (V2) or "legacy" (V1). An installed BirdNET Geomodel v3.0 replaces the stock models.
     threshold:
       0.01 # Range filter species occurrence threshold (0.0-1.0)
       # Default (0.01) is recommended for most users
@@ -193,7 +195,7 @@ realtime:
 
   # Audio settings
   audio:
-    source: "" # Audio source to use for analysis
+    sources: [] # Audio capture devices (configured in Settings > Audio)
     ffmpegpath: "" # Path to ffmpeg (runtime value)
     streamtransport: auto # Preferred transport for audio streaming: auto, sse, or ws
     soundlevel:
@@ -201,17 +203,19 @@ realtime:
       interval: 10 # Measurement interval in seconds (default: 10)
     export:
       debug: false # Enable audio export debug
-      enabled: false # Export audio clips containing identified bird calls
+      enabled: true # Export audio clips containing identified bird calls
       path: clips/ # Path to audio clip export directory
-      type: wav # Audio file type: wav, mp3, or flac
-      bitrate: 192k # Bitrate for audio export
+      type: wav # Audio file type: aac, opus, flac, wav, or mp3 (aac/opus recommended for lossy, flac for post-processing; mp3 discouraged)
+      ultrasonictype: flac # Lossless only (flac or wav) for bat/ultrasonic captures above 48 kHz
+      bitrate: 96k # Bitrate for lossy audio exports (32k to 320k; Opus caps at 256k)
       retention:
         debug: false # Enable retention debug
-        policy: none # Retention policy: none, age, or usage
+        policy: usage # Retention policy: none, age, or usage
         maxage: 30d # Maximum age of audio clips to keep
-        maxusage: 85% # Maximum disk usage percentage before cleanup
-        minclips: 5 # Minimum number of clips per species to keep
-        checkInterval: 15 # Cleanup check interval in minutes (default: 15)
+        maxusage: 80% # Maximum disk usage percentage before cleanup
+        minclips: 10 # Minimum number of clips per species to keep
+        keepspectrograms: true # Keep spectrograms even when clips are deleted
+        checkinterval: 15 # Cleanup check interval in minutes (default: 15)
     equalizer:
       enabled: false # Enable equalizer filters
       filters:
@@ -232,10 +236,10 @@ realtime:
 
   # Dynamic threshold adjustment
   dynamicthreshold:
-    enabled: false # Enable dynamic threshold adjustment
+    enabled: true # Enable dynamic threshold adjustment
     debug: false # Enable debug mode for dynamic threshold
-    trigger: 0.5 # Trigger threshold for dynamic adjustment
-    min: 0.3 # Minimum threshold for dynamic adjustment
+    trigger: 0.90 # Trigger threshold for dynamic adjustment
+    min: 0.20 # Minimum threshold for dynamic adjustment
     validhours: 24 # Number of hours to consider for dynamic threshold
 
   # OBS chat log settings
@@ -371,8 +375,8 @@ security:
     # Set this to your public hostname when using a reverse proxy (e.g., "birdnet.home.arpa")
     # Can also be set via BIRDNET_HOST environment variable
     # Falls back to "localhost" if not configured (works for direct access only)
-  autotls: false # Enable automatic TLS certificate management using Let's Encrypt
-  redirecttohttps: true # Redirect HTTP to HTTPS
+  tlsMode: "" # TLS mode: "" (none), "autotls" (Let's Encrypt), "manual", or "selfsigned" (replaces deprecated autotls boolean)
+  redirecttohttps: false # Redirect HTTP to HTTPS (when TLS is enabled)
   allowsubnetbypass:
     enabled: false # Enable subnet bypass for authentication
     subnet: "192.168.1.0/24" # Subnet to bypass authentication
@@ -384,6 +388,9 @@ security:
     redirecturi: "" # Redirect URI for OAuth2
     authcodeexp: 10m # Duration for authorization code
     accesstokenexp: 1h # No longer sets how long a browser stays signed in
+  # Preferred format for OAuth2 / OIDC providers (Google, GitHub, Microsoft, generic OIDC):
+  oauthProviders: []
+  # Legacy flat OAuth keys (migrated only when oauthProviders is empty; ignored afterward):
   googleauth:
     enabled: false # Enable Google OAuth2
     clientid: "" # Google client ID
@@ -406,7 +413,7 @@ sentry:
 output:
   # SQLite database output settings
   sqlite:
-    enabled: false # Enable SQLite output
+    enabled: true # Enable SQLite output
     path: birdnet.db # Path to SQLite database
 
   # MySQL or MariaDB database output settings
@@ -436,13 +443,13 @@ birdnet [command] [flags]
 
 **Available Commands:**
 
-- `realtime`: (Default) Starts the real-time analysis using the configuration file.
+- `serve` (alias `realtime`): Starts real-time analysis and the web server using the configuration file.
 - `benchmark`: Runs a performance benchmark on the current system.
-- `range`: Manages the range filter database (used for location-based species filtering).
-  - `range update`: Downloads or updates the range filter database.
-  - `range info`: Displays information about the current range filter database.
+- `range`: Inspects the range filter for your location and date.
   - `range print`: Shows all species that pass the current threshold for your location and date, with their probability scores.
-- `support`: Generates a support bundle containing logs and configuration (with sensitive data masked) for troubleshooting.
+- `notify`: Tests notification delivery.
+- `support`: Diagnostic and support utilities.
+  - `support collect`: Generates a support bundle containing logs and configuration (with sensitive data masked) for troubleshooting.
 - `authors`: Displays author information.
 - `license`: Displays software license information.
 - `help`: Shows help for any command.
@@ -1005,62 +1012,62 @@ realtime:
 - The system automatically cleans up stale thresholds to prevent memory bloat
 - Custom species thresholds (if configured) take precedence over dynamic adjustments
 
-### Stage 3: Deep Detection Filter
+### Stage 3: Deep Detection (False Positive Filter)
 
-[Deep Detection](BirdNET‐Go-Guide#deep-detection) uses the `overlap` setting to require multiple detections of the same species within a configurable detection window before accepting it, significantly reducing false positives.
+[Deep Detection](#deep-detection) uses overlapping analysis windows and a configurable filter level (`realtime.falsepositivefilter.level`, 0 to 5) to require multiple confirmations of the same species within the pending detection window before accepting it.
 
 #### How It Works:
 
-1. **Detection Holding**: All detections are held in a pending state for `captureLength - preCaptureLength` seconds from first detection (defaults to 12 seconds with 15s clip length and 3s pre-capture buffer)
-2. **Counting Mechanism**: During this window, if the same species is detected again, a counter increments
-3. **Threshold Calculation**: The minimum required detections scales with both overlap and detection window duration:
+1. **Detection Holding**: Pending detections are held for `max(0, captureLength - preCaptureLength)` seconds from first detection (12 seconds with the default 15 s clip length and 3 s pre-capture buffer).
+2. **Counting Mechanism**: During this holding window, each additional detection of the same species increments the confirmation counter.
+3. **Threshold Calculation**: Required confirmations are computed against a 6-second reference vocalization window using the analysis step (`segmentSeconds = max(0.1, 3.0 - overlap)` for 3-second BirdNET clips; models with a different clip length or step derive `segmentSeconds` from their own buffer cadence) and the level's confirmation fraction:
 
 ```yaml
 birdnet:
-  overlap: 2.7 # Enable deep detection (requires more CPU power)
+  overlap: 2.4 # Minimum overlap for Balanced (level 3)
 realtime:
+  falsepositivefilter:
+    level: 3 # 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum
   audio:
     export:
       length: 15 # Audio clip length in seconds
-      preCapture: 3 # Pre-detection buffer in seconds
+      precapture: 3 # Pre-detection buffer in seconds
 ```
 
-**Exact Minimum Detections Calculation:**
+**Minimum Detections Calculation (3-second BirdNET clips):**
 
+```text
+segmentSeconds = max(0.1, 3.0 - overlap)
+maxDetections  = 6.0 / segmentSeconds
+minDetections  = max(1, ceil(maxDetections * levelThreshold))   # always 1 when level = 0
 ```
-detectionWindow = captureLength - preCaptureLength
-segmentLength = max(0.1, 3.0 - overlap)
-baseMinDetections = 3.0 / segmentLength
-scaleFactor = detectionWindow / 15.0
-minDetections = max(1, round(baseMinDetections * scaleFactor))
 
-Examples (with default 12-second detection window):
-- overlap: 0.0  → segmentLength: 3.0  → minDetections: 1  (standard mode)
-- overlap: 1.5  → segmentLength: 1.5  → minDetections: 2
-- overlap: 2.4  → segmentLength: 0.6  → minDetections: 4  (recommended)
-- overlap: 2.7  → segmentLength: 0.3  → minDetections: 8  (deep detection)
-- overlap: 2.9  → segmentLength: 0.1  → minDetections: 24 (very strict)
+| Level | Name     | Min overlap | Step  | Threshold | Min detections (at min overlap) |
+| ----- | -------- | ----------- | ----- | --------- | ------------------------------- |
+| 0     | Off      | 0.0         | 3.0 s | 0%        | 1                               |
+| 1     | Lenient  | 2.0         | 1.0 s | 20%       | 2                               |
+| 2     | Moderate | 2.2         | 0.8 s | 30%       | 3                               |
+| 3     | Balanced | 2.4         | 0.6 s | 50%       | 5                               |
+| 4     | Strict   | 2.7         | 0.3 s | 60%       | 12                              |
+| 5     | Maximum  | 2.8         | 0.2 s | 70%       | 21                              |
 
-With longer detection window (30s clip, 0s pre-capture = 30s window):
-- overlap: 2.4  → minDetections: 10 (2x baseline)
-- overlap: 2.7  → minDetections: 20 (2x baseline)
-```
+Bat models use their own separate `bat.falsepositivefilter.level` setting (0 to 5).
 
 #### Processing Timeline:
 
 1. **0 seconds**: Species detected for first time, detection window timer starts
 2. **0 to detectionWindow seconds**: Additional detections increment the counter
 3. **detectionWindow seconds**: Decision point reached:
-   - **If count ≥ minDetections**: Detection approved and processed
-   - **If count < minDetections**: Detection discarded as "false positive"
+   - **If count >= minDetections**: Detection approved and processed
+   - **If count < minDetections**: Detection discarded as a false positive
 
 #### Key Behavior Notes:
 
-- **Configurable timeout**: Detection window duration is `captureLength - preCaptureLength` (prevents audio clip gaps)
-- **No early approval**: Even if minimum detections are met early, the system waits for the full window
+- **Configurable holding window**: Duration is `max(0, captureLength - preCaptureLength)` (12 seconds by default)
+- **No early approval**: Even if minimum detections are met early, the system waits for the full holding window
 - **Quality improvement**: Higher confidence detections within the window replace lower ones
 - **Memory efficient**: Only one pending detection per species is held at a time
-- **Runtime adaptable**: Changes to overlap, clip length, or pre-capture settings take effect within 1 second
+- **Runtime adaptable**: Changes to filter level, overlap, clip length, or pre-capture saved via the web UI or settings API apply without restarting; `config.yaml` edits take effect after a restart
 
 ### Stage 4: Privacy and Behavioral Filters
 
@@ -1178,7 +1185,7 @@ The BirdNET Range Filter is an intelligent location and time-based filtering sys
 
 #### Model Overview
 
-The range filter uses a secondary AI model trained on [eBird checklist frequency data](https://support.ebird.org/en/support/solutions/articles/48000948655-ebird-glossary#:~:text=frequency%3A%20as%20of%20a%20species,purple%20grid%20on%20species%20maps) to estimate the probability of bird species occurrence based on three factors:
+The range filter uses a separate model trained on [eBird checklist frequency data](https://support.ebird.org/en/support/solutions/articles/48000948655-ebird-glossary#:~:text=frequency%3A%20as%20of%20a%20species,purple%20grid%20on%20species%20maps) to estimate the probability of bird species occurrence based on three factors:
 
 1. **Latitude** - Your geographic latitude coordinate
 2. **Longitude** - Your geographic longitude coordinate
@@ -1380,7 +1387,7 @@ BirdNET-Go offers advanced audio processing capabilities:
 
 - Support for various audio sources including direct soundcard capture and RTSP streams
 - Configurable equalizer with multiple filter types (LowPass, HighPass, BandPass, etc.)
-- Audio export in multiple formats (WAV, MP3, FLAC)
+- Native audio clip export in AAC, Opus, FLAC, WAV, and MP3 (with lossless FLAC or WAV for ultrasonic bat recordings; see [Audio Formats](audio-formats.md))
 - Retention policies for managing exported audio clips
 
 ### Audio Clip Retention
@@ -1392,26 +1399,27 @@ The cleanup task runs periodically to check if clips need to be deleted based on
 Configure these options under `realtime.audio.export.retention` in your `config.yaml`:
 
 - **`policy`**: Sets the retention strategy. Options are:
-  - **`none`** (Default): No automatic deletion. You are responsible for managing the clip files.
+  - **`usage`** (Default): Deletes the oldest clips _only when_ the disk usage of the partition containing the clips directory exceeds the `maxusage` percentage. This policy tries to keep at least `minclips` per species, deleting the oldest clips first when cleanup is needed.
   - **`age`**: Deletes clips older than the specified `maxage`.
-  - **`usage`**: Deletes the oldest clips _only when_ the disk usage of the partition containing the clips directory exceeds the `maxusage` percentage. This policy tries to keep at least `minclips` per species, deleting the oldest clips first when cleanup is needed.
+  - **`none`**: No automatic deletion. You are responsible for managing the clip files.
 - **`maxage`**: (Used with `policy: age`) Maximum age for clips (e.g., `30d` for 30 days, `7d` for 7 days, `24h` for 24 hours). Clips older than this will be deleted.
-- **`maxusage`**: (Used with `policy: usage`) The target maximum disk usage percentage (e.g., `85%`). Cleanup triggers when usage exceeds this threshold.
-- **`minclips`**: (Used with `policy: usage`) The minimum number of clips to keep for each species, even when cleaning up based on disk usage. This ensures you retain at least some recent examples per species.
-- **`checkInterval`**: How often to check if cleanup is needed, in minutes (default: 15). Higher values reduce CPU/IO overhead but may delay cleanup. For usage-based policy, disk usage is checked first before scanning files, so setting this too low won't waste resources when disk usage is below threshold.
+- **`maxusage`**: (Used with `policy: usage`) The target maximum disk usage percentage (default: `80%`). Cleanup triggers when usage exceeds this threshold.
+- **`minclips`**: (Used with `policy: usage`) The minimum number of clips to keep for each species (default: `10`), even when cleaning up based on disk usage. This ensures you retain at least some recent examples per species.
+- **`keepspectrograms`**: Keep rendered spectrogram images when audio clips are evicted (default: `true`).
+- **`checkinterval`**: How often to check if cleanup is needed, in minutes (default: `15`). Higher values reduce CPU/IO overhead but may delay cleanup. For usage-based policy, disk usage is checked first before scanning files, so setting this too low won't waste resources when disk usage is below threshold.
 
 ### Security Features
 
 The application includes several security options:
 
 - Basic authentication with password protection
-- OAuth2 authentication through Google or GitHub
-- Automatic TLS certificate management via Let's Encrypt
+- OAuth2 and OpenID Connect (OIDC) authentication (Google, GitHub, Microsoft, and generic OIDC providers; see [Security & Access Control](security.md))
+- TLS certificate management (`tlsMode`: Let's Encrypt AutoTLS, manual certificates, or self-signed)
 - IP subnet-based authentication bypass for local networks
 
 #### Setting Up OAuth Authentication
 
-BirdNET-Go supports OAuth2 authentication with Google and GitHub for secure access to your web interface. This is the recommended authentication method when exposing your instance to the internet.
+BirdNET-Go supports OAuth2 and OpenID Connect authentication (Google, GitHub, Microsoft, and generic OIDC providers) for secure access to your web interface. Configure providers in the web UI under **Settings > Security** or via `security.oauthProviders` in `config.yaml` (see [Security & Access Control](security.md) for OIDC and allowed-user ID guidance). The examples below cover Google and GitHub app registration:
 
 ##### Google OAuth Setup
 
@@ -1479,40 +1487,29 @@ BirdNET-Go supports OAuth2 authentication with Google and GitHub for secure acce
 ```yaml
 security:
   host: "yourdomain.com" # Your domain for HTTPS
-  autotls: true # Enable automatic HTTPS certificates
+  tlsMode: "autotls" # Enable automatic HTTPS certificates via Let's Encrypt
 
-  googleauth:
-    enabled: true
-    clientid: "123456789-abcdefghijklmnop.apps.googleusercontent.com"
-    clientsecret: "GOCSPX-your-secret-key-here"
-    userid: "user@gmail.com" # Optional: restrict to specific user
+  oauthProviders:
+    - provider: google
+      enabled: true
+      clientId: "123456789-abcdefghijklmnop.apps.googleusercontent.com"
+      clientSecret: "GOCSPX-your-secret-key-here"
+      userId: "your-google-user-id" # Optional: restrict to specific user ID (preferred over email)
 
-  githubauth:
-    enabled: true
-    clientid: "Ov23liABCDEFGHIJ1234"
-    clientsecret: "your-github-secret-key-here"
-    userid: "yourusername" # Optional: restrict to specific user
+    - provider: github
+      enabled: true
+      clientId: "Ov23liABCDEFGHIJ1234"
+      clientSecret: "your-github-secret-key-here"
+      userId: "your-github-user-id" # Optional: restrict to specific user ID
 ```
 
-**Environment variables** (Docker):
-
-```bash
-BIRDNET_SECURITY_GOOGLEAUTH_ENABLED=true
-BIRDNET_SECURITY_GOOGLEAUTH_CLIENTID=123456789-abcdefghijklmnop.apps.googleusercontent.com
-BIRDNET_SECURITY_GOOGLEAUTH_CLIENTSECRET=GOCSPX-your-secret-key-here
-BIRDNET_SECURITY_GOOGLEAUTH_USERID=user@gmail.com
-
-BIRDNET_SECURITY_GITHUBAUTH_ENABLED=true
-BIRDNET_SECURITY_GITHUBAUTH_CLIENTID=Ov23liABCDEFGHIJ1234
-BIRDNET_SECURITY_GITHUBAUTH_CLIENTSECRET=your-github-secret-key-here
-BIRDNET_SECURITY_GITHUBAUTH_USERID=yourusername
-```
+OAuth providers are configured in `config.yaml` under `security.oauthProviders` or in the web UI under **Settings > Security** (OAuth provider settings do not have individual environment variables).
 
 ##### Important OAuth Notes
 
 - **Callback URLs**: Always use the format `/auth/provider/callback` (e.g., `/auth/google/callback`, `/auth/github/callback`) as shown in the BirdNET-Go settings page
-- **HTTPS Requirement**: OAuth providers typically require HTTPS for production use. Enable `autotls: true` or use a reverse proxy with SSL certificates
-- **User ID Restrictions**: The optional `userid` field allows you to restrict access to a specific account for enhanced security
+- **HTTPS Requirement**: OAuth providers typically require HTTPS for production use. Enable `tlsMode: "autotls"` or use a reverse proxy with SSL certificates
+- **User ID Restrictions**: The optional `userId` field allows you to restrict access to a specific account for enhanced security (prefer provider user IDs over email addresses; see [Security & Access Control](security.md#allowed-users-prefer-user-ids))
 - **Local Network**: OAuth authentication works on local networks, but you can also enable subnet bypass for local access without OAuth
 - **Multiple Providers**: You can enable both Google and GitHub OAuth simultaneously - users will see both options on the login page
 
@@ -1546,84 +1543,71 @@ BirdNET-Go includes intelligent filtering mechanisms:
 
 ### Deep Detection
 
-BirdNET-Go includes a "Deep Detection" feature designed to improve detection reliability and reduce false positives by requiring multiple detections of the same species within a time window.
+BirdNET-Go includes a "Deep Detection" (false-positive filter) mechanism designed to improve detection reliability by requiring multiple overlapping confirmations of the same species within the pending detection window.
 
 #### Deep Detection Flow Chart
 
 ```mermaid
 graph TD
-    A[Species Detected<br/>by BirdNET] --> B{First Detection<br/>of This Species?}
+    A[Species Detected<br/>by Model] --> B{First Detection<br/>of This Species?}
 
-    B -->|Yes| C[⏱️ Start 15-Second<br/>Counting Window<br/>Count = 1]
-    B -->|No| D[📈 Increment Counter<br/>Count = Count + 1]
+    B -->|Yes| C[Start Pending Window<br/>captureLength - preCapture<br/>Count = 1]
+    B -->|No| D[Increment Counter<br/>Count = Count + 1]
 
-    C --> E[🎧 Continue Listening<br/>for More Audio]
+    C --> E[Continue Listening<br/>for More Audio]
     D --> E
 
     E --> F{Same Species<br/>Detected Again?}
-    F -->|Yes| G[⬆️ Add to Count]
-    F -->|No| H{15 Seconds<br/>Elapsed?}
+    F -->|Yes| G[Add to Count]
+    F -->|No| H{Window<br/>Elapsed?}
 
     G --> H
     H -->|No| E
-    H -->|Yes| I{Count ≥ Required<br/>Minimum?}
+    H -->|Yes| I{Count >= Required<br/>Minimum?}
 
-    I -->|No| J[❌ Rejected<br/>False Positive]
+    I -->|No| J[Rejected<br/>False Positive]
     I -->|Yes| K{Final Safety<br/>Checks Pass?}
 
-    K -->|No| L[❌ Blocked by<br/>Privacy/Dog/Consensus Filter]
-    K -->|Yes| M[✅ Detection Approved<br/>Saved to Database]
+    K -->|No| L[Blocked by<br/>Privacy/Dog/Consensus Filter]
+    K -->|Yes| M[Detection Approved<br/>Saved to Database]
 
-    J --> N[🗂️ Log: Not enough matches]
-    L --> O[🗂️ Log: Blocked by filter]
-    M --> P[🗂️ Log: Species confirmed]
+    J --> N[Log: Not enough matches]
+    L --> O[Log: Blocked by filter]
+    M --> P[Log: Species confirmed]
 ```
 
 #### How Deep Detection Works
 
-1. **Increased Analysis Frequency**: Higher `overlap` values reduce the step size between audio analysis windows (e.g., from 1.5 seconds to 300ms), causing the BirdNET AI model to run more frequently
-
-2. **Pending Detection System**: All detections are held in memory for exactly **15 seconds** from the first detection
-
-3. **Counting Mechanism**: During the 15-second window, each additional detection of the same species increments a counter
-
-4. **Variable Threshold**: The number of required detections scales with the overlap setting:
-
-   ```
-   Required Detections = max(1, 3 / max(0.1, 3.0 - overlap))
-
-   Examples:
-   - overlap: 0.0 → 1 detection required (standard mode)
-   - overlap: 2.4 → 5 detections required
-   - overlap: 2.7 → 10 detections required (typical deep detection)
-   - overlap: 2.9 → 30 detections required (very strict)
-   ```
-
-5. **Decision Point**: After exactly 15 seconds, the detection is either approved (if minimum count reached) or discarded as a false positive
+1. **Increased Analysis Frequency**: Higher `overlap` values reduce the step size between audio analysis windows (for example from 1.5 s down to 200 ms), causing the model to run more frequently.
+2. **Pending Detection Window**: Detections are held in memory for `max(0, captureLength - preCaptureLength)` seconds from the first detection (12 seconds with the default 15 s clip length and 3 s pre-capture buffer).
+3. **Counting Mechanism**: During the holding window, each additional detection of the same species increments the counter and retains the highest confidence score.
+4. **Level-Based Confirmation Threshold**: Required confirmations are computed from `realtime.falsepositivefilter.level` (0 to 5) and the analysis step against a 6-second reference vocalization window (see [Stage 3: Deep Detection (False Positive Filter)](#stage-3-deep-detection-false-positive-filter) for the exact formula and level table).
+5. **Decision Point**: When the holding window expires, the detection is either approved (if the confirmation count meets or exceeds the minimum) or discarded as a false positive.
 
 #### Benefits and Use Cases
 
-- **False Positive Reduction**: Eliminates single spurious detections that don't repeat
-- **Lower Threshold Tolerance**: Allows using lower `birdnet.threshold` values (e.g., 0.3-0.6) while maintaining accuracy
-- **Quality Selection**: Keeps the highest confidence detection from the 15-second window
-- **Consistent Behavior**: All detections are held for exactly 15 seconds, providing predictable timing
+- **False Positive Reduction**: Eliminates single spurious detections that do not repeat across overlapping windows
+- **Lower Threshold Tolerance**: Allows using lower `birdnet.threshold` values while maintaining accuracy
+- **Quality Selection**: Keeps the highest confidence detection from the pending window
 
 #### System Requirements
 
-- **CPU Load**: Significantly increases processing requirements due to higher analysis frequency
+- **CPU Load**: Higher overlap increases inference frequency and CPU load; BirdNET-Go caps the effective overlap if the hardware cannot keep up with the configured cadence
 - **Recommended Hardware**: Raspberry Pi 4/5 or more powerful systems
 - **Performance Monitoring**: Watch for `processing time exceeded buffer interval` (one model is too slow for its step) and `analysis is not keeping up with incoming audio` (audio is being lost) warnings
 
 #### Configuration
 
-- **Docker Installation**: Deep Detection is **enabled by default** with the `install.sh` script, which benchmarks your hardware and sets appropriate overlap values
-- **Manual Configuration**: Set `birdnet.overlap` in your `config.yaml`:
+- **Web UI**: Choose a filter level (Off through Maximum) under **Settings > Analysis**; BirdNET-Go sets the matching overlap automatically.
+- **Manual Configuration**: Set `realtime.falsepositivefilter.level` (and `birdnet.overlap` if needed) in `config.yaml`:
   ```yaml
   birdnet:
-    overlap: 2.7 # Enable deep detection (10 detections required)
-    threshold: 0.5 # Can use lower thresholds with deep detection
+    overlap: 2.4 # Minimum overlap for Balanced (level 3)
+  realtime:
+    falsepositivefilter:
+      level: 3 # 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum
   ```
-- **Disabling**: Set `overlap: 0.0` for standard single-detection mode
+- **Disabling**: Set `realtime.falsepositivefilter.level: 0` for single-detection mode.
 
 #### Reference
 

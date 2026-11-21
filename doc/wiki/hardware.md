@@ -46,7 +46,7 @@ Different AI classifiers have different resource demands:
 
 - **Recommended:** Raspberry Pi OS Lite (64-bit) based on Debian Bookworm (Debian 12)
   - **Rationale:**
-    - 64-bit OS is **required** (not optional) because TensorFlow Lite requires a 64-bit system
+    - 64-bit OS is **required** (not optional) because TensorFlow Lite and ONNX Runtime require a 64-bit system
     - "Lite" version avoids unnecessary desktop components, saving resources
     - Bookworm provides current package support for dependencies
 
@@ -210,7 +210,7 @@ Bat echolocation calls are ultrasonic, typically ranging from 20kHz to over 120k
 
 - **Limited Memory Resources:**
   - Disable thumbnail generation in the web interface
-  - Use WAV format for audio exports (requires less processing)
+  - Use WAV format for audio exports to avoid compression overhead (largest files; see [Audio Formats](audio-formats.md))
   - Implement aggressive retention policies for audio clips
 
 ## Additional Resources
