@@ -61,8 +61,11 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
   acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
 }));
 
-const quietHours = vi.hoisted(() => ({
-  status: null as { suppressedStreams: Record<string, boolean> } | null,
+interface QuietHoursStatusFixture {
+  suppressedStreams: Record<string, boolean>;
+}
+const quietHours = vi.hoisted((): { status: QuietHoursStatusFixture | null } => ({
+  status: null,
 }));
 vi.mock('$lib/stores/quietHours.svelte', () => ({
   quietHoursStore: {
@@ -96,6 +99,14 @@ import { watchModels } from '$lib/stores/models.svelte';
 import { api } from '$lib/utils/api';
 import StreamManager from './StreamManager.svelte';
 import { analyzeStreamChannels } from './streamOptions';
+
+// Tests override these shared mocks; each override is undone after the test.
+const defaultApiGet = vi.mocked(api.get).getMockImplementation();
+afterEach(() => {
+  vi.mocked(api.get).mockReset();
+  if (defaultApiGet) vi.mocked(api.get).mockImplementation(defaultApiGet);
+  vi.mocked(analyzeStreamChannels).mockReset();
+});
 
 const ADD_KEY = 'settings.audio.streams.addStream';
 const TEST_REQUIRED_KEY = 'settings.audio.streams.testRequired';
@@ -160,8 +171,16 @@ async function confirmDelete(cardIndex: number) {
   if (confirm) await fireEvent.click(confirm);
 }
 
-async function fillAddForm(name: string, url: string) {
+/** Opens the add form from Add stream, which waits for the first health load. */
+async function openAddForm() {
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: ADD_KEY })).not.toHaveAttribute('aria-disabled')
+  );
   await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+}
+
+async function fillAddForm(name: string, url: string) {
+  await openAddForm();
   await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: name } });
   await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: url } });
 }
@@ -601,9 +620,11 @@ describe('StreamManager add form', () => {
     await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://gate/other' },
     });
-    await fireEvent.click(screen.getByTestId('stream-test-finish'));
+    // The earlier URL turned out to be stereo; that says nothing about the newer one.
+    await fireEvent.click(screen.getByTestId('stream-test-finish-stereo'));
 
     expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-channels', '0');
+    expect(analyzeStreamChannels).not.toHaveBeenCalled();
   });
 
   it('keeps the result of the test of the URL the form holds', async () => {
@@ -666,7 +687,7 @@ describe('StreamManager add form', () => {
 
   it('limits the name of a new stream to what the server accepts', async () => {
     renderRows([]);
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await openAddForm();
 
     expect(screen.getByTestId(NAME_TESTID)).toHaveAttribute('maxlength', '64');
   });
@@ -696,7 +717,7 @@ describe('StreamManager add form', () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
     renderRows([]);
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await openAddForm();
     await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://gate/live' },
     });
@@ -716,7 +737,7 @@ describe('StreamManager add form', () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
     renderRows([]);
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await openAddForm();
     await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://gate/live' },
     });
@@ -803,7 +824,7 @@ describe('StreamManager blocked actions', () => {
   it('keeps the empty state Add stream button while blocked, marked and linked to the reason', async () => {
     const view = renderRows([]);
     const add = screen.getByRole('button', { name: ADD_KEY });
-    expect(add).not.toHaveAttribute('aria-disabled');
+    await waitFor(() => expect(add).not.toHaveAttribute('aria-disabled'));
 
     await view.rerender({ streams: [], disabled: true, disabledReason: SAVING_KEY });
 
@@ -829,12 +850,12 @@ describe('StreamManager blocked actions', () => {
   it('shows no reason and keeps the buttons usable while nothing is blocked', async () => {
     renderRows([streamA, streamB], { disabledReason: SAVING_KEY });
 
-    expect(screen.queryByText(SAVING_KEY)).toBeNull();
-    expect(screen.getByRole('button', { name: ADD_KEY })).not.toHaveAttribute('aria-disabled');
-    // Refresh is inert only while the first health load runs.
+    // Add stream and Refresh are inert only while the first health load runs.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: REFRESH_KEY })).not.toHaveAttribute('aria-disabled')
     );
+    expect(screen.queryByText(SAVING_KEY)).toBeNull();
+    expect(screen.getByRole('button', { name: ADD_KEY })).not.toHaveAttribute('aria-disabled');
   });
 });
 
@@ -1093,5 +1114,268 @@ describe('StreamManager health follows the saved streams', () => {
 
     await view.rerender({ streams: [streamA], savedStreams: [] });
     expect(sse.closed).toBe(1);
+  });
+});
+
+describe('StreamManager add form channel choice and analysis', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  const mode = () => screen.getByTestId('channel-controls').getAttribute('data-mode');
+
+  async function analyzeFirstUrl() {
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+    await waitFor(() => expect(mode()).toBe('left'));
+  }
+
+  it('resets the automatic channel choice when the URL changes', async () => {
+    vi.mocked(analyzeStreamChannels).mockResolvedValue(LEFT_ANALYSIS);
+    renderRows([]);
+    await analyzeFirstUrl();
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: 'rtsp://gate/two' } });
+
+    expect(mode()).toBe('downmix');
+  });
+
+  it('keeps a channel picked by hand when the URL changes', async () => {
+    vi.mocked(analyzeStreamChannels).mockResolvedValue(LEFT_ANALYSIS);
+    renderRows([]);
+    await analyzeFirstUrl();
+    await fireEvent.click(screen.getByTestId('channel-pick-right'));
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: 'rtsp://gate/two' } });
+
+    expect(mode()).toBe('right');
+  });
+
+  it('does not let a late analysis rejection for an earlier URL show up', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: 'rtsp://gate/two' } });
+    pending.reject(new Error('boom'));
+    await tick();
+    await tick();
+
+    const controls = screen.getByTestId('channel-controls');
+    expect(controls).toHaveAttribute('data-error', '');
+    expect(controls).toHaveAttribute('data-analyzing', 'false');
+  });
+
+  it('does not let a late analysis result land when the field went away and came back to the URL', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: 'rtsp://gate/two' } });
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
+      target: { value: 'rtsp://gate/live' },
+    });
+    pending.resolve(LEFT_ANALYSIS);
+    await pending.promise;
+    await tick();
+
+    expect(mode()).toBe('downmix');
+  });
+
+  it('detects the add form type from the trimmed URL', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', '  http://gate/live');
+
+    expect(screen.getAllByTestId('select-settings.audio.streams.typeLabel').at(-1)).toHaveValue(
+      'http'
+    );
+  });
+});
+
+describe('StreamManager add form validation on blur', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it('shows a malformed URL on blur ahead of the test reminder', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', 'not a url');
+    const url = screen.getByTestId(URL_TESTID);
+    expect(url).toHaveAccessibleDescription(TEST_REQUIRED_KEY);
+
+    await fireEvent.blur(url);
+
+    expect(url).toHaveAccessibleDescription('settings.audio.streams.errors.invalidUrl');
+  });
+
+  it('shows an empty URL as required on blur', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', '');
+
+    await fireEvent.blur(screen.getByTestId(URL_TESTID));
+
+    expect(screen.getByTestId(URL_TESTID)).toHaveAccessibleDescription(
+      'settings.audio.streams.errors.urlRequired'
+    );
+  });
+
+  it('shows an empty name as required on blur, and clears it when the field is edited', async () => {
+    renderRows([]);
+    await fillAddForm('', 'rtsp://gate/live');
+    const name = screen.getByTestId(NAME_TESTID);
+
+    await fireEvent.blur(name);
+    expect(name).toHaveAccessibleDescription('settings.audio.streams.errors.nameRequired');
+
+    await fireEvent.input(name, { target: { value: 'Gate' } });
+    expect(name).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('keeps the test reminder for a valid untested URL on blur', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    const url = screen.getByTestId(URL_TESTID);
+
+    await fireEvent.blur(url);
+
+    expect(url).toHaveAccessibleDescription(TEST_REQUIRED_KEY);
+  });
+});
+
+describe('StreamManager Add stream during the first health load', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it.each([
+    ['with streams', [streamA]],
+    ['with no streams', []],
+  ])(
+    'blocks both entry points with the loading reason until it settles, %s',
+    async (_label, streams) => {
+      const pending = deferred<never[]>();
+      vi.mocked(api.get).mockReturnValueOnce(pending.promise);
+      renderRows(streams);
+
+      const add = screen.getByRole('button', { name: ADD_KEY });
+      expect(add).toHaveAttribute('aria-disabled', 'true');
+      expect(add).toHaveAccessibleDescription('common.loading');
+      await fireEvent.click(add);
+      expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
+
+      pending.resolve([]);
+      await waitFor(() => expect(add).not.toHaveAttribute('aria-disabled'));
+      await fireEvent.click(add);
+      expect(screen.getByTestId(NAME_TESTID)).toBeInTheDocument();
+    }
+  );
+});
+
+describe('StreamManager health ownership of a row', () => {
+  const CONNECTED_KEY = 'settings.audio.streams.status.connected';
+  const UNKNOWN_KEY = 'settings.audio.streams.status.unknown';
+  const SUPPRESSED_KEY = 'settings.audio.streams.status.suppressed';
+  const healthOf = (stream: StreamConfig) => ({
+    name: stream.name,
+    type: stream.type,
+    url: stream.url,
+    is_healthy: true,
+    process_state: 'running',
+    last_data_received: null,
+    restart_count: 0,
+    total_bytes_received: 0,
+    bytes_per_second: 0,
+    is_receiving_data: true,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.get).mockResolvedValue([healthOf(streamA), healthOf(streamB)]);
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it('takes quiet hours eligibility from the saved stream, not the unsaved draft', async () => {
+    const quiet = { ...streamA, quietHours: { ...defaultQuietHoursConfig, enabled: true } };
+    const draft = { ...quiet, quietHours: { ...defaultQuietHoursConfig, enabled: false } };
+    quietHours.status = { suppressedStreams: { [streamA.url]: true } };
+    onTestFinished(() => {
+      quietHours.status = null;
+    });
+    vi.mocked(api.get).mockResolvedValue([]);
+
+    renderRows([draft], { savedStreams: [quiet] });
+
+    expect(within(header('A')).getByText(SUPPRESSED_KEY)).toBeInTheDocument();
+  });
+
+  it('does not lend a row the health of another saved stream that took its URL', async () => {
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+
+    // The saved list replaced A/x with Z/x.
+    const z = { ...streamA, name: 'Z' };
+    vi.mocked(api.get).mockResolvedValue([healthOf(z), healthOf(streamB)]);
+    await view.rerender({ streams: [streamA, streamB], savedStreams: [z, streamB] });
+
+    await waitFor(() => expect(within(header('B')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+  });
+
+  it('keeps the health of a row through an unsaved rename while its saved stream exists', async () => {
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    await fireEvent.click(header('A'));
+
+    await fireEvent.input(screen.getByLabelText(/settings\.audio\.streams\.nameLabel/), {
+      target: { value: 'A2' },
+    });
+    await echoLast(view, view.onUpdateStreams);
+
+    expect(within(header('A2')).getByText(CONNECTED_KEY)).toBeInTheDocument();
+  });
+
+  it('drops a health response that started before the saved list changed, and asks again', async () => {
+    const first = deferred<ReturnType<typeof healthOf>[]>();
+    vi.mocked(api.get).mockReset();
+    vi.mocked(api.get)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValue([healthOf(streamA)]);
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA] });
+
+    // A save added B to the saved list while the first request is open.
+    await view.rerender({ streams: [streamA, streamB], savedStreams: [streamA, streamB] });
+    expect(api.get).toHaveBeenCalledOnce();
+    first.resolve([healthOf(streamA), healthOf({ ...streamB, url: 'rtsp://b/old' })]);
+
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    expect(within(header('B')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
   });
 });

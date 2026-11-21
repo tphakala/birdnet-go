@@ -256,9 +256,9 @@
 
   // Check if a specific stream is suppressed by quiet hours.
   // The backend returns sanitized URLs (credentials stripped), so we compare using sanitized form.
-  function isStreamSuppressed(url: string, stream: StreamConfig): boolean {
+  function isStreamSuppressed(url: string, savedStream: StreamConfig): boolean {
     const qhStatus = quietHoursStore.status;
-    if (!stream.quietHours?.enabled || !qhStatus?.suppressedStreams) return false;
+    if (!savedStream.quietHours?.enabled || !qhStatus?.suppressedStreams) return false;
     const sanitized = sanitizeUrlForComparison(url);
     // eslint-disable-next-line security/detect-object-injection -- sanitized URL from internal sanitizeUrlForComparison, not user input
     return qhStatus.suppressedStreams[sanitized] === true;
@@ -275,9 +275,11 @@
     if (!health) {
       // No health data means the stream was removed from the active map.
       // Check per-stream suppression state rather than global anyActive flag.
-      // Only a stream that has a saved counterpart can be suppressed: an unsaved card
-      // with the URL of a suppressed stream must not borrow its status.
-      if (healthUrl !== undefined && isStreamSuppressed(healthUrl, stream)) {
+      // Suppression belongs to the saved stream: its saved quiet hours decide, not the
+      // draft, and a card without a saved counterpart must not borrow another's status.
+      const saved =
+        healthUrl === undefined ? undefined : savedStreams.find(s => s.url === healthUrl);
+      if (healthUrl !== undefined && saved && isStreamSuppressed(healthUrl, saved)) {
         return 'suppressed';
       }
       return 'unknown';
@@ -318,9 +320,13 @@
   async function loadHealthStatus() {
     if (healthLoading) return;
     healthLoading = true;
+    // The saved names and URLs this request belongs to: the entries are matched against
+    // the saved list, so a response for an older list must not be applied to a newer one.
+    const requestedIdentity = listIdentity(savedStreams);
 
     try {
       const response = await api.get<StreamHealthResponse[]>('/api/v2/streams/health');
+      if (requestedIdentity !== listIdentity(savedStreams)) return;
 
       // Clear existing entries first (mutate, don't reassign)
       for (const key of Object.keys(streamHealth)) {
@@ -345,6 +351,8 @@
       // Health loading failure is non-critical, stream cards will show "unknown" status
     } finally {
       healthLoading = false;
+      // The saved list changed while the request ran: ask again for the latest one.
+      if (requestedIdentity !== listIdentity(savedStreams)) void loadHealthStatus();
     }
   }
 
@@ -394,10 +402,28 @@
   }
 
   // Handle URL input with auto-detection
+  // The trimmed URL of the field at its last input.
+  let lastNewUrl = '';
+  // The channel choice came from an analysis, not from the user: it belongs to the URL
+  // that was analyzed and goes back to the default when the URL changes.
+  let channelModeIsAutomatic = false;
+
   function handleUrlInput(value: string) {
     urlError = null;
-    if (value.includes('://')) {
-      newStreamType = detectStreamType(value);
+    const trimmed = value.trim();
+    if (trimmed.includes('://')) {
+      newStreamType = detectStreamType(trimmed);
+    }
+    if (trimmed === lastNewUrl) return;
+    lastNewUrl = trimmed;
+    // A run, a result or a rejection of an earlier URL must not land on this one.
+    analysisSeq++;
+    isAnalyzing = false;
+    analysisResult = null;
+    analysisError = null;
+    if (channelModeIsAutomatic) {
+      newChannelMode = 'downmix';
+      channelModeIsAutomatic = false;
     }
   }
 
@@ -412,6 +438,7 @@
       analysisResult = result;
       if (result.recommended && result.recommended !== 'downmix') {
         newChannelMode = result.recommended;
+        channelModeIsAutomatic = true;
       }
     } catch (err: unknown) {
       if (seq !== analysisSeq) return;
@@ -448,6 +475,8 @@
     newTransport = 'tcp';
     newStreamType = 'rtsp';
     newChannelMode = 'downmix';
+    channelModeIsAutomatic = false;
+    lastNewUrl = '';
     newGain = 0;
     newModels = defaultModels;
     newQuietHours = { ...defaultQuietHoursConfig };
@@ -467,7 +496,7 @@
   // Add new stream
   // Open add form with the default models pre-selected
   function openAddForm() {
-    if (disabled) return;
+    if (addEntryBlocked) return;
     newModels = defaultModels;
     showAddForm = true;
   }
@@ -482,35 +511,41 @@
   // One stream opens by default, several start closed.
   const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
 
-  // The URL each row had in the saved list, by row id. Health belongs to the saved
-  // stream, so a row shows it only while its URL is still that saved URL: an edited
-  // URL, or a URL copied from another stream, shows none. A row counts as saved when
-  // its name and URL are those of a saved stream at the moment its id is given out
-  // (the first list, Reset, a reload) or the saved list is replaced (a Save). The
-  // map is rebuilt from scratch each time: a row keeps the saved URL it had only
-  // while a saved stream still has that URL, so a stale entry cannot outlive it.
-  const savedRowUrls = new SvelteMap<string, string>();
+  // The saved stream (name and URL) each row came from, by row id. Health belongs to
+  // the saved stream, so a row shows it only while its URL is still that saved URL: an
+  // edited URL, or a URL copied from another stream, shows none. A row counts as saved
+  // when its name and URL are those of a saved stream at the moment its id is given out
+  // (the first list, Reset, a reload) or the saved list is replaced (a Save). The map is
+  // rebuilt from scratch each time: a row keeps its earlier saved source (through an
+  // unsaved rename, say) only while that same saved source still exists, never just
+  // because another saved stream now uses the URL.
+  interface SavedSource {
+    name: string;
+    url: string;
+  }
+  const savedRowSources = new SvelteMap<string, SavedSource>();
+
+  function sourceKey(source: SavedSource): string {
+    return JSON.stringify([source.name, source.url]);
+  }
 
   function adoptSavedUrls() {
-    const savedPairs = new Set(
-      savedStreams.map(stream => JSON.stringify([stream.name, stream.url]))
-    );
-    const savedUrls = new Set(savedStreams.map(stream => stream.url));
-    const next = new Map<string, string>();
+    const savedKeys = new Set(savedStreams.map(sourceKey));
+    const next = new Map<string, SavedSource>();
     streams.forEach((stream, index) => {
       const id = rowIds.at(index);
       if (id === undefined) return;
-      const known = savedRowUrls.get(id);
-      if (savedPairs.has(JSON.stringify([stream.name, stream.url]))) next.set(id, stream.url);
-      else if (known !== undefined && savedUrls.has(known)) next.set(id, known);
+      const known = savedRowSources.get(id);
+      if (savedKeys.has(sourceKey(stream))) next.set(id, { name: stream.name, url: stream.url });
+      else if (known !== undefined && savedKeys.has(sourceKey(known))) next.set(id, known);
     });
-    savedRowUrls.clear();
-    next.forEach((url, id) => savedRowUrls.set(id, url));
+    savedRowSources.clear();
+    next.forEach((source, id) => savedRowSources.set(id, source));
   }
 
   /** The URL a row's health is filed under: its saved URL while the row still has it. */
   function healthUrlOf(id: string | undefined, stream: StreamConfig): string | undefined {
-    const saved = id === undefined ? undefined : savedRowUrls.get(id);
+    const saved = id === undefined ? undefined : savedRowSources.get(id)?.url;
     return saved !== undefined && saved === stream.url ? saved : undefined;
   }
 
@@ -541,7 +576,7 @@
       expectedIdentity = identity;
       rowIds = newRowIds(streams.length);
       expandedRows.clear();
-      savedRowUrls.clear();
+      savedRowSources.clear();
       adoptSavedUrls();
       if (streams.length === 1) expandedRows.add(rowIds[0]);
     });
@@ -565,29 +600,24 @@
   /** Id of the reason line shown below the manager while it is disabled, and of the add form's test reason. */
   const blockedReasonId = generateId('streams-blocked-reason');
   const addTestRequiredId = generateId('add-stream-test-required');
-  let blockedReason = $derived(disabledReason ?? t('common.loading'));
-  /** Id of the loading text beside Refresh while a health load runs and nothing else blocks it. */
-  const refreshLoadingId = generateId('streams-refresh-loading');
-  let refreshDescribedBy = $derived(
-    disabled ? blockedReasonId : healthLoading ? refreshLoadingId : undefined
+  // The reason line says why the manager is disabled, or that the health load runs.
+  let blockedReason = $derived(
+    disabled ? (disabledReason ?? t('common.loading')) : t('common.loading')
   );
+  // Add stream (both entry points) and Refresh wait for a running health load too.
+  let addEntryBlocked = $derived(disabled || healthLoading);
+  let refreshDescribedBy = $derived(addEntryBlocked ? blockedReasonId : undefined);
   let addDescribedBy = $derived(
     [disabled ? blockedReasonId : undefined, newNeedsTest ? addTestRequiredId : undefined]
       .filter(Boolean)
       .join(' ') || undefined
   );
 
-  function addStream() {
-    if (addBlocked) return;
-    clearErrors();
-
-    const trimmedName = newName.trim();
-    const trimmedUrl = newUrl.trim();
-
+  function buildNewStream(): StreamConfig {
     // Only RTSP and RTMP take a transport.
-    const newStream: StreamConfig = {
-      name: trimmedName,
-      url: trimmedUrl,
+    return {
+      name: newName.trim(),
+      url: newUrl.trim(),
       enabled: true,
       type: newStreamType,
       models: newModels.length > 0 ? newModels : defaultModels,
@@ -596,10 +626,34 @@
       gain: newGain,
       quietHours: newQuietHours,
     };
+  }
 
-    // The new row against the current rows only: the saved list is not a reason to
-    // accept it, and its URL was tested (addBlocked).
-    const problem = streamProblems([...streams, newStream], [], new Set([trimmedUrl])).at(-1);
+  /**
+   * What is wrong with the new stream against the current rows only: the saved list is
+   * not a reason to accept it, and the test requirement is checked apart (addBlocked).
+   */
+  function newStreamProblem(newStream: StreamConfig) {
+    return streamProblems([...streams, newStream], [], new Set([newStream.url])).at(-1);
+  }
+
+  // An empty or malformed name or URL shows when its field is left, ahead of the
+  // reminder that the URL needs a test.
+  function validateNameOnBlur() {
+    const problem = newStreamProblem(buildNewStream());
+    if (problem?.name) nameError = streamNameProblemMessage(problem.name);
+  }
+
+  function validateUrlOnBlur() {
+    const problem = newStreamProblem(buildNewStream());
+    if (problem?.url) urlError = streamUrlProblemMessage(problem.url);
+  }
+
+  function addStream() {
+    if (addBlocked) return;
+    clearErrors();
+
+    const newStream = buildNewStream();
+    const problem = newStreamProblem(newStream);
     if (problem?.name) {
       nameError = streamNameProblemMessage(problem.name);
       return;
@@ -633,7 +687,7 @@
     rowIds = rowIds.filter((_, i) => i !== index);
     if (id !== undefined) {
       expandedRows.delete(id);
-      savedRowUrls.delete(id);
+      savedRowSources.delete(id);
     }
     sendStreams(streams.filter((_, i) => i !== index));
     // The deleted card took focus with it; land on the add button instead.
@@ -727,9 +781,6 @@
       </div>
 
       <div class="flex items-center gap-2">
-        {#if healthLoading && !disabled}
-          <span id={refreshLoadingId} class="text-xs text-muted">{t('common.loading')}</span>
-        {/if}
         <button
           type="button"
           class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
@@ -762,7 +813,7 @@
         label: t('settings.audio.streams.addStream'),
         icon: Plus,
         onclick: openAddForm,
-        disabled,
+        disabled: addEntryBlocked,
         describedBy: blockedReasonId,
       }}
     />
@@ -811,6 +862,7 @@
                 {disabled}
                 error={nameError ?? undefined}
                 oninput={() => (nameError = null)}
+                onblur={validateNameOnBlur}
               />
             </div>
 
@@ -826,6 +878,7 @@
                   : t('settings.audio.streams.urlHelp')}
                 required
                 oninput={handleUrlInput}
+                onblur={validateUrlOnBlur}
                 {disabled}
                 error={urlError ??
                   (newNeedsTest ? t('settings.audio.streams.testRequired') : undefined)}
@@ -881,7 +934,10 @@
               {analysisResult}
               {analysisError}
               {disabled}
-              onChange={mode => (newChannelMode = mode)}
+              onChange={mode => {
+                newChannelMode = mode;
+                channelModeIsAutomatic = false;
+              }}
               onAnalyze={url => analyzeChannels(url)}
             />
 
@@ -964,8 +1020,8 @@
         type="button"
         class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
         onclick={openAddForm}
-        aria-disabled={disabled ? 'true' : undefined}
-        aria-describedby={disabled ? blockedReasonId : undefined}
+        aria-disabled={addEntryBlocked ? 'true' : undefined}
+        aria-describedby={addEntryBlocked ? blockedReasonId : undefined}
       >
         <Plus class="size-4" />
         {t('settings.audio.streams.addStream')}
@@ -973,7 +1029,7 @@
     {/if}
   {/if}
 
-  {#if disabled}
+  {#if addEntryBlocked}
     <p id={blockedReasonId} class="text-sm text-[var(--text-subtle)]">{blockedReason}</p>
   {/if}
 </div>

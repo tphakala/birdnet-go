@@ -51,3 +51,10 @@
 >
   finish-stream-test
 </button>
+<button
+  type="button"
+  data-testid="stream-test-finish-stereo"
+  onclick={() => onResult?.({ sampleRate: PROBED_SAMPLE_RATE, channels: 2 }, startedUrl)}
+>
+  finish-stream-test-stereo
+</button>
