@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Hurtigtaster",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Hurtigtaster",
+      "enable": "Slå på hurtigtaster",
+      "enableHelp": "Slå av dette hvis hurtigtaster med én tast kommer i veien for en skjermleser, stemmestyring eller et hjelpetastatur.",
+      "offNote": "Hurtigtastene er slått av. Tastene nedenfor gjør ingenting før du slår dem på.",
+      "or": "eller"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Alle sider"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Navigasjon",
+      "review": "Gjennomgang",
+      "audio": "Lyd",
+      "general": "Generelt"
     },
     "keys": {
-      "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
-      "combination": "{first} plus {second}"
+      "shift": "Skift",
+      "space": "Mellomrom",
+      "arrowLeft": "Venstrepil",
+      "arrowRight": "Høyrepil",
+      "comma": "Komma",
+      "period": "Punktum",
+      "questionMark": "Spørsmålstegn",
+      "combination": "{first} pluss {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Eldre registrering av samme art",
+      "newerSpecies": "Nyere registrering av samme art",
+      "correct": "Merk som korrekt",
+      "falsePositive": "Merk som falsk positiv",
+      "wrongSpecies": "Endre arten",
+      "keep": "Behold eller frigi dette opptaket",
+      "playPause": "Spill av eller sett på pause",
+      "seekBack": "Ett sekund tilbake",
+      "seekForward": "Ett sekund frem",
+      "focusReview": "Gå til gjennomgangsknappene",
+      "backToList": "Tilbake til registreringer"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Vis eller skjul hurtigtaster"
     }
   }
 }

@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Īsinājumtaustiņi",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Īsinājumtaustiņi",
+      "enable": "Iespējot īsinājumtaustiņus",
+      "enableHelp": "Izslēdziet, ja viena taustiņa īsinājumi traucē ekrāna lasītājam, balss vadībai vai palīgtastatūrai.",
+      "offNote": "Īsinājumtaustiņi ir izslēgti. Tālāk norādītie taustiņi neko nedara, kamēr tos neieslēdzat.",
+      "or": "vai"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Visas lapas"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
+      "navigation": "Navigācija",
+      "review": "Pārskatīšana",
       "audio": "Audio",
-      "general": "General"
+      "general": "Vispārīgi"
     },
     "keys": {
       "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "space": "Atstarpes taustiņš",
+      "arrowLeft": "Kreisā bultiņa",
+      "arrowRight": "Labā bultiņa",
+      "comma": "Komats",
+      "period": "Punkts",
+      "questionMark": "Jautājuma zīme",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Vecāka tās pašas sugas noteikšana",
+      "newerSpecies": "Jaunāka tās pašas sugas noteikšana",
+      "correct": "Atzīmēt kā pareizu",
+      "falsePositive": "Atzīmēt kā kļūdaini pozitīvu",
+      "wrongSpecies": "Mainīt sugu",
+      "keep": "Paturēt vai atbrīvot šo ierakstu",
+      "playPause": "Atskaņot vai apturēt",
+      "seekBack": "Viena sekunde atpakaļ",
+      "seekForward": "Viena sekunde uz priekšu",
+      "focusReview": "Pāriet uz pārskatīšanas pogām",
+      "backToList": "Atpakaļ uz noteikšanām"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Rādīt vai paslēpt īsinājumtaustiņus"
     }
   }
 }

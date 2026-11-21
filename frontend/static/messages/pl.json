@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Skróty klawiszowe",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Skróty klawiszowe",
+      "enable": "Włącz skróty klawiszowe",
+      "enableHelp": "Wyłącz, jeśli skróty jednoklawiszowe przeszkadzają czytnikowi ekranu, sterowaniu głosowemu lub klawiaturze ułatwień dostępu.",
+      "offNote": "Skróty klawiszowe są wyłączone. Poniższe klawisze nic nie robią, dopóki ich nie włączysz.",
+      "or": "lub"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Wszystkie strony"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Nawigacja",
+      "review": "Ocena",
+      "audio": "Dźwięk",
+      "general": "Ogólne"
     },
     "keys": {
       "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "space": "Spacja",
+      "arrowLeft": "Strzałka w lewo",
+      "arrowRight": "Strzałka w prawo",
+      "comma": "Przecinek",
+      "period": "Kropka",
+      "questionMark": "Znak zapytania",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Starsza detekcja tego samego gatunku",
+      "newerSpecies": "Nowsza detekcja tego samego gatunku",
+      "correct": "Oznacz jako poprawne",
+      "falsePositive": "Oznacz jako fałszywie pozytywne",
+      "wrongSpecies": "Zmień gatunek",
+      "keep": "Zachowaj lub zwolnij to nagranie",
+      "playPause": "Odtwórz lub wstrzymaj",
+      "seekBack": "Cofnij o sekundę",
+      "seekForward": "Do przodu o sekundę",
+      "focusReview": "Przejdź do przycisków oceny",
+      "backToList": "Wróć do detekcji"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Pokaż lub ukryj skróty klawiszowe"
     }
   }
 }

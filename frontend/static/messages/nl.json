@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Sneltoetsen",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Sneltoetsen",
+      "enable": "Sneltoetsen inschakelen",
+      "enableHelp": "Schakel dit uit als sneltoetsen met één toets problemen geven met een schermlezer, spraakbesturing of een aangepast toetsenbord.",
+      "offNote": "Sneltoetsen staan uit. De onderstaande toetsen doen niets totdat je ze inschakelt.",
+      "or": "of"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Alle pagina's"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
+      "navigation": "Navigatie",
+      "review": "Beoordeling",
       "audio": "Audio",
-      "general": "General"
+      "general": "Algemeen"
     },
     "keys": {
       "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "space": "Spatiebalk",
+      "arrowLeft": "Pijl-links",
+      "arrowRight": "Pijl-rechts",
+      "comma": "Komma",
+      "period": "Punt",
+      "questionMark": "Vraagteken",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Oudere detectie van dezelfde soort",
+      "newerSpecies": "Nieuwere detectie van dezelfde soort",
+      "correct": "Markeren als juist",
+      "falsePositive": "Markeren als fout-positief",
+      "wrongSpecies": "De soort wijzigen",
+      "keep": "Deze opname bewaren of vrijgeven",
+      "playPause": "Afspelen of pauzeren",
+      "seekBack": "Een seconde terug",
+      "seekForward": "Een seconde vooruit",
+      "focusReview": "Naar de beoordelingsknoppen gaan",
+      "backToList": "Terug naar detecties"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Sneltoetsen tonen of verbergen"
     }
   }
 }

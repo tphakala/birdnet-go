@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Scorciatoie da tastiera",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Scorciatoie da tastiera",
+      "enable": "Attiva le scorciatoie da tastiera",
+      "enableHelp": "Disattivale se le scorciatoie a tasto singolo interferiscono con uno screen reader, il controllo vocale o una tastiera assistiva.",
+      "offNote": "Le scorciatoie da tastiera sono disattivate. I tasti qui sotto non fanno nulla finché non le attivi.",
+      "or": "o"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Tutte le pagine"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
+      "navigation": "Navigazione",
+      "review": "Revisione",
       "audio": "Audio",
-      "general": "General"
+      "general": "Generali"
     },
     "keys": {
-      "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
-      "combination": "{first} plus {second}"
+      "shift": "Maiusc",
+      "space": "Barra spaziatrice",
+      "arrowLeft": "Freccia sinistra",
+      "arrowRight": "Freccia destra",
+      "comma": "Virgola",
+      "period": "Punto",
+      "questionMark": "Punto interrogativo",
+      "combination": "{first} più {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Rilevamento precedente della stessa specie",
+      "newerSpecies": "Rilevamento successivo della stessa specie",
+      "correct": "Segna come corretto",
+      "falsePositive": "Segna come falso positivo",
+      "wrongSpecies": "Cambia la specie",
+      "keep": "Conserva o rilascia questa registrazione",
+      "playPause": "Riproduci o metti in pausa",
+      "seekBack": "Indietro di un secondo",
+      "seekForward": "Avanti di un secondo",
+      "focusReview": "Vai ai pulsanti di revisione",
+      "backToList": "Torna ai rilevamenti"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Mostra o nascondi le scorciatoie da tastiera"
     }
   }
 }

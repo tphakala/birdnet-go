@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Kortkommandon",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Kortkommandon",
+      "enable": "Aktivera kortkommandon",
+      "enableHelp": "Stäng av detta om kortkommandon med en enda tangent stör en skärmläsare, röststyrning eller ett hjälpmedelstangentbord.",
+      "offNote": "Kortkommandon är avstängda. Tangenterna nedan gör ingenting förrän du aktiverar dem.",
+      "or": "eller"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Alla sidor"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Navigering",
+      "review": "Granskning",
+      "audio": "Ljud",
+      "general": "Allmänt"
     },
     "keys": {
-      "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "shift": "Skift",
+      "space": "Blanksteg",
+      "arrowLeft": "Vänsterpil",
+      "arrowRight": "Högerpil",
+      "comma": "Komma",
+      "period": "Punkt",
+      "questionMark": "Frågetecken",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Äldre detektering av samma art",
+      "newerSpecies": "Nyare detektering av samma art",
+      "correct": "Markera som korrekt",
+      "falsePositive": "Markera som falskt positiv",
+      "wrongSpecies": "Ändra art",
+      "keep": "Behåll eller frigör denna inspelning",
+      "playPause": "Spela upp eller pausa",
+      "seekBack": "En sekund bakåt",
+      "seekForward": "En sekund framåt",
+      "focusReview": "Gå till granskningsknapparna",
+      "backToList": "Tillbaka till detekteringar"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Visa eller dölj kortkommandon"
     }
   }
 }

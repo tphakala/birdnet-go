@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Pikanäppäimet",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Pikanäppäimet",
+      "enable": "Ota pikanäppäimet käyttöön",
+      "enableHelp": "Poista käytöstä, jos yhden näppäimen pikanäppäimet häiritsevät ruudunlukijaa, puheohjausta tai apunäppäimistöä.",
+      "offNote": "Pikanäppäimet ovat pois käytöstä. Alla olevat näppäimet eivät tee mitään, ennen kuin otat ne käyttöön.",
+      "or": "tai"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Kaikki sivut"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Navigointi",
+      "review": "Tarkistus",
+      "audio": "Ääni",
+      "general": "Yleiset"
     },
     "keys": {
-      "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "shift": "Vaihto",
+      "space": "Välilyönti",
+      "arrowLeft": "Vasen nuoli",
+      "arrowRight": "Oikea nuoli",
+      "comma": "Pilkku",
+      "period": "Piste",
+      "questionMark": "Kysymysmerkki",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Vanhempi havainto samasta lajista",
+      "newerSpecies": "Uudempi havainto samasta lajista",
+      "correct": "Merkitse oikeaksi",
+      "falsePositive": "Merkitse virheelliseksi havainnoksi",
+      "wrongSpecies": "Vaihda laji",
+      "keep": "Säilytä tai vapauta tämä tallenne",
+      "playPause": "Toista tai keskeytä",
+      "seekBack": "Sekunti taaksepäin",
+      "seekForward": "Sekunti eteenpäin",
+      "focusReview": "Siirry tarkistuspainikkeisiin",
+      "backToList": "Takaisin havaintoihin"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Näytä tai piilota pikanäppäimet"
     }
   }
 }

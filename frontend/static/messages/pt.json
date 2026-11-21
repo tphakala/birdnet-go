@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Atalhos de teclado",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Atalhos de teclado",
+      "enable": "Ativar atalhos de teclado",
+      "enableHelp": "Desative se os atalhos de uma única tecla atrapalharem um leitor de tela, o controle por voz ou um teclado assistivo.",
+      "offNote": "Os atalhos de teclado estão desativados. As teclas abaixo não fazem nada até você ativá-los.",
+      "or": "ou"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Todas as páginas"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Navegação",
+      "review": "Revisão",
+      "audio": "Áudio",
+      "general": "Geral"
     },
     "keys": {
       "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
-      "combination": "{first} plus {second}"
+      "space": "Barra de espaço",
+      "arrowLeft": "Seta para a esquerda",
+      "arrowRight": "Seta para a direita",
+      "comma": "Vírgula",
+      "period": "Ponto",
+      "questionMark": "Ponto de interrogação",
+      "combination": "{first} mais {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Detecção mais antiga da mesma espécie",
+      "newerSpecies": "Detecção mais recente da mesma espécie",
+      "correct": "Marcar como correta",
+      "falsePositive": "Marcar como falso positivo",
+      "wrongSpecies": "Alterar a espécie",
+      "keep": "Manter ou liberar esta gravação",
+      "playPause": "Reproduzir ou pausar",
+      "seekBack": "Voltar um segundo",
+      "seekForward": "Avançar um segundo",
+      "focusReview": "Ir para os botões de revisão",
+      "backToList": "Voltar às detecções"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Mostrar ou ocultar os atalhos de teclado"
     }
   }
 }

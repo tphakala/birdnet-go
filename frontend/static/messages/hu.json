@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Billentyűparancsok",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Billentyűparancsok",
+      "enable": "Billentyűparancsok engedélyezése",
+      "enableHelp": "Kapcsolja ki, ha az egybillentyűs parancsok zavarják a képernyőolvasót, a hangvezérlést vagy a kisegítő billentyűzetet.",
+      "offNote": "A billentyűparancsok ki vannak kapcsolva. Az alábbi billentyűk nem csinálnak semmit, amíg be nem kapcsolja őket.",
+      "or": "vagy"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Minden oldal"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Navigáció",
+      "review": "Ellenőrzés",
+      "audio": "Hang",
+      "general": "Általános"
     },
     "keys": {
       "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
-      "combination": "{first} plus {second}"
+      "space": "Szóköz",
+      "arrowLeft": "Balra nyíl",
+      "arrowRight": "Jobbra nyíl",
+      "comma": "Vessző",
+      "period": "Pont",
+      "questionMark": "Kérdőjel",
+      "combination": "{first} plusz {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Régebbi észlelés ugyanarról a fajról",
+      "newerSpecies": "Újabb észlelés ugyanarról a fajról",
+      "correct": "Megjelölés helyesként",
+      "falsePositive": "Megjelölés hamis pozitívként",
+      "wrongSpecies": "Faj módosítása",
+      "keep": "A felvétel megtartása vagy felszabadítása",
+      "playPause": "Lejátszás vagy szüneteltetés",
+      "seekBack": "Vissza egy másodpercet",
+      "seekForward": "Előre egy másodpercet",
+      "focusReview": "Ugrás az ellenőrző gombokra",
+      "backToList": "Vissza az észlelésekhez"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Billentyűparancsok megjelenítése vagy elrejtése"
     }
   }
 }

@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Raccourcis clavier",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Raccourcis clavier",
+      "enable": "Activer les raccourcis clavier",
+      "enableHelp": "Désactivez cette option si les raccourcis à une seule touche gênent un lecteur d'écran, la commande vocale ou un clavier adapté.",
+      "offNote": "Les raccourcis clavier sont désactivés. Les touches ci-dessous ne font rien tant que vous ne les activez pas.",
+      "or": "ou"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Toutes les pages"
     },
     "groups": {
       "navigation": "Navigation",
-      "review": "Review",
+      "review": "Vérification",
       "audio": "Audio",
-      "general": "General"
+      "general": "Général"
     },
     "keys": {
-      "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "shift": "Maj",
+      "space": "Espace",
+      "arrowLeft": "Flèche gauche",
+      "arrowRight": "Flèche droite",
+      "comma": "Virgule",
+      "period": "Point",
+      "questionMark": "Point d'interrogation",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Détection plus ancienne de la même espèce",
+      "newerSpecies": "Détection plus récente de la même espèce",
+      "correct": "Marquer comme correct",
+      "falsePositive": "Marquer comme faux positif",
+      "wrongSpecies": "Changer l'espèce",
+      "keep": "Conserver ou libérer cet enregistrement",
+      "playPause": "Lire ou mettre en pause",
+      "seekBack": "Reculer d'une seconde",
+      "seekForward": "Avancer d'une seconde",
+      "focusReview": "Aller aux boutons de vérification",
+      "backToList": "Retour aux détections"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Afficher ou masquer les raccourcis clavier"
     }
   }
 }

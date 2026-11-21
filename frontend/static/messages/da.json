@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Tastaturgenveje",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Tastaturgenveje",
+      "enable": "Slå tastaturgenveje til",
+      "enableHelp": "Slå dette fra, hvis genveje med én tast er i vejen for en skærmlæser, stemmestyring eller et hjælpetastatur.",
+      "offNote": "Tastaturgenveje er slået fra. Tasterne nedenfor gør ingenting, før du slår dem til.",
+      "or": "eller"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Alle sider"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Navigering",
+      "review": "Gennemgang",
+      "audio": "Lyd",
+      "general": "Generelt"
     },
     "keys": {
-      "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "shift": "Skift",
+      "space": "Mellemrum",
+      "arrowLeft": "Venstrepil",
+      "arrowRight": "Højrepil",
+      "comma": "Komma",
+      "period": "Punktum",
+      "questionMark": "Spørgsmålstegn",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Ældre registrering af samme art",
+      "newerSpecies": "Nyere registrering af samme art",
+      "correct": "Markér som korrekt",
+      "falsePositive": "Markér som falsk positiv",
+      "wrongSpecies": "Skift art",
+      "keep": "Behold eller frigiv denne optagelse",
+      "playPause": "Afspil eller sæt på pause",
+      "seekBack": "Ét sekund tilbage",
+      "seekForward": "Ét sekund frem",
+      "focusReview": "Gå til gennemgangsknapperne",
+      "backToList": "Tilbage til registreringer"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Vis eller skjul tastaturgenveje"
     }
   }
 }

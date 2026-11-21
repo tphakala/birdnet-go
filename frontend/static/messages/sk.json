@@ -6387,49 +6387,49 @@
     }
   },
   "shortcuts": {
-    "menuItem": "Keyboard shortcuts",
+    "menuItem": "Klávesové skratky",
     "modal": {
-      "title": "Keyboard shortcuts",
-      "enable": "Enable keyboard shortcuts",
-      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
-      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
-      "or": "or"
+      "title": "Klávesové skratky",
+      "enable": "Povoliť klávesové skratky",
+      "enableHelp": "Vypnite, ak vám skratky na jednej klávese prekážajú pri používaní čítača obrazovky, hlasového ovládania alebo asistenčnej klávesnice.",
+      "offNote": "Klávesové skratky sú vypnuté. Nižšie uvedené klávesy nerobia nič, kým ich nezapnete.",
+      "or": "alebo"
     },
     "scopes": {
-      "global": "All pages"
+      "global": "Všetky stránky"
     },
     "groups": {
-      "navigation": "Navigation",
-      "review": "Review",
-      "audio": "Audio",
-      "general": "General"
+      "navigation": "Navigácia",
+      "review": "Kontrola",
+      "audio": "Zvuk",
+      "general": "Všeobecné"
     },
     "keys": {
       "shift": "Shift",
-      "space": "Space",
-      "arrowLeft": "Left arrow",
-      "arrowRight": "Right arrow",
-      "comma": "Comma",
-      "period": "Period",
-      "questionMark": "Question mark",
+      "space": "Medzerník",
+      "arrowLeft": "Šípka vľavo",
+      "arrowRight": "Šípka vpravo",
+      "comma": "Čiarka",
+      "period": "Bodka",
+      "questionMark": "Otáznik",
       "combination": "{first} plus {second}"
     },
     "withKey": "{label} ({keys})",
     "detectionDetail": {
-      "olderSpecies": "Older detection of the same species",
-      "newerSpecies": "Newer detection of the same species",
-      "correct": "Mark as correct",
-      "falsePositive": "Mark as false positive",
-      "wrongSpecies": "Change the species",
-      "keep": "Keep or release this recording",
-      "playPause": "Play or pause",
-      "seekBack": "Back one second",
-      "seekForward": "Forward one second",
-      "focusReview": "Go to the review buttons",
-      "backToList": "Back to detections"
+      "olderSpecies": "Staršia detekcia rovnakého druhu",
+      "newerSpecies": "Novšia detekcia rovnakého druhu",
+      "correct": "Označiť ako správne",
+      "falsePositive": "Označiť ako falošne pozitívne",
+      "wrongSpecies": "Zmeniť druh",
+      "keep": "Ponechať alebo uvoľniť túto nahrávku",
+      "playPause": "Prehrať alebo pozastaviť",
+      "seekBack": "O sekundu späť",
+      "seekForward": "O sekundu vpred",
+      "focusReview": "Prejsť na tlačidlá kontroly",
+      "backToList": "Späť na detekcie"
     },
     "global": {
-      "help": "Show or hide keyboard shortcuts"
+      "help": "Zobraziť alebo skryť klávesové skratky"
     }
   }
 }
