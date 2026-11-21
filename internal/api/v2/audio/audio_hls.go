@@ -925,13 +925,18 @@ func (f *audioFeed) release(n int) {
 }
 
 // evictOldest drops the single oldest queued chunk if there is one, releasing
-// its bytes, and reports whether it evicted anything. It is the one place a
-// chunk leaves the queue on the producer side, so the receive and its matching
-// release stay welded together here rather than being repeated at each caller:
-// makeRoom's byte-budget loop and Write's slot-exhaustion arm both go through it.
+// its bytes, and reports whether it evicted anything. A closed channel counts
+// as empty, so makeRoom stops instead of looping on zero-value receives. It is
+// the one place a chunk leaves the queue on the producer side, so the receive
+// and its matching release stay welded together here rather than being repeated
+// at each caller: makeRoom's byte-budget loop and Write's slot-exhaustion arm
+// both go through it.
 func (f *audioFeed) evictOldest() bool {
 	select {
-	case old := <-f.ch:
+	case old, ok := <-f.ch:
+		if !ok {
+			return false
+		}
 		f.release(len(old.data))
 		return true
 	default:
@@ -973,7 +978,12 @@ type hlsConsumer struct {
 	rate     int
 	depth    int
 	channels int
-	closed   atomic.Bool
+
+	// mu orders Close against Write: Write holds the read lock while it sends,
+	// Close takes the write lock to close feed.ch, so a send never meets a closed
+	// channel. closed is guarded by mu.
+	mu     sync.RWMutex
+	closed bool
 
 	// Drop tracking for diagnostics
 	dropCount   int64
@@ -1003,7 +1013,9 @@ func (h *hlsConsumer) Channels() int { return h.channels }
 // The send never blocks. A feed loop that has fallen behind costs the stream
 // its oldest queued audio, not the router its dispatch goroutine.
 func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
-	if h.closed.Load() {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.closed {
 		return audiocore.ErrConsumerClosed
 	}
 
@@ -1057,9 +1069,16 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 	return nil
 }
 
-// Close marks the consumer as closed.
+// Close marks the consumer as closed and closes its feed channel once, so the
+// feed loop drains any buffered audio and exits. It waits for a Write in flight
+// and is safe to call more than once.
 func (h *hlsConsumer) Close() error {
-	h.closed.Store(true)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.closed {
+		h.closed = true
+		close(h.feed.ch)
+	}
 	return nil
 }
 
