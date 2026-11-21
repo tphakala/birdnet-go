@@ -197,6 +197,9 @@
     showAddForm = true;
   }
 
+  /** Id of the reason shown beside the add form's Add button while it is disabled. */
+  const addDisabledReasonId = generateId('add-source-disabled-reason');
+
   // ----- Rows -----
 
   function newRowIds(count: number): string[] {
@@ -569,6 +572,11 @@
 
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
+              {#if disabled && disabledReason}
+                <p id={addDisabledReasonId} class="mr-auto text-sm text-[var(--text-subtle)]">
+                  {disabledReason}
+                </p>
+              {/if}
               <button
                 type="button"
                 class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
@@ -580,6 +588,7 @@
                 type="button"
                 class="btn btn-primary btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
                 aria-disabled={disabled ? 'true' : undefined}
+                aria-describedby={disabled && disabledReason ? addDisabledReasonId : undefined}
                 onclick={addSource}
               >
                 <Plus class="size-4" aria-hidden="true" />

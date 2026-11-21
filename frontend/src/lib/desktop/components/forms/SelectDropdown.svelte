@@ -37,6 +37,8 @@
     helpText?: string;
     /** Space-separated ids of extra elements that describe the trigger (in addition to helpText; the displayed value is the combobox value, not part of the description) */
     'aria-describedby'?: string;
+    /** Marks the trigger invalid for assistive technology while the caller shows a validation error */
+    'aria-invalid'?: boolean;
     className?: string;
     dropdownClassName?: string;
     maxHeight?: number;
@@ -75,6 +77,7 @@
     'aria-label': ariaLabel,
     helpText,
     'aria-describedby': ariaDescribedBy,
+    'aria-invalid': ariaInvalid = false,
     className = '',
     dropdownClassName = '',
     maxHeight = 300,
@@ -591,6 +594,7 @@
       aria-haspopup="listbox"
       aria-expanded={isOpen}
       aria-required={required || undefined}
+      aria-invalid={ariaInvalid || undefined}
       aria-controls={isOpen ? `${fieldId}-listbox` : undefined}
       aria-activedescendant={activeDescendantId}
       aria-labelledby={label ? `${fieldId}-label` : undefined}

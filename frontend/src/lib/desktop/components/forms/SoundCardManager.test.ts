@@ -164,6 +164,26 @@ describe('SoundCardManager sample rate probe (issue #3593)', () => {
     expect(rateSelect().querySelector(`option[value="${RATE_192K.value}"]`)).not.toBeNull();
   });
 
+  it('shows why the add form cannot add while the page saves, and links it to the button', async () => {
+    const view = createComponentTestFactory(SoundCardManager, {
+      sources: [],
+      audioDevices: [{ index: 0, name: 'USB Mic', id: USB_MIC }],
+      audioDevicesLoading: false,
+      disabled: false,
+      onUpdateSources: vi.fn(),
+      onRefreshDevices: vi.fn(),
+    }).render();
+    await openAddForm();
+    const addButton = screen.getByRole('button', { name: ADD_SOURCE_KEY });
+    expect(addButton).not.toHaveAttribute('aria-describedby');
+
+    await view.rerender({ disabled: true, disabledReason: 'Saving...' });
+
+    expect(addButton).toHaveAttribute('aria-disabled', 'true');
+    expect(addButton).toHaveAccessibleDescription('Saving...');
+    expect(screen.getByText('Saving...')).toBeVisible();
+  });
+
   it('passes the selected sample rate to the equalizer preview', async () => {
     stubElementAnimate();
     onTestFinished(restoreElementAnimate);

@@ -16,7 +16,7 @@ import {
   hasUnsavedChanges,
   settingsValidationErrors,
 } from '$lib/stores/settings';
-import type { AudioSourceConfig, SettingsFormData } from '$lib/stores/settings';
+import type { AudioSourceConfig } from '$lib/stores/settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { serveConfirmedSettings } from '../../../../../test/settings-store-helpers';
 import { serverSettings } from '../../../../../test/settings-helpers';
@@ -71,16 +71,14 @@ vi.mock('$lib/stores/appState.svelte', () => ({
 const STREAM = { name: 'Old', url: 'rtsp://old', enabled: true, type: 'rtsp' };
 const SOURCE = { name: 'Garden', device: 'hw:1,0', gain: 0, models: ['birdnet'] };
 
-const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
 function seedStore(sources: AudioSourceConfig[]) {
-  const settings = serverSettings() as unknown as {
-    realtime: { audio: { sources: AudioSourceConfig[] } };
-  };
-  settings.realtime.audio.sources = sources;
+  const settings = serverSettings();
+  const audio = settings.realtime?.audio;
+  if (!audio) throw new Error('serverSettings() has no realtime.audio section');
+  audio.sources = sources;
   settingsStore.set({
-    formData: clone(settings as unknown as SettingsFormData),
-    originalData: clone(settings as unknown as SettingsFormData),
+    formData: globalThis.structuredClone(settings),
+    originalData: globalThis.structuredClone(settings),
     isLoading: false,
     isSaving: false,
     activeSection: 'audio',
@@ -91,7 +89,10 @@ function seedStore(sources: AudioSourceConfig[]) {
   // first write, so take the coerced form as the saved state: a source edit then
   // changes only the sources.
   settingsActions.updateSection('realtime', {});
-  settingsStore.update(state => ({ ...state, originalData: clone(state.formData) }));
+  settingsStore.update(state => ({
+    ...state,
+    originalData: globalThis.structuredClone(state.formData),
+  }));
 }
 
 function formSources(): AudioSourceConfig[] {
@@ -161,7 +162,7 @@ describe('AudioSettingsPage sound card tab saves with the page', () => {
 
   it('keeps the audio section keys the tab does not edit when a source is written', async () => {
     renderTab('soundcard');
-    const before = clone(get(settingsStore).formData.realtime?.audio);
+    const before = globalThis.structuredClone(get(settingsStore).formData.realtime?.audio);
 
     await fireEvent.click(await screen.findByRole('button', { name: 'commit-sources' }));
 

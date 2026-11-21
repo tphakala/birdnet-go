@@ -5,7 +5,10 @@ import {
   restoreElementAnimate,
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
-import { makeAbortableProbe } from '../../../../test/fixtures/soundCardProbeTest';
+import {
+  DEVICE_SELECT_TESTID,
+  makeAbortableProbe,
+} from '../../../../test/fixtures/soundCardProbeTest';
 import type { AudioSourceConfig } from '$lib/stores/settings';
 import type { SoundCardProblem } from './sourceRules';
 import type { AcousticModelAvailability } from '$lib/types/models';
@@ -226,6 +229,7 @@ describe('SoundCardCard editing', () => {
       const view = renderCard();
       const input = nameInput();
 
+      await fireEvent.input(input, { target: { value: 'Typed' } });
       await view.rerender({ problem: { name: problem } });
       expect(input).not.toHaveAttribute('aria-invalid');
 
@@ -237,6 +241,29 @@ describe('SoundCardCard editing', () => {
       expect(input).not.toHaveAttribute('aria-invalid');
     }
   );
+
+  it('shows a duplicate made on another card at once, without the field being left', async () => {
+    const view = renderCard();
+
+    await view.rerender({ problem: { name: 'duplicate' } });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+    expect(nameInput()).toHaveAccessibleDescription(
+      'settings.audio.soundCards.errors.duplicateName'
+    );
+  });
+
+  it('hides a shown name error while the field is edited and shows it again when left', async () => {
+    renderCard({ problem: { name: 'duplicate' } });
+    const input = nameInput();
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+
+    await fireEvent.input(input, { target: { value: 'Still taken' } });
+    expect(input).not.toHaveAttribute('aria-invalid');
+
+    await fireEvent.blur(input);
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
 
   it('shows a problem at once on a card that opens with one, and flags the header', async () => {
     renderCard({ problem: { name: 'duplicate' } });
@@ -252,12 +279,16 @@ describe('SoundCardCard editing', () => {
     renderCard({ problem: { device: problem } });
 
     expect(screen.getByRole('alert')).toHaveTextContent(message);
+    const device = screen.getByTestId(DEVICE_SELECT_TESTID);
+    expect(device).toHaveAttribute('aria-invalid', 'true');
+    expect(device).toHaveAccessibleDescription(message);
   });
 
   it('shows no device message without a device problem', () => {
     renderCard({ problem: { name: 'required' } });
 
     expect(screen.queryByText(/soundCards\.errors\.(deviceRequired|duplicateDevice)/)).toBeNull();
+    expect(screen.getByTestId(DEVICE_SELECT_TESTID)).not.toHaveAttribute('aria-invalid');
   });
 
   it('shows no attention badge without a problem', () => {

@@ -143,9 +143,14 @@
 
   // ----- Name -----
 
-  // The field shows its problem once it was left; a card that opens with one
-  // (a duplicate the user typed on another card) shows it at once.
+  // The field shows its problem once it was left, and hides it again while the
+  // user edits it. A problem this field did not cause (a duplicate typed on
+  // another card) shows at once, also on a card that opens with one.
   let nameTouched = $state(untrack(() => Boolean(problem?.name)));
+  let nameEditing = false;
+  $effect(() => {
+    if (problem?.name && !nameEditing) nameTouched = true;
+  });
   let nameError = $derived.by(() => {
     if (!problem?.name || !nameTouched) return undefined;
     return problem.name === 'required'
@@ -161,10 +166,13 @@
   });
 
   function handleNameInput(name: string) {
+    nameEditing = true;
+    nameTouched = false;
     if (name !== source.name) change({ name });
   }
 
   function handleNameBlur(name: string) {
+    nameEditing = false;
     nameTouched = true;
     const trimmed = name.trim();
     if (trimmed !== source.name) change({ name: trimmed });
@@ -379,6 +387,7 @@
           required
           {disabled}
           aria-describedby={deviceError ? deviceErrorId : undefined}
+          aria-invalid={Boolean(deviceError)}
           onChange={pickDevice}
           groupBy={false}
           menuSize="sm"
