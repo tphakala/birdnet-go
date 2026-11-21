@@ -97,6 +97,17 @@ func TestORTInstallGuidesMatchPin(t *testing.T) {
 		}
 		assert.Len(t, hashes, len(docVersionAssignRe.FindAllString(string(data), -1)),
 			"%s: every snippet with a VERSION line needs the package hash check", guide)
+
+		// A failed check must stop the snippet: the lines that extract and install
+		// the library only run inside the block the check opens.
+		for line := range strings.SplitSeq(string(data), "\n") {
+			switch {
+			case strings.Contains(line, " -c - "), strings.HasSuffix(line, " -c -"):
+				assert.True(t, strings.HasSuffix(line, " -c - && {"), "%s: the check must open a guarded block: %s", guide, line)
+			case strings.Contains(line, "Get-FileHash"):
+				assert.True(t, strings.Contains(line, " -eq ") && strings.HasSuffix(line, ") {"), "%s: the check must open a guarded block: %s", guide, line)
+			}
+		}
 	}
 }
 

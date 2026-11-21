@@ -107,16 +107,16 @@ VERSION=1.32.0
 
 curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
   -o onnxruntime.nupkg
-echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c -
-
-unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime.so > libonnxruntime.so
-unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so
-sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}"
-sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/
-sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1
-sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so
-sudo ldconfig
-rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
+echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c - && {
+  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime.so > libonnxruntime.so
+  unzip -p onnxruntime.nupkg runtimes/linux-x64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so
+  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}"
+  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/
+  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1
+  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so
+  sudo ldconfig
+  rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
+}
 ```
 
 The main library is installed as `libonnxruntime.so.${VERSION}` because BirdNET-Go reads the installed version from that file name. The two links point at it, so an update never writes through a link into an older version's file.
@@ -128,16 +128,16 @@ VERSION=1.32.0
 
 curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
   -o onnxruntime.nupkg
-echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c -
-
-unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime.so > libonnxruntime.so
-unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so
-sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}"
-sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/
-sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1
-sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so
-sudo ldconfig
-rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
+echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | sha256sum -c - && {
+  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime.so > libonnxruntime.so
+  unzip -p onnxruntime.nupkg runtimes/linux-arm64/native/libonnxruntime_providers_shared.so > libonnxruntime_providers_shared.so
+  sudo install -m 755 libonnxruntime.so "/usr/lib/libonnxruntime.so.${VERSION}"
+  sudo install -m 755 libonnxruntime_providers_shared.so /usr/lib/
+  sudo ln -sf "libonnxruntime.so.${VERSION}" /usr/lib/libonnxruntime.so.1
+  sudo ln -sf libonnxruntime.so.1 /usr/lib/libonnxruntime.so
+  sudo ldconfig
+  rm onnxruntime.nupkg libonnxruntime.so libonnxruntime_providers_shared.so
+}
 ```
 
 This covers Raspberry Pi 4/5 (64-bit OS), NVIDIA Jetson, and other ARM64 single-board computers.
@@ -149,13 +149,13 @@ VERSION=1.32.0
 
 curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg" \
   -o onnxruntime.nupkg
-echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | shasum -a 256 -c -
-
-unzip -p onnxruntime.nupkg runtimes/osx-arm64/native/libonnxruntime.dylib > libonnxruntime.dylib
-sudo install -m 755 libonnxruntime.dylib "/usr/local/lib/libonnxruntime.${VERSION}.dylib"
-sudo ln -sf "libonnxruntime.${VERSION}.dylib" /usr/local/lib/libonnxruntime.dylib
-sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true
-rm onnxruntime.nupkg libonnxruntime.dylib
+echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | shasum -a 256 -c - && {
+  unzip -p onnxruntime.nupkg runtimes/osx-arm64/native/libonnxruntime.dylib > libonnxruntime.dylib
+  sudo install -m 755 libonnxruntime.dylib "/usr/local/lib/libonnxruntime.${VERSION}.dylib"
+  sudo ln -sf "libonnxruntime.${VERSION}.dylib" /usr/local/lib/libonnxruntime.dylib
+  sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true
+  rm onnxruntime.nupkg libonnxruntime.dylib
+}
 ```
 
 The NuGet package has no Intel Mac (x86_64) build. BirdNET-Go does not publish pre-built binaries for Intel Macs either.
@@ -170,14 +170,16 @@ $VERSION = "1.32.0"
 Invoke-WebRequest `
   -Uri "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$VERSION/microsoft.ml.onnxruntime.$VERSION.nupkg" `
   -OutFile onnxruntime.nupkg
-if ((Get-FileHash onnxruntime.nupkg -Algorithm SHA256).Hash -ne "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db") { throw "onnxruntime.nupkg does not match the expected SHA-256" }
-
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zip = [System.IO.Compression.ZipFile]::OpenRead("$PWD\onnxruntime.nupkg")
-$entry = $zip.GetEntry("runtimes/win-x64/native/onnxruntime.dll")
-[System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "$PWD\onnxruntime.dll", $true)
-$zip.Dispose()
-Remove-Item onnxruntime.nupkg
+if ((Get-FileHash onnxruntime.nupkg -Algorithm SHA256).Hash -eq "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db") {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead("$PWD\onnxruntime.nupkg")
+  $entry = $zip.GetEntry("runtimes/win-x64/native/onnxruntime.dll")
+  [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, "$PWD\onnxruntime.dll", $true)
+  $zip.Dispose()
+  Remove-Item onnxruntime.nupkg
+} else {
+  throw "onnxruntime.nupkg does not match the expected SHA-256"
+}
 ```
 
 Place `onnxruntime.dll` in the same directory as `birdnet-go.exe`.
