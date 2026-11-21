@@ -132,9 +132,11 @@ func notReadyError(cause error) *AudioNotReadyError {
 // settleNativeFile runs one readiness pass: the size must be at least
 // minReadyAudioBytes and, for a recently modified file, unchanged over
 // fileStabilityCheckDuration. A stat failure is returned as an error;
-// any other verdict is in the result.
+// any other verdict is in the result. The file is stat'ed with
+// spectrogram.StatSource, so the returned info carries the identity of the file
+// that was measured even if another file is renamed over it afterwards.
 func settleNativeFile(ctx context.Context, path string) (nativeSettle, error) {
-	info, err := os.Stat(path)
+	info, err := spectrogram.StatSource(path)
 	if err != nil {
 		return nativeSettle{}, err
 	}
@@ -158,7 +160,7 @@ func settleNativeFile(ctx context.Context, path string) (nativeSettle, error) {
 	}
 	// A failed re-stat counts as a change: the file is not in a settled state.
 	changed := true
-	after, statErr := os.Stat(path)
+	after, statErr := spectrogram.StatSource(path)
 	if statErr == nil {
 		changed = after.Size() != size
 	}

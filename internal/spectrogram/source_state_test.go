@@ -37,6 +37,23 @@ func statSourceState(t *testing.T, path string) SourceState {
 	return NewSourceState(info, 0)
 }
 
+func TestStatSource(t *testing.T) {
+	t.Run("a present file yields info that matches a state built from it", func(t *testing.T) {
+		clip := filepath.Join(t.TempDir(), "clip.wav")
+		require.NoError(t, os.WriteFile(clip, make([]byte, sourceStateClipBytes), 0o600))
+
+		info, err := StatSource(clip)
+		require.NoError(t, err)
+		assert.Equal(t, int64(sourceStateClipBytes), info.Size())
+		assert.True(t, NewSourceState(info, 0).Matches(info), "the identity is readable")
+	})
+	t.Run("a missing file keeps the stat error", func(t *testing.T) {
+		_, err := StatSource(filepath.Join(t.TempDir(), "absent.wav"))
+		require.ErrorIs(t, err, os.ErrNotExist)
+		require.NotErrorIs(t, err, ErrSourceChanged)
+	})
+}
+
 func TestGenerateFromFile_RefusesToPublishWhenSourceChanged(t *testing.T) {
 
 	appendBytes := func(t *testing.T, path string) {
