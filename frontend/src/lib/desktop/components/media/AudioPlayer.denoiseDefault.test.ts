@@ -625,23 +625,46 @@ describe('AudioPlayer playback denoise default', () => {
   });
 
   describe('with audible bats active', () => {
+    function makeBatWavBuffer(sampleRate = 256000): ArrayBuffer {
+      const numSamples = 4;
+      const buf = new ArrayBuffer(44 + numSamples * 2);
+      const view = new DataView(buf);
+      const w = (off: number, txt: string) => {
+        for (let i = 0; i < txt.length; i++) view.setUint8(off + i, txt.charCodeAt(i));
+      };
+      w(0, 'RIFF');
+      view.setUint32(4, buf.byteLength - 8, true);
+      w(8, 'WAVE');
+      w(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      w(36, 'data');
+      view.setUint32(40, numSamples * 2, true);
+      return buf;
+    }
+
     beforeEach(() => {
       Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
         configurable: true,
         get: () => WIDE_CONTAINER_PX,
       });
       URL.createObjectURL = vi.fn((blob: Blob | MediaSource) =>
-        blob instanceof Blob && blob.size > 0 && blob.type === 'bats'
+        blob instanceof Blob && blob.size > 0 && blob.type === 'audio/wav'
           ? BATS_BLOB_URL
           : PROCESSED_BLOB_URL
       );
-      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-        const isBats = String(input).includes('/audible-bats');
+      fetchMock.mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        const isProcess = init?.method === 'POST';
         return {
           ok: true,
           status: 200,
-          blob: async () =>
-            new Blob([isBats ? 'bats' : 'processed'], { type: isBats ? 'bats' : '' }),
+          arrayBuffer: async () => makeBatWavBuffer(),
+          blob: async () => new Blob([isProcess ? 'processed' : 'bats'], { type: '' }),
           headers: new Headers(),
         };
       });
@@ -679,10 +702,14 @@ describe('AudioPlayer playback denoise default', () => {
       expect(ctl.element.src).toBe(BATS_BLOB_URL);
     });
 
-    function audibleBatsBodies(): Array<{ denoise: string }> {
+    function audibleBatsDenoiseParams(): Array<string | null> {
       return fetchMock.mock.calls
-        .filter(call => String(call[0]).includes('/audible-bats'))
-        .map(call => JSON.parse(String((call[1] as RequestInit).body)));
+        .filter(
+          call =>
+            String(call[0]).includes('/api/v2/audio/') &&
+            (call[1] as RequestInit | undefined)?.method !== 'POST'
+        )
+        .map(call => new URL(String(call[0]), 'http://localhost').searchParams.get('denoise'));
     }
 
     it('requests the audible copy with the playback default', async () => {
@@ -690,7 +717,7 @@ describe('AudioPlayer playback denoise default', () => {
       ctl.completeLoad();
       await activateAudibleBats();
 
-      expect(audibleBatsBodies().map(body => body.denoise)).toEqual([PRESET]);
+      expect(audibleBatsDenoiseParams()).toEqual([PRESET]);
     });
 
     it('requests the audible copy with the clip override from the toolbar', async () => {
@@ -699,20 +726,21 @@ describe('AudioPlayer playback denoise default', () => {
       await chooseDenoise(DENOISE_HEAVY_TEXT);
       await activateAudibleBats();
 
-      expect(audibleBatsBodies().map(body => body.denoise)).toEqual(['heavy']);
+      expect(audibleBatsDenoiseParams()).toEqual(['heavy']);
     });
 
-    async function failDefaultThenRequestBats(choose?: string): Promise<string[]> {
+    async function failDefaultThenRequestBats(choose?: string): Promise<Array<string | null>> {
       const restoreProbe = mockAudioProbe({ status: 500 });
       const probe = globalThis.fetch;
-      const batsBodies: Array<{ denoise: string }> = [];
+      let capturingBats = false;
+      const batsDenoises: Array<string | null> = [];
       const wrapper = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (!String(input).includes('/audible-bats')) return probe(input, init);
-        batsBodies.push(JSON.parse(String(init?.body)));
+        if (!capturingBats) return probe(input, init);
+        batsDenoises.push(new URL(String(input), 'http://localhost').searchParams.get('denoise'));
         return {
           ok: true,
           status: 200,
-          blob: async () => new Blob(['bats']),
+          arrayBuffer: async () => makeBatWavBuffer(),
           headers: new Headers(),
         };
       });
@@ -726,16 +754,17 @@ describe('AudioPlayer playback denoise default', () => {
         expect(elementPath()).toBe(STORED_URL);
 
         if (choose) await chooseDenoise(choose);
+        capturingBats = true;
         await activateAudibleBats();
 
-        return batsBodies.map(body => body.denoise);
+        return batsDenoises;
       } finally {
         restoreProbe();
       }
     }
 
     it('requests the audible copy without denoise once the default clip failed', async () => {
-      expect(await failDefaultThenRequestBats()).toEqual(['']);
+      expect(await failDefaultThenRequestBats()).toEqual([null]);
     });
 
     it('requests the audible copy with an explicit choice made after the default clip failed', async () => {
@@ -752,7 +781,9 @@ describe('AudioPlayer playback denoise default', () => {
         headers: new Headers(),
       };
       fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        if (!String(input).includes('/audible-bats')) return Promise.resolve(processedResponse);
+        if (init?.method === 'POST' || !String(input).includes('/api/v2/audio/')) {
+          return Promise.resolve(processedResponse);
+        }
         batsSignal = init?.signal ?? undefined;
         return new Promise(resolve => {
           resolveBats = resolve;
@@ -766,7 +797,7 @@ describe('AudioPlayer playback denoise default', () => {
       resolveBats({
         ok: true,
         status: 200,
-        blob: async () => new Blob(['bats'], { type: 'bats' }),
+        arrayBuffer: async () => makeBatWavBuffer(),
         headers: new Headers(),
       });
       await settle();

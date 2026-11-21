@@ -1,18 +1,19 @@
 /**
  * useAudibleBats.svelte.ts
  *
- * Composable that owns the "audible bats" derived-audio generation lifecycle for
- * a single detection: it POSTs the chosen settings to the server, turns the
- * returned WAV into an object URL, and tracks the active/generating/error state.
+ * Composable that owns the "audible bats" derived-audio lifecycle for a single
+ * detection: it fetches the detection's WAV or FLAC clip (optionally denoised
+ * via the shared playback denoise endpoint), time-expands it client-side into a
+ * playable WAV object URL, and tracks active/generating/error state.
  *
  * It deliberately does NOT touch any <audio> element. The consuming player owns
  * playback and reacts to the generated `url` (or the optional onActivate /
- * onDeactivate callbacks) to swap its source. This keeps the request lifecycle
- * shared between the full AudioPlayer and the compact PlayOverlay (grid cards)
- * without duplicating fetch/blob/abort handling.
+ * onDeactivate callbacks) to swap its source. This keeps the lifecycle shared
+ * between the full AudioPlayer and the compact PlayOverlay (grid cards) without
+ * duplicating fetch/blob/abort handling.
  */
-import { buildAppUrl } from '$lib/utils/urlHelpers';
-import { getCsrfToken } from '$lib/utils/api';
+import { audioUrlFor } from '$lib/utils/playbackDenoise';
+import { timeExpandAudio } from '$lib/utils/timeExpandAudio';
 import { t } from '$lib/i18n';
 import { loggers } from '$lib/utils/logger';
 import type { AudibleBatsSettings } from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
@@ -23,24 +24,15 @@ interface UseAudibleBatsOptions {
   /** Returns the current detection ID (read lazily so it tracks card recycling). */
   getDetectionId: () => string | number;
   /**
-   * Returns the denoise preset ('' off) for the derived copy, read when the
-   * request is made. The server denoises at the source rate before time expansion.
+   * Returns the denoise preset ('' off) for the fetched source audio, read when
+   * activation runs. When non-empty, the server serves a denoised WAV at the
+   * capture sample rate.
    */
   getDenoise?: () => string;
   /** Called once the derived audio URL is ready, so the player can swap to it. */
   onActivate?: (_url: string) => void;
   /** Called before the derived URL is revoked, so the player can swap away first. */
   onDeactivate?: () => void;
-}
-
-// Build JSON headers with CSRF token (server rejects mutating requests without it).
-function jsonHeadersWithCsrf(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const csrfToken = getCsrfToken();
-  if (csrfToken) {
-    headers['X-CSRF-Token'] = csrfToken;
-  }
-  return headers;
 }
 
 export function useAudibleBats(options: UseAudibleBatsOptions) {
@@ -57,14 +49,7 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
     }
   }
 
-  // Loudness normalization and gain are intentionally not exposed as audible-bats
-  // settings: gain is already covered by the player's own Web Audio gain node
-  // (applies regardless of source), and normalization is left off by default for
-  // this review copy.
-  const AUDIBLE_BATS_NORMALIZE = false;
-  const AUDIBLE_BATS_GAIN_DB = 0;
-
-  // Generate (or regenerate) the derived audible-bats audio.
+  // Fetch the clip and time-expand it client-side into a playable WAV Blob URL.
   async function enable(settings: AudibleBatsSettings) {
     // Abort any in-flight generation so a stale response can't win.
     if (abortController) {
@@ -77,20 +62,10 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
 
     try {
       const detectionId = options.getDetectionId();
-      const response = await fetch(
-        buildAppUrl(`/api/v2/audio/${encodeURIComponent(String(detectionId))}/audible-bats`),
-        {
-          method: 'POST',
-          headers: jsonHeadersWithCsrf(),
-          signal: controller.signal,
-          body: JSON.stringify({
-            expansion: settings.expansion,
-            denoise: options.getDenoise?.() ?? '',
-            normalize: AUDIBLE_BATS_NORMALIZE,
-            gain_db: AUDIBLE_BATS_GAIN_DB,
-          }),
-        }
-      );
+      const denoise = options.getDenoise?.() ?? '';
+      const response = await fetch(audioUrlFor(detectionId, denoise), {
+        signal: controller.signal,
+      });
 
       if (!response.ok) {
         let errorMsg = t('media.audio.audibleBats.error');
@@ -103,7 +78,10 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
         throw new Error(errorMsg);
       }
 
-      const blob = await response.blob();
+      const buffer = await response.arrayBuffer();
+      if (abortController !== controller || controller.signal.aborted) return;
+
+      const blob = await timeExpandAudio(buffer, settings.expansion, controller.signal);
 
       // Discard if a newer request (or a disable) superseded this one.
       if (abortController !== controller) return;

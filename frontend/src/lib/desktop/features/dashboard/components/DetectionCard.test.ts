@@ -114,16 +114,39 @@ describe('DetectionCard playback denoise default', () => {
     const SERVER_ERROR_STATUS = 500;
     let restoreProbe: (() => void) | undefined;
     let probe: typeof globalThis.fetch;
-    let batsBodies: Array<{ denoise: string }>;
+    let batsUrls: string[];
+    let capturingBats: boolean;
 
     beforeEach(() => {
-      batsBodies = [];
+      const makeBatWavBuffer = (sampleRate = 256000) => {
+        const buf = new ArrayBuffer(44 + 8);
+        const view = new DataView(buf);
+        const w = (off: number, txt: string) => {
+          for (let i = 0; i < txt.length; i++) view.setUint8(off + i, txt.charCodeAt(i));
+        };
+        w(0, 'RIFF');
+        view.setUint32(4, buf.byteLength - 8, true);
+        w(8, 'WAVE');
+        w(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        w(36, 'data');
+        view.setUint32(40, 8, true);
+        return buf;
+      };
+      batsUrls = [];
+      capturingBats = false;
       restoreProbe = mockAudioProbe({ status: SERVER_ERROR_STATUS });
       probe = globalThis.fetch;
       const wrapper = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (!String(input).includes('/audible-bats')) return probe(input, init);
-        batsBodies.push(JSON.parse(String(init?.body)));
-        return new Response('wav-data', { status: 200 });
+        if (!capturingBats) return probe(input, init);
+        batsUrls.push(String(input));
+        return new Response(makeBatWavBuffer(), { status: 200 });
       });
       globalThis.fetch = wrapper;
       vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:bats');
@@ -135,7 +158,7 @@ describe('DetectionCard playback denoise default', () => {
       vi.restoreAllMocks();
     });
 
-    async function requestBats(): Promise<string[]> {
+    async function requestBats(): Promise<Array<string | null>> {
       render(DetectionCard, {
         props: {
           detection: createDetection({ clipName: 'clip_654.wav', modelType: 'bat' }),
@@ -144,10 +167,11 @@ describe('DetectionCard playback denoise default', () => {
       ctl.completeLoad();
       await fireEvent.click(screen.getAllByRole('button', { name: /play/i })[0]);
       await settle();
-      return batsBodies.map(body => body.denoise);
+      return batsUrls.map(u => new URL(u, 'http://localhost').searchParams.get('denoise'));
     }
 
     async function enableBats() {
+      capturingBats = true;
       await fireEvent.click(screen.getByLabelText('media.audio.audibleBats.title'));
       await fireEvent.click(screen.getByText('media.audio.audibleBats.enable'));
       await settle();
@@ -157,7 +181,9 @@ describe('DetectionCard playback denoise default', () => {
       await requestBats();
       await enableBats();
 
-      expect(batsBodies.map(body => body.denoise)).toEqual([PRESET]);
+      expect(batsUrls.map(u => new URL(u, 'http://localhost').searchParams.get('denoise'))).toEqual(
+        [PRESET]
+      );
     });
 
     it('sends no denoise once the denoised clip failed', async () => {
@@ -166,7 +192,9 @@ describe('DetectionCard playback denoise default', () => {
       await settle();
       await enableBats();
 
-      expect(batsBodies.map(body => body.denoise)).toEqual(['']);
+      expect(batsUrls.map(u => new URL(u, 'http://localhost').searchParams.get('denoise'))).toEqual(
+        [null]
+      );
     });
   });
 });

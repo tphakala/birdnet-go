@@ -382,7 +382,7 @@
   let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Audible bats derived playback. When active, the player swaps its audio source
-  // to a server-generated time-expanded (slowed) copy so ultrasonic bat calls fall
+  // to a client-side time-expanded (slowed) WAV copy so ultrasonic bat calls fall
   // into the human hearing range. The spectrogram still spans the full original
   // clip; because the derived audio's duration scales by the expansion factor, the
   // playhead and seeking stay proportionally in sync automatically. The request
