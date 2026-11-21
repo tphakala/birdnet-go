@@ -105,14 +105,21 @@ func TestORTInstallGuidesMatchPin(t *testing.T) {
 		assert.Equal(t, strings.Count(string(data), "Get-FileHash"),
 			strings.Count(string(data), `throw "onnxruntime.nupkg does not match the expected SHA-256"`),
 			"%s: every PowerShell check needs its throw", guide)
+		shellChecks, psChecks := 0, 0
 		for line := range strings.SplitSeq(string(data), "\n") {
 			switch {
 			case strings.Contains(line, " -c - "), strings.HasSuffix(line, " -c -"):
+				shellChecks++
 				assert.True(t, strings.HasSuffix(line, " -c - && {"), "%s: the check must open a guarded block: %s", guide, line)
 			case strings.Contains(line, "Get-FileHash"):
+				psChecks++
 				assert.True(t, strings.Contains(line, " -eq ") && strings.HasSuffix(line, ") {"), "%s: the check must open a guarded block: %s", guide, line)
 			}
 		}
+		// The guide has three shell snippets (Linux x64, Linux arm64, macOS) and
+		// one PowerShell snippet; a reworded check must not skip the loop above.
+		assert.Equal(t, 3, shellChecks, "%s: shell checksum lines", guide)
+		assert.Equal(t, 1, psChecks, "%s: PowerShell checksum lines", guide)
 	}
 }
 

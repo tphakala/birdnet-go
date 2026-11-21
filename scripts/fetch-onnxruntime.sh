@@ -225,13 +225,15 @@ open_source() {
 extract() {
     case "$ONNXRUNTIME_SOURCE" in
         nuget)
-            unzip -p "$ARCHIVE" "runtimes/$RID/native/$1" >"$DL/$1" || true
+            unzip -p "$ARCHIVE" "runtimes/$RID/native/$1" >"$DL/$1" ||
+                die "cannot extract $1 from $ARCHIVE"
             ;;
         github)
             member="${ASSET%.*}/lib/$(installed_name "$1")"
             case "$ASSET" in
                 *.zip)
-                    unzip -p "$ARCHIVE" "$member" >"$DL/$1" || true
+                    unzip -p "$ARCHIVE" "$member" >"$DL/$1" ||
+                        die "cannot extract $member from $ARCHIVE"
                     ;;
                 *)
                     # The release archives name their members with or without a
@@ -261,7 +263,14 @@ cmd_install() {
     [ "$#" -eq 3 ] || die "usage: $0 install VERSION PLATFORM DEST_DIR"
     check_version "$1"
     platform=$2
-    dest=${3%/}
+    dest=$3
+    # Strip every trailing slash, so the download directory stays a sibling.
+    while :; do
+        case "$dest" in
+            ?*/) dest=${dest%/} ;;
+            *) break ;;
+        esac
+    done
     set_platform "$platform"
 
     fetched=no

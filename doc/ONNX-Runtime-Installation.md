@@ -151,6 +151,7 @@ curl -fsSL "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VE
   -o onnxruntime.nupkg
 echo "a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  onnxruntime.nupkg" | shasum -a 256 -c - && {
   unzip -p onnxruntime.nupkg runtimes/osx-arm64/native/libonnxruntime.dylib > libonnxruntime.dylib &&
+  sudo mkdir -p /usr/local/lib &&
   sudo install -m 755 libonnxruntime.dylib "/usr/local/lib/libonnxruntime.${VERSION}.dylib" &&
   sudo ln -sf "libonnxruntime.${VERSION}.dylib" /usr/local/lib/libonnxruntime.dylib &&
   { sudo xattr -d com.apple.quarantine /usr/local/lib/libonnxruntime*.dylib 2>/dev/null || true; } &&
