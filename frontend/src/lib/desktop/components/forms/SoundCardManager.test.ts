@@ -696,6 +696,22 @@ describe('SoundCardManager add', () => {
     });
   });
 
+  it('shows the reason it was given beside delete while it is disabled', () => {
+    renderTyped(SoundCardManager, {
+      props: {
+        sources: [{ name: 'Garden', device: 'dev-a', gain: 0, models: [] }],
+        audioDevices: [{ index: 0, name: 'Mic A', id: 'dev-a' }],
+        audioDevicesLoading: false,
+        disabled: true,
+        disabledReason: 'Saving now',
+        onUpdateSources: vi.fn(),
+        onRefreshDevices: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText('Saving now')).toBeInTheDocument();
+  });
+
   describe('rows and the page save rules', () => {
     const devicesForRows = [
       { index: 0, name: 'Mic A', id: 'dev-a' },
