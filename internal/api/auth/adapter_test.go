@@ -48,7 +48,7 @@ func TestAuthenticateBasicHotReloadAfterEnable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	authCode, err := adapter.AuthenticateBasic(c, "admin", "correct-horse")
+	authCode, err := adapter.AuthenticateBasic(c, "admin", "correct-horse", false)
 	require.NoError(t, err, "login should succeed with credentials configured via UI without restart")
 	require.NotEmpty(t, authCode, "a non-empty auth code should be generated on success")
 }

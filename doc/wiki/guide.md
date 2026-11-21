@@ -383,7 +383,7 @@ security:
     clientsecret: "" # Client secret for OAuth2
     redirecturi: "" # Redirect URI for OAuth2
     authcodeexp: 10m # Duration for authorization code
-    accesstokenexp: 1h # Duration for access token
+    accesstokenexp: 1h # No longer sets how long a browser stays signed in
   googleauth:
     enabled: false # Enable Google OAuth2
     clientid: "" # Google client ID

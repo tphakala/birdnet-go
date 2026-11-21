@@ -1615,7 +1615,7 @@ type BasicAuth struct {
 	ClientSecret   string        `yaml:"clientsecret" json:"clientSecret"`     // client secret for OAuth2
 	RedirectURI    string        `yaml:"redirecturi" json:"redirectUri"`       // redirect uri for OAuth2
 	AuthCodeExp    time.Duration `yaml:"authcodeexp" json:"authCodeExp"`       // duration for authorization code
-	AccessTokenExp time.Duration `yaml:"accesstokenexp" json:"accessTokenExp"` // duration for access token
+	AccessTokenExp time.Duration `yaml:"accesstokenexp" json:"accessTokenExp"` // no longer sets how long a browser stays signed in
 }
 
 // SocialProvider holds settings for an OAuth2 identity provider
@@ -1805,7 +1805,7 @@ type Security struct {
 	MicrosoftAuth SocialProvider `yaml:"microsoftAuth,omitempty" json:"microsoftAuth,omitempty"` //nolint:modernize // Deprecated: use OAuthProviders, yaml.v3 doesn't support omitzero
 
 	SessionSecret   string        `yaml:"sessionsecret" json:"sessionSecret"`     // secret for session cookie
-	SessionDuration time.Duration `yaml:"sessionduration" json:"sessionDuration"` // duration for browser session cookies
+	SessionDuration time.Duration `yaml:"sessionduration" json:"sessionDuration"` // lifetime of the OAuth handshake cookie; no longer sets how long a browser stays signed in
 }
 
 type WebServerSettings struct {

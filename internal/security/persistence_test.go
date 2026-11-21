@@ -3,9 +3,11 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,64 +25,69 @@ var ctx = context.Background()
 // that rely on Unix file-permission or read-only-directory semantics.
 const osWindows = "windows"
 
-// TestTokenPersistence tests saving and loading of access tokens
-func TestTokenPersistence(t *testing.T) {
-	// Create a temporary directory for testing
-	tempDir := t.TempDir()
+// persistenceTestSettings returns settings with basic authentication enabled,
+// the shape the persisted password sessions below need to validate.
+func persistenceTestSettings() *conf.Settings {
+	return &conf.Settings{Security: conf.Security{
+		SessionSecret: "test-secret-32-bytes-minimum-len",
+		BasicAuth:     conf.BasicAuth{Enabled: true, ClientID: "client", Password: "pw"},
+	}}
+}
 
-	// Create test server with custom token file
-	server := &OAuth2Server{
-		settings:      &conf.Settings{Security: conf.Security{BasicAuth: conf.BasicAuth{AccessTokenExp: time.Hour}}},
+// newPersistingServer returns a server that persists to tokensFile.
+func newPersistingServer(tokensFile string, settings *conf.Settings) *OAuth2Server {
+	return &OAuth2Server{
+		settings:      settings,
 		accessTokens:  make(map[string]AccessToken),
 		authCodes:     make(map[string]AuthCode),
-		tokensFile:    filepath.Join(tempDir, "tokens.json"),
+		tokensFile:    tokensFile,
 		persistTokens: true,
 	}
+}
 
-	// Add some test tokens
-	testTokens := map[string]time.Time{
-		"valid_token":   time.Now().Add(time.Hour),
-		"expired_token": time.Now().Add(-time.Hour),
-	}
+// TestTokenPersistence tests saving and loading of session records
+func TestTokenPersistence(t *testing.T) {
+	tempDir := t.TempDir()
+	tokensFile := filepath.Join(tempDir, "tokens.json")
+	settings := persistenceTestSettings()
 
-	// Add tokens to the server
-	for token, expiry := range testTokens {
-		server.accessTokens[token] = AccessToken{
-			Token:     token,
-			ExpiresAt: expiry,
-		}
-	}
+	server := newPersistingServer(tokensFile, settings)
+	validToken := seedSession(t, server, &AccessToken{Remember: true})
+	expiredToken := seedSession(t, server, &AccessToken{ExpiresAt: time.Now().Add(-time.Hour)})
+	socialToken := seedSession(t, server, &AccessToken{
+		Provider: ProviderGoogle, UserID: "user@example.com", ProviderUserID: "12345", IDToken: "id-token-value",
+	})
 
-	// Save tokens
-	err := server.saveTokens(ctx)
-	require.NoError(t, err, "Failed to save tokens")
+	require.NoError(t, server.saveTokens(ctx), "Failed to save tokens")
 
-	// Create a new server instance to load tokens
-	newServer := &OAuth2Server{
-		settings:      &conf.Settings{},
-		accessTokens:  make(map[string]AccessToken),
-		tokensFile:    filepath.Join(tempDir, "tokens.json"),
-		persistTokens: true,
-	}
+	// A new server instance loads them
+	newServer := newPersistingServer(tokensFile, settings)
+	require.NoError(t, newServer.loadTokens(ctx), "Failed to load tokens")
 
-	// Load tokens
-	err = newServer.loadTokens(ctx)
-	require.NoError(t, err, "Failed to load tokens")
+	require.NoError(t, newServer.ValidateAccessToken(validToken), "Valid token should be loaded and validated")
+	require.ErrorIs(t, newServer.ValidateAccessToken(expiredToken), ErrTokenNotFound, "Expired token should not be loaded, thus not found")
 
-	// Verify only valid tokens were loaded
-	require.NoError(t, newServer.ValidateAccessToken("valid_token"), "Valid token should be loaded and validated")
-	require.ErrorIs(t, newServer.ValidateAccessToken("expired_token"), ErrTokenNotFound, "Expired token should not be loaded, thus not found")
+	loaded, ok := newServer.liveRecord(validToken)
+	require.True(t, ok)
+	assert.True(t, loaded.Remember, "the remember choice must survive a restart")
 
-	// Check token file contents directly
-	data, err := os.ReadFile(filepath.Join(tempDir, "tokens.json")) //nolint:gosec // test file path from t.TempDir()
+	social, ok := newServer.liveRecord(socialToken)
+	require.True(t, ok)
+	assert.Equal(t, ProviderGoogle, social.Provider)
+	assert.Equal(t, "user@example.com", social.UserID)
+	assert.Equal(t, "12345", social.ProviderUserID)
+	assert.Equal(t, "id-token-value", social.IDToken)
+
+	// The file holds only token hashes, never a token
+	data, err := os.ReadFile(tokensFile) //nolint:gosec // test file path from t.TempDir()
 	require.NoError(t, err, "Failed to read tokens file")
-
-	var savedTokens map[string]AccessToken
-	err = json.Unmarshal(data, &savedTokens)
-	require.NoError(t, err, "Failed to parse tokens file")
+	for _, token := range []string{validToken, expiredToken, socialToken} {
+		assert.NotContains(t, string(data), token, "a raw session token must never be persisted")
+	}
+	assert.Contains(t, string(data), sessionTokenKey(validToken))
 
 	// Verify file permissions
-	info, err := os.Stat(filepath.Join(tempDir, "tokens.json"))
+	info, err := os.Stat(tokensFile)
 	require.NoError(t, err, "Failed to stat tokens file")
 	// Windows reports 0666 for regular files regardless of the mode saveTokens
 	// requests; the 0600 bits are not observable on NTFS. Skip only the perm
@@ -88,6 +95,46 @@ func TestTokenPersistence(t *testing.T) {
 	if runtime.GOOS != osWindows {
 		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "Tokens file should have 0600 permissions")
 	}
+}
+
+// TestTokenPersistenceIgnoresOldShape verifies a tokens.json written by an
+// older build (access tokens under "access_tokens") loads with no sessions: the
+// browser signs in once, and the old token is never accepted.
+func TestTokenPersistenceIgnoresOldShape(t *testing.T) {
+	tokensFile := filepath.Join(t.TempDir(), "tokens.json")
+	old := `{"auth_codes":{},"access_tokens":{"old-token":{"Token":"old-token","ExpiresAt":"` +
+		time.Now().Add(time.Hour).Format(time.RFC3339) + `"}}}`
+	require.NoError(t, os.WriteFile(tokensFile, []byte(old), FilePermissions))
+
+	server := newPersistingServer(tokensFile, persistenceTestSettings())
+	require.NoError(t, server.loadTokens(ctx))
+
+	assert.Empty(t, server.accessTokens)
+	assert.ErrorIs(t, server.ValidateAccessToken("old-token"), ErrTokenNotFound)
+}
+
+// TestEndSessionSurvivesRestartAfterRacingPersist verifies that a session ended
+// by EndSession stays ended in the file even when a persist that began before
+// the logout finishes after it.
+func TestEndSessionSurvivesRestartAfterRacingPersist(t *testing.T) {
+	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
+	tokensFile := filepath.Join(t.TempDir(), "tokens.json")
+	settings := persistenceTestSettings()
+
+	server := newPersistingServer(tokensFile, settings)
+	token := seedSession(t, server, &AccessToken{})
+	require.NoError(t, server.saveTokens(ctx))
+
+	// A renewal persist starts, then the user logs out.
+	var wg sync.WaitGroup
+	wg.Go(server.persistTokensIfEnabled)
+	server.EndSession(httptest.NewRecorder(), sessionRequest(token))
+	wg.Wait()
+
+	restarted := newPersistingServer(tokensFile, settings)
+	require.NoError(t, restarted.loadTokens(ctx))
+	_, ok := restarted.liveRecord(token)
+	assert.False(t, ok, "a logged-out session must not come back after a restart")
 }
 
 // TestFilesystemStore tests that the FilesystemStore is initialized correctly
@@ -264,7 +311,6 @@ func TestLoadCorruptedTokensFile(t *testing.T) {
 		settings: &conf.Settings{},
 		accessTokens: map[string]AccessToken{
 			"test_token": {
-				Token:     "test_token",
 				ExpiresAt: time.Now().Add(time.Hour),
 			},
 		},
@@ -309,7 +355,6 @@ func TestUnwritableTokensDirectory(t *testing.T) {
 		settings: &conf.Settings{},
 		accessTokens: map[string]AccessToken{
 			"test_token": {
-				Token:     "test_token",
 				ExpiresAt: time.Now().Add(time.Hour),
 			},
 		},
@@ -337,7 +382,6 @@ func TestAtomicTokenSaving(t *testing.T) {
 		settings: &conf.Settings{},
 		accessTokens: map[string]AccessToken{
 			"test_token": {
-				Token:     "test_token",
 				ExpiresAt: time.Now().Add(time.Hour),
 			},
 		},
@@ -360,8 +404,8 @@ func TestAtomicTokenSaving(t *testing.T) {
 	// Now test that contents are correct
 	// Define a struct to match the persisted structure
 	type StoredTokenData struct {
-		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
-		AccessTokens map[string]AccessToken `json:"access_tokens"`
+		AuthCodes map[string]AuthCode    `json:"auth_codes"`
+		Sessions  map[string]AccessToken `json:"sessions"`
 	}
 	var storedData StoredTokenData
 
@@ -370,7 +414,7 @@ func TestAtomicTokenSaving(t *testing.T) {
 
 	err = json.Unmarshal(data, &storedData)
 	require.NoError(t, err, "Token file should contain valid JSON matching StoredTokenData struct")
-	assert.NotNil(t, storedData.AccessTokens, "AccessTokens map should not be nil")
-	_, ok := storedData.AccessTokens["test_token"]
-	assert.True(t, ok, "Tokens file should contain the test_token in the access_tokens map")
+	assert.NotNil(t, storedData.Sessions, "Sessions map should not be nil")
+	_, ok := storedData.Sessions["test_token"]
+	assert.True(t, ok, "Tokens file should contain the test_token in the sessions map")
 }

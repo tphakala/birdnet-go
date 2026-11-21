@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/security"
 )
@@ -323,7 +324,7 @@ func useOAuthSettings(t *testing.T, providerID string) *Server {
 	prev := conf.GetSettings()
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
-	return &Server{settings: settings}
+	return &Server{settings: settings, oauth2Server: security.NewOAuth2ServerForTest(settings)}
 }
 
 // TestHandleOAuthBegin_UnregisteredProvider covers an enabled provider that goth
@@ -452,9 +453,81 @@ func TestHandleOAuthCallback_MixedCaseProvider(t *testing.T) {
 	for _, cookie := range jar.Cookies(callbackURL) {
 		readBack.AddCookie(cookie)
 	}
-	stored, err := gothic.GetFromSession(security.SessionKeyAuthProvider, readBack)
-	require.NoError(t, err)
-	assert.Equal(t, security.ProviderMicrosoft, stored)
+	record, ok := s.oauth2Server.Session(readBack)
+	require.True(t, ok, "the callback must start a session")
+	assert.Equal(t, security.ProviderMicrosoft, record.Provider)
+}
+
+// TestHandleOAuthRememberChoice pins the remember choice across the begin and
+// callback steps: ?remember=1 sets the choice cookie, its absence clears a stale
+// one, and the callback turns the choice into a persistent or a browser-session
+// cookie and clears the choice cookie.
+// Not parallel: it swaps the settings, the goth registry, gothic.Store and gothic.CompleteUserAuth.
+func TestHandleOAuthRememberChoice(t *testing.T) {
+	const choiceCookie = "birdnet_remember_browser"
+	s := useOAuthSettings(t, security.ConfigMicrosoft)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	goth.UseProviders(microsoftonline.New("id", "secret", "http://localhost/auth/microsoftonline/callback"))
+	prevStore := gothic.Store
+	gothic.Store = sessions.NewFilesystemStore(t.TempDir(), []byte("test-session-secret-long-enough-32"))
+	t.Cleanup(func() { gothic.Store = prevStore })
+
+	cookieNamed := func(rec *httptest.ResponseRecorder, name string) *http.Cookie {
+		for _, cookie := range rec.Result().Cookies() {
+			if cookie.Name == name {
+				return cookie
+			}
+		}
+		return nil
+	}
+	begin := func(query string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/auth/"+security.ProviderMicrosoft+query, http.NoBody)
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(req, rec)
+		c.SetParamNames("provider")
+		c.SetParamValues(security.ProviderMicrosoft)
+		require.NoError(t, s.handleOAuthBegin(c))
+		return rec
+	}
+
+	t.Run("begin sets the choice cookie only when ticked", func(t *testing.T) {
+		ticked := cookieNamed(begin("?remember=1"), choiceCookie)
+		require.NotNil(t, ticked)
+		assert.Positive(t, ticked.MaxAge)
+
+		unticked := cookieNamed(begin(""), choiceCookie)
+		require.NotNil(t, unticked)
+		assert.Negative(t, unticked.MaxAge, "a stale choice must be cleared")
+	})
+
+	for _, tt := range []struct {
+		name       string
+		choice     *http.Cookie
+		wantMaxAge int
+	}{
+		{"ticked gives a persistent cookie", &http.Cookie{Name: choiceCookie, Value: security.RememberQueryValue}, int(security.RememberedSessionDuration.Seconds())},
+		{"unticked gives a browser-session cookie", nil, 0},
+	} {
+		t.Run("callback "+tt.name, func(t *testing.T) {
+			stubCompleteUserAuth(t, &goth.User{UserID: "ms-1", Email: "user@example.com"})
+			var cookies []*http.Cookie
+			if tt.choice != nil {
+				cookies = append(cookies, tt.choice)
+			}
+			rec := callbackOAuth(t, s, security.ProviderMicrosoft, cookies...)
+			require.Equal(t, http.StatusFound, rec.Code)
+
+			session := cookieNamed(rec, security.SessionCookieName)
+			require.NotNil(t, session)
+			assert.Equal(t, tt.wantMaxAge, session.MaxAge)
+			if tt.choice != nil {
+				cleared := cookieNamed(rec, choiceCookie)
+				require.NotNil(t, cleared)
+				assert.Negative(t, cleared.MaxAge)
+			}
+		})
+	}
 }
 
 // TestHandleOAuthCallback_UnknownProvider pins that an unknown provider in the
@@ -503,7 +576,7 @@ func TestHandleOAuthCallback_QueryProviderCannotOverridePath(t *testing.T) {
 	prev := conf.GetSettings()
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(prev) })
-	s := &Server{settings: settings}
+	s := &Server{settings: settings, oauth2Server: security.NewOAuth2ServerForTest(settings)}
 
 	googleStub := &namedStubProvider{Provider: &faux.Provider{}, name: security.ProviderGoogle, user: goth.User{UserID: "google-1", Email: victimEmail}}
 	oidcStub := &namedStubProvider{Provider: &faux.Provider{}, name: security.ProviderOIDC, user: goth.User{UserID: "oidc-1", Email: victimEmail}}
@@ -544,7 +617,11 @@ func TestHandleOAuthCallback_QueryProviderCannotOverridePath(t *testing.T) {
 		for _, cookie := range rec.Result().Cookies() {
 			readBack.AddCookie(cookie)
 		}
-		return gothic.GetFromSession(security.SessionKeyAuthProvider, readBack)
+		record, ok := s.oauth2Server.Session(readBack)
+		if !ok {
+			return "", errors.NewStd("no session")
+		}
+		return record.Provider, nil
 	}
 
 	state, cookies := begin()

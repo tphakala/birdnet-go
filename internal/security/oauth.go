@@ -137,22 +137,35 @@ func enableOIDCRetries() uint64 {
 	return oidcEnableEpoch
 }
 
+// AuthCode is a one-time authorization code a password sign-in exchanges for a
+// session.
 type AuthCode struct {
 	Code      string
 	ExpiresAt time.Time
+	// Remember is the "Remember this browser" choice made at sign-in; the
+	// session issued for the code inherits it.
+	Remember bool
 }
 
+// AccessToken is a browser session record. It is stored under the SHA-256 of
+// the session token (never the token itself) and carries the "Remember this
+// browser" choice, which is fixed at sign-in, and the sliding expiry. The name
+// is kept from the access token the record replaces.
 type AccessToken struct {
-	Token     string
 	ExpiresAt time.Time
-}
-
-// providerAuthConfig holds the configuration for validating a provider's auth session.
-// This allows checkProviderAuth to work generically with any OAuth provider.
-type providerAuthConfig struct {
-	providerName   string // Session key (e.g., ProviderGoogle, ProviderGitHub)
-	enabled        bool   // Whether this provider is enabled
-	allowedUserIds string // Comma-separated list of allowed user IDs
+	// Remember is the choice made at sign-in; only the expiry slides.
+	Remember bool
+	// Provider is the goth provider name of a social sign-in, empty for a
+	// password sign-in.
+	Provider string
+	// UserID is the identity matched against the provider's allowed list and
+	// shown as the user name (the email when the provider gave one).
+	UserID string
+	// ProviderUserID is the provider's own user ID, also matched against the
+	// allowed list.
+	ProviderUserID string
+	// IDToken is the OIDC ID token kept for RP-Initiated Logout. Never logged.
+	IDToken string
 }
 
 type OAuth2Server struct {
@@ -162,8 +175,15 @@ type OAuth2Server struct {
 	// the live atomic snapshot (GitHub #3370).
 	settings     *conf.Settings
 	authCodes    map[string]AuthCode
-	accessTokens map[string]AccessToken
+	accessTokens map[string]AccessToken // session records, keyed by sessionTokenKey
 	mutex        sync.RWMutex
+
+	// credentialsID identifies the basic-auth credentials the records were
+	// issued under (see syncCredentials). Guarded by mutex.
+	credentialsID string
+	// saveMu serialises saveTokens so an older snapshot cannot overwrite a
+	// newer file.
+	saveMu sync.Mutex
 
 	GithubConfig *oauth2.Config
 	GoogleConfig *oauth2.Config
@@ -325,8 +345,11 @@ func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(settings, secureCookies)
 
+	warnSupersededSessionSettings(settings)
+
 	// Set up token persistence
 	server.setupTokenPersistence()
+	server.syncCredentials(server.currentSettings())
 
 	// Clean up expired tokens every hour. The caller's context terminates the
 	// goroutine on application shutdown.
@@ -346,6 +369,22 @@ func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 
 	GetLogger().Info("OAuth2 server initialization complete")
 	return server
+}
+
+// warnSupersededSessionSettings warns once at startup when a configured
+// security.sessionduration or security.basicauth.accesstokenexp differs from its
+// old default: neither governs how long a browser stays signed in any more.
+func warnSupersededSessionSettings(settings *conf.Settings) {
+	if d := settings.Security.SessionDuration; d > 0 && d != legacySessionDuration {
+		GetLogger().Warn("security.sessionduration no longer controls how long a browser stays signed in; "+
+			"sign-in length follows the \"Remember this browser\" choice",
+			logger.Duration("configured", d))
+	}
+	if d := settings.Security.BasicAuth.AccessTokenExp; d > 0 && d != legacyAccessTokenExp {
+		GetLogger().Warn("security.basicauth.accesstokenexp no longer controls how long a browser stays signed in; "+
+			"sign-in length follows the \"Remember this browser\" choice",
+			logger.Duration("configured", d))
+	}
 }
 
 // validateSessionSecret checks the session secret strength and generates a temporary one if needed
@@ -999,125 +1038,11 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 		return true
 	}
 
-	if s.checkBasicAuthToken(c.Request(), secLog) {
-		return true
-	}
-
-	if s.checkSocialAuthSessions(c.Request(), secLog) {
+	if s.checkSession(c, secLog) {
 		return true
 	}
 
 	secLog.Info("User not authenticated")
-	return false
-}
-
-// checkBasicAuthToken validates the basic auth access token from the session
-func (s *OAuth2Server) checkBasicAuthToken(r *http.Request, log SecurityLogger) bool {
-	token, err := gothic.GetFromSession("access_token", r)
-	if err != nil || token == "" {
-		return false
-	}
-
-	log.Debug("Found access_token in session, validating...")
-	if s.ValidateAccessToken(token) == nil {
-		log.Info("User authenticated: valid access_token found in session")
-		return true
-	}
-	log.Warn("Invalid or expired access_token found in session")
-	return false
-}
-
-// checkSocialAuthSessions checks for valid OAuth authentication sessions.
-// It first tries a direct lookup using the stored auth_provider session key,
-// then falls back to iterating all configured providers for backward compatibility.
-func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogger) bool {
-	userId, err := gothic.GetFromSession("userId", r)
-	if err != nil {
-		log.Debug("No userId found in session")
-	} else {
-		log.Debug("Found userId in session, checking provider sessions")
-	}
-
-	// Try direct lookup via stored auth_provider session key first
-	if s.checkSocialAuthDirect(r, userId, log) {
-		return true
-	}
-
-	// Fall back to iterating all providers for backward compatibility
-	// (existing sessions may not have the auth_provider key)
-	return s.checkSocialAuthFallback(r, userId, log)
-}
-
-// checkSocialAuthDirect checks for a valid session using the stored auth_provider key.
-// Returns false if the key is missing or the provider session is invalid.
-func (s *OAuth2Server) checkSocialAuthDirect(r *http.Request, userId string, log SecurityLogger) bool {
-	activeProvider, err := gothic.GetFromSession(SessionKeyAuthProvider, r)
-	if err != nil || activeProvider == "" {
-		log.Debug("No auth_provider key in session, will try fallback iteration")
-		return false
-	}
-
-	log.Debug("Found active auth provider in session", logger.String("provider", activeProvider))
-
-	// Look up the config provider for this goth provider name
-	configProvider := gothToConfigProvider(activeProvider)
-	provider := s.currentSettings().GetOAuthProvider(configProvider)
-	if provider == nil || !provider.Enabled {
-		log.Debug("Active auth provider not enabled or not found in config", logger.String("provider", activeProvider))
-		return false
-	}
-
-	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
-		providerName:   activeProvider,
-		enabled:        provider.Enabled,
-		allowedUserIds: provider.UserID,
-	})
-}
-
-// checkSocialAuthFallback iterates over all configured providers to find a valid session.
-// This handles sessions created before the auth_provider key was introduced.
-func (s *OAuth2Server) checkSocialAuthFallback(r *http.Request, userId string, log SecurityLogger) bool {
-	settings := s.currentSettings()
-	for configProvider, gothProvider := range ConfigToGothProvider {
-		provider := settings.GetOAuthProvider(configProvider)
-		if provider == nil || !provider.Enabled {
-			continue
-		}
-
-		if s.checkProviderAuth(r, userId, log, providerAuthConfig{
-			providerName:   gothProvider,
-			enabled:        provider.Enabled,
-			allowedUserIds: provider.UserID,
-		}) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// checkProviderAuth validates an OAuth provider session generically.
-// This is the shared implementation used by all OAuth provider auth checks.
-func (s *OAuth2Server) checkProviderAuth(r *http.Request, userId string, log SecurityLogger, cfg providerAuthConfig) bool {
-	if !cfg.enabled {
-		return false
-	}
-
-	sessionUser, err := gothic.GetFromSession(cfg.providerName, r)
-	if err != nil || sessionUser == "" {
-		return false
-	}
-
-	log.Debug("Found provider session key", logger.String("provider", cfg.providerName))
-	// Check both the session userId (typically email) and the provider-specific session user
-	// (typically the provider's UserID/sub claim). This handles cases where the admin configured
-	// the allowed user list using either format.
-	if isValidUserId(cfg.allowedUserIds, userId) || isValidUserId(cfg.allowedUserIds, sessionUser) {
-		log.Info("User authenticated: valid session found for allowed user ID", logger.String("provider", cfg.providerName))
-		return true
-	}
-	// The allowlist holds email addresses and user IDs, so it is never logged.
-	log.Warn("Provider session found, but userId does not match allowed IDs", logger.String("provider", cfg.providerName))
 	return false
 }
 
@@ -1152,10 +1077,12 @@ func isValidUserId(configuredIds, providedId string) bool {
 	return false
 }
 
-// GenerateAuthCode generates a new authorization code
-func (s *OAuth2Server) GenerateAuthCode() string {
+// GenerateAuthCode generates a new authorization code. remember is the
+// "Remember this browser" choice the session issued for the code inherits.
+func (s *OAuth2Server) GenerateAuthCode(remember bool) string {
 	secLog := GetLogger()
 	secLog.Debug("Generating new authorization code")
+	s.syncCredentials(s.currentSettings())
 
 	code := make([]byte, AuthCodeByteLength)
 	rand.Read(code)
@@ -1168,6 +1095,7 @@ func (s *OAuth2Server) GenerateAuthCode() string {
 	s.authCodes[authCode] = AuthCode{
 		Code:      authCode,
 		ExpiresAt: expiresAt,
+		Remember:  remember,
 	}
 	// Do not log the authCode itself
 	secLog.Info("Generated and stored new authorization code", logger.Time("expires_at", expiresAt))
@@ -1188,6 +1116,8 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	}
 
 	secLog.Debug("Attempting to exchange authorization code")
+	// A code issued before a credentials change must not be exchanged after it.
+	s.syncCredentials(s.currentSettings())
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -1210,37 +1140,43 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 		return "", errors.NewStd("authorization code expired")
 	}
 
-	// Generate access token
-	tokenBytes := make([]byte, AccessTokenByteLength)
-	rand.Read(tokenBytes)
-	accessToken := base64.URLEncoding.EncodeToString(tokenBytes)
-	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AccessTokenExp)
+	// Generate the session token; only its hash is stored.
+	accessToken, err := newOpaqueToken()
+	if err != nil {
+		return "", err
+	}
+	expiresAt := time.Now().Add(sessionLifetime(authCode.Remember))
 
-	s.accessTokens[accessToken] = AccessToken{
-		Token:     accessToken,
+	s.accessTokens[sessionTokenKey(accessToken)] = AccessToken{
 		ExpiresAt: expiresAt,
+		Remember:  authCode.Remember,
 	}
 
 	// Invalidate the auth code after use
 	delete(s.authCodes, code)
 
 	// Do not log the accessToken
-	secLog.Info("Exchanged authorization code for new access token", logger.Time("expires_at", expiresAt))
+	secLog.Info("Exchanged authorization code for new session", logger.Time("expires_at", expiresAt), logger.Bool("remember", authCode.Remember))
 	go s.persistTokensIfEnabled() // Persist changes
 	return accessToken, nil
 }
 
-// ValidateAccessToken checks if an access token is valid and returns an error if not.
+// ValidateAccessToken checks if an access token is valid and returns an error
+// if not. Only a live password session counts, and only while basic
+// authentication is enabled.
 func (s *OAuth2Server) ValidateAccessToken(token string) error {
 	// Do not log the token
 	secLog := GetLogger()
 	secLog.Debug("Validating access token")
 
+	settings := s.currentSettings()
+	s.syncCredentials(settings)
+
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	accessToken, ok := s.accessTokens[token]
-	if !ok {
+	accessToken, ok := s.accessTokens[sessionTokenKey(token)]
+	if !ok || accessToken.Provider != "" || !settings.Security.BasicAuth.Enabled {
 		secLog.Debug("Access token not found")
 		return ErrTokenNotFound // Return specific error
 	}
@@ -1431,8 +1367,9 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 
 	// Unmarshal data outside the lock
 	var storedData struct {
-		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
-		AccessTokens map[string]AccessToken `json:"access_tokens"`
+		AuthCodes     map[string]AuthCode    `json:"auth_codes"`
+		Sessions      map[string]AccessToken `json:"sessions"`
+		CredentialsID string                 `json:"credentials_id"`
 	}
 
 	if err := json.Unmarshal(data, &storedData); err != nil {
@@ -1456,19 +1393,20 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 		}
 	}
 
-	loadedAccessTokens := 0
-	for token, accessToken := range storedData.AccessTokens {
-		if now.Before(accessToken.ExpiresAt) {
-			s.accessTokens[token] = accessToken
-			loadedAccessTokens++
+	loadedSessions := 0
+	for key, session := range storedData.Sessions {
+		if now.Before(session.ExpiresAt) {
+			s.accessTokens[key] = session
+			loadedSessions++
 		} else {
-			secLog.Debug("Ignoring expired access token during load", logger.Time("expired_at", accessToken.ExpiresAt))
+			secLog.Debug("Ignoring expired session during load", logger.Time("expired_at", session.ExpiresAt))
 		}
 	}
+	s.credentialsID = storedData.CredentialsID
 
 	secLog.Info("Successfully loaded tokens from file",
 		logger.Int("auth_codes_loaded", loadedAuthCodes),
-		logger.Int("access_tokens_loaded", loadedAccessTokens),
+		logger.Int("sessions_loaded", loadedSessions),
 	)
 	return nil
 }
@@ -1483,6 +1421,10 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	}
 
 	secLog.Debug("Attempting to save tokens to file")
+	// Take the snapshot inside the save lock so an older snapshot cannot be
+	// written after a newer one.
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
@@ -1501,11 +1443,13 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	}
 
 	storedData := struct {
-		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
-		AccessTokens map[string]AccessToken `json:"access_tokens"`
+		AuthCodes     map[string]AuthCode    `json:"auth_codes"`
+		Sessions      map[string]AccessToken `json:"sessions"`
+		CredentialsID string                 `json:"credentials_id"`
 	}{
-		AuthCodes:    authCodesCopy,
-		AccessTokens: accessTokensCopy,
+		AuthCodes:     authCodesCopy,
+		Sessions:      accessTokensCopy,
+		CredentialsID: s.credentialsID,
 	}
 
 	data, err := json.MarshalIndent(storedData, "", "  ")
@@ -1530,7 +1474,7 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 
 	secLog.Debug("Successfully saved tokens to file",
 		logger.Int("auth_codes_saved", len(authCodesCopy)),
-		logger.Int("access_tokens_saved", len(accessTokensCopy)),
+		logger.Int("sessions_saved", len(accessTokensCopy)),
 	)
 	return nil
 }

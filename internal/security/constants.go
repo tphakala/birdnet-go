@@ -27,13 +27,43 @@ const (
 	ProviderKakao     = "kakao"           // Same as config
 	ProviderOIDC      = "openid-connect"  // Different from config!
 
-	// SessionKeyAuthProvider is the session key used to store the active OAuth provider name.
-	// This avoids iterating all providers when looking up the active session.
-	SessionKeyAuthProvider = "auth_provider"
-
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7
 	DefaultSessionMaxAgeSeconds = 86400 * DefaultSessionMaxAgeDays // 7 days in seconds
+
+	// SessionCookieName is the cookie that names the signed-in browser's session
+	// record. The gothic session cookie only carries the OAuth handshake.
+	SessionCookieName = "birdnet_session"
+
+	// RememberedSessionDuration is how long a session that was signed in with
+	// "Remember this browser" ticked lasts after its last renewal.
+	RememberedSessionDuration = 30 * 24 * time.Hour
+
+	// SessionIdleTimeout is how long a session that was signed in with
+	// "Remember this browser" unticked lasts after its last renewal.
+	SessionIdleTimeout = 8 * time.Hour
+
+	// RememberedSessionRenewInterval is the most often a remembered session is
+	// extended (and persisted) per browser.
+	RememberedSessionRenewInterval = 24 * time.Hour
+
+	// IdleSessionRenewInterval is the most often an unticked session is
+	// extended (and persisted) per browser.
+	IdleSessionRenewInterval = 15 * time.Minute
+
+	// RememberQueryParam is the query parameter of GET /auth/:provider that
+	// carries the "Remember this browser" choice, and RememberQueryValue the
+	// value that means ticked.
+	RememberQueryParam = "remember"
+	RememberQueryValue = "1"
+
+	// rememberChoiceCookieName holds the remember choice between the start of a
+	// provider sign-in and its callback.
+	rememberChoiceCookieName = "birdnet_remember_browser"
+
+	// rememberChoiceMaxAgeSeconds bounds how long the choice cookie lives; it
+	// only has to outlast the round trip to the identity provider.
+	rememberChoiceMaxAgeSeconds = 10 * 60
 
 	// Cryptographic settings
 	MinSessionSecretLength = 32

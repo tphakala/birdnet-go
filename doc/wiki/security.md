@@ -74,6 +74,12 @@ security:
       postLogoutRedirect: true
 ```
 
+## Staying signed in
+
+The sign-in dialog has a "Remember this browser" box, ticked by default. Ticked, the browser stays signed in for 30 days, counted from its last visit. Unticked, the browser signs you out when it is closed and after 8 hours without a request. The choice applies to password and social sign-ins alike. Leave it unticked on a shared computer.
+
+Signing out ends the session at once. Changing the password (or the basic authentication client ID) signs every browser out, including the one that made the change, and so does removing a user from a provider's allowed list on that browser's next request. After an upgrade to a version with this feature, each browser signs in once. The `sessionduration` and `accesstokenexp` settings in `config.yaml` no longer control how long a browser stays signed in.
+
 ## Authentication Bypass
 
 On a trusted network you can let clients from a given subnet skip authentication entirely.

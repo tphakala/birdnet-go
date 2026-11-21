@@ -83,10 +83,3 @@ func TestGothToConfigProvider_UnknownFallback(t *testing.T) {
 
 	assert.Equal(t, "unknown-provider", gothToConfigProvider("unknown-provider"))
 }
-
-// TestSessionKeyAuthProviderConstant verifies the constant value.
-func TestSessionKeyAuthProviderConstant(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "auth_provider", SessionKeyAuthProvider)
-}
