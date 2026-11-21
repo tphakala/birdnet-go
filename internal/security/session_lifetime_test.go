@@ -476,24 +476,25 @@ func TestEndSessionClearsCookie(t *testing.T) {
 }
 
 // TestRememberChoiceCookie covers the round trip of the choice between the
-// start of a provider sign-in and its callback.
+// start of a provider sign-in and its callback, kept per provider.
 func TestRememberChoiceCookie(t *testing.T) {
 	newServer := func(t *testing.T) { t.Helper(); newSessionTestServer(t, false, nil) }
+	googleCookie := rememberChoiceCookie(ProviderGoogle)
 
 	t.Run("set true then take returns true and deletes", func(t *testing.T) {
 		newServer(t)
 		w := httptest.NewRecorder()
-		SetRememberChoice(w, sessionRequest(""), true)
-		set := findCookie(w, rememberChoiceCookieName)
+		SetRememberChoice(w, sessionRequest(""), ProviderGoogle, true)
+		set := findCookie(w, googleCookie)
 		require.NotNil(t, set)
 		assert.Equal(t, rememberChoiceMaxAgeSeconds, set.MaxAge)
 		assert.True(t, set.HttpOnly)
 
 		req := sessionRequest("")
-		req.AddCookie(&http.Cookie{Name: rememberChoiceCookieName, Value: set.Value})
+		req.AddCookie(&http.Cookie{Name: googleCookie, Value: set.Value})
 		w = httptest.NewRecorder()
-		assert.True(t, TakeRememberChoice(w, req))
-		deleted := findCookie(w, rememberChoiceCookieName)
+		assert.True(t, TakeRememberChoice(w, req, ProviderGoogle))
+		deleted := findCookie(w, googleCookie)
 		require.NotNil(t, deleted)
 		assert.Negative(t, deleted.MaxAge)
 	})
@@ -501,19 +502,29 @@ func TestRememberChoiceCookie(t *testing.T) {
 	t.Run("set false deletes a stale one", func(t *testing.T) {
 		newServer(t)
 		w := httptest.NewRecorder()
-		SetRememberChoice(w, sessionRequest(""), false)
-		deleted := findCookie(w, rememberChoiceCookieName)
+		SetRememberChoice(w, sessionRequest(""), ProviderGoogle, false)
+		deleted := findCookie(w, googleCookie)
 		require.NotNil(t, deleted)
 		assert.Negative(t, deleted.MaxAge)
+		assert.Nil(t, findCookie(w, rememberChoiceCookie(ProviderGitHub)), "another provider's choice must be left alone")
 	})
 
 	t.Run("absent or unexpected value is false", func(t *testing.T) {
 		newServer(t)
-		assert.False(t, TakeRememberChoice(httptest.NewRecorder(), sessionRequest("")))
+		assert.False(t, TakeRememberChoice(httptest.NewRecorder(), sessionRequest(""), ProviderGoogle))
 
 		req := sessionRequest("")
-		req.AddCookie(&http.Cookie{Name: rememberChoiceCookieName, Value: strings.Repeat("x", 3)})
-		assert.False(t, TakeRememberChoice(httptest.NewRecorder(), req))
+		req.AddCookie(&http.Cookie{Name: googleCookie, Value: strings.Repeat("x", 3)})
+		assert.False(t, TakeRememberChoice(httptest.NewRecorder(), req, ProviderGoogle))
+	})
+
+	t.Run("another provider's choice is neither read nor cleared", func(t *testing.T) {
+		newServer(t)
+		req := sessionRequest("")
+		req.AddCookie(&http.Cookie{Name: rememberChoiceCookie(ProviderGitHub), Value: RememberQueryValue})
+		w := httptest.NewRecorder()
+		assert.False(t, TakeRememberChoice(w, req, ProviderGoogle))
+		assert.Empty(t, w.Result().Cookies())
 	})
 }
 

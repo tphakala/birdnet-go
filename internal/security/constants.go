@@ -64,8 +64,9 @@ const (
 	RememberQueryParam = "remember"
 	RememberQueryValue = "1"
 
-	// rememberChoiceCookieName holds the remember choice between the start of a
-	// provider sign-in and its callback.
+	// rememberChoiceCookieName is the prefix of the cookies that hold the remember
+	// choice between the start of a provider sign-in and its callback, one per
+	// provider (see rememberChoiceCookie).
 	rememberChoiceCookieName = "birdnet_remember_browser"
 
 	// rememberChoiceMaxAgeSeconds bounds how long the choice cookie lives; it

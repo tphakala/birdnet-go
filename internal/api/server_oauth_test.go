@@ -2,10 +2,12 @@ package api
 
 import (
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"testing"
 
 	"github.com/gorilla/sessions"
@@ -13,6 +15,7 @@ import (
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/markbates/goth/providers/faux"
+	"github.com/markbates/goth/providers/github"
 	"github.com/markbates/goth/providers/microsoftonline"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -464,7 +467,7 @@ func TestHandleOAuthCallback_MixedCaseProvider(t *testing.T) {
 // cookie and clears the choice cookie.
 // Not parallel: it swaps the settings, the goth registry, gothic.Store and gothic.CompleteUserAuth.
 func TestHandleOAuthRememberChoice(t *testing.T) {
-	const choiceCookie = "birdnet_remember_browser"
+	const choiceCookie = "birdnet_remember_browser_" + security.ProviderMicrosoft
 	s := useOAuthSettings(t, security.ConfigMicrosoft)
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
@@ -528,6 +531,81 @@ func TestHandleOAuthRememberChoice(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHandleOAuthRememberChoiceIsPerProvider pins that a callback applies only
+// the remember choice recorded for its own provider: a ticked Microsoft sign-in
+// still ends with a persistent cookie after an unticked GitHub sign-in began in
+// the same browser and cleared its own choice cookie.
+// Not parallel: it swaps the settings, the goth registry, gothic.Store and gothic.CompleteUserAuth.
+func TestHandleOAuthRememberChoiceIsPerProvider(t *testing.T) {
+	settings := &conf.Settings{
+		Security: conf.Security{
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{Provider: security.ConfigMicrosoft, Enabled: true, ClientID: "id", ClientSecret: "secret", UserID: "user@example.com"},
+				{Provider: security.ConfigGitHub, Enabled: true, ClientID: "id", ClientSecret: "secret", UserID: "user@example.com"},
+			},
+		},
+	}
+	prev := conf.GetSettings()
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(prev) })
+	s := &Server{settings: settings, oauth2Server: security.NewOAuth2ServerForTest(settings)}
+
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	goth.UseProviders(
+		microsoftonline.New("id", "secret", "http://localhost/auth/microsoftonline/callback"),
+		github.New("id", "secret", "http://localhost/auth/github/callback"),
+	)
+	prevStore := gothic.Store
+	gothic.Store = sessions.NewFilesystemStore(t.TempDir(), []byte("test-session-secret-long-enough-32"))
+	t.Cleanup(func() { gothic.Store = prevStore })
+
+	// browser holds the cookies the way a browser would: a Set-Cookie replaces a
+	// cookie of the same name, and a negative Max-Age deletes it.
+	browser := map[string]*http.Cookie{}
+	apply := func(rec *httptest.ResponseRecorder) {
+		for _, cookie := range rec.Result().Cookies() {
+			if cookie.MaxAge < 0 {
+				delete(browser, cookie.Name)
+				continue
+			}
+			browser[cookie.Name] = cookie
+		}
+	}
+	begin := func(provider, query string) {
+		req := httptest.NewRequest(http.MethodGet, "/auth/"+provider+query, http.NoBody)
+		for _, cookie := range browser {
+			req.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(req, rec)
+		c.SetParamNames("provider")
+		c.SetParamValues(provider)
+		require.NoError(t, s.handleOAuthBegin(c))
+		require.NotEmpty(t, rec.Header().Get("Location"), "the begin step must redirect to the provider")
+		apply(rec)
+	}
+	callback := func(provider string) *http.Cookie {
+		rec := callbackOAuth(t, s, provider, slices.Collect(maps.Values(browser))...)
+		require.Equal(t, http.StatusFound, rec.Code)
+		for _, cookie := range rec.Result().Cookies() {
+			if cookie.Name == security.SessionCookieName {
+				return cookie
+			}
+		}
+		require.Fail(t, "the callback must set the session cookie")
+		return nil
+	}
+
+	begin(security.ProviderMicrosoft, "?remember=1")
+	begin(security.ProviderGitHub, "")
+	// Only the callbacks may find the user signed in already.
+	stubCompleteUserAuth(t, &goth.User{UserID: "user-1", Email: "user@example.com"})
+
+	assert.Equal(t, int(security.RememberedCookieMaxAge.Seconds()), callback(security.ProviderMicrosoft).MaxAge,
+		"the ticked sign-in must keep its choice after another provider's sign-in began unticked")
 }
 
 // TestHandleOAuthCallback_UnknownProvider pins that an unknown provider in the

@@ -1091,7 +1091,7 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 
 	// Carry the "Remember this browser" choice to the callback. The cookie holds
 	// one boolean, so it cannot redirect anywhere.
-	security.SetRememberChoice(c.Response(), req, c.QueryParam(security.RememberQueryParam) == security.RememberQueryValue)
+	security.SetRememberChoice(c.Response(), req, provider, c.QueryParam(security.RememberQueryParam) == security.RememberQueryValue)
 
 	// Begin OAuth flow - this will redirect to the provider
 	log.Debug("Redirecting to OAuth provider to begin authentication")
@@ -1154,7 +1154,7 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	req := gothic.GetContextWithProvider(c.Request(), provider)
 
 	// The remember choice was set when the sign-in began; read and clear it.
-	remember := security.TakeRememberChoice(c.Response(), req)
+	remember := security.TakeRememberChoice(c.Response(), req, provider)
 
 	// Complete the OAuth flow and get user info
 	user, err := gothic.CompleteUserAuth(c.Response(), req)

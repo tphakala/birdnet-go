@@ -186,27 +186,34 @@ func deleteCookie(w http.ResponseWriter, r *http.Request, name string) {
 	http.SetCookie(w, sessions.NewCookie(name, "", &opts))
 }
 
+// rememberChoiceCookie returns the name of the choice cookie of provider, the
+// canonical goth provider name. One cookie per provider keeps sign-ins with
+// different providers, started together in one browser, from sharing a choice.
+func rememberChoiceCookie(provider string) string {
+	return rememberChoiceCookieName + "_" + provider
+}
+
 // SetRememberChoice records the "Remember this browser" choice for the
-// provider callback that follows the redirect to the identity provider. A false
-// choice clears any stale cookie.
-func SetRememberChoice(w http.ResponseWriter, r *http.Request, remember bool) {
+// callback of provider that follows the redirect to the identity provider. A
+// false choice clears any stale cookie of that provider.
+func SetRememberChoice(w http.ResponseWriter, r *http.Request, provider string, remember bool) {
 	if !remember {
-		deleteCookie(w, r, rememberChoiceCookieName)
+		deleteCookie(w, r, rememberChoiceCookie(provider))
 		return
 	}
 	opts := sessionCookieOptions(r)
 	opts.MaxAge = rememberChoiceMaxAgeSeconds
-	http.SetCookie(w, sessions.NewCookie(rememberChoiceCookieName, RememberQueryValue, &opts))
+	http.SetCookie(w, sessions.NewCookie(rememberChoiceCookie(provider), RememberQueryValue, &opts))
 }
 
-// TakeRememberChoice returns the choice SetRememberChoice recorded and clears
-// the cookie. An absent or unexpected value is false.
-func TakeRememberChoice(w http.ResponseWriter, r *http.Request) bool {
-	cookie, err := r.Cookie(rememberChoiceCookieName)
+// TakeRememberChoice returns the choice SetRememberChoice recorded for provider
+// and clears that cookie. An absent or unexpected value is false.
+func TakeRememberChoice(w http.ResponseWriter, r *http.Request, provider string) bool {
+	cookie, err := r.Cookie(rememberChoiceCookie(provider))
 	if err != nil {
 		return false
 	}
-	deleteCookie(w, r, rememberChoiceCookieName)
+	deleteCookie(w, r, rememberChoiceCookie(provider))
 	return cookie.Value == RememberQueryValue
 }
 
