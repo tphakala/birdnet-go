@@ -26,9 +26,8 @@
   import { dropdown } from '$lib/utils/transitions';
   import { appState } from '$lib/stores/appState.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
-  import { HELP_SHORTCUT_ID } from '$lib/desktop/components/modals/KeyboardShortcutsModal.svelte';
   import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
-  import { shortcuts } from '$lib/stores/shortcuts.svelte';
+  import { HELP_SHORTCUT_ID, shortcuts } from '$lib/stores/shortcuts.svelte';
 
   const logger = getLogger('dashboard');
 

@@ -8,22 +8,15 @@
 
   @component
 -->
-<script module lang="ts">
-  /** Id of the sheet's dialog root, so the `?` key can tell whether the sheet is the open dialog. */
-  export const KEYBOARD_SHORTCUTS_DIALOG_ID = 'keyboard-shortcuts-dialog';
-
-  /** Id of the shortcut that opens and closes the sheet. */
-  export const HELP_SHORTCUT_ID = 'global.help';
-</script>
-
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import Modal, { isOnlyOpenDialog } from '$lib/desktop/components/ui/Modal.svelte';
+  import Modal, { openDialogCount } from '$lib/desktop/components/ui/Modal.svelte';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
   import { t } from '$lib/i18n';
   import {
     GLOBAL_SHORTCUT_SCOPE,
+    HELP_SHORTCUT_ID,
     shortcuts,
     type ShortcutDefinition,
     type ShortcutGroup,
@@ -58,9 +51,7 @@
         description: () => t('shortcuts.global.help'),
         // Inside a dialog only when the sheet is the one open: `?` must not close it
         // under a dialog that opened on top of it
-        allowInDialog: () =>
-          shortcuts.helpOpen &&
-          isOnlyOpenDialog(document.getElementById(KEYBOARD_SHORTCUTS_DIALOG_ID)),
+        allowInDialog: () => shortcuts.helpOpen && openDialogCount() === 1,
         run: () => shortcuts.toggleHelp(),
       },
     ],
@@ -103,7 +94,6 @@
 </script>
 
 <Modal
-  id={KEYBOARD_SHORTCUTS_DIALOG_ID}
   isOpen={shortcuts.helpOpen}
   title={t('shortcuts.modal.title')}
   size="md"

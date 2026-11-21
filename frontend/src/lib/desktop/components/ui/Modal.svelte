@@ -42,11 +42,6 @@
     return openModals.length + document.querySelectorAll(FOREIGN_OPEN_DIALOG_SELECTOR).length;
   }
 
-  /** Whether `element` is the root of an open Modal and no other dialog is open. A foreign dialog never matches. */
-  export function isOnlyOpenDialog(element: HTMLElement | null): boolean {
-    return openDialogCount() === 1 && openModals[0]?.dialog === element;
-  }
-
   // Ancestors that take their whole subtree out of the tab order
   const TAB_EXCLUDING_ANCESTOR_SELECTOR = '[inert], [hidden]';
 

@@ -46,6 +46,9 @@ export const SHORTCUTS_ENABLED_STORAGE_KEY = 'birdnet-keyboard-shortcuts';
 /** Id of the scope for shortcuts that work on every page. It is listed after the page scopes. */
 export const GLOBAL_SHORTCUT_SCOPE = 'global';
 
+/** Id of the shortcut that opens and closes the cheat sheet. */
+export const HELP_SHORTCUT_ID = 'global.help';
+
 /** Section a shortcut is listed under in the cheat sheet. */
 export type ShortcutGroup = 'navigation' | 'review' | 'audio' | 'general';
 
@@ -213,11 +216,11 @@ export function createShortcuts(deps: {
   const handleKeydown = (event: KeyboardEvent): void => {
     if (!enabled) return;
     if (event.defaultPrevented || isImeComposition(event) || hasCommandModifier(event)) return;
-    const target = event.target;
-    if (isTextEntryTarget(target)) return;
-
+    // The pure string match first: almost every key on the page matches nothing
     const definition = findMatch(event);
     if (!definition) return;
+    const target = event.target;
+    if (isTextEntryTarget(target)) return;
     if (isArrowKey(event.key) && isArrowKeyWidget(target)) return;
     if (event.key === KEYS.space && isInteractiveTarget(target)) return;
     if (deps.openDialogCount() > 0 && !definition.allowInDialog?.()) return;

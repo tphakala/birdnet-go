@@ -22,7 +22,7 @@ export const KEYS = {
 const NAMED_KEYS: ReadonlySet<string> = new Set([KEYS.arrowLeft, KEYS.arrowRight, KEYS.space]);
 
 /** `KeyboardEvent.keyCode` the browsers report for a key press that an input method handles. */
-export const IME_PROCESS_KEY_CODE = 229;
+const IME_PROCESS_KEY_CODE = 229;
 
 /** `KeyboardEvent.key` a key press handled by an input method reports. */
 const IME_PROCESS_KEY = 'Process';
@@ -106,8 +106,14 @@ const ARIA_ALTERNATIVE_SEPARATOR = ' ';
 const ARIA_SHIFT = 'Shift';
 const ARIA_SPACE = 'Space';
 const APPLE_SHIFT_GLYPH = '⇧';
-const ARROW_LEFT_GLYPH = '←';
-const ARROW_RIGHT_GLYPH = '→';
+/** Keys whose cap shows a glyph instead of a word. */
+const KEY_GLYPHS: ReadonlyMap<string, string> = new Map([
+  [KEYS.arrowLeft, '←'],
+  [KEYS.arrowRight, '→'],
+  [KEYS.comma, KEYS.comma],
+  [KEYS.period, KEYS.period],
+  [KEYS.questionMark, KEYS.questionMark],
+]);
 const APPLE_PLATFORM_PATTERN = /Mac|iPhone|iPad|iPod/;
 
 /** A single cased character: a letter that has an upper and a lower case. */
@@ -207,22 +213,9 @@ function keyWord(key: string): string {
   }
 }
 
-/** The glyph or word on a key cap. Arrows and punctuation show their glyph, Space its word. */
+/** The glyph or word on a key cap. Arrows and punctuation show their glyph, any other key its word. */
 function keyToken(key: string): string {
-  switch (key) {
-    case KEYS.arrowLeft:
-      return ARROW_LEFT_GLYPH;
-    case KEYS.arrowRight:
-      return ARROW_RIGHT_GLYPH;
-    case KEYS.space:
-      return t('shortcuts.keys.space');
-    case KEYS.comma:
-    case KEYS.period:
-    case KEYS.questionMark:
-      return key;
-    default:
-      return key.toUpperCase();
-  }
+  return KEY_GLYPHS.get(key) ?? keyWord(key);
 }
 
 /** Key name in `aria-keyshortcuts`: arrows keep their `key` value, letters are upper case. */
