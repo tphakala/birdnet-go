@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -534,9 +535,7 @@ func TestAudibleBatsByID_GuestDoesNotStarveAuthenticatedProcessing(t *testing.T)
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 	// controller.isClientAuthenticated stays nil for guest requests on audible-bats.
 
-	// Long enough that guest 1 stays inside AudibleBatsByID while concurrent checks run.
-	const inFlightSeconds = 10
-	writeToneWAV(t, fixturePath(tempDir, "bat1.wav"), batTestRate, inFlightSeconds, fixtureBatToneHz)
+	writeToneWAV(t, fixturePath(tempDir, "bat1.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
 	writeToneWAV(t, fixturePath(tempDir, "bat2.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
 	writeToneWAV(t, fixturePath(tempDir, "bird.wav"), processTestRate, 0.2, fixtureToneHz)
 
@@ -548,21 +547,28 @@ func TestAudibleBatsByID_GuestDoesNotStarveAuthenticatedProcessing(t *testing.T)
 	mockDS.On("GetNoteClipPath", "43").Return("bird.wav", nil)
 	controller.DS = mockDS
 
-	reqCtx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	req1 := httptest.NewRequest(http.MethodPost, "/api/v2/audio/41/audible-bats",
-		strings.NewReader(`{"expansion": 10, "denoise": "light-medium"}`)).WithContext(reqCtx)
-	req1.Header.Set("Content-Type", "application/json")
-	rec1 := httptest.NewRecorder()
+	var callCount atomic.Int32
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseHook := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseHook)
+	controller.processingStartedHook = func() {
+		if callCount.Add(1) == 1 {
+			close(entered)
+			<-release
+		}
+	}
 
+	var rec1 *httptest.ResponseRecorder
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		e.ServeHTTP(rec1, req1)
+		rec1 = postJSON(e, "/api/v2/audio/41/audible-bats", `{"expansion": 10}`)
 	})
 
-	require.Eventually(t, func() bool {
-		return len(controller.guestAudibleBatsSemaphore) == 1 && len(controller.processingSemaphore) == 1
-	}, 5*time.Second, time.Millisecond, "guest 1 acquired both guest and shared slots")
+	<-entered
+	assert.Equal(t, 1, len(controller.guestAudibleBatsSemaphore))
+	assert.Equal(t, 1, len(controller.processingSemaphore))
 
 	// A second concurrent guest miss on a different note ID must be rejected
 	// before touching the remaining shared processing slot.
@@ -574,8 +580,9 @@ func TestAudibleBatsByID_GuestDoesNotStarveAuthenticatedProcessing(t *testing.T)
 	procRec := postJSON(e, "/api/v2/audio/43/process", `{"normalize": true}`)
 	assert.Equal(t, http.StatusOK, procRec.Code, procRec.Body.String())
 
-	cancel()
+	releaseHook()
 	wg.Wait()
+	require.Equal(t, http.StatusOK, rec1.Code, rec1.Body.String())
 	assert.Empty(t, controller.guestAudibleBatsSemaphore)
 	assert.Empty(t, controller.processingSemaphore)
 

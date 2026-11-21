@@ -1764,6 +1764,9 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
 	defer release()
+	if c.processingStartedHook != nil {
+		c.processingStartedHook()
+	}
 
 	// Denoise at the source rate, then full-clip time expansion + 48 kHz resample
 	// (all-or-nothing; no detection-window clipping), then normalization (after
