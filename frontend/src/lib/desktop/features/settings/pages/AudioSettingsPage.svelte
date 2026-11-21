@@ -897,15 +897,18 @@
       originalData={store.originalData.realtime?.rtsp?.streams}
       currentData={store.formData.realtime?.rtsp?.streams}
     >
-      <StreamManager
-        streams={settings.rtsp.streams}
-        {savedStreams}
-        {testedUrls}
-        disabled={store.isLoading || store.isSaving}
-        disabledReason={store.isSaving ? t('settings.actions.saving') : t('common.loading')}
-        onUpdateStreams={updateRTSPStreams}
-        onUrlTested={url => testedUrls.add(url)}
-      />
+      <!-- A Reset recreates the manager, so an analysis or test that is still running is dropped and the add form closes. -->
+      {#key resetCount}
+        <StreamManager
+          streams={settings.rtsp.streams}
+          {savedStreams}
+          {testedUrls}
+          disabled={store.isLoading || store.isSaving}
+          disabledReason={store.isSaving ? t('settings.actions.saving') : t('common.loading')}
+          onUpdateStreams={updateRTSPStreams}
+          onUrlTested={url => testedUrls.add(url)}
+        />
+      {/key}
     </SettingsSection>
   </div>
 {/snippet}

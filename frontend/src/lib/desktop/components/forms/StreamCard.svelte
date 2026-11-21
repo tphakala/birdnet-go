@@ -327,7 +327,7 @@
   // Like the name: the field shows its problem once it was left, hides it while
   // it is edited, and shows a problem another card caused at once. An untested
   // URL is shown always, since the test is the next step.
-  let urlTouched = $state(untrack(() => Boolean(problem?.url && problem.url !== 'untested')));
+  let urlTouched = $state(untrack(() => Boolean(problem?.url)));
   let urlEditing = $state(false);
   $effect(() => {
     if (problem?.url && !urlEditing) urlTouched = true;
@@ -407,8 +407,10 @@
     }
   }
 
+  // A collapsed or disabled card (a save is running) drops a pending analysis, so
+  // its late result cannot write into the form while a save runs or after a Reset.
   $effect(() => {
-    if (expanded) return;
+    if (expanded && !disabled) return;
     untrack(() => {
       analysisSeq++;
       isAnalyzing = false;

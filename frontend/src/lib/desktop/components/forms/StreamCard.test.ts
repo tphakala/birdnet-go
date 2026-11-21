@@ -409,6 +409,24 @@ describe('StreamCard editing', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...baseStream, channelMode: 'left' });
   });
 
+  it.each([
+    ['the card is disabled by a running save', { disabled: true }],
+    ['the card is collapsed', { expanded: false }],
+  ])('drops a late channel analysis when %s meanwhile', async (_label, patch) => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    const { onChange, update } = renderCard();
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
+
+    await update(patch);
+    await update({ disabled: false, expanded: true });
+    pending.resolve(LEFT_ANALYSIS);
+    await pending.promise;
+    await tick();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('ignores a channel analysis of a URL the stream no longer holds', async () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);

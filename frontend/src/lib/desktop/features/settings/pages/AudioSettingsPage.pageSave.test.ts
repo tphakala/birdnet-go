@@ -404,11 +404,17 @@ describe('AudioSettingsPage streams tab saves with the page', () => {
     expect(saveButton()).not.toHaveAttribute('aria-disabled');
   });
 
-  it('keeps the tested URLs when the tab is left and entered again, and the block from the recording tab', async () => {
+  it('keeps the block on the recording tab, and the tested URLs when the tab is entered again', async () => {
     renderTab('streams');
     await fireEvent.click(await screen.findByRole('button', { name: 'new-url' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'test-new-url' }));
 
+    // The untested URL still blocks Save while another tab is open.
+    await fireEvent.click(screen.getByRole('tab', { name: RECORDING_TAB_KEY }));
+    expect(await screen.findByText(STREAMS_UNTESTED_REASON_KEY)).toBeInTheDocument();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+
+    await fireEvent.click(await screen.findByRole('tab', { name: STREAMS_TAB_KEY }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'test-new-url' }));
     await fireEvent.click(screen.getByRole('tab', { name: RECORDING_TAB_KEY }));
     await fireEvent.click(await screen.findByRole('tab', { name: STREAMS_TAB_KEY }));
 
@@ -461,6 +467,18 @@ describe('AudioSettingsPage streams tab saves with the page', () => {
 
     await waitFor(() => expect(state).toHaveAttribute('data-disabled', 'true'));
     expect(state).toHaveTextContent('settings.actions.saving');
+  });
+
+  it('remounts the manager when the form is reset', async () => {
+    renderTab('streams');
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
+    const before = screen.getByTestId('manager-state').getAttribute('data-mount');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('manager-state').getAttribute('data-mount')).not.toBe(before)
+    );
   });
 
   it('gives the manager the saved streams, not the edited ones', async () => {
