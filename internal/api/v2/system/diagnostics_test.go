@@ -2,13 +2,18 @@
 package system
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 // TestMapInferenceSnapshotsKeepsUnmappedModel verifies that a counter whose
@@ -100,4 +105,45 @@ func TestMapInferenceSnapshotsDeterministicOrder(t *testing.T) {
 	}
 	assert.Equal(t, []string{"Alpha_Model", "Mango_Model", "Zebra_Model"}, ids,
 		"models must be returned in sorted ModelID order")
+}
+
+// TestRegisterHealthChecks_AudioExportFormatFollowsSettings verifies that the
+// audio export format check reads the current settings snapshot on every run,
+// so a saved change applies without re-registering the checks. Not parallel:
+// apitest.PublishTestSettings swaps the process-global snapshot.
+func TestRegisterHealthChecks_AudioExportFormatFollowsSettings(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "birdnet.db")
+	h := &Handler{Core: apitest.NewCore(t, apitest.WithSettingsFunc(func(s *conf.Settings) {
+		s.Realtime.Audio.Export.Enabled = true
+		s.Realtime.Audio.Export.Type = conf.AudioExportTypeMP3
+		s.Output.SQLite.Path = dbPath
+	}))}
+	h.storageDeps = storageDeps{envType: func() string { return sysinfo.EnvLXC }}
+	h.healthRegistry = health.NewRegistry()
+	h.registerHealthChecks()
+
+	run := func() health.Result {
+		results := h.healthRegistry.RunCategory(t.Context(), health.CategoryConfig)
+		for i := range results {
+			if results[i].Name == "audio_export_format" {
+				return results[i]
+			}
+		}
+		require.FailNow(t, "audio_export_format is not registered in the config category")
+		return health.Result{}
+	}
+
+	assert.Equal(t, health.StatusWarning, run().Status, "export on with mp3 warns")
+
+	opus := apitest.NewValidTestSettings()
+	opus.Realtime.Audio.Export.Enabled = true
+	opus.Realtime.Audio.Export.Type = conf.AudioExportTypeOPUS
+	apitest.PublishTestSettings(t, opus)
+	assert.Equal(t, health.StatusHealthy, run().Status, "saving opus applies without a restart")
+
+	off := apitest.NewValidTestSettings()
+	off.Realtime.Audio.Export.Enabled = false
+	off.Realtime.Audio.Export.Type = conf.AudioExportTypeMP3
+	apitest.PublishTestSettings(t, off)
+	assert.Equal(t, health.StatusSkipped, run().Status, "switching export off skips the check")
 }
