@@ -55,7 +55,7 @@ The HTTP side is in `internal/api/server.go`: `GET /auth/:provider` begins the l
 
 ### Logout
 
-`SecurityAdapter.Logout` calls `EndSession`, which deletes the session record, writes the deletion to `tokens.json` before it returns when the file can be written (a failed write is logged at error level and the record then returns after a restart) and clears the cookie, then calls `gothic.Logout` to drop a leftover handshake session. For OIDC providers the adapter can also build the provider's end-session URL from the ID token kept in the record.
+`SecurityAdapter.Logout` calls `EndSession`, which deletes the session record, writes the deletion to `tokens.json` before it returns when the file can be written (a failed write is logged at error level, and the record can return after a restart unless a later save succeeds first) and clears the cookie, then calls `gothic.Logout` to drop a leftover handshake session. For OIDC providers the adapter can also build the provider's end-session URL from the ID token kept in the record.
 
 ## Local subnet bypass
 
