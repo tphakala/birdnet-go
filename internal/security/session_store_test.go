@@ -405,21 +405,3 @@ func TestSetupSessionStore_CookieStoreFallbackWrapped(t *testing.T) {
 	assert.False(t, loginCookieSecure(t, newRequest(testInternalClientAddr+testRemotePort)), "listed client")
 	assert.True(t, loginCookieSecure(t, newRequest(testExternalAddr+testRemotePort)), "unlisted client")
 }
-
-// TestConfigureLocalNetworkCookieStore_WrappedStore verifies that the local
-// network relaxation still reaches the store wrapped by
-// plainHTTPClientSessionStore.
-func TestConfigureLocalNetworkCookieStore_WrappedStore(t *testing.T) {
-	// Not parallel: mutates the global gothic.Store.
-	prevStore := gothic.Store
-	t.Cleanup(func() { gothic.Store = prevStore })
-
-	inner := sessions.NewFilesystemStore(t.TempDir(), []byte("test-secret"))
-	inner.Options = buildSessionOptions(true, DefaultSessionMaxAgeSeconds)
-	gothic.Store = plainHTTPClientSessionStore{Store: inner}
-
-	server := &OAuth2Server{settings: &conf.Settings{Security: conf.Security{SessionSecret: "test-secret"}}}
-	server.configureLocalNetworkCookieStore(server.settings)
-
-	assert.False(t, inner.Options.Secure, "Secure should be false on the wrapped store for local network")
-}

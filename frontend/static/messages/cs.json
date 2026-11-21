@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Zadejte své heslo",
     "enterPassword": "Zadejte své heslo",
     "continue": "Pokračovat",
+    "rememberBrowser": "Zapamatovat si tento prohlížeč",
+    "rememberBrowserHelp": "Zůstat přihlášen v tomto prohlížeči. Na sdíleném počítači nechte nezaškrtnuté.",
     "or": "nebo",
     "loginWithGoogle": "Přihlásit se přes Google",
     "loginWithGithub": "Přihlásit se přes GitHub",

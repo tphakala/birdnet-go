@@ -44,8 +44,7 @@ type logoutRow struct {
 	oidcEnabled  bool
 	registerOIDC bool
 	endSession   string
-	authProvider string // value stored under auth_provider, empty for none
-	legacyKey    bool   // store the provider's own session key instead of auth_provider
+	authProvider string // provider of the session record, empty for none
 	registerGH   bool   // register a provider that has no RP-Initiated Logout
 	noWarn       bool   // the log must hold no WARN line at all
 	wantURL      bool
@@ -85,8 +84,6 @@ func TestGetProviderLogoutURL_ReportsSkippedSignOut(t *testing.T) {
 		{name: "toggle is read on every call", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, wantURL: true, baseURL: logoutTestOrigin, flipPostLogout: true, wantReturnAfter: logoutTestOrigin + "/ui/"},
 		{name: "no provider in session, OIDC enabled", oidcEnabled: true, wantSkipLogs: 1, wantLevel: "INFO"},
 		{name: "no provider in session, OIDC disabled"},
-		{name: "legacy session returns URL", oidcEnabled: true, registerOIDC: true, endSession: "https://" + logoutTestEndpoint, authProvider: security.ProviderOIDC, legacyKey: true, wantURL: true},
-		{name: "legacy session with empty endpoint warns once", oidcEnabled: true, registerOIDC: true, authProvider: security.ProviderOIDC, legacyKey: true, wantSkipLogs: 1, wantLevel: "WARN"},
 		{name: "unregistered provider other than OIDC stays quiet", oidcEnabled: true, authProvider: security.ProviderGitHub, noWarn: true},
 		{name: "provider without logout support stays quiet", oidcEnabled: true, registerGH: true, authProvider: security.ProviderGitHub, noWarn: true},
 	}
@@ -131,25 +128,18 @@ func runLogoutRow(t *testing.T, row *logoutRow) {
 	}
 
 	e := echo.New()
-	// Write the session cookie the way the OAuth callback does: each write goes
-	// through a request that carries the cookie of the previous one.
+	// Sign in the way the OAuth callback does and send its cookie back.
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/logout", http.NoBody)
-	store := func(key, value string) {
+	if row.authProvider != "" {
+		identity := security.AccessToken{Provider: row.authProvider, UserID: "user", ProviderUserID: "sub"}
+		if !row.noIDToken {
+			identity.IDToken = logoutTestIDToken
+		}
 		rec := httptest.NewRecorder()
-		require.NoError(t, gothic.StoreInSession(key, value, req, rec))
+		require.NoError(t, server.StartProviderSession(rec, req, &identity, false))
 		for _, cookie := range rec.Result().Cookies() {
-			req = httptest.NewRequest(http.MethodPost, "/api/v2/auth/logout", http.NoBody)
 			req.AddCookie(cookie)
 		}
-	}
-	switch {
-	case row.legacyKey:
-		store(row.authProvider, "user")
-	case row.authProvider != "":
-		store(security.SessionKeyAuthProvider, row.authProvider)
-	}
-	if !row.noIDToken {
-		store("id_token", logoutTestIDToken)
 	}
 	c := e.NewContext(req, httptest.NewRecorder())
 

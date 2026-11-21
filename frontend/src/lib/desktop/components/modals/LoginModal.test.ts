@@ -50,6 +50,7 @@ describe('LoginModal', () => {
   function mockWindowLocation(pathname = '/ui/', search = '') {
     const mockLocation = {
       href: '',
+      origin: 'http://localhost',
       pathname,
       search,
       reload: vi.fn(),
@@ -448,7 +449,7 @@ describe('LoginModal', () => {
 
       // The endpoint must carry the ingress prefix; without it the browser
       // leaves the proxy path entirely and the request never reaches the app.
-      expect(mockLocation.href).toBe('/api/hassio_ingress/TOKEN/auth/google');
+      expect(mockLocation.href).toBe('/api/hassio_ingress/TOKEN/auth/google?remember=1');
     });
 
     it('should leave the OAuth redirect unchanged for direct access (no proxy prefix)', async () => {
@@ -467,7 +468,146 @@ describe('LoginModal', () => {
       await fireEvent.click(googleButton);
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(mockLocation.href).toBe('/auth/google');
+      expect(mockLocation.href).toBe('/auth/google?remember=1');
+    });
+  });
+
+  describe('Remember this browser', () => {
+    const rememberCheckbox = () => screen.getByRole('checkbox', { name: /auth\.rememberBrowser/ });
+
+    it('is ticked by default', () => {
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      expect(rememberCheckbox()).toBeChecked();
+    });
+
+    it.each([
+      { ticked: true, expected: true },
+      { ticked: false, expected: false },
+    ])(
+      'sends rememberBrowser=$expected with the password when ticked=$ticked',
+      async ({ ticked, expected }) => {
+        const { api } = await import('$lib/utils/api');
+        const postSpy = vi.mocked(api.post);
+        postSpy.mockResolvedValue({ success: true, message: 'Login successful' });
+        mockWindowLocation('/ui/dashboard');
+
+        loginModalTest.render({
+          isOpen: true,
+          onClose: vi.fn(),
+          authConfig: { basicEnabled: true, enabledProviders: [] },
+        });
+
+        if (!ticked) {
+          await fireEvent.click(rememberCheckbox());
+        }
+        await fireEvent.input(screen.getByLabelText('auth.password'), {
+          target: { value: 'valid-password' },
+        });
+        await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+
+        await waitFor(() => {
+          expect(postSpy).toHaveBeenCalledWith(
+            '/api/v2/auth/login',
+            expect.objectContaining({ rememberBrowser: expected })
+          );
+        });
+      }
+    );
+
+    it('adds remember=1 to the provider redirect only when ticked, keeping the base path', async () => {
+      const mockLocation = mockWindowLocation('/api/hassio_ingress/TOKEN/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: false, enabledProviders: ['google'] },
+      });
+
+      await fireEvent.click(rememberCheckbox());
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      await waitFor(() => {
+        expect(mockLocation.href).toBe('/api/hassio_ingress/TOKEN/auth/google');
+      });
+    });
+
+    it('appends remember=1 with & when the provider endpoint already has a query', async () => {
+      const mockLocation = mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          enabledProviders: ['google'],
+          endpoints: { google: '/auth/google?prompt=login' },
+        },
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      await waitFor(() => {
+        expect(mockLocation.href).toBe('/auth/google?prompt=login&remember=1');
+      });
+    });
+
+    it('removes a remember parameter already in an overridden endpoint when unticked', async () => {
+      const mockLocation = mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          enabledProviders: ['google'],
+          endpoints: { google: '/auth/google?remember=1&prompt=login' },
+        },
+      });
+
+      await fireEvent.click(rememberCheckbox());
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      await waitFor(() => {
+        expect(mockLocation.href).toBe('/auth/google?prompt=login');
+      });
+    });
+
+    it('shows one checkbox with password and providers and sends its state to the provider URL', async () => {
+      const mockLocation = mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+
+      expect(screen.getAllByRole('checkbox', { name: /auth\.rememberBrowser/ })).toHaveLength(1);
+
+      await fireEvent.click(rememberCheckbox());
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      await waitFor(() => {
+        expect(mockLocation.href).toBe('/auth/google');
+      });
+    });
+
+    it('disables the checkbox while a sign-in is in progress', async () => {
+      mockWindowLocation('/ui/');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: { basicEnabled: true, enabledProviders: ['google'] },
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /continueWithGoogle/i }));
+
+      expect(rememberCheckbox()).toBeDisabled();
     });
   });
 

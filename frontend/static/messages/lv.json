@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Ievadiet savu paroli",
     "enterPassword": "Ievadiet savu paroli",
     "continue": "Turpināt",
+    "rememberBrowser": "Atcerēties šo pārlūku",
+    "rememberBrowserHelp": "Palikt pieteiktam šajā pārlūkā. Kopīgā datorā atstājiet neatzīmētu.",
     "or": "vai",
     "loginWithGoogle": "Pieteikties ar Google",
     "loginWithGithub": "Pieteikties ar GitHub",

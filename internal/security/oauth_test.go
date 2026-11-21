@@ -1,7 +1,6 @@
 package security
 
 import (
-	"bytes"
 	"context"
 	"net"
 	"net/http"
@@ -27,87 +26,21 @@ import (
 	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
-// TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
+// TestIsUserAuthenticatedValidAccessToken tests IsUserAuthenticated with a live password session
 func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 	settings := conftest.NewTestSettings().Apply()
 	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
+	settings.Security.BasicAuth.Enabled = true
 
-	s := NewOAuth2Server(t.Context(), false)
-
-	// Initialize gothic exactly as in production
+	s := newOAuth2ServerForTesting(t, settings)
+	prevStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = prevStore })
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	token := seedSession(t, s, &AccessToken{})
+	c, _ := sessionContext(sessionRequest(token))
 
-	// Store token using gothic's method
-	_ = gothic.StoreInSession("access_token", "valid_token", req, rec) // Test setup, error not relevant
-
-	// Add cookie to request
-	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-	// Add token to OAuth2Server's valid tokens
-	s.accessTokens["valid_token"] = AccessToken{
-		Token:     "valid_token",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}
-
-	isAuthenticated := s.IsUserAuthenticated(c)
-	assert.True(t, isAuthenticated, "expected IsUserAuthenticated to return true")
-}
-
-// TestIsUserAuthenticatedTableDriven tests the IsUserAuthenticated function with a table-driven approach
-func TestIsUserAuthenticatedTableDriven(t *testing.T) {
-	tests := []struct {
-		name    string
-		token   string
-		expires time.Duration
-		want    bool
-	}{
-		{
-			name:    "valid token",
-			token:   "valid_token",
-			expires: time.Hour,
-			want:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			settings := &conf.Settings{
-				Security: conf.Security{
-					SessionSecret: "test-secret",
-				},
-			}
-
-			s := NewOAuth2Server(t.Context(), false)
-
-			// Initialize gothic exactly as in production
-			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
-
-			e := echo.New()
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Store token using gothic's method
-			_ = gothic.StoreInSession("access_token", tt.token, req, rec) // Test setup, error not relevant
-
-			// Add cookie to request
-			req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-			// Add token to OAuth2Server's valid tokens
-			s.accessTokens[tt.token] = AccessToken{
-				Token:     tt.token,
-				ExpiresAt: time.Now().Add(tt.expires),
-			}
-
-			got := s.IsUserAuthenticated(c)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	assert.True(t, s.IsUserAuthenticated(c), "expected IsUserAuthenticated to return true")
 }
 
 func TestOAuth2Server(t *testing.T) {
@@ -136,7 +69,8 @@ func TestOAuth2Server(t *testing.T) {
 				conftest.SetTestSettings(s.settings)
 
 				// Generate and immediately use the auth code
-				code := s.GenerateAuthCode()
+				code, err := s.GenerateAuthCode(s.settings, false)
+				require.NoError(t, err)
 
 				// Pass test context to ExchangeAuthCode
 				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -166,7 +100,7 @@ func TestOAuth2Server(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewOAuth2Server(t.Context(), false)
+			s := newOAuth2ServerForTesting(t, &conf.Settings{})
 			tt.test(t, s)
 		})
 	}
@@ -196,37 +130,25 @@ func TestNewOAuth2ServerForTesting(t *testing.T) {
 	assert.NotNil(t, server.throttledMessages)
 }
 
-// TestIsUserAuthenticatedExpiredToken tests with an expired access token
+// TestIsUserAuthenticatedExpiredToken tests with an expired session record
 func TestIsUserAuthenticatedExpiredToken(t *testing.T) {
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
+			BasicAuth:     conf.BasicAuth{Enabled: true},
 		},
 	}
 
 	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	token := seedSession(t, server, &AccessToken{ExpiresAt: time.Now().Add(-time.Hour)})
+	c, _ := sessionContext(sessionRequest(token))
 
-	// Store token using gothic's method
-	_ = gothic.StoreInSession("access_token", "expired_token", req, rec)
-	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-	// Add expired token to OAuth2Server
-	server.accessTokens["expired_token"] = AccessToken{
-		Token:     "expired_token",
-		ExpiresAt: time.Now().Add(-time.Hour), // Expired
-	}
-
-	isAuthenticated := server.IsUserAuthenticated(c)
-	assert.False(t, isAuthenticated, "expired token should not authenticate")
+	assert.False(t, server.IsUserAuthenticated(c), "expired session should not authenticate")
 }
 
-// TestIsUserAuthenticatedNoToken tests with no access token
+// TestIsUserAuthenticatedNoToken tests with no session cookie
 func TestIsUserAuthenticatedNoToken(t *testing.T) {
 	settings := &conf.Settings{
 		Security: conf.Security{
@@ -237,14 +159,8 @@ func TestIsUserAuthenticatedNoToken(t *testing.T) {
 	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// No token stored
-	isAuthenticated := server.IsUserAuthenticated(c)
-	assert.False(t, isAuthenticated, "no token should not authenticate")
+	c, _ := sessionContext(sessionRequest(""))
+	assert.False(t, server.IsUserAuthenticated(c), "no cookie should not authenticate")
 }
 
 // TestIsUserAuthenticatedGoogleAuth tests Google authentication path
@@ -354,11 +270,12 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 }
 
 // TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled verifies that
-// disabling subnet bypass does NOT break token-based authentication.
+// disabling subnet bypass does NOT break session-based authentication.
 func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T) {
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
+			BasicAuth:     conf.BasicAuth{Enabled: true},
 			AllowSubnetBypass: conf.AllowSubnetBypass{
 				Enabled: false, // Subnet bypass disabled
 			},
@@ -368,23 +285,10 @@ func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T)
 	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	token := seedSession(t, server, &AccessToken{})
+	c, _ := sessionContext(sessionRequest(token))
 
-	// Store token using gothic's method
-	_ = gothic.StoreInSession("access_token", "valid_token", req, rec)
-	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-	// Add valid token to OAuth2Server
-	server.accessTokens["valid_token"] = AccessToken{
-		Token:     "valid_token",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}
-
-	result := server.IsUserAuthenticated(c)
-	assert.True(t, result, "token auth must work even when subnet bypass is disabled")
+	assert.True(t, server.IsUserAuthenticated(c), "session auth must work even when subnet bypass is disabled")
 }
 
 // TestIsValidUserId tests the isValidUserId helper function
@@ -455,22 +359,17 @@ func TestIsValidUserId(t *testing.T) {
 
 // TestValidateAccessToken tests the ValidateAccessToken method
 func TestValidateAccessToken(t *testing.T) {
+	settings := &conf.Settings{Security: conf.Security{BasicAuth: conf.BasicAuth{Enabled: true}}}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 	server := &OAuth2Server{
-		settings:     &conf.Settings{},
+		settings:     settings,
 		accessTokens: make(map[string]AccessToken),
 	}
 
-	// Add a valid token
-	server.accessTokens["valid_token"] = AccessToken{
-		Token:     "valid_token",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}
-
-	// Add an expired token
-	server.accessTokens["expired_token"] = AccessToken{
-		Token:     "expired_token",
-		ExpiresAt: time.Now().Add(-time.Hour),
-	}
+	validToken := seedSession(t, server, &AccessToken{})
+	expiredToken := seedSession(t, server, &AccessToken{ExpiresAt: time.Now().Add(-time.Hour)})
+	socialToken := seedSession(t, server, &AccessToken{Provider: ProviderGoogle, UserID: "user@example.com"})
 
 	tests := []struct {
 		name        string
@@ -479,17 +378,22 @@ func TestValidateAccessToken(t *testing.T) {
 	}{
 		{
 			name:        "valid token",
-			token:       "valid_token",
+			token:       validToken,
 			expectedErr: nil,
 		},
 		{
 			name:        "expired token",
-			token:       "expired_token",
+			token:       expiredToken,
 			expectedErr: ErrTokenExpired,
 		},
 		{
 			name:        "non-existent token",
 			token:       "nonexistent",
+			expectedErr: ErrTokenNotFound,
+		},
+		{
+			name:        "social session is not a bearer token",
+			token:       socialToken,
 			expectedErr: ErrTokenNotFound,
 		},
 	}
@@ -504,6 +408,16 @@ func TestValidateAccessToken(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("password session is rejected once basic authentication is disabled", func(t *testing.T) {
+		require.NoError(t, server.ValidateAccessToken(validToken))
+
+		disabled := conf.CloneSettings(settings)
+		disabled.Security.BasicAuth.Enabled = false
+		conftest.SetTestSettings(disabled)
+
+		assert.ErrorIs(t, server.ValidateAccessToken(validToken), ErrTokenNotFound)
+	})
 }
 
 // TestGenerateAuthCode tests the GenerateAuthCode method
@@ -524,7 +438,8 @@ func TestGenerateAuthCode(t *testing.T) {
 		accessTokens: make(map[string]AccessToken),
 	}
 
-	code := server.GenerateAuthCode()
+	code, err := server.GenerateAuthCode(settings, false)
+	require.NoError(t, err)
 	assert.NotEmpty(t, code)
 
 	// Verify code was stored
@@ -562,6 +477,7 @@ func TestExchangeAuthCode(t *testing.T) {
 		Code:      "expired_code",
 		ExpiresAt: time.Now().Add(-time.Minute),
 	}
+	settleCredentials(server)
 
 	tests := []struct {
 		name        string
@@ -602,7 +518,7 @@ func TestExchangeAuthCode(t *testing.T) {
 				assert.False(t, exists, "auth code should be deleted after exchange")
 
 				// Verify access token was created
-				assert.Contains(t, server.accessTokens, token)
+				assert.Contains(t, server.accessTokens, sessionTokenKey(token))
 			}
 		})
 	}
@@ -626,6 +542,7 @@ func TestExchangeAuthCodeContextCancellation(t *testing.T) {
 		Code:      "valid_code",
 		ExpiresAt: time.Now().Add(time.Minute),
 	}
+	settleCredentials(server)
 
 	// Create a cancelled context
 	ctx, cancel := context.WithCancel(t.Context())
@@ -971,445 +888,6 @@ func (testLogger) With(_ ...logger.Field) logger.Logger               { return t
 func (testLogger) WithContext(_ context.Context) logger.Logger        { return testLogger{} }
 func (testLogger) Log(_ logger.LogLevel, _ string, _ ...logger.Field) {}
 func (testLogger) Flush() error                                       { return nil }
-
-// TestCheckBasicAuthToken tests the basic auth token validation helper
-func TestCheckBasicAuthToken(t *testing.T) {
-	tests := []struct {
-		name           string
-		setupServer    func(*OAuth2Server)
-		setupSession   func(*http.Request, *httptest.ResponseRecorder)
-		expectedResult bool
-	}{
-		{
-			name: "valid token returns true",
-			setupServer: func(s *OAuth2Server) {
-				s.accessTokens["valid_token"] = AccessToken{
-					Token:     "valid_token",
-					ExpiresAt: time.Now().Add(time.Hour),
-				}
-			},
-			setupSession: func(req *http.Request, rec *httptest.ResponseRecorder) {
-				_ = gothic.StoreInSession("access_token", "valid_token", req, rec)
-				req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-			},
-			expectedResult: true,
-		},
-		{
-			name:        "no token in session returns false",
-			setupServer: func(_ *OAuth2Server) {},
-			setupSession: func(_ *http.Request, _ *httptest.ResponseRecorder) {
-				// No session setup
-			},
-			expectedResult: false,
-		},
-		{
-			name: "expired token returns false",
-			setupServer: func(s *OAuth2Server) {
-				s.accessTokens["expired_token"] = AccessToken{
-					Token:     "expired_token",
-					ExpiresAt: time.Now().Add(-time.Hour),
-				}
-			},
-			setupSession: func(req *http.Request, rec *httptest.ResponseRecorder) {
-				_ = gothic.StoreInSession("access_token", "expired_token", req, rec)
-				req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-			},
-			expectedResult: false,
-		},
-		{
-			name:        "non-existent token returns false",
-			setupServer: func(_ *OAuth2Server) {},
-			setupSession: func(req *http.Request, rec *httptest.ResponseRecorder) {
-				_ = gothic.StoreInSession("access_token", "nonexistent", req, rec)
-				req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-			},
-			expectedResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Setup Gothic store
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			server := &OAuth2Server{
-				settings:     &conf.Settings{},
-				accessTokens: make(map[string]AccessToken),
-			}
-			tt.setupServer(server)
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			rec := httptest.NewRecorder()
-			tt.setupSession(req, rec)
-
-			result := server.checkBasicAuthToken(req, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// TestCheckSocialAuthSessions tests the social auth sessions validation helper.
-// It verifies that checkSocialAuthSessions iterates over configured OAuth providers.
-func TestCheckSocialAuthSessions(t *testing.T) {
-	tests := []struct {
-		name           string
-		providers      []conf.OAuthProviderConfig
-		expectedResult bool
-	}{
-		{
-			name:           "no providers configured returns false",
-			providers:      nil,
-			expectedResult: false,
-		},
-		{
-			name: "google enabled but no session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-		{
-			name: "github enabled but no session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-		{
-			name: "multiple providers enabled but no session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
-				{Provider: ConfigMicrosoft, Enabled: true, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-		{
-			name: "provider disabled returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: false, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			server := &OAuth2Server{
-				settings: &conf.Settings{
-					Security: conf.Security{
-						OAuthProviders: tt.providers,
-					},
-				},
-			}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			result := server.checkSocialAuthSessions(req, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// storeMultipleInSession stores multiple key-value pairs in the same Gothic session.
-// Each StoreInSession call requires the request cookie to be updated before the next call
-// so all values end up in the same session. Returns the final request with all cookies set.
-func storeMultipleInSession(t *testing.T, req *http.Request, pairs ...string) *http.Request {
-	t.Helper()
-	if len(pairs)%2 != 0 {
-		t.Fatal("storeMultipleInSession requires an even number of arguments (key-value pairs)")
-	}
-	for i := 0; i < len(pairs); i += 2 {
-		rec := httptest.NewRecorder()
-		_ = gothic.StoreInSession(pairs[i], pairs[i+1], req, rec)
-		req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-	}
-	return req
-}
-
-// TestCheckSocialAuthDirect tests the direct auth_provider session key lookup path.
-func TestCheckSocialAuthDirect(t *testing.T) {
-	tests := []struct {
-		name           string
-		providers      []conf.OAuthProviderConfig
-		setupSession   func(*testing.T, *http.Request) *http.Request
-		expectedResult bool
-	}{
-		{
-			name: "no auth_provider key in session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession:   func(_ *testing.T, req *http.Request) *http.Request { return req },
-			expectedResult: false,
-		},
-		{
-			name: "auth_provider points to valid enabled provider with matching session",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderGoogle,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-		{
-			name: "auth_provider points to disabled provider returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: false, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderGoogle,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: false,
-		},
-		{
-			name: "auth_provider points to unconfigured provider returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				// Session says google, but only github is configured
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderGoogle,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: false,
-		},
-		{
-			name: "auth_provider key with microsoft provider (different config name)",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigMicrosoft, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderMicrosoft,
-					"userId", "user@example.com",
-					ProviderMicrosoft, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-		{
-			name: "auth_provider key with OIDC provider (different config name)",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigOIDC, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderOIDC,
-					"userId", "user@example.com",
-					ProviderOIDC, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			settings := &conf.Settings{
-				Security: conf.Security{
-					OAuthProviders: tt.providers,
-				},
-			}
-			conftest.SetTestSettings(settings)
-			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
-
-			server := &OAuth2Server{settings: settings}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			req = tt.setupSession(t, req)
-
-			userId, _ := gothic.GetFromSession("userId", req)
-			result := server.checkSocialAuthDirect(req, userId, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// TestCheckSocialAuthFallback tests the fallback path that iterates all providers.
-func TestCheckSocialAuthFallback(t *testing.T) {
-	tests := []struct {
-		name           string
-		providers      []conf.OAuthProviderConfig
-		setupSession   func(*testing.T, *http.Request) *http.Request
-		expectedResult bool
-	}{
-		{
-			name:           "no providers returns false",
-			providers:      nil,
-			setupSession:   func(_ *testing.T, req *http.Request) *http.Request { return req },
-			expectedResult: false,
-		},
-		{
-			name: "provider session without auth_provider key still works via fallback",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				// No auth_provider key - simulating old session format
-				return storeMultipleInSession(t, req,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			settings := &conf.Settings{
-				Security: conf.Security{
-					OAuthProviders: tt.providers,
-				},
-			}
-			conftest.SetTestSettings(settings)
-			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
-
-			server := &OAuth2Server{settings: settings}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			req = tt.setupSession(t, req)
-
-			userId, _ := gothic.GetFromSession("userId", req)
-			result := server.checkSocialAuthFallback(req, userId, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// TestCheckSocialAuthSessionsWithAuthProviderKey tests the full checkSocialAuthSessions
-// path with the auth_provider key set (new sessions).
-func TestCheckSocialAuthSessionsWithAuthProviderKey(t *testing.T) {
-	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-	settings := &conf.Settings{
-		Security: conf.Security{
-			OAuthProviders: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-		},
-	}
-	conftest.SetTestSettings(settings)
-	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
-
-	server := &OAuth2Server{settings: settings}
-
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req = storeMultipleInSession(t, req,
-		SessionKeyAuthProvider, ProviderGoogle,
-		"userId", "user@example.com",
-		ProviderGoogle, "12345",
-	)
-
-	result := server.checkSocialAuthSessions(req, testLogger{})
-	assert.True(t, result, "checkSocialAuthSessions should succeed with auth_provider key in session")
-}
-
-// TestCheckProviderAuth tests the generic provider auth validation function
-func TestCheckProviderAuth(t *testing.T) {
-	tests := []struct {
-		name           string
-		config         providerAuthConfig
-		userId         string
-		expectedResult bool
-	}{
-		{
-			name: "disabled provider returns false",
-			config: providerAuthConfig{
-				providerName:   ProviderGoogle,
-				enabled:        false,
-				allowedUserIds: "user@example.com",
-			},
-			userId:         "user@example.com",
-			expectedResult: false,
-		},
-		{
-			name: "enabled but no session returns false",
-			config: providerAuthConfig{
-				providerName:   ProviderGoogle,
-				enabled:        true,
-				allowedUserIds: "user@example.com",
-			},
-			userId:         "",
-			expectedResult: false,
-		},
-		{
-			name: "works with github provider",
-			config: providerAuthConfig{
-				providerName:   ProviderGitHub,
-				enabled:        false,
-				allowedUserIds: "user@example.com",
-			},
-			userId:         "user@example.com",
-			expectedResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			server := &OAuth2Server{
-				settings: &conf.Settings{},
-			}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			result := server.checkProviderAuth(req, tt.userId, testLogger{}, tt.config)
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// TestCheckProviderAuthMismatchDoesNotLogAllowlist verifies that a provider
-// session for a user outside the allowlist is rejected without writing the
-// configured allowlist (email addresses, user IDs) to the log.
-func TestCheckProviderAuthMismatchDoesNotLogAllowlist(t *testing.T) {
-	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-	server := &OAuth2Server{settings: &conf.Settings{}}
-
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req = storeMultipleInSession(t, req, ProviderGoogle, "stranger-sub")
-
-	const allowlist = "admin@example.com, 1234567890"
-	buf := &bytes.Buffer{}
-	log := logger.NewSlogLogger(buf, logger.LogLevelDebug, time.UTC)
-
-	result := server.checkProviderAuth(req, "stranger@example.com", log, providerAuthConfig{
-		providerName:   ProviderGoogle,
-		enabled:        true,
-		allowedUserIds: allowlist,
-	})
-
-	require.False(t, result, "a user outside the allowlist must be rejected")
-	output := buf.String()
-	assert.Contains(t, output, "does not match allowed IDs", "the mismatch must still be logged")
-	assert.NotContains(t, output, "admin@example.com", "the allowlist must not be logged")
-	assert.NotContains(t, output, "1234567890", "the allowlist must not be logged")
-}
 
 // mockOIDCDiscovery creates an httptest server that serves a minimal OIDC discovery document.
 func mockOIDCDiscovery(t *testing.T) *httptest.Server {

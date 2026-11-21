@@ -381,7 +381,7 @@
         },
         "accesstokenexp": {
           "type": "string",
-          "description": "duration for access token",
+          "description": "no longer sets how long a browser stays signed in",
           "examples": [
             "10s",
             "5m",
@@ -2297,7 +2297,7 @@
         },
         "sessionduration": {
           "type": "string",
-          "description": "duration for browser session cookies",
+          "description": "lifetime of the OAuth handshake cookie; no longer sets how long a browser stays signed in",
           "examples": [
             "10s",
             "5m",

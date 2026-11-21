@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Vul je wachtwoord in",
     "enterPassword": "Voer je wachtwoord in",
     "continue": "Doorgaan",
+    "rememberBrowser": "Onthoud deze browser",
+    "rememberBrowserHelp": "Blijf ingelogd in deze browser. Laat uitgevinkt op een gedeelde computer.",
     "or": "of",
     "loginWithGoogle": "Aanmelden met Google",
     "loginWithGithub": "Aanmelden met GitHub",

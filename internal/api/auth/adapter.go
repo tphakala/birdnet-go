@@ -59,15 +59,12 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 		}
 	}
 
-	// 2. Fallback: Try to get username from session (for cases where middleware might not have set it, though it should)
-	//    NOTE: Removed the redundant token validation logic that was here.
-	//    If authentication succeeded, the username should already be in the context.
-	userId, err := gothic.GetFromSession("userId", c.Request())
-	if err == nil && userId != "" {
+	// 2. Fallback: the session record (for cases where middleware might not have set it, though it should)
+	if rec, ok := a.sessionRecord(c); ok && rec.UserID != "" {
 		a.log().Debug("Retrieved username from session as fallback",
 			logger.String("path", c.Request().URL.Path),
 			logger.String("ip", c.RealIP()))
-		return userId
+		return rec.UserID
 	}
 
 	// No username found in context or session - this is expected for LAN bypass
@@ -76,6 +73,15 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 		logger.String("path", c.Request().URL.Path),
 		logger.String("ip", c.RealIP()))
 	return ""
+}
+
+// sessionRecord returns the session record of the request: the one an earlier
+// session check left on the context, else the one the request's cookie names.
+func (a *SecurityAdapter) sessionRecord(c echo.Context) (security.AccessToken, bool) {
+	if rec, ok := security.SessionFromContext(c); ok {
+		return rec, true
+	}
+	return a.OAuth2Server.Session(c.Request())
 }
 
 // GetAuthMethod returns the authentication method used as a defined constant.
@@ -109,9 +115,10 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 		return AuthMethodLocalSubnet // Changed from AuthMethodUnknown
 	}
 
-	// 3. Check generic authentication status (if context wasn't set)
+	// 3. Check generic authentication status (if context wasn't set). A session
+	// check that already succeeded on this request left its record on the context.
 	// This might catch session types not explicitly handled by middleware context setting.
-	if a.OAuth2Server.IsUserAuthenticated(c) {
+	if _, ok := security.SessionFromContext(c); ok || a.OAuth2Server.IsUserAuthenticated(c) {
 		// Could attempt more detailed session type detection here if needed,
 		// but for now, return generic Session if middleware didn't specify.
 		return AuthMethodBrowserSession // Use BrowserSession for generic session
@@ -165,8 +172,11 @@ func (a *SecurityAdapter) ValidateToken(token string) error {
 // while still allowing stricter authentication when ClientID is explicitly configured.
 // See Issue #1234 for details.
 //
+// remember is the "Remember this browser" choice; the session issued for the
+// code keeps it.
+//
 // Returns auth code on success, error on failure.
-func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string) (string, error) {
+func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password string, remember bool) (string, error) {
 	a.log().Info("Basic authentication login attempt", logger.Username(username))
 
 	// Snapshot the live settings once so credentials configured through the web
@@ -195,7 +205,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		return "", a.handleAuthFailure(userMatch, username)
 	}
 
-	return a.generateAuthCodeOnSuccess(username), nil
+	return a.generateAuthCodeOnSuccess(settings, username, remember)
 }
 
 // validateBasicAuthEnabled checks if basic auth is enabled. The enabled flag is
@@ -250,31 +260,28 @@ func (a *SecurityAdapter) handleAuthFailure(userMatch bool, username string) err
 	return ErrInvalidCredentials
 }
 
-// generateAuthCodeOnSuccess generates an auth code after successful authentication.
-func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) string {
+// generateAuthCodeOnSuccess generates an auth code after successful
+// authentication against settings, the snapshot the password was checked
+// against. It fails like a wrong password when the credentials changed since.
+func (a *SecurityAdapter) generateAuthCodeOnSuccess(settings *conf.Settings, username string, remember bool) (string, error) {
 	log := a.log()
 	log.Info("Credentials validated successfully", logger.Username(username))
 
-	authCode := a.OAuth2Server.GenerateAuthCode()
-
-	log.Info("Basic authentication successful", logger.Username(username))
-	return authCode
-}
-
-// Logout invalidates the current session/token
-func (a *SecurityAdapter) Logout(c echo.Context) error {
-	// Clear generic session values
-	gothic.StoreInSession("userId", "", c.Request(), c.Response())                        //nolint:errcheck // Error checking not critical during logout
-	gothic.StoreInSession("access_token", "", c.Request(), c.Response())                  //nolint:errcheck // Error checking not critical during logout
-	gothic.StoreInSession("id_token", "", c.Request(), c.Response())                      //nolint:errcheck // Error checking not critical during logout
-	gothic.StoreInSession(security.SessionKeyAuthProvider, "", c.Request(), c.Response()) //nolint:errcheck // Error checking not critical during logout
-
-	// Clear all provider-specific session keys dynamically
-	for _, gothName := range security.ConfigToGothProvider {
-		gothic.StoreInSession(gothName, "", c.Request(), c.Response()) //nolint:errcheck // Error checking not critical during logout
+	authCode, err := a.OAuth2Server.GenerateAuthCode(settings, remember)
+	if err != nil {
+		log.Warn("Basic authentication failed: credentials changed during sign-in", logger.Username(username))
+		return "", ErrInvalidCredentials
 	}
 
-	// Log out from gothic session
+	log.Info("Basic authentication successful", logger.Username(username))
+	return authCode, nil
+}
+
+// Logout ends the browser's session: the record is deleted and the cookie
+// cleared. The gothic session is cleared too, to drop a leftover handshake or a
+// session from before the session record existed.
+func (a *SecurityAdapter) Logout(c echo.Context) error {
+	a.OAuth2Server.EndSession(c.Response(), c.Request())
 	return gothic.Logout(c.Response().Writer, c.Request())
 }
 
@@ -291,17 +298,8 @@ const logoutReturnNotSentPrefix = "post-logout return URL not sent: "
 func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context) string {
 	log := a.log()
 
-	// Prefer the stored auth_provider session key. When it is present the
-	// outcome is final: the fallback scan could only find the same provider.
-	if activeProvider := a.getActiveAuthProvider(c, log); activeProvider != "" {
-		return a.buildProviderLogoutURL(c, activeProvider, log)
-	}
-
-	// Fall back to iterating all providers for backward compatibility
-	// (existing sessions may not have the auth_provider key)
-	logoutURL, found := a.getProviderLogoutURLFallback(c, log)
-	if found {
-		return logoutURL
+	if rec, ok := a.OAuth2Server.Session(c.Request()); ok && rec.Provider != "" {
+		return a.buildProviderLogoutURL(&rec, log)
 	}
 
 	settings := a.OAuth2Server.CurrentSettings()
@@ -312,47 +310,6 @@ func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context) string {
 		log.Debug("No OAuth provider session found, skipping provider logout")
 	}
 	return ""
-}
-
-// getActiveAuthProvider returns the provider name stored under the auth_provider
-// session key, or an empty string if the key is missing.
-func (a *SecurityAdapter) getActiveAuthProvider(c echo.Context, log logger.Logger) string {
-	activeProvider, err := gothic.GetFromSession(security.SessionKeyAuthProvider, c.Request())
-	if err != nil || activeProvider == "" {
-		log.Debug("No auth_provider key in session, will try fallback iteration")
-		return ""
-	}
-
-	log.Debug("Found active auth provider in session", logger.String("provider", activeProvider))
-	return activeProvider
-}
-
-// getProviderLogoutURLFallback iterates all configured providers to find the active session.
-// This handles sessions created before the auth_provider key was introduced.
-// found reports whether a provider session key exists, whether or not it yielded a URL.
-func (a *SecurityAdapter) getProviderLogoutURLFallback(c echo.Context, log logger.Logger) (logoutURL string, found bool) {
-	settings := a.OAuth2Server.CurrentSettings()
-	if settings == nil {
-		return "", false
-	}
-	for configProvider, gothProviderName := range security.ConfigToGothProvider {
-		provider := settings.GetOAuthProvider(configProvider)
-		if provider == nil || !provider.Enabled {
-			continue
-		}
-
-		// Check if user has a session with this provider
-		sessionUser, err := gothic.GetFromSession(gothProviderName, c.Request())
-		if err != nil || sessionUser == "" {
-			continue
-		}
-
-		if logoutURL := a.buildProviderLogoutURL(c, gothProviderName, log); logoutURL != "" {
-			return logoutURL, true
-		}
-		found = true
-	}
-	return "", found
 }
 
 // logLogoutSkipped reports that provider sign-out was skipped. For the OIDC
@@ -414,7 +371,8 @@ func postLogoutReturnURL(gothProviderName string, entry *conf.OAuthProviderConfi
 // (the scheme must be https, or http when the OIDC issuer URL is http).
 // For OIDC the URL also carries the return URL when postLogoutReturnURL returns one.
 // The URL carries the ID token hint, so it is never logged.
-func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderName string, log logger.Logger) string {
+func (a *SecurityAdapter) buildProviderLogoutURL(rec *security.AccessToken, log logger.Logger) string {
+	gothProviderName := rec.Provider
 	gothProvider, err := goth.GetProvider(gothProviderName)
 	if err != nil {
 		logLogoutSkipped(log, logger.LogLevelWarn, logger.LogLevelDebug, gothProviderName, "provider is not registered", logger.Error(err))
@@ -427,8 +385,8 @@ func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderNam
 		return ""
 	}
 
-	// Get ID token from session for the hint
-	idToken, _ := gothic.GetFromSession("id_token", c.Request())
+	// The ID token kept in the session record is the hint
+	idToken := rec.IDToken
 
 	// Settings are read per sign-out so a change applies without a restart.
 	var entry *conf.OAuthProviderConfig
@@ -473,26 +431,17 @@ func (a *SecurityAdapter) ExchangeAuthCode(ctx context.Context, code string) (st
 	return a.OAuth2Server.ExchangeAuthCode(ctx, code)
 }
 
-// EstablishSession creates a new session with the given access token.
-// Handles session fixation mitigation by clearing old session first.
+// EstablishSession starts the browser session for the given access token: it
+// revokes the record the request's cookie names, then sends the session cookie.
+// The new token is never one the browser held before, so a planted cookie
+// cannot become a signed-in one (session fixation).
 func (a *SecurityAdapter) EstablishSession(c echo.Context, accessToken string) error {
 	log := a.log()
-	// Session fixation mitigation: clear old session first
-	// This regenerates the session ID to prevent session fixation attacks
-	if err := gothic.Logout(c.Response().Writer, c.Request()); err != nil {
-		log.Warn("Error during session regeneration (session fixation mitigation)", logger.Error(err))
-		// Continue anyway - StoreInSession might still create a new session
-	} else {
-		log.Info("Successfully cleared old session before storing new token (session fixation mitigation)")
-	}
-
-	// Store access token in new session
-	if err := gothic.StoreInSession("access_token", accessToken, c.Request(), c.Response()); err != nil {
-		log.Error("Failed to store access token in new session after logout/regeneration", logger.Error(err))
+	if err := a.OAuth2Server.StartSession(c.Response(), c.Request(), accessToken); err != nil {
+		log.Error("Failed to start session", logger.Error(err))
 		return err
 	}
-
-	log.Info("Successfully stored access token in new session")
+	log.Info("Successfully started session")
 	return nil
 }
 

@@ -27,13 +27,51 @@ const (
 	ProviderKakao     = "kakao"           // Same as config
 	ProviderOIDC      = "openid-connect"  // Different from config!
 
-	// SessionKeyAuthProvider is the session key used to store the active OAuth provider name.
-	// This avoids iterating all providers when looking up the active session.
-	SessionKeyAuthProvider = "auth_provider"
-
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7
 	DefaultSessionMaxAgeSeconds = 86400 * DefaultSessionMaxAgeDays // 7 days in seconds
+
+	// SessionCookieName is the cookie that names the signed-in browser's session
+	// record. The gothic session cookie only carries the OAuth handshake.
+	SessionCookieName = "birdnet_session"
+
+	// RememberedSessionDuration is how long a session that was signed in with
+	// "Remember this browser" ticked lasts after its last renewal.
+	RememberedSessionDuration = 30 * 24 * time.Hour
+
+	// RememberedCookieMaxAge is the Max-Age of a remembered session's cookie: the
+	// longest lifetime browsers keep (400 days). The cookie is sent again each
+	// time the record is renewed, so an active browser keeps its 30 days and the
+	// 400 days is only how long an unused cookie lives; the server record decides
+	// when the session ends.
+	RememberedCookieMaxAge = 400 * 24 * time.Hour
+
+	// sessionIdleTimeout is how long a session that was signed in with
+	// "Remember this browser" unticked lasts after its last renewal.
+	sessionIdleTimeout = 8 * time.Hour
+
+	// rememberedSessionRenewInterval is the most often a remembered session is
+	// extended (and persisted) per browser.
+	rememberedSessionRenewInterval = 24 * time.Hour
+
+	// idleSessionRenewInterval is the most often an unticked session is
+	// extended (and persisted) per browser.
+	idleSessionRenewInterval = 15 * time.Minute
+
+	// RememberQueryParam is the query parameter of GET /auth/:provider that
+	// carries the "Remember this browser" choice, and RememberQueryValue the
+	// value that means ticked.
+	RememberQueryParam = "remember"
+	RememberQueryValue = "1"
+
+	// rememberChoiceCookieName is the prefix of the cookies that hold the remember
+	// choice between the start of a provider sign-in and its callback, one per
+	// provider (see rememberChoiceCookie).
+	rememberChoiceCookieName = "birdnet_remember_browser"
+
+	// rememberChoiceMaxAgeSeconds bounds how long the choice cookie lives; it
+	// only has to outlast the round trip to the identity provider.
+	rememberChoiceMaxAgeSeconds = 10 * 60
 
 	// Cryptographic settings
 	MinSessionSecretLength = 32

@@ -1089,6 +1089,10 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 		return c.Redirect(http.StatusFound, ingressPath(c, s.currentSettings())+"/ui/dashboard")
 	}
 
+	// Carry the "Remember this browser" choice to the callback. The cookie holds
+	// one boolean, so it cannot redirect anywhere.
+	security.SetRememberChoice(c.Response(), req, provider, c.QueryParam(security.RememberQueryParam) == security.RememberQueryValue)
+
 	// Begin OAuth flow - this will redirect to the provider
 	log.Debug("Redirecting to OAuth provider to begin authentication")
 	gothic.BeginAuthHandler(c.Response(), req)
@@ -1149,6 +1153,9 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	// Add provider to request context for gothic
 	req := gothic.GetContextWithProvider(c.Request(), provider)
 
+	// The remember choice was set when the sign-in began; read and clear it.
+	remember := security.TakeRememberChoice(c.Response(), req, provider)
+
 	// Complete the OAuth flow and get user info
 	user, err := gothic.CompleteUserAuth(c.Response(), req)
 	if err != nil {
@@ -1184,41 +1191,23 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 		return c.String(http.StatusForbidden, "Access denied: user not authorized")
 	}
 
-	// Persist the authenticated session. The userId, provider, and active-provider
-	// keys are read by the auth middleware on every subsequent request, so a write
-	// failure here means the redirect would land on a page that immediately bounces
-	// the user back. Fail fast with a generic error instead of redirecting into a
-	// broken session.
+	// Start the browser session. The auth middleware reads it on every
+	// subsequent request.
 	userId := oauthIdentity(user.Email, user.UserID)
 
-	if err := gothic.StoreInSession("userId", userId, req, c.Response()); err != nil {
-		log.Error("OAuth login failed: could not persist userId in session", logger.Error(err))
+	if s.oauth2Server == nil {
+		log.Error("OAuth login failed: authentication server is not available")
 		return c.String(http.StatusInternalServerError, "Authentication failed")
 	}
-
-	// Store provider name in session for later reference
-	if err := gothic.StoreInSession(provider, user.UserID, req, c.Response()); err != nil {
-		log.Error("OAuth login failed: could not persist provider session", logger.Error(err))
-		return c.String(http.StatusInternalServerError, "Authentication failed")
+	identity := security.AccessToken{
+		Provider:       provider,
+		UserID:         userId,
+		ProviderUserID: user.UserID,
+		IDToken:        user.IDToken,
 	}
-
-	// Store active provider name for direct lookup (avoids iterating all providers)
-	if err := gothic.StoreInSession(security.SessionKeyAuthProvider, provider, req, c.Response()); err != nil {
-		log.Error("OAuth login failed: could not persist active auth provider in session", logger.Error(err))
+	if err := s.oauth2Server.StartProviderSession(c.Response(), req, &identity, remember); err != nil {
+		log.Error("OAuth login failed: could not start session", logger.Error(err))
 		return c.String(http.StatusInternalServerError, "Authentication failed")
-	}
-
-	// Store or clear ID token for RP-Initiated Logout (OIDC providers). Best-effort:
-	// a failure here does not break authentication, only later RP-initiated logout.
-	if user.IDToken != "" {
-		if err := gothic.StoreInSession("id_token", user.IDToken, req, c.Response()); err != nil {
-			log.Error("Failed to store ID token in session", logger.Error(err))
-		}
-	} else {
-		// Clear stale ID token to prevent reuse across auth flows
-		if err := gothic.StoreInSession("id_token", "", req, c.Response()); err != nil {
-			log.Error("Failed to clear ID token in session", logger.Error(err))
-		}
 	}
 
 	log.Info("OAuth login successful, session established, redirecting to dashboard",

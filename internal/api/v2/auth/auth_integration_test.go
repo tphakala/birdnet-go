@@ -7,6 +7,7 @@ package authapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -91,77 +92,92 @@ func createTestOAuth2Server(tb testing.TB, settings *conf.Settings) *security.OA
 	return securitytest.NewOAuth2ServerForTesting(tb, settings)
 }
 
-// TestV2AuthFlow_CompleteLogin tests the complete V2 login flow end-to-end.
-func TestV2AuthFlow_CompleteLogin(t *testing.T) {
-	e, h, _ := setupAuthIntegrationTest(t)
+// signInThroughHandlers runs login and the callback for payload and returns the
+// session cookie the callback sets, or nil when it sets none.
+func signInThroughHandlers(t *testing.T, e *echo.Echo, h *Handler, payload string, prev *http.Cookie) *http.Cookie {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/login", strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	require.NoError(t, h.Login(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
 
-	t.Run("complete login flow with V2 callback", func(t *testing.T) {
-		// Step 1: POST /api/v2/auth/login with valid credentials
-		loginPayload := `{
-			"username": "birdnet-client",
-			"password": "testpassword123",
-			"redirectUrl": "/ui/dashboard"
-		}`
+	var loginResp AuthResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &loginResp))
+	require.True(t, loginResp.Success)
+	assert.Contains(t, loginResp.RedirectURL, "/api/v2/auth/callback")
+	assert.Contains(t, loginResp.RedirectURL, "code=")
+	assert.NotContains(t, loginResp.RedirectURL, "remember", "the choice must ride in the server-side code, not the URL")
 
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/auth/login", strings.NewReader(loginPayload))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
+	callbackReq := httptest.NewRequest(http.MethodGet, loginResp.RedirectURL, http.NoBody)
+	if prev != nil {
+		callbackReq.AddCookie(prev)
+	}
+	callbackRec := httptest.NewRecorder()
+	require.NoError(t, h.OAuthCallback(e.NewContext(callbackReq, callbackRec)))
+	require.Equal(t, http.StatusFound, callbackRec.Code)
+	assert.NotEmpty(t, callbackRec.Header().Get("Location"))
 
-		// Execute login handler
-		err := h.Login(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Parse login response
-		var loginResp AuthResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &loginResp)
-		require.NoError(t, err)
-
-		assert.True(t, loginResp.Success)
-		assert.NotEmpty(t, loginResp.RedirectURL)
-		assert.Contains(t, loginResp.RedirectURL, "/api/v2/auth/callback")
-		assert.Contains(t, loginResp.RedirectURL, "code=")
-
-		t.Logf("Login successful, redirect URL: %s", loginResp.RedirectURL)
-
-		// Step 2: Follow callback URL
-		// Extract code from redirect URL
-		callbackURL := loginResp.RedirectURL
-		assert.True(t, strings.HasPrefix(callbackURL, "/api/v2/auth/callback"))
-
-		// Make callback request
-		callbackReq := httptest.NewRequest(http.MethodGet, callbackURL, http.NoBody)
-		callbackRec := httptest.NewRecorder()
-		callbackCtx := e.NewContext(callbackReq, callbackRec)
-
-		// Execute callback handler
-		err = h.OAuthCallback(callbackCtx)
-		require.NoError(t, err)
-
-		// Should redirect (302) to final destination
-		assert.Equal(t, http.StatusFound, callbackRec.Code)
-		location := callbackRec.Header().Get("Location")
-		assert.NotEmpty(t, location)
-		t.Logf("Callback redirected to: %s", location)
-
-		// The callback must establish a session: the response sets a live
-		// session cookie (the regenerated session also sends an expired one)
-		// whose session carries the access token.
-		var session *http.Cookie
-		for _, cookie := range callbackRec.Result().Cookies() {
-			if cookie.Name == gothic.SessionName && cookie.MaxAge > 0 {
-				session = cookie
-			}
+	for _, cookie := range callbackRec.Result().Cookies() {
+		if cookie.Name == security.SessionCookieName {
+			return cookie
 		}
-		require.NotNil(t, session, "the callback must set a live session cookie")
-		replay := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		replay.AddCookie(session)
-		token, err := gothic.GetFromSession("access_token", replay)
-		require.NoError(t, err, "the session cookie must carry the access token")
-		assert.NotEmpty(t, token)
-		require.NoError(t, h.authService.ValidateToken(token), "the stored token must be one the auth service accepts")
-	})
+	}
+	return nil
+}
+
+// isSignedIn reports whether a request carrying cookie passes the auth check.
+func isSignedIn(e *echo.Echo, h *Handler, cookie *http.Cookie) bool {
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/anything", http.NoBody)
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
+	return h.authService.CheckAccess(e.NewContext(req, httptest.NewRecorder())) == nil
+}
+
+// TestV2AuthFlow_CompleteLogin tests the complete V2 login flow end-to-end,
+// including the "Remember this browser" choice, logout and replay of the cookie.
+func TestV2AuthFlow_CompleteLogin(t *testing.T) {
+	const loginFmt = `{"username": "birdnet-client", "password": "testpassword123", "redirectUrl": "/ui/dashboard"%s}`
+	rememberedMaxAge := int(security.RememberedCookieMaxAge.Seconds())
+
+	tests := []struct {
+		name       string
+		extra      string
+		wantMaxAge int
+	}{
+		{"rememberBrowser true", `, "rememberBrowser": true`, rememberedMaxAge},
+		{"rememberBrowser false", `, "rememberBrowser": false`, 0},
+		{"rememberBrowser omitted", ``, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, h, _ := setupAuthIntegrationTest(t)
+			payload := fmt.Sprintf(loginFmt, tt.extra)
+
+			session := signInThroughHandlers(t, e, h, payload, nil)
+			require.NotNil(t, session, "the callback must set the session cookie")
+			assert.Equal(t, tt.wantMaxAge, session.MaxAge, "persistence of the session cookie follows the choice")
+			assert.NotEmpty(t, session.Value)
+			assert.True(t, isSignedIn(e, h, session), "the cookie must authenticate")
+			require.NoError(t, h.authService.ValidateToken(session.Value), "the session token is also accepted as a bearer token")
+
+			// Signing in again on the same browser yields a different token and
+			// revokes the first (session fixation regression).
+			second := signInThroughHandlers(t, e, h, payload, session)
+			require.NotNil(t, second)
+			assert.NotEqual(t, session.Value, second.Value)
+			assert.False(t, isSignedIn(e, h, session), "the previous session must be revoked")
+			assert.True(t, isSignedIn(e, h, second))
+
+			// Logout ends the session; a replay of the same cookie is not signed in.
+			logoutReq := httptest.NewRequest(http.MethodPost, "/api/v2/auth/logout", http.NoBody)
+			logoutReq.AddCookie(second)
+			logoutRec := httptest.NewRecorder()
+			require.NoError(t, h.Logout(e.NewContext(logoutReq, logoutRec)))
+			assert.False(t, isSignedIn(e, h, second), "a replayed cookie must not be signed in after logout")
+		})
+	}
 }
 
 // TestV2AuthFlow_FilterQueryRedirectSurvives verifies that a post-login redirect

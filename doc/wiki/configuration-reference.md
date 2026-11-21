@@ -418,7 +418,7 @@ SecurityConfig handles all security-related settings and validations for the app
 | `security.basicauth.clientsecret` | string | client secret for OAuth2 |
 | `security.basicauth.redirecturi` | string | redirect uri for OAuth2 |
 | `security.basicauth.authcodeexp` | string | duration for authorization code |
-| `security.basicauth.accesstokenexp` | string | duration for access token |
+| `security.basicauth.accesstokenexp` | string | no longer sets how long a browser stays signed in |
 | `security.oauthProviders` | o-auth-provider-config[] | OAuthProviders is the new array-based OAuth configuration. This is the preferred format for configuring OAuth providers. |
 | `security.googleAuth.enabled` | boolean | true to enable social provider |
 | `security.googleAuth.clientid` | string | client id for OAuth2 |
@@ -436,7 +436,7 @@ SecurityConfig handles all security-related settings and validations for the app
 | `security.microsoftAuth.redirecturi` | string | redirect uri for OAuth2 |
 | `security.microsoftAuth.userid` | string | valid user id for OAuth2 |
 | `security.sessionsecret` | string | secret for session cookie |
-| `security.sessionduration` | string | duration for browser session cookies |
+| `security.sessionduration` | string | lifetime of the OAuth handshake cookie; no longer sets how long a browser stays signed in |
 
 ## sentry
 

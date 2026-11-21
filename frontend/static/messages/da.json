@@ -5117,6 +5117,8 @@
     "passwordPlaceholder": "Indtast din adgangskode",
     "enterPassword": "Indtast din adgangskode",
     "continue": "Fortsæt",
+    "rememberBrowser": "Husk denne browser",
+    "rememberBrowserHelp": "Forbliv logget ind i denne browser. Lad feltet stå uafkrydset på en delt computer.",
     "or": "eller",
     "loginWithGoogle": "Log ind med Google",
     "loginWithGithub": "Log ind med GitHub",
