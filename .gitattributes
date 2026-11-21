@@ -1,7 +1,8 @@
 # Check text files out with LF on every OS. Tests read byte-exact fixtures and
 # docs (the Perch golden scores, the labels hash, the database doctor guide),
 # and a CRLF checkout (core.autocrlf=true on Windows) changes those bytes.
-# Files committed with CRLF stay as committed until they are re-added.
+# Files committed with CRLF stay as committed; only git add --renormalize
+# converts them.
 * text=auto eol=lf
 
 # Binary types tracked in the repository. Git detects these as binary today;
