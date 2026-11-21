@@ -1,14 +1,16 @@
 <!--
   Stream Manager Component
 
-  Purpose: Manage the audio streams of a tab that saves as it changes: stream
-  cards with live health, an add form that saves the new stream at once,
+  Purpose: Manage the audio streams of a tab that saves with the page: stream
+  cards with live health, an add form that appends the new stream to the form,
   delete, a status summary bar and empty state guidance.
 
-  Every change goes out through onUpdateStreams as the whole streams array with
-  the auto-save options of the control that made it. Rows carry a UI-only id
-  (never persisted) that keys the cards, their field keys and their expanded
-  state; a length change the manager did not make gives every row a fresh id.
+  Every change goes out through onUpdateStreams as the whole streams array; the
+  page's Save Changes bar persists it. Rows carry a UI-only id (never persisted)
+  that keys the cards and their expanded state. The manager remembers the
+  identity (name and URL of every row) of the list it last sent; a list with
+  another identity (Reset, a reload) is foreign and gives every row a fresh id.
+  Health is shown for the saved streams only.
 
   Features:
   - Stream cards: one stream opens by default, several start closed
@@ -40,10 +42,8 @@
     modelsFailed,
     refreshModels,
   } from '$lib/stores/models.svelte';
-  import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
-  import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
   import { modelLabel } from '$lib/utils/modelLabel';
-  import { STREAMS_LIST_FIELD, RowRollback } from './sourceFields';
+  import { streamProblems } from './sourceRules';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -78,10 +78,9 @@
     transportOptions,
     analyzeStreamChannels,
     detectStreamType,
-    isStreamNameTooLong,
-    isValidStreamUrl,
     streamHasTransport,
-    streamNameTooLongMessage,
+    streamNameProblemMessage,
+    streamUrlProblemMessage,
     toStreamType,
   } from './streamOptions';
 
@@ -105,13 +104,6 @@
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: modelLabel(m) })));
 
   const ROW_ID_PREFIX = 'stream-row';
-  /** Id of the add form's save status, which explains why Cancel is blocked while saving. */
-  const ADD_SAVING_STATUS_ID = 'new-stream-saving-status';
-  /** How many lists the manager remembers sending or holding, to tell its own from foreign ones. */
-  const MAX_KNOWN_LISTS = 16;
-  /** Delay before the health of a newly added stream is fetched, so it has started. */
-  const HEALTH_REFRESH_AFTER_ADD_MS = 1000;
-  let healthRefreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Error context from FFmpeg error parsing (matching backend ErrorContextResponse)
   export interface ErrorContext {
@@ -163,11 +155,29 @@
 
   interface Props {
     streams: StreamConfig[];
+    /** The saved streams: health follows them and only problems the user introduced are reported. */
+    savedStreams?: StreamConfig[];
+    /** URLs tested in this page session, kept by the page so they outlive a tab switch. */
+    testedUrls?: ReadonlySet<string>;
     disabled?: boolean;
-    onUpdateStreams: (_streams: StreamConfig[], _options: CommitOptions) => void;
+    /** Why the cards and the add form are disabled, shown beside their blocked actions. */
+    disabledReason?: string;
+    onUpdateStreams: (_streams: StreamConfig[]) => void;
+    /** Called with a URL whose test succeeded and that the user added. */
+    onUrlTested?: (_url: string) => void;
   }
 
-  let { streams = [], disabled = false, onUpdateStreams }: Props = $props();
+  const NO_URLS: ReadonlySet<string> = new Set();
+
+  let {
+    streams = [],
+    savedStreams = [],
+    testedUrls = NO_URLS,
+    disabled = false,
+    disabledReason,
+    onUpdateStreams,
+    onUrlTested,
+  }: Props = $props();
 
   // Stream health state - using $state object passed via context for reactivity
   // In Svelte 5, passing a $state object to context allows children to access the same reactive proxy
@@ -287,11 +297,11 @@
   function findMatchingStream(health: StreamHealthResponse): StreamConfig | undefined {
     // Prefer name-based matching for unambiguous identification
     if (health.name) {
-      const byName = streams.find(s => s.name === health.name);
+      const byName = savedStreams.find(s => s.name === health.name);
       if (byName) return byName;
     }
     // Fallback to URL-based matching (handles legacy responses or missing names)
-    return streams.find(
+    return savedStreams.find(
       s => sanitizeUrlForComparison(s.url) === health.url || s.url === health.url
     );
   }
@@ -377,6 +387,7 @@
 
   // Handle URL input with auto-detection
   function handleUrlInput(value: string) {
+    urlError = null;
     if (value.includes('://')) {
       newStreamType = detectStreamType(value);
     }
@@ -402,9 +413,12 @@
     }
   }
 
-  function handleNewTestResult(result: { sampleRate: number; channels: number } | null) {
+  function handleNewTestResult(
+    result: { sampleRate: number; channels: number } | null,
+    testedUrl: string
+  ) {
     newTestResult = result;
-    newTestedUrl = result ? newUrl.trim() : null;
+    newTestedUrl = result ? testedUrl : null;
     if (!result) {
       analysisResult = null;
       analysisError = null;
@@ -456,67 +470,36 @@
   // One stream opens by default, several start closed.
   const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
 
-  const rollback = new RowRollback();
-
-  // A stream is identified by its name and URL, the two fields a row's open
-  // state and drafts are about; other edits (gain, models) keep the identity.
+  // A stream is identified by its name and URL, the fields a card's open state
+  // is about; other edits keep the identity.
   function listIdentity(list: readonly StreamConfig[]): string {
     return JSON.stringify(list.map(stream => [stream.name, stream.url]));
   }
 
-  // Identities of the lists this manager has held or sent: the one it started
-  // with, each list it sent (add, delete, a card's commit) and the list that
-  // was current when it sent, which a refused save takes the list back to. A
-  // list outside this history came from elsewhere (a reload, another window)
-  // and replaces the history.
-  const knownLists: string[] = untrack(() => [listIdentity(streams)]);
+  // The identity of the list this manager last held or sent.
+  let expectedIdentity = untrack(() => listIdentity(streams));
 
-  function remember(identity: string) {
-    if (knownLists.includes(identity)) return;
-    knownLists.push(identity);
-    if (knownLists.length > MAX_KNOWN_LISTS) knownLists.shift();
+  /** Sends a list to the parent and remembers its identity as the expected one. */
+  function sendStreams(list: StreamConfig[]) {
+    expectedIdentity = listIdentity(list);
+    onUpdateStreams(list);
   }
 
-  /** Sends a list to the parent and remembers it, with the list it replaces. */
-  function sendStreams(list: StreamConfig[], options: CommitOptions) {
-    remember(listIdentity(streams));
-    remember(listIdentity(list));
-    onUpdateStreams(list, options);
-  }
-
-  // A list this manager did not produce gives every row a fresh id, so no open
-  // state, status or unapplied draft lands on a different stream, and forgets
-  // the rollback baseline. A refused add or delete takes the list back to the
-  // rows this manager remembered, which keeps every card's id, open state and
-  // drafts; a length change from a list the manager knows but cannot restore
-  // also gives fresh ids.
+  // A list this manager did not produce (Reset, a reload) gives every row a
+  // fresh id, so the cards are recreated and no open confirmation or open state
+  // lands on a different stream.
   $effect.pre(() => {
-    const count = streams.length;
     const identity = listIdentity(streams);
     untrack(() => {
-      const own = knownLists.includes(identity);
-      // A foreign list starts a new history that holds only itself: it arriving
-      // again keeps the rows, while an older list (a swap and its swap back) is
-      // foreign again.
-      if (!own) {
-        knownLists.length = 0;
-        knownLists.push(identity);
-      }
-      if (own && rowIds.length === count) return;
-      const previous = own ? rollback.take(count) : null;
-      if (previous) {
-        rowIds = previous.ids;
-        expandedRows.clear();
-        for (const id of previous.expanded) expandedRows.add(id);
-        return;
-      }
-      rollback.clear();
-      rowIds = newRowIds(count);
+      if (identity === expectedIdentity) return;
+      expectedIdentity = identity;
+      rowIds = newRowIds(streams.length);
       expandedRows.clear();
-      if (count === 1) expandedRows.add(rowIds[0]);
+      if (streams.length === 1) expandedRows.add(rowIds[0]);
     });
   });
 
+  let problems = $derived(streamProblems(streams, savedStreams, testedUrls));
   let rows = $derived(
     streams.map((stream, index) => ({ stream, index, id: rowIds.at(index) ?? `${index}` }))
   );
@@ -528,27 +511,20 @@
 
   let addButton = $state<HTMLButtonElement>();
 
-  // ----- Add (saved at once) -----
+  // ----- Add -----
 
-  let listStatus = $derived(autoSaveStatus(STREAMS_LIST_FIELD));
-  let addPending = $state(false);
-  let adding = $derived(addPending && listStatus.state === 'saving');
-  let addBlocked = $derived(adding || disabled || newNeedsTest);
-
-  // Ends an add: a save closes the form and fetches the new stream's health, a
-  // failure keeps the form open with the reason.
-  $effect(() => {
-    const state = listStatus.state;
-    untrack(() => {
-      if (state === 'saved') rollback.clear();
-      if (!addPending || state === 'saving') return;
-      addPending = false;
-      if (state === 'error') return;
-      resetAddForm();
-      clearTimeout(healthRefreshTimer);
-      healthRefreshTimer = setTimeout(() => void loadHealthStatus(), HEALTH_REFRESH_AFTER_ADD_MS);
-    });
-  });
+  let addBlocked = $derived(disabled || newNeedsTest);
+  /** Ids of the reasons shown beside the add form's Add button while it is blocked. */
+  const addDisabledReasonId = generateId('add-stream-disabled-reason');
+  const addTestRequiredId = generateId('add-stream-test-required');
+  let addDescribedBy = $derived(
+    [
+      disabled && disabledReason ? addDisabledReasonId : undefined,
+      newNeedsTest ? addTestRequiredId : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
+  );
 
   function addStream() {
     if (addBlocked) return;
@@ -557,81 +533,51 @@
     const trimmedName = newName.trim();
     const trimmedUrl = newUrl.trim();
 
-    if (!trimmedName) {
-      nameError = t('settings.audio.streams.errors.nameRequired');
-      return;
-    }
-    if (isStreamNameTooLong(trimmedName)) {
-      nameError = streamNameTooLongMessage();
-      return;
-    }
-    // Check for duplicate name (case-insensitive)
-    const nameLower = trimmedName.toLowerCase();
-    if (streams.some(s => s.name.toLowerCase() === nameLower)) {
-      nameError = t('settings.audio.streams.errors.duplicateName');
-      return;
-    }
-    if (!trimmedUrl) {
-      urlError = t('settings.audio.streams.errors.urlRequired');
-      return;
-    }
-    if (!isValidStreamUrl(trimmedUrl, newStreamType)) {
-      urlError = t('settings.audio.streams.errors.invalidUrl');
-      return;
-    }
-    if (streams.some(s => s.url === trimmedUrl)) {
-      urlError = t('settings.audio.streams.errors.duplicate');
-      return;
-    }
-
-    // Ensure at least one model is selected when the classifier offers one
-    const models = newModels.length > 0 ? newModels : defaultModels;
-
     // Only RTSP and RTMP take a transport.
     const newStream: StreamConfig = {
       name: trimmedName,
       url: trimmedUrl,
       enabled: true,
       type: newStreamType,
-      models,
+      models: newModels.length > 0 ? newModels : defaultModels,
       channelMode: newChannelMode,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
       gain: newGain,
       quietHours: newQuietHours,
     };
 
+    // The new row against the current rows only: the saved list is not a reason to
+    // accept it, and its URL was tested (addBlocked).
+    const problem = streamProblems([...streams, newStream], [], new Set([trimmedUrl])).at(-1);
+    if (problem?.name) {
+      nameError = streamNameProblemMessage(problem.name);
+      return;
+    }
+    if (problem?.url) {
+      urlError = streamUrlProblemMessage(problem.url);
+      return;
+    }
+
     const rowId = generateId(ROW_ID_PREFIX);
-    rollback.remember(rowIds, expandedRows);
     rowIds = [...rowIds, rowId];
     if (streams.length === 0) expandedRows.add(rowId);
-    addPending = true;
-    sendStreams([...streams, newStream], { field: STREAMS_LIST_FIELD });
+    onUrlTested?.(trimmedUrl);
+    sendStreams([...streams, newStream]);
+    resetAddForm();
   }
 
   // ----- Change and delete -----
 
-  function commitStream(index: number, updated: StreamConfig, options: CommitOptions) {
-    const current = streams.at(index);
-    if (!current) return;
-    // Health is keyed by URL; a new URL starts without the old one's.
-    if (current.url !== updated.url) delete streamHealth[current.url];
-    sendStreams(
-      streams.map((stream, i) => (i === index ? updated : stream)),
-      options
-    );
+  function changeStream(index: number, updated: StreamConfig) {
+    if (!streams.at(index)) return;
+    sendStreams(streams.map((stream, i) => (i === index ? updated : stream)));
   }
 
   async function deleteStream(index: number) {
-    const streamToDelete = streams.at(index);
     const id = rowIds.at(index);
-    rollback.remember(rowIds, expandedRows);
     rowIds = rowIds.filter((_, i) => i !== index);
     if (id !== undefined) expandedRows.delete(id);
-    sendStreams(
-      streams.filter((_, i) => i !== index),
-      { field: STREAMS_LIST_FIELD }
-    );
-    if (streamToDelete) delete streamHealth[streamToDelete.url];
+    sendStreams(streams.filter((_, i) => i !== index));
     // The deleted card took focus with it; land on the add button instead.
     await tick();
     addButton?.focus();
@@ -640,13 +586,9 @@
   onMount(() => {
     loadHealthStatus();
     quietHoursStore.startPolling();
-    if (streams.length > 0) {
-      connectSSE();
-    }
   });
 
   onDestroy(() => {
-    clearTimeout(healthRefreshTimer);
     quietHoursStore.stopPolling();
     if (eventSource) {
       eventSource.close();
@@ -654,14 +596,22 @@
     }
   });
 
-  // Reconnect SSE when streams change
+  // Follow the saved streams: a stream exists on the server only after Save, so
+  // the SSE connects while any is saved and the health is fetched again when the
+  // saved list changes.
+  let savedIdentity: string | undefined;
   $effect(() => {
-    if (streams.length > 0 && !eventSource) {
-      connectSSE();
-    } else if (streams.length === 0 && eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    const identity = JSON.stringify(savedStreams.map(stream => [stream.name, stream.url]));
+    const hasSaved = savedStreams.length > 0;
+    untrack(() => {
+      if (hasSaved && !eventSource) connectSSE();
+      else if (!hasSaved && eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      if (savedIdentity !== undefined && savedIdentity !== identity) void loadHealthStatus();
+      savedIdentity = identity;
+    });
   });
 </script>
 
@@ -746,24 +696,20 @@
       {#each rows as row (row.id)}
         <StreamCard
           stream={row.stream}
-          index={row.index}
-          {streams}
-          rowId={row.id}
           status={getStreamStatus(row.stream.url, row.stream)}
           {availableModels}
           {modelOptions}
           {disabled}
+          {disabledReason}
           expanded={expandedRows.has(row.id)}
           onToggleExpanded={() => toggleRow(row.id)}
-          onCommit={(updated, options) => commitStream(row.index, updated, options)}
+          problem={problems.at(row.index)}
+          onUrlTested={url => onUrlTested?.(url)}
+          onChange={updated => changeStream(row.index, updated)}
           onDelete={() => void deleteStream(row.index)}
         />
       {/each}
     </div>
-
-    {#if !showAddForm}
-      <AutoSaveStatus field={STREAMS_LIST_FIELD} />
-    {/if}
 
     <!-- Add Stream Section -->
     {#if showAddForm}
@@ -803,16 +749,8 @@
                 required
                 oninput={handleUrlInput}
                 {disabled}
+                error={urlError ?? undefined}
               />
-              {#if urlError}
-                <p
-                  role="alert"
-                  aria-live="assertive"
-                  class="text-xs text-[var(--text-error)] -mt-2"
-                >
-                  {urlError}
-                </p>
-              {/if}
             </div>
 
             <!-- Test Stream -->
@@ -831,7 +769,10 @@
                 label={t('settings.audio.streams.typeLabel')}
                 options={streamTypeOptions}
                 {disabled}
-                onChange={value => (newStreamType = toStreamType(value) ?? newStreamType)}
+                onChange={value => {
+                  newStreamType = toStreamType(value) ?? newStreamType;
+                  urlError = null;
+                }}
                 groupBy={false}
                 menuSize="sm"
               />
@@ -910,11 +851,13 @@
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
               <div class="mr-auto flex min-w-0 flex-col gap-1">
-                <div id={ADD_SAVING_STATUS_ID}>
-                  <AutoSaveStatus field={STREAMS_LIST_FIELD} />
-                </div>
+                {#if disabled && disabledReason}
+                  <p id={addDisabledReasonId} class="text-sm text-[var(--text-subtle)]">
+                    {disabledReason}
+                  </p>
+                {/if}
                 {#if newNeedsTest}
-                  <p id="new-stream-test-required" class="text-xs text-muted">
+                  <p id={addTestRequiredId} class="text-xs text-muted">
                     {t('settings.audio.streams.testRequired')}
                   </p>
                 {/if}
@@ -922,11 +865,7 @@
               <button
                 type="button"
                 class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                aria-disabled={adding ? 'true' : undefined}
-                aria-describedby={adding ? ADD_SAVING_STATUS_ID : undefined}
-                onclick={() => {
-                  if (!adding) resetAddForm();
-                }}
+                onclick={resetAddForm}
               >
                 {t('common.cancel')}
               </button>
@@ -934,13 +873,11 @@
                 type="button"
                 class="btn btn-primary btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
                 aria-disabled={addBlocked ? 'true' : undefined}
-                aria-describedby={newNeedsTest ? 'new-stream-test-required' : undefined}
+                aria-describedby={addDescribedBy}
                 onclick={addStream}
               >
                 <Plus class="size-4" aria-hidden="true" />
-                {adding
-                  ? t('settings.audio.soundCards.adding')
-                  : t('settings.audio.streams.addStream')}
+                {t('settings.audio.streams.addStream')}
               </button>
             </div>
           </div>

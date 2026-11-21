@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Należy wybrać co najmniej jeden model"
         },
         "captureTitle": "Przechwytywanie",
-        "levelTitle": "Poziom wejściowy",
-        "applying": "Stosowanie...",
-        "adding": "Dodawanie..."
+        "levelTitle": "Poziom wejściowy"
       },
       "audioCapture": {
         "title": "Przechwytywanie Audio",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Konfiguracja Strumieni Audio",
-        "noStreamsConfigured": "Brak skonfigurowanych strumieni"
+        "noStreamsConfigured": "Brak skonfigurowanych strumieni",
+        "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio. Obsługuje protokoły RTSP, HTTP, HLS, RTMP i UDP. Zmiana połączenia ponownie łączy strumień po zapisaniu."
       },
       "streams": {
         "streamLabel": "Strumień",
@@ -3904,12 +3903,7 @@
           "message": "Wykryto strumień stereo. Miksowanie wielu kanałów może zmniejszyć dokładność detekcji z powodu różnic fazowych między kanałami. Wybierz konkretny kanał (lewy/prawy) lub użyj detektora kanałów, aby uzyskać najlepsze wyniki.",
           "short": "Downmix stereo aktywny. Dokładność detekcji może być zmniejszona. Wybierz konkretny kanał w sekcji Połączenie."
         },
-        "autoSaveHelp": "Zmiany są zapisywane od razu. Zmiany połączenia ponownie łączą strumień, więc czekają, aż klikniesz Zastosuj.",
         "connectionTitle": "Połączenie",
-        "connectionApplyHint": "Strumień połączy się ponownie po zastosowaniu.",
-        "connectionApplyFailed": "Połączenie nie zostało zmienione. Zastosuj ponownie lub anuluj.",
-        "applyConnection": "Zastosuj i połącz ponownie",
-        "testBeforeApply": "Przetestuj nowy URL przed zastosowaniem.",
         "statsLine": "Łącznie: {total} · Szybkość: {rate} · Ostatnio: {last}",
         "ago": {
           "seconds": "{count} s temu",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Przed zapisaniem popraw karty dźwiękowe na karcie {tab}: {names}",
         "unnamedSource": "źródło {position} (bez nazwy)",
-        "needsAttention": "Wymaga uwagi"
+        "needsAttention": "Wymaga uwagi",
+        "streams": "Przed zapisaniem popraw strumienie na karcie {tab}: {names}",
+        "streamsUntested": "Przed zapisaniem przetestuj nowy adres URL strumienia na karcie {tab}: {names}",
+        "unnamedStream": "strumień {position} (bez nazwy)"
       }
     },
     "security": {

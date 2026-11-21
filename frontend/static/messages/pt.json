@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Pelo menos um modelo deve ser selecionado"
         },
         "captureTitle": "Captura",
-        "levelTitle": "Nível de entrada",
-        "applying": "A aplicar...",
-        "adding": "A adicionar..."
+        "levelTitle": "Nível de entrada"
       },
       "audioCapture": {
         "title": "Captura de áudio",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Configuração de Fluxos de Áudio",
-        "noStreamsConfigured": "Nenhum fluxo configurado"
+        "noStreamsConfigured": "Nenhum fluxo configurado",
+        "description": "Configure fluxos de áudio de rede para captura de áudio remota. Suporta protocolos RTSP, HTTP, HLS, RTMP e UDP. Uma alteração de conexão reconecta o stream ao salvar."
       },
       "streams": {
         "streamLabel": "Transmissão",
@@ -3904,12 +3903,7 @@
           "message": "Stream estéreo detectado. A mistura de múltiplos canais pode reduzir a precisão de detecção devido a diferenças de fase entre canais. Selecione um canal específico (esquerdo/direito) ou use o detector de canais para melhores resultados.",
           "short": "Downmix estéreo ativo. A precisão de detecção pode estar reduzida. Selecione um canal específico em Ligação."
         },
-        "autoSaveHelp": "As alterações são guardadas de imediato. As alterações da ligação voltam a ligar o stream, por isso aguardam até clicar em Aplicar.",
         "connectionTitle": "Ligação",
-        "connectionApplyHint": "O stream volta a ligar-se ao aplicar.",
-        "connectionApplyFailed": "A ligação não foi alterada. Aplique novamente ou cancele.",
-        "applyConnection": "Aplicar e voltar a ligar",
-        "testBeforeApply": "Teste o novo URL antes de o aplicar.",
         "statsLine": "Total: {total} · Taxa: {rate} · Último: {last}",
         "ago": {
           "seconds": "há {count} s",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Corrija as placas de som na aba {tab} antes de salvar: {names}",
         "unnamedSource": "fonte {position} (sem nome)",
-        "needsAttention": "Requer atenção"
+        "needsAttention": "Requer atenção",
+        "streams": "Corrija os streams na aba {tab} antes de salvar: {names}",
+        "streamsUntested": "Teste a nova URL do stream na aba {tab} antes de salvar: {names}",
+        "unnamedStream": "stream {position} (sem nome)"
       }
     },
     "security": {

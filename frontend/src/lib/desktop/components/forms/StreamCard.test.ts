@@ -1,5 +1,5 @@
 import { tick } from 'svelte';
-import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, cleanup, fireEvent, render } from '@testing-library/svelte';
 import StreamCard from './StreamCard.svelte';
 import { analyzeStreamChannels } from './streamOptions';
@@ -10,7 +10,7 @@ import {
 } from '../../../../test/fixtures/elementAnimate';
 import type { ChannelAnalysis, StreamConfig } from '$lib/stores/settings';
 import type { BackendModel } from '$lib/stores/models.svelte';
-import { AUTOSAVE_DEBOUNCE_MS } from '$lib/stores/settingsAutoSave.svelte';
+import type { StreamProblem } from './sourceRules';
 
 // SelectDropdown is a native <select> stand-in; the test button reports a test
 // of its URL when clicked, so each test decides when a URL counts as tested.
@@ -44,13 +44,12 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
 }));
 
 const LEFT_ANALYSIS: ChannelAnalysis = { channels: 2, energy: [], recommended: 'left' };
-const ROW_ID = 'row-1';
-const FIELD_PREFIX = `rtsp:streams:${ROW_ID}:`;
 const URL_LABEL_KEY = 'settings.audio.streams.urlLabel';
 const NAME_LABEL_KEY = 'settings.audio.streams.nameLabel';
-const APPLY_KEY = 'settings.audio.streams.applyConnection';
-const TEST_FIRST_KEY = 'settings.audio.streams.testBeforeApply';
 const TYPE_SELECT_TESTID = 'select-settings.audio.streams.typeLabel';
+const TRANSPORT_SELECT_TESTID = 'select-settings.audio.streams.transportLabel';
+const MEDIA_MODE_SELECT_TESTID = 'select-settings.audio.streams.mediaModeLabel';
+const NEEDS_ATTENTION_KEY = 'settings.audio.validation.needsAttention';
 
 const availableModels: BackendModel[] = [
   { id: 'birdnet', registryId: 'BirdNET_V2.4', name: 'BirdNET v2.4', category: 'bird' },
@@ -72,199 +71,334 @@ const baseStream: StreamConfig = {
 interface RenderOptions {
   stream?: StreamConfig;
   models?: BackendModel[];
-  streams?: StreamConfig[];
+  problem?: StreamProblem;
   expanded?: boolean;
   disabled?: boolean;
+  disabledReason?: string;
 }
 
 function renderCard(options: RenderOptions = {}) {
-  const stream = options.stream ?? baseStream;
-  const onCommit = vi.fn();
+  const onChange = vi.fn();
+  const onUrlTested = vi.fn();
   const onDelete = vi.fn();
   // Raw render so the streamHealth context the card reads can be provided.
+  let props = {
+    stream: options.stream ?? baseStream,
+    problem: options.problem,
+    availableModels: options.models ?? availableModels,
+    modelOptions: (options.models ?? availableModels).map(m => ({ value: m.id, label: m.name })),
+    expanded: options.expanded ?? true,
+    onToggleExpanded: vi.fn(),
+    onChange,
+    onUrlTested,
+    onDelete,
+    disabled: options.disabled ?? false,
+    disabledReason: options.disabledReason,
+  };
   const result = render(StreamCard, {
     context: new Map<string, unknown>([['streamHealth', {}]]),
-    props: {
-      stream,
-      index: 0,
-      streams: options.streams ?? [stream],
-      rowId: ROW_ID,
-      availableModels: options.models ?? availableModels,
-      modelOptions: (options.models ?? availableModels).map(m => ({ value: m.id, label: m.name })),
-      expanded: options.expanded ?? true,
-      onToggleExpanded: vi.fn(),
-      onCommit,
-      onDelete,
-      disabled: options.disabled ?? false,
-    },
+    props,
   });
-  return { ...result, onCommit, onDelete };
+  // Sets some props and keeps the others, as a parent that re-renders would.
+  const update = async (patch: Partial<typeof props>) => {
+    props = { ...props, ...patch };
+    await result.rerender(props);
+  };
+  return { ...result, onChange, onUrlTested, onDelete, update };
 }
 
 function urlInput(): HTMLInputElement {
   return screen.getByLabelText<HTMLInputElement>(new RegExp(URL_LABEL_KEY));
 }
 
-function applyButton(): HTMLElement {
-  return screen.getByRole('button', { name: APPLY_KEY });
+function nameInput(): HTMLInputElement {
+  return screen.getByLabelText<HTMLInputElement>(new RegExp(NAME_LABEL_KEY));
 }
 
-describe('StreamCard immediate save', () => {
+describe('StreamCard editing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    stubElementAnimate();
   });
 
   afterEach(() => {
     cleanup();
+    restoreElementAnimate();
   });
 
-  it('saves the enabled switch in the header at once, also while collapsed', async () => {
-    const { onCommit } = renderCard({ expanded: false });
+  it('writes the enabled switch in the header at once, also while collapsed', async () => {
+    const { onChange } = renderCard({ expanded: false });
 
     await fireEvent.click(screen.getByRole('switch', { name: 'settings.audio.streams.enabled' }));
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith(
-      { ...baseStream, enabled: false },
-      { field: `${FIELD_PREFIX}enabled` }
-    );
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...baseStream, enabled: false });
   });
 
-  it('commits a name on blur and refuses a duplicate with the reason at the field', async () => {
-    const other: StreamConfig = { ...baseStream, name: 'Porch', url: 'rtsp://porch/stream' };
-    const { onCommit } = renderCard({ streams: [baseStream, other] });
-    const input = screen.getByLabelText<HTMLInputElement>(new RegExp(NAME_LABEL_KEY));
+  it('writes the whole stream with the name as typed and the trimmed name when the field is left', async () => {
+    const { onChange } = renderCard();
+    const input = nameInput();
 
-    await fireEvent.input(input, { target: { value: 'porch' } });
+    await fireEvent.input(input, { target: { value: ' Back Yard ' } });
+    expect(onChange).toHaveBeenLastCalledWith({ ...baseStream, name: ' Back Yard ' });
+
     await fireEvent.blur(input);
-    expect(onCommit).not.toHaveBeenCalled();
-    expect(input).toHaveAccessibleDescription('settings.audio.streams.errors.duplicateName');
-
-    await fireEvent.input(input, { target: { value: 'Back Yard' } });
-    expect(onCommit).not.toHaveBeenCalled();
-    await fireEvent.blur(input);
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith(
-      { ...baseStream, name: 'Back Yard' },
-      { field: `${FIELD_PREFIX}name` }
-    );
+    expect(onChange).toHaveBeenLastCalledWith({ ...baseStream, name: 'Back Yard' });
   });
 
-  it('keeps a URL edit as a draft and blocks Apply with the reason until that URL is tested', async () => {
-    const { onCommit } = renderCard();
-    expect(screen.queryByRole('button', { name: APPLY_KEY })).toBeNull();
+  it('writes nothing on blur when the name is already trimmed and unchanged', async () => {
+    const { onChange } = renderCard();
 
-    await fireEvent.input(urlInput(), { target: { value: 'rtsp://other/stream' } });
-    expect(onCommit).not.toHaveBeenCalled();
-    expect(applyButton()).toHaveAttribute('aria-disabled', 'true');
-    expect(applyButton()).toHaveAccessibleDescription(TEST_FIRST_KEY);
-    await fireEvent.click(applyButton());
-    expect(onCommit).not.toHaveBeenCalled();
+    await fireEvent.blur(nameInput());
 
-    await fireEvent.click(screen.getByTestId('stream-test-button'));
-    expect(applyButton()).not.toHaveAttribute('aria-disabled');
-
-    // A test of one URL does not cover the next edit.
-    await fireEvent.input(urlInput(), { target: { value: 'rtsp://third/stream' } });
-    expect(applyButton()).toHaveAttribute('aria-disabled', 'true');
-    await fireEvent.click(screen.getByTestId('stream-test-button'));
-
-    await fireEvent.click(applyButton());
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith(
-      { ...baseStream, url: 'rtsp://third/stream' },
-      { field: `${FIELD_PREFIX}connection` }
-    );
+    expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('blocks Apply for a URL another stream already uses and says why', async () => {
-    const other: StreamConfig = { ...baseStream, name: 'Porch', url: 'rtsp://porch/stream' };
-    const { onCommit } = renderCard({ streams: [baseStream, other] });
+  it('marks the name and URL fields required for assistive technology without the native attribute', () => {
+    renderCard();
 
-    await fireEvent.input(urlInput(), { target: { value: 'rtsp://porch/stream' } });
-    await fireEvent.click(screen.getByTestId('stream-test-button'));
-
-    expect(applyButton()).toHaveAttribute('aria-disabled', 'true');
-    expect(applyButton()).toHaveAccessibleDescription('settings.audio.streams.errors.duplicate');
-    await fireEvent.click(applyButton());
-    expect(onCommit).not.toHaveBeenCalled();
-  });
-
-  it('applies a type change that fits the URL without a test, drops the RTSP-only fields, and Cancel restores', async () => {
-    const httpStream: StreamConfig = {
-      ...baseStream,
-      type: 'http',
-      url: 'http://host/stream.m3u8',
-    };
-    const { onCommit } = renderCard({ stream: httpStream });
-
-    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'hls' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByTestId<HTMLSelectElement>(TYPE_SELECT_TESTID).value).toBe('http');
-    expect(screen.queryByRole('button', { name: APPLY_KEY })).toBeNull();
-
-    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'hls' } });
-    await fireEvent.click(applyButton());
-    expect(onCommit).toHaveBeenCalledOnce();
-    const [committed, options] = onCommit.mock.calls[0];
-    expect(options).toEqual({ field: `${FIELD_PREFIX}connection` });
-    expect(committed).toEqual({
-      name: 'Front Yard',
-      url: 'http://host/stream.m3u8',
-      enabled: true,
-      type: 'hls',
-      channelMode: 'downmix',
-      gain: 0,
-      models: ['birdnet'],
-    });
-  });
-
-  it('blocks Apply when only the type changes to one the saved URL does not fit', async () => {
-    const { onCommit } = renderCard();
-
-    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'http' } });
-    expect(applyButton()).toHaveAttribute('aria-disabled', 'true');
-    expect(applyButton()).toHaveAccessibleDescription('settings.audio.streams.errors.invalidUrl');
-    await fireEvent.click(applyButton());
-    expect(onCommit).not.toHaveBeenCalled();
-  });
-
-  it('commits gain once on release with the debounce', async () => {
-    const { onCommit } = renderCard();
-    const slider = screen.getByRole('slider');
-
-    await fireEvent.input(slider, { target: { value: '4' } });
-    expect(onCommit).not.toHaveBeenCalled();
-    await fireEvent.change(slider, { target: { value: '4' } });
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith(
-      { ...baseStream, gain: 4 },
-      { field: `${FIELD_PREFIX}gain`, debounceMs: AUTOSAVE_DEBOUNCE_MS }
-    );
+    for (const input of [nameInput(), urlInput()]) {
+      expect(input).toHaveAttribute('aria-required', 'true');
+      expect(input).not.toHaveAttribute('required');
+    }
   });
 
   it('limits the name to what the server accepts', () => {
     renderCard();
 
-    const input = screen.getByLabelText<HTMLInputElement>(new RegExp(NAME_LABEL_KEY));
-    expect(input).toHaveAttribute('maxlength', '64');
+    expect(nameInput()).toHaveAttribute('maxlength', '64');
   });
 
-  it('refuses a name longer than the server limit in bytes, with the reason at the field', async () => {
-    const { onCommit } = renderCard();
-    const input = screen.getByLabelText<HTMLInputElement>(new RegExp(NAME_LABEL_KEY));
+  it.each([
+    ['required', 'settings.audio.streams.errors.nameRequired'],
+    ['tooLong', 'settings.audio.streams.errors.nameTooLong'],
+    ['duplicate', 'settings.audio.streams.errors.duplicateName'],
+  ] as const)(
+    'shows a %s name problem at once on a card that opens with it, and flags the header',
+    (name, message) => {
+      renderCard({ problem: { name } });
 
-    // 22 euro signs are 22 characters, within maxlength, but 66 bytes.
-    await fireEvent.input(input, { target: { value: '\u20ac'.repeat(22) } });
-    await fireEvent.blur(input);
+      expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+      expect(nameInput()).toHaveAccessibleDescription(message);
+      expect(screen.getByText(NEEDS_ATTENTION_KEY)).toBeInTheDocument();
+    }
+  );
 
-    expect(onCommit).not.toHaveBeenCalled();
-    expect(input).toHaveAccessibleDescription('settings.audio.streams.errors.nameTooLong');
-  });
-
-  it('applies a channel analysis of the current URL when Test is clicked again meanwhile', async () => {
-    const pending = deferred<ChannelAnalysis>();
-    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+  it('shows no message and no attention badge without a problem', () => {
     renderCard();
 
-    await fireEvent.input(urlInput(), { target: { value: 'rtsp://other/stream' } });
-    await fireEvent.click(screen.getByTestId('channel-analyze'));
+    expect(nameInput()).not.toHaveAttribute('aria-invalid');
+    expect(urlInput()).not.toHaveAttribute('aria-invalid');
+    expect(screen.queryByText(NEEDS_ATTENTION_KEY)).toBeNull();
+  });
 
+  it('hides a shown name error while the field is edited and shows it again when left', async () => {
+    renderCard({ problem: { name: 'duplicate' } });
+
+    await fireEvent.input(nameInput(), { target: { value: 'Porc' } });
+    expect(nameInput()).not.toHaveAttribute('aria-invalid');
+
+    await fireEvent.blur(nameInput());
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows the name error again when a save ends an edit that hid it', async () => {
+    const { update } = renderCard({ problem: { name: 'duplicate' } });
+    await fireEvent.input(nameInput(), { target: { value: 'Porc' } });
+    expect(nameInput()).not.toHaveAttribute('aria-invalid');
+
+    // A running save disables the card: the field loses focus without a blur event.
+    await update({ disabled: true });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows the name error again when a collapse ends an edit that hid it', async () => {
+    const { update } = renderCard({ problem: { name: 'duplicate' } });
+    await fireEvent.input(nameInput(), { target: { value: 'Porc' } });
+
+    await update({ expanded: false });
+    await update({ expanded: true });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows a duplicate made on another card at once, without the field being left', async () => {
+    const { update } = renderCard();
+    expect(nameInput()).not.toHaveAttribute('aria-invalid');
+
+    await update({ problem: { name: 'duplicate' } });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('writes the URL as typed with the type its scheme names, and the trimmed URL when left', async () => {
+    const { onChange } = renderCard();
+    const input = urlInput();
+
+    await fireEvent.input(input, { target: { value: 'rtmp://host/live ' } });
+    expect(onChange).toHaveBeenLastCalledWith({
+      ...baseStream,
+      url: 'rtmp://host/live ',
+      type: 'rtmp',
+    });
+
+    await fireEvent.blur(input);
+    expect(onChange).toHaveBeenLastCalledWith({ ...baseStream, url: 'rtmp://host/live' });
+  });
+
+  it('keeps the type while the typed URL names no scheme yet', async () => {
+    const { onChange } = renderCard();
+
+    await fireEvent.input(urlInput(), { target: { value: 'host/stream' } });
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...baseStream, url: 'host/stream' });
+  });
+
+  it('says an untested URL needs its test at once, marks the field and flags the header', () => {
+    renderCard({ problem: { url: 'untested' } });
+
+    expect(urlInput()).toHaveAttribute('aria-invalid', 'true');
+    expect(urlInput()).toHaveAccessibleDescription('settings.audio.streams.testRequired');
+    expect(screen.getByText(NEEDS_ATTENTION_KEY)).toBeInTheDocument();
+  });
+
+  it('keeps saying an untested URL needs its test while the field is edited', async () => {
+    renderCard({ problem: { url: 'untested' } });
+
+    await fireEvent.input(urlInput(), { target: { value: 'rtsp://host/other' } });
+
+    expect(urlInput()).toHaveAccessibleDescription('settings.audio.streams.testRequired');
+  });
+
+  it.each([
+    ['required', 'settings.audio.streams.errors.urlRequired'],
+    ['invalid', 'settings.audio.streams.errors.invalidUrl'],
+    ['duplicate', 'settings.audio.streams.errors.duplicate'],
+  ] as const)(
+    'shows a %s URL problem once the field was left, and hides it while it is edited',
+    async (url, message) => {
+      const { update } = renderCard();
+      await fireEvent.input(urlInput(), { target: { value: 'rtsp://host/x' } });
+      expect(urlInput()).not.toHaveAttribute('aria-invalid');
+
+      // The page evaluates the rules and hands the problem to the card.
+      await update({ problem: { url } });
+      expect(urlInput()).not.toHaveAttribute('aria-invalid');
+
+      await fireEvent.blur(urlInput());
+      expect(urlInput()).toHaveAttribute('aria-invalid', 'true');
+      expect(urlInput()).toHaveAccessibleDescription(message);
+    }
+  );
+
+  it('shows a URL duplicate made on another card at once', async () => {
+    const { update } = renderCard();
+
+    await update({ problem: { url: 'duplicate' } });
+
+    expect(urlInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows the URL error again when a save ends an edit that hid it', async () => {
+    const { update } = renderCard({ problem: { url: 'duplicate' } });
+    await fireEvent.input(urlInput(), { target: { value: 'rtsp://host/x' } });
+    expect(urlInput()).not.toHaveAttribute('aria-invalid');
+
+    await update({ disabled: true });
+
+    expect(urlInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('reports a successful test with the URL it tested', async () => {
+    const { onUrlTested } = renderCard();
+
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+
+    expect(onUrlTested).toHaveBeenCalledExactlyOnceWith('rtsp://host/stream');
+  });
+
+  it('reports the URL that was tested, not the one the field holds when the result arrives', async () => {
+    const { onUrlTested, update } = renderCard();
+    await fireEvent.click(screen.getByTestId('stream-test-start'));
+
+    await update({ stream: { ...baseStream, url: 'rtsp://host/other' } });
+    await fireEvent.click(screen.getByTestId('stream-test-finish'));
+
+    expect(onUrlTested).toHaveBeenCalledExactlyOnceWith('rtsp://host/stream');
+  });
+
+  it('does not report a test that was cleared or failed', async () => {
+    const { onUrlTested } = renderCard();
+
+    await fireEvent.click(screen.getByTestId('stream-test-clear'));
+
+    expect(onUrlTested).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['type', TYPE_SELECT_TESTID, 'http', { type: 'http' }],
+    ['transport', TRANSPORT_SELECT_TESTID, 'udp', { transport: 'udp' }],
+    ['media mode', MEDIA_MODE_SELECT_TESTID, 'audio-only', { mediaMode: 'audio-only' }],
+  ])(
+    'writes only the %s key of the stream when it is picked',
+    async (_label, testId, value, patch) => {
+      const { onChange } = renderCard();
+
+      await fireEvent.change(screen.getByTestId(testId), { target: { value } });
+
+      expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...baseStream, ...patch });
+    }
+  );
+
+  it('writes only the type of a stream that stores no transport or media mode', async () => {
+    const httpStream: StreamConfig = {
+      name: 'Garden',
+      url: 'http://host/live.m3u8',
+      enabled: true,
+      type: 'http',
+      gain: 0,
+      models: [],
+    };
+    const { onChange } = renderCard({ stream: httpStream });
+
+    await fireEvent.change(screen.getByTestId(TYPE_SELECT_TESTID), { target: { value: 'hls' } });
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...httpStream, type: 'hls' });
+  });
+
+  it('writes the gain once on release, not while dragging', async () => {
+    const { onChange } = renderCard();
+    const slider = screen.getByRole('slider');
+
+    await fireEvent.input(slider, { target: { value: '4' } });
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.change(slider, { target: { value: '4' } });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...baseStream, gain: 4 });
+  });
+
+  it('writes a classifier switch with the complete list', async () => {
+    const { onChange } = renderCard();
+
+    await fireEvent.click(screen.getByRole('switch', { name: 'Perch v2' }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({
+      ...baseStream,
+      models: ['birdnet', 'perch_v2'],
+    });
+  });
+
+  it('writes nothing when it opens or collapses', async () => {
+    const { onChange, update } = renderCard({ expanded: false });
+    await update({ expanded: true });
+    await update({ expanded: false });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('writes the recommended channel mode of an analysis of the current URL', async () => {
+    const pending = deferred<ChannelAnalysis>();
+    vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
+    const { onChange } = renderCard();
+
+    await fireEvent.click(screen.getByTestId('channel-analyze'));
     // A new test run, or a failed one, reports a cleared result for the same URL.
     await fireEvent.click(screen.getByTestId('stream-test-clear'));
     expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'true');
@@ -272,22 +406,21 @@ describe('StreamCard immediate save', () => {
     pending.resolve(LEFT_ANALYSIS);
     await pending.promise;
     await tick();
-    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'left');
-    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-analyzing', 'false');
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...baseStream, channelMode: 'left' });
   });
 
-  it('ignores a channel analysis of a URL the draft no longer holds', async () => {
+  it('ignores a channel analysis of a URL the stream no longer holds', async () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
-    renderCard();
-
-    await fireEvent.input(urlInput(), { target: { value: 'rtsp://other/stream' } });
+    const { onChange, update } = renderCard();
     await fireEvent.click(screen.getByTestId('channel-analyze'));
-    await fireEvent.input(urlInput(), { target: { value: 'rtsp://third/stream' } });
 
+    await update({ stream: { ...baseStream, url: 'rtsp://host/other' } });
     pending.resolve(LEFT_ANALYSIS);
     await pending.promise;
     await tick();
+
+    expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
   });
 
@@ -298,19 +431,7 @@ describe('StreamCard immediate save', () => {
     expect(screen.getByText('settings.audio.streams.batWarning')).toBeInTheDocument();
   });
 
-  it('commits a classifier switch at once with the complete list', async () => {
-    const { onCommit } = renderCard();
-
-    await fireEvent.click(screen.getByRole('switch', { name: 'Perch v2' }));
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith(
-      { ...baseStream, models: ['birdnet', 'perch_v2'] },
-      { field: `${FIELD_PREFIX}models` }
-    );
-  });
-
   it('previews a stream equalizer without a sampleRate, even after a test probed one', async () => {
-    stubElementAnimate();
-    onTestFinished(restoreElementAnimate);
     renderCard();
 
     await fireEvent.click(screen.getByTestId('stream-test-button'));
@@ -340,6 +461,14 @@ describe('StreamCard delete and groups', () => {
     expect(trigger).toHaveAccessibleDescription('common.loading');
   });
 
+  it('says why Delete is blocked while a save runs', () => {
+    renderCard({ expanded: false, disabled: true, disabledReason: 'settings.actions.saving' });
+
+    expect(screen.getByRole('button', { name: 'common.delete' })).toHaveAccessibleDescription(
+      'settings.actions.saving'
+    );
+  });
+
   it('shows body group titles as group labels and single-control titles as field labels', () => {
     renderCard();
 
@@ -364,9 +493,9 @@ describe('StreamCard delete and groups', () => {
     expect(
       screen.getByRole('heading', { level: 4, name: 'settings.audio.soundCards.levelTitle' })
     ).not.toHaveClass('uppercase');
-    expect(
-      screen.getByText('settings.audio.streams.nameLabel', { selector: 'label' })
-    ).not.toHaveClass('uppercase');
+    for (const label of ['settings.audio.streams.nameLabel', 'settings.audio.streams.urlLabel']) {
+      expect(screen.getByText(label, { selector: 'label' })).not.toHaveClass('uppercase');
+    }
   });
 
   it('names the audio filters region after its disclosure button', () => {

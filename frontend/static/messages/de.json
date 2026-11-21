@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Mindestens ein Modell muss ausgewählt sein"
         },
         "captureTitle": "Aufnahme",
-        "levelTitle": "Eingangspegel",
-        "applying": "Wird übernommen...",
-        "adding": "Wird hinzugefügt..."
+        "levelTitle": "Eingangspegel"
       },
       "audioCapture": {
         "title": "Audioaufnahme",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Audio-Stream-Konfiguration",
-        "noStreamsConfigured": "Keine Streams konfiguriert"
+        "noStreamsConfigured": "Keine Streams konfiguriert",
+        "description": "Netzwerk-Audio-Streams für Remote-Audioaufnahme konfigurieren. Unterstützt RTSP-, HTTP-, HLS-, RTMP- und UDP-Protokolle. Eine Änderung der Verbindung verbindet den Stream beim Speichern neu."
       },
       "streams": {
         "streamLabel": "Stream",
@@ -3904,12 +3903,7 @@
           "message": "Stereo-Stream erkannt. Das Abmischen mehrerer Kanäle kann die Erkennungsgenauigkeit aufgrund von Phasenunterschieden zwischen den Kanälen verringern. Wählen Sie einen bestimmten Kanal (links/rechts) oder verwenden Sie den Kanaldetektor für beste Ergebnisse.",
           "short": "Stereo-Downmix aktiv. Erkennungsgenauigkeit kann beeinträchtigt sein. Wählen Sie unter Verbindung einen bestimmten Kanal."
         },
-        "autoSaveHelp": "Änderungen werden sofort gespeichert. Änderungen an der Verbindung verbinden den Stream neu und warten daher, bis Sie auf Übernehmen klicken.",
         "connectionTitle": "Verbindung",
-        "connectionApplyHint": "Der Stream wird beim Übernehmen neu verbunden.",
-        "connectionApplyFailed": "Die Verbindung wurde nicht geändert. Erneut übernehmen oder abbrechen.",
-        "applyConnection": "Übernehmen und neu verbinden",
-        "testBeforeApply": "Testen Sie die neue URL, bevor Sie sie übernehmen.",
         "statsLine": "Gesamt: {total} · Rate: {rate} · Zuletzt: {last}",
         "ago": {
           "seconds": "vor {count} s",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Korrigieren Sie vor dem Speichern die Soundkarten im Tab {tab}: {names}",
         "unnamedSource": "Quelle {position} (ohne Namen)",
-        "needsAttention": "Erfordert Aufmerksamkeit"
+        "needsAttention": "Erfordert Aufmerksamkeit",
+        "streams": "Korrigieren Sie vor dem Speichern die Streams im Tab {tab}: {names}",
+        "streamsUntested": "Testen Sie vor dem Speichern die neue Stream-URL im Tab {tab}: {names}",
+        "unnamedStream": "Stream {position} (ohne Namen)"
       }
     },
     "security": {

@@ -6,8 +6,8 @@
   same `bind:value` contract (via $bindable) so a test can type into it with
   fireEvent.input and drive a parent's validation/enablement logic. The
   `data-testid` mirrors the passed `id` so the field can be addressed directly.
-  The `maxlength` prop is forwarded to the input, `oninput` receives the typed
-  value and `error` marks the input invalid and describes it; all other props are accepted and ignored.
+  The `maxlength` prop is forwarded to the input, `oninput` and `onblur` receive the
+  current value and `error` marks the input invalid and describes it; all other props are accepted and ignored.
 
   @component
 -->
@@ -17,11 +17,19 @@
     id?: string;
     maxlength?: number;
     oninput?: (_value: string) => void;
+    onblur?: (_value: string) => void;
     error?: string;
     [key: string]: unknown;
   }
 
-  let { value = $bindable(''), id, maxlength, oninput, error }: MockTextInputProps = $props();
+  let {
+    value = $bindable(''),
+    id,
+    maxlength,
+    oninput,
+    onblur,
+    error,
+  }: MockTextInputProps = $props();
 </script>
 
 <input
@@ -32,6 +40,7 @@
   aria-describedby={error ? `${id}-error` : undefined}
   bind:value
   oninput={event => oninput?.(event.currentTarget.value)}
+  onblur={event => onblur?.(event.currentTarget.value)}
 />
 {#if error}
   <p id="{id}-error" role="alert">{error}</p>

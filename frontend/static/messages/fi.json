@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Vähintään yksi malli on valittava"
         },
         "captureTitle": "Tallennus",
-        "levelTitle": "Tulotaso",
-        "applying": "Otetaan käyttöön...",
-        "adding": "Lisätään..."
+        "levelTitle": "Tulotaso"
       },
       "audioCapture": {
         "title": "Äänen tallennus",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Äänistriimien määritys",
-        "noStreamsConfigured": "Striimejä ei ole määritetty"
+        "noStreamsConfigured": "Striimejä ei ole määritetty",
+        "description": "Määritä verkkoäänistriimejä etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia. Yhteyden muutos yhdistää striimin uudelleen, kun tallennat."
       },
       "streams": {
         "streamLabel": "Lähetys",
@@ -3904,12 +3903,7 @@
           "message": "Stereovirta havaittu. Useiden kanavien sekoittaminen voi heikentää tunnistustarkkuutta kanavien välisten vaihe-erojen vuoksi. Valitse tietty kanava (vasen/oikea) tai käytä kanavatunnistinta parhaiden tulosten saavuttamiseksi.",
           "short": "Stereon downmix käytössä. Tunnistustarkkuus voi olla heikentynyt. Valitse tietty kanava Yhteys-kohdasta."
         },
-        "autoSaveHelp": "Muutokset tallennetaan heti. Yhteyden muutokset yhdistävät striimin uudelleen, joten ne odottavat, kunnes valitset Ota käyttöön.",
         "connectionTitle": "Yhteys",
-        "connectionApplyHint": "Striimi yhdistetään uudelleen, kun otat muutokset käyttöön.",
-        "connectionApplyFailed": "Yhteyttä ei muutettu. Ota käyttöön uudelleen tai peruuta.",
-        "applyConnection": "Ota käyttöön ja yhdistä uudelleen",
-        "testBeforeApply": "Testaa uusi URL ennen kuin otat sen käyttöön.",
         "statsLine": "Yhteensä: {total} · Nopeus: {rate} · Viimeksi: {last}",
         "ago": {
           "seconds": "{count} s sitten",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Korjaa välilehden {tab} äänikortit ennen tallennusta: {names}",
         "unnamedSource": "lähde {position} (ei nimeä)",
-        "needsAttention": "Vaatii huomiota"
+        "needsAttention": "Vaatii huomiota",
+        "streams": "Korjaa välilehden {tab} striimit ennen tallennusta: {names}",
+        "streamsUntested": "Testaa välilehden {tab} uusi striimin URL-osoite ennen tallennusta: {names}",
+        "unnamedStream": "striimi {position} (ei nimeä)"
       }
     },
     "security": {

@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "È necessario selezionare almeno un modello"
         },
         "captureTitle": "Acquisizione",
-        "levelTitle": "Livello di ingresso",
-        "applying": "Applicazione...",
-        "adding": "Aggiunta..."
+        "levelTitle": "Livello di ingresso"
       },
       "audioCapture": {
         "title": "Configurazione Scheda Audio",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Configurazione Flusso Audio",
-        "noStreamsConfigured": "Nessun flusso configurato"
+        "noStreamsConfigured": "Nessun flusso configurato",
+        "description": "Configura flussi audio di rete per cattura audio remota. Supporta protocolli RTSP, HTTP, HLS, RTMP e UDP. Una modifica della connessione riconnette il flusso al salvataggio."
       },
       "streams": {
         "streamLabel": "Flusso",
@@ -3904,12 +3903,7 @@
           "message": "Stream stereo rilevato. Il downmix di più canali può ridurre la precisione del rilevamento a causa delle differenze di fase tra i canali. Seleziona un canale specifico (sinistro/destro) o usa il rilevatore di canali per i migliori risultati.",
           "short": "Downmix stereo attivo. La precisione del rilevamento potrebbe essere ridotta. Seleziona un canale specifico in Connessione."
         },
-        "autoSaveHelp": "Le modifiche vengono salvate subito. Le modifiche alla connessione riconnettono lo stream, quindi attendono che si faccia clic su Applica.",
         "connectionTitle": "Connessione",
-        "connectionApplyHint": "Lo stream si riconnette quando applichi.",
-        "connectionApplyFailed": "La connessione non è stata modificata. Applica di nuovo o annulla.",
-        "applyConnection": "Applica e riconnetti",
-        "testBeforeApply": "Testa il nuovo URL prima di applicarlo.",
         "statsLine": "Totale: {total} · Velocità: {rate} · Ultimo: {last}",
         "ago": {
           "seconds": "{count} s fa",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Correggi le schede audio nella scheda {tab} prima di salvare: {names}",
         "unnamedSource": "sorgente {position} (senza nome)",
-        "needsAttention": "Richiede attenzione"
+        "needsAttention": "Richiede attenzione",
+        "streams": "Correggi i flussi nella scheda {tab} prima di salvare: {names}",
+        "streamsUntested": "Testa il nuovo URL del flusso nella scheda {tab} prima di salvare: {names}",
+        "unnamedStream": "flusso {position} (senza nome)"
       }
     },
     "security": {

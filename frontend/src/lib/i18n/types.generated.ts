@@ -2729,8 +2729,6 @@ export type TranslationKey =
   | 'settings.audio.soundCards.compatibility.atLeastOneModel'
   | 'settings.audio.soundCards.captureTitle'
   | 'settings.audio.soundCards.levelTitle'
-  | 'settings.audio.soundCards.applying'
-  | 'settings.audio.soundCards.adding'
   | 'settings.audio.audioCapture.title'
   | 'settings.audio.audioCapture.soundCardSource'
   | 'settings.audio.audioCapture.audioSourceLabel'
@@ -2768,6 +2766,7 @@ export type TranslationKey =
   | 'settings.audio.quietHours.enableLabel'
   | 'settings.audio.rtspStreams.title'
   | 'settings.audio.rtspStreams.noStreamsConfigured'
+  | 'settings.audio.rtspStreams.description'
   | 'settings.audio.streams.streamLabel'
   | 'settings.audio.streams.nameLabel'
   | 'settings.audio.streams.enabled'
@@ -2862,12 +2861,7 @@ export type TranslationKey =
   | 'settings.audio.streams.format.withSampleRate' // params: rate, channels
   | 'settings.audio.streams.stereoWarning.message'
   | 'settings.audio.streams.stereoWarning.short'
-  | 'settings.audio.streams.autoSaveHelp'
   | 'settings.audio.streams.connectionTitle'
-  | 'settings.audio.streams.connectionApplyHint'
-  | 'settings.audio.streams.connectionApplyFailed'
-  | 'settings.audio.streams.applyConnection'
-  | 'settings.audio.streams.testBeforeApply'
   | 'settings.audio.streams.statsLine' // params: total, rate, last
   | 'settings.audio.streams.ago.seconds' // params: count
   | 'settings.audio.streams.ago.minutes' // params: count
@@ -3070,6 +3064,9 @@ export type TranslationKey =
   | 'settings.audio.validation.soundCards' // params: tab, names
   | 'settings.audio.validation.unnamedSource' // params: position
   | 'settings.audio.validation.needsAttention'
+  | 'settings.audio.validation.streams' // params: tab, names
+  | 'settings.audio.validation.streamsUntested' // params: tab, names
+  | 'settings.audio.validation.unnamedStream' // params: position
   | 'settings.security.pageLabel'
   | 'settings.security.baseUrlLabel'
   | 'settings.security.baseUrlHelp'
@@ -5215,6 +5212,9 @@ export type TranslationParams = {
   'settings.audio.models.removeMissingAria': { model: string | number; source: string | number };
   'settings.audio.validation.soundCards': { tab: string | number; names: string | number };
   'settings.audio.validation.unnamedSource': { position: string | number };
+  'settings.audio.validation.streams': { tab: string | number; names: string | number };
+  'settings.audio.validation.streamsUntested': { tab: string | number; names: string | number };
+  'settings.audio.validation.unnamedStream': { position: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
   'settings.security.oauth.oidc.postLogoutRedirectHelpText': { url: string | number };

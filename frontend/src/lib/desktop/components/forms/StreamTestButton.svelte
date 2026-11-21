@@ -35,7 +35,8 @@
     models: ModelOption[];
     selectedModels: string[];
     disabled?: boolean;
-    onResult?: (_result: ProbeResult | null) => void;
+    /** Receives the result and the trimmed URL that was tested (or changed away from). */
+    onResult?: (_result: ProbeResult | null, _url: string) => void;
   }
 
   let { url, models, selectedModels, disabled = false, onResult }: Props = $props();
@@ -71,19 +72,20 @@
     isTesting = true;
     testResult = null;
     testError = null;
-    onResult?.(null);
+    onResult?.(null, url.trim());
+    const testedUrl = url.trim();
     try {
       const result = await api.post<ProbeResult>(
         '/api/v2/streams/test',
-        { url: url.trim() },
+        { url: testedUrl },
         { signal: testController.signal }
       );
       testResult = result;
-      onResult?.(result);
+      onResult?.(result, testedUrl);
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
       testError = err instanceof Error ? err.message : '';
-      onResult?.(null);
+      onResult?.(null, testedUrl);
     } finally {
       isTesting = false;
     }
@@ -95,7 +97,7 @@
       if (prevUrl !== '') {
         testResult = null;
         testError = null;
-        onResult?.(null);
+        onResult?.(null, url.trim());
       }
       prevUrl = url;
     }

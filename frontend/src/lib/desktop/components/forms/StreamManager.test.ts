@@ -1,11 +1,13 @@
 /**
- * StreamManager on the immediately saved streams tab: UI-only row ids key the
- * cards and their open state, add and delete save the whole array at once, and
- * the model list stays live while mounted.
+ * StreamManager on the streams tab that saves with the page: UI-only row ids key
+ * the cards and their open state, every change goes out as the whole array for
+ * the form, health follows the saved streams, and the model list stays live while
+ * mounted. The row id rules (which list keeps its cards and which gets fresh ones)
+ * are pinned in full below.
  */
 import { tick } from 'svelte';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { deferred } from '../../../../test/async-helpers';
 import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
 import {
@@ -13,13 +15,6 @@ import {
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
 import type { ChannelAnalysis, StreamConfig } from '$lib/stores/settings';
-import { STREAMS_LIST_FIELD } from './sourceFields';
-import {
-  autoSaveStatus,
-  commitSetting,
-  resetAutoSaveForTest,
-  type CommitOptions,
-} from '$lib/stores/settingsAutoSave.svelte';
 
 vi.mock('./SelectDropdown.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockSelectDropdown.svelte')).default,
@@ -70,30 +65,28 @@ vi.mock('$lib/utils/api', async importOriginal => ({
   api: { get: vi.fn(() => Promise.resolve([])) },
 }));
 
-const store = vi.hoisted(() => ({
-  stageSectionEdit: vi.fn(),
-  saveStagedSection: vi.fn(),
-  onStagedEditsDropped: vi.fn(() => () => undefined),
-}));
-
-// The add outcome tests run the real auto-save engine over a mocked store.
-vi.mock('$lib/stores/settings', async importOriginal => {
-  const actual = await importOriginal<typeof import('$lib/stores/settings')>();
-  return { ...actual, settingsActions: { ...actual.settingsActions, ...store } };
-});
-
+const sse = vi.hoisted(() => ({ opened: 0, closed: 0 }));
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class ReconnectingEventSource {
+    constructor() {
+      sse.opened++;
+    }
     addEventListener(): void {}
-    close(): void {}
+    close(): void {
+      sse.closed++;
+    }
   },
 }));
 
 import { watchModels } from '$lib/stores/models.svelte';
+import { api } from '$lib/utils/api';
 import StreamManager from './StreamManager.svelte';
 import { analyzeStreamChannels } from './streamOptions';
 
 const ADD_KEY = 'settings.audio.streams.addStream';
+const TEST_REQUIRED_KEY = 'settings.audio.streams.testRequired';
+const NAME_TESTID = 'new-stream-name';
+const URL_TESTID = 'new-stream-url';
 const LEFT_ANALYSIS: ChannelAnalysis = { channels: 2, energy: [], recommended: 'left' };
 
 const streamA: StreamConfig = {
@@ -105,20 +98,60 @@ const streamA: StreamConfig = {
 };
 const streamB: StreamConfig = { ...streamA, name: 'B', url: 'rtsp://b/stream' };
 const streamC: StreamConfig = { ...streamA, name: 'C', url: 'rtsp://c/stream' };
+const streamP: StreamConfig = { ...streamA, name: 'P', url: 'rtsp://p/live' };
+const streamQ: StreamConfig = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
 
-function renderRows(streams: StreamConfig[]) {
+function renderRows(streams: StreamConfig[], extra: Record<string, unknown> = {}) {
   const onUpdateStreams = vi.fn();
+  const onUrlTested = vi.fn();
   const view = createComponentTestFactory(StreamManager, {
     streams,
     disabled: false,
     onUpdateStreams,
+    onUrlTested,
+    ...extra,
   }).render();
-  return { ...view, onUpdateStreams };
+  return { ...view, onUpdateStreams, onUrlTested };
 }
 
 function header(name: string): HTMLElement {
   // The header button is named by the stream name, its status and its URL.
   return screen.getByRole('button', { name: accessible => accessible.startsWith(`${name} `) });
+}
+
+/** Sends the list the manager sent last back as the new streams, as the page does. */
+async function echoLast(
+  view: { rerender: (_props: { streams: StreamConfig[] }) => Promise<void> },
+  onUpdateStreams: ReturnType<typeof vi.fn>
+): Promise<StreamConfig[]> {
+  const sent = onUpdateStreams.mock.calls.at(-1)?.[0] as StreamConfig[];
+  await view.rerender({ streams: sent });
+  return sent;
+}
+
+async function confirmDelete(cardIndex: number) {
+  const trigger = screen.getAllByRole('button', { name: 'common.delete' }).at(cardIndex);
+  expect(trigger).toBeDefined();
+  if (trigger) await fireEvent.click(trigger);
+  const dialog = screen.getByRole('alertdialog');
+  const confirm = Array.from(dialog.querySelectorAll('button')).find(
+    button => button.textContent.trim() === 'common.delete'
+  );
+  expect(confirm).toBeDefined();
+  if (confirm) await fireEvent.click(confirm);
+}
+
+async function fillAddForm(name: string, url: string) {
+  await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+  await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: name } });
+  await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: url } });
+}
+
+/** The test button of the add form: the open card has one of its own, the form's comes last. */
+function addFormTestButton(): HTMLElement {
+  const button = screen.getAllByTestId('stream-test-button').at(-1);
+  if (!button) throw new Error('no test button');
+  return button;
 }
 
 describe('StreamManager', () => {
@@ -150,145 +183,236 @@ describe('StreamManager', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('keeps a card open when its own rename or URL apply comes back as the list', async () => {
-    const { rerender, onUpdateStreams } = renderRows([streamA, streamB]);
-    await fireEvent.click(header('B'));
-
-    const name = screen.getByLabelText<HTMLInputElement>(/settings\.audio\.streams\.nameLabel/);
-    await fireEvent.input(name, { target: { value: 'B2' } });
-    await fireEvent.blur(name);
-    const renamed = onUpdateStreams.mock.calls[0][0];
-    expect(renamed.map((s: StreamConfig) => s.name)).toEqual(['A', 'B2']);
-    await rerender({ streams: renamed });
-    expect(header('B2')).toHaveAttribute('aria-expanded', 'true');
-
-    // A refused rename takes the list back to the old name; the card stays too.
-    await rerender({ streams: [streamA, streamB] });
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-
-    await fireEvent.input(screen.getByTestId(/-url$/), {
-      target: { value: 'rtsp://b/other' },
-    });
-    await fireEvent.click(screen.getAllByTestId('stream-test-button')[0]);
-    await fireEvent.click(
-      screen.getByRole('button', { name: 'settings.audio.streams.applyConnection' })
-    );
-    const reconnected = onUpdateStreams.mock.calls.at(-1)?.[0];
-    expect(reconnected?.[1].url).toBe('rtsp://b/other');
-    await rerender({ streams: reconnected });
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('gives every row a fresh id when other streams replace the list at the same length', async () => {
-    const { rerender } = renderRows([streamA, streamB]);
-    await fireEvent.click(header('B'));
-    await fireEvent.input(screen.getByTestId(/-url$/), {
-      target: { value: 'rtsp://b/draft' },
-    });
-    expect(
-      screen.getByRole('button', { name: 'settings.audio.streams.applyConnection' })
-    ).toBeInTheDocument();
-
-    await rerender({ streams: [streamA, streamC] });
-
-    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
-    expect(
-      screen.queryByRole('button', { name: 'settings.audio.streams.applyConnection' })
-    ).toBeNull();
-  });
-
-  it('gives every row a fresh id when the list length changes from outside', async () => {
-    const { rerender } = renderRows([streamA, streamB]);
-    await fireEvent.click(header('B'));
-
-    await rerender({ streams: [streamA, streamB, streamC] });
-    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('gives fresh ids again when an outside list swaps the streams and swaps them back', async () => {
-    const { rerender } = renderRows([streamA, streamB]);
-
-    await rerender({ streams: [streamB, streamA] });
-    await fireEvent.click(header('B'));
-    await fireEvent.input(screen.getByTestId(/-url$/), { target: { value: 'rtsp://b/draft' } });
-    expect(
-      screen.getByRole('button', { name: 'settings.audio.streams.applyConnection' })
-    ).toBeInTheDocument();
-
-    await rerender({ streams: [streamA, streamB] });
-
-    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
-    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
-    expect(
-      screen.queryByRole('button', { name: 'settings.audio.streams.applyConnection' })
-    ).toBeNull();
-  });
-
-  it('keeps the rows when the same outside list arrives again', async () => {
-    const streamP = { ...streamA, name: 'P', url: 'rtsp://p/live' };
-    const streamQ = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
-    const { rerender } = renderRows([streamA, streamB]);
-
-    await rerender({ streams: [streamP, streamQ] });
-    await fireEvent.click(header('Q'));
-    await rerender({ streams: [{ ...streamP }, { ...streamQ }] });
-
-    expect(header('Q')).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('keeps the rows when an identical echo follows the first load replacing the initial list', async () => {
-    const { rerender } = renderRows([]);
-
-    await rerender({ streams: [streamA, streamB] });
-    await fireEvent.click(header('B'));
-    await rerender({ streams: [{ ...streamA }, { ...streamB }] });
-
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('gives fresh ids to an outside list at the length of a pending add baseline', async () => {
-    const streamP = { ...streamA, name: 'P', url: 'rtsp://p/live' };
-    const streamQ = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
-    const { rerender } = renderRows([streamA, streamB]);
-    await fireEvent.click(header('B'));
-
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    await fireEvent.input(screen.getByTestId('new-stream-name'), { target: { value: 'C' } });
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
-      target: { value: 'rtsp://c/stream' },
-    });
-    const testButton = screen.getAllByTestId('stream-test-button').at(-1);
-    if (testButton) await fireEvent.click(testButton);
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    await rerender({ streams: [streamA, streamB, streamC] });
-
-    // Not the list before the add: another window replaced it. The add's
-    // baseline must not give its open card to the second stream.
-    await rerender({ streams: [streamP, streamQ] });
-
-    expect(header('Q')).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('saves a change of one stream as the whole array under that row field', async () => {
+  it('writes a change of one stream as the whole array, without touching the others', async () => {
     const { onUpdateStreams } = renderRows([streamA, streamB]);
 
     const switches = screen.getAllByRole('switch', { name: 'settings.audio.streams.enabled' });
     await fireEvent.click(switches[1]);
 
-    expect(onUpdateStreams).toHaveBeenCalledOnce();
-    const [saved, options] = onUpdateStreams.mock.calls[0];
-    expect(saved).toEqual([streamA, { ...streamB, enabled: false }]);
-    expect(options.field).toMatch(/^rtsp:streams:.+:enabled$/);
+    expect(onUpdateStreams).toHaveBeenCalledExactlyOnceWith([
+      streamA,
+      { ...streamB, enabled: false },
+    ]);
   });
 
-  it('adds a tested stream with one list save, and blocks Add until the URL is tested', async () => {
-    const { onUpdateStreams } = renderRows([]);
+  it('deletes a stream after confirmation with one write of the remaining list', async () => {
+    const { onUpdateStreams } = renderRows([streamA, streamB]);
 
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    await fireEvent.input(screen.getByTestId('new-stream-name'), { target: { value: 'Gate' } });
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
-      target: { value: 'rtsp://gate/live' },
+    await confirmDelete(0);
+
+    expect(onUpdateStreams).toHaveBeenCalledExactlyOnceWith([streamB]);
+  });
+});
+
+describe('StreamManager row ids', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  // A list the manager sent itself and got back keeps every card and its open
+  // state; any other list is foreign, and every row gets a fresh id.
+
+  it('keeps a card open while its own name and URL edits come back as the list', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+
+    const name = screen.getByLabelText<HTMLInputElement>(/settings\.audio\.streams\.nameLabel/);
+    await fireEvent.input(name, { target: { value: 'B2' } });
+    const renamed = await echoLast(view, view.onUpdateStreams);
+    expect(renamed.map(s => s.name)).toEqual(['A', 'B2']);
+    expect(header('B2')).toHaveAttribute('aria-expanded', 'true');
+
+    await fireEvent.input(screen.getByTestId(/-url$/), { target: { value: 'rtsp://b/other' } });
+    const retargeted = await echoLast(view, view.onUpdateStreams);
+    expect(retargeted[1].url).toBe('rtsp://b/other');
+    expect(header('B2')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the cards when a save returns the sent list with other keys filled in', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+    await fireEvent.click(
+      screen.getAllByRole('switch', { name: 'settings.audio.streams.enabled' })[0]
+    );
+    const sent = view.onUpdateStreams.mock.calls.at(-1)?.[0] as StreamConfig[];
+
+    // Same names and URLs; the server added defaults to the rows.
+    await view.rerender({
+      streams: sent.map((s): StreamConfig => ({ ...s, gain: 0, transport: 'tcp' })),
     });
+
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('gives every row a fresh id when a save returns a list with the name or URL trimmed', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+    const name = screen.getByLabelText<HTMLInputElement>(/settings\.audio\.streams\.nameLabel/);
+    await fireEvent.input(name, { target: { value: ' B2 ' } });
+    await echoLast(view, view.onUpdateStreams);
+    expect(header('B2')).toHaveAttribute('aria-expanded', 'true');
+
+    // The backend trims the name and the URL before it stores them.
+    await view.rerender({ streams: [streamA, { ...streamB, name: 'B2' }] });
+
+    expect(header('B2')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('gives every row a fresh id on Reset, and closes the cards of the restored list', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+    const name = screen.getByLabelText<HTMLInputElement>(/settings\.audio\.streams\.nameLabel/);
+    await fireEvent.input(name, { target: { value: 'B2' } });
+    await echoLast(view, view.onUpdateStreams);
+
+    await view.rerender({ streams: [streamA, streamB] });
+
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('opens the only card of a list that arrives from outside', async () => {
+    const view = renderRows([streamA, streamB]);
+
+    await view.rerender({ streams: [streamP] });
+
+    expect(header('P')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('gives every row a fresh id when other streams replace the list at the same length', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+    await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[1]);
+    expect(screen.getByRole('alertdialog')).toHaveAccessibleDescription('Remove stream "B"?');
+
+    await view.rerender({ streams: [streamA, streamC] });
+
+    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('gives every row a fresh id when the list length changes from outside', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+
+    await view.rerender({ streams: [streamA, streamB, streamC] });
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('gives fresh ids again when an outside list swaps the streams and swaps them back', async () => {
+    const view = renderRows([streamA, streamB]);
+
+    await view.rerender({ streams: [streamB, streamA] });
+    await fireEvent.click(header('B'));
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+
+    await view.rerender({ streams: [streamA, streamB] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the rows when the same outside list arrives again', async () => {
+    const view = renderRows([streamA, streamB]);
+
+    await view.rerender({ streams: [streamP, streamQ] });
+    await fireEvent.click(header('Q'));
+    await view.rerender({ streams: [{ ...streamP }, { ...streamQ }] });
+
+    expect(header('Q')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the rows when an identical echo follows the first load replacing the initial list', async () => {
+    const view = renderRows([]);
+
+    await view.rerender({ streams: [streamA, streamB] });
+    await fireEvent.click(header('B'));
+    await view.rerender({ streams: [{ ...streamA }, { ...streamB }] });
+
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the open cards through an add, and then through a delete above them', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('B'));
+
+    await fillAddForm('C', 'rtsp://c/stream');
+    await fireEvent.click(addFormTestButton());
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await echoLast(view, view.onUpdateStreams);
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
+
+    await confirmDelete(0);
+    await echoLast(view, view.onUpdateStreams);
+
+    expect(screen.queryByRole('button', { name: n => n.startsWith('A ') })).toBeNull();
+    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('opens the card of the first stream added to an empty list', async () => {
+    const view = renderRows([]);
+
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(addFormTestButton());
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await echoLast(view, view.onUpdateStreams);
+
+    expect(header('Gate')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('brings a deleted stream back closed when Reset restores the list', async () => {
+    const view = renderRows([streamA, streamB]);
+    await fireEvent.click(header('A'));
+    await fireEvent.click(header('B'));
+
+    await confirmDelete(0);
+    await echoLast(view, view.onUpdateStreams);
+    await view.rerender({ streams: [streamA, streamB] });
+
+    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('does not move an open delete confirmation to another stream when Reset restores the list', async () => {
+    const view = renderRows([streamA, streamB]);
+
+    // Delete A, add C: the list is [B, C], as long as the saved [A, B].
+    await confirmDelete(0);
+    await echoLast(view, view.onUpdateStreams);
+    await fillAddForm('C', 'rtsp://c/stream');
+    await fireEvent.click(addFormTestButton());
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await echoLast(view, view.onUpdateStreams);
+    await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[1]);
+    expect(screen.getByRole('alertdialog')).toHaveAccessibleDescription('Remove stream "C"?');
+
+    await view.rerender({ streams: [streamA, streamB] });
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+});
+
+describe('StreamManager add form', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubElementAnimate();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it('adds a tested stream with one write, reports its URL as tested and closes the form', async () => {
+    const { onUpdateStreams, onUrlTested } = renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
 
     const add = screen.getByRole('button', { name: ADD_KEY });
     expect(add).toHaveAttribute('aria-disabled', 'true');
@@ -300,165 +424,105 @@ describe('StreamManager', () => {
     await fireEvent.click(add);
 
     expect(onUpdateStreams).toHaveBeenCalledOnce();
-    const [saved, options] = onUpdateStreams.mock.calls[0];
-    expect(options).toEqual({ field: STREAMS_LIST_FIELD });
-    expect(saved).toHaveLength(1);
-    expect(saved[0]).toMatchObject({ name: 'Gate', url: 'rtsp://gate/live', enabled: true });
+    const [list] = onUpdateStreams.mock.calls[0];
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ name: 'Gate', url: 'rtsp://gate/live', enabled: true });
+    expect(onUrlTested).toHaveBeenCalledExactlyOnceWith('rtsp://gate/live');
+    expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
   });
 
-  it('keeps the open state of every card when a refused add takes the list back', async () => {
-    const { rerender } = renderRows([streamA, streamB]);
-    await fireEvent.click(header('B'));
+  it('explains a blocked Add by the missing test and links the reason', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
 
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    await fireEvent.input(screen.getByTestId('new-stream-name'), { target: { value: 'C' } });
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
-      target: { value: 'rtsp://c/stream' },
+    const add = screen.getByRole('button', { name: ADD_KEY });
+    expect(add).toHaveAccessibleDescription(TEST_REQUIRED_KEY);
+
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    expect(add).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('explains a blocked Add while the form is disabled and links the reason', async () => {
+    const view = renderRows([], { disabledReason: 'settings.actions.saving' });
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    await view.rerender({ streams: [], disabled: true, disabledReason: 'settings.actions.saving' });
+
+    const add = screen.getByRole('button', { name: ADD_KEY });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add).toHaveAccessibleDescription('settings.actions.saving');
+  });
+
+  it('counts a test for the URL that was sent, also when the field changed before the result arrived', async () => {
+    const { onUpdateStreams } = renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+
+    await fireEvent.click(screen.getByTestId('stream-test-start'));
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
+      target: { value: 'rtsp://gate/other' },
     });
-    // The open card has a test button of its own; the add form comes last.
-    const testButton = screen.getAllByTestId('stream-test-button').at(-1);
-    if (testButton) await fireEvent.click(testButton);
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    await fireEvent.click(screen.getByTestId('stream-test-finish'));
 
-    // The list grows at once, then the refusal takes it back.
-    await rerender({ streams: [streamA, streamB, streamC] });
-    await rerender({ streams: [streamA, streamB] });
+    // The result belongs to the first URL, so the second still needs a test.
+    const add = screen.getByRole('button', { name: ADD_KEY });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.click(add);
+    expect(onUpdateStreams).not.toHaveBeenCalled();
 
-    expect(header('A')).toHaveAttribute('aria-expanded', 'false');
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('brings a refused delete back with its open state', async () => {
-    const { rerender } = renderRows([streamA, streamB]);
-    await fireEvent.click(header('A'));
-    await fireEvent.click(header('B'));
-
-    await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
-    const dialog = screen.getByRole('alertdialog');
-    const confirm = Array.from(dialog.querySelectorAll('button')).find(
-      button => button.textContent.trim() === 'common.delete'
-    );
-    if (confirm) await fireEvent.click(confirm);
-
-    await rerender({ streams: [streamB] });
-    await rerender({ streams: [streamA, streamB] });
-
-    expect(header('A')).toHaveAttribute('aria-expanded', 'true');
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('restores the rows from before a refused delete that follows an outside length change', async () => {
-    const streamP = { ...streamA, name: 'P', url: 'rtsp://p/live' };
-    const streamQ = { ...streamA, name: 'Q', url: 'rtsp://q/live' };
-    const streamR = { ...streamA, name: 'R', url: 'rtsp://r/live' };
-    async function deleteFirstCard() {
-      await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
-      const confirm = Array.from(screen.getByRole('alertdialog').querySelectorAll('button')).find(
-        button => button.textContent.trim() === 'common.delete'
-      );
-      expect(confirm).toBeDefined();
-      if (confirm) await fireEvent.click(confirm);
-    }
-    const { rerender } = renderRows([streamA, streamB]);
-
-    // A delete that is never answered leaves its baseline behind.
-    await deleteFirstCard();
-    await rerender({ streams: [streamB] });
-
-    // Another window replaces the list: every row gets a fresh id and the old
-    // baseline must not survive to be restored onto these streams.
-    await rerender({ streams: [streamP, streamQ, streamR] });
-    await fireEvent.click(header('Q'));
-
-    await deleteFirstCard();
-    await rerender({ streams: [streamQ, streamR] });
-    await rerender({ streams: [streamP, streamQ, streamR] });
-
-    expect(header('Q')).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('deletes a stream after confirmation with one list save', async () => {
-    const { onUpdateStreams } = renderRows([streamA, streamB]);
-
-    await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
-    const dialog = screen.getByRole('alertdialog');
-    const confirm = Array.from(dialog.querySelectorAll('button')).find(
-      button => button.textContent.trim() === 'common.delete'
-    );
-    if (confirm) await fireEvent.click(confirm);
-
-    expect(onUpdateStreams).toHaveBeenCalledExactlyOnceWith([streamB], {
-      field: STREAMS_LIST_FIELD,
-    });
-  });
-});
-
-describe('StreamManager add outcome', () => {
-  const NAME_TESTID = 'new-stream-name';
-  const SAVED = { saved: [['streams']], dropped: [], failed: [], remaining: false };
-  const REFUSED = {
-    saved: [],
-    dropped: [],
-    failed: [['streams']],
-    remaining: false,
-    error: new Error('no'),
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetAutoSaveForTest();
-    store.stageSectionEdit.mockReset();
-    store.saveStagedSection.mockReset();
-    stubElementAnimate();
-  });
-
-  afterEach(() => {
-    cleanup();
-    resetAutoSaveForTest();
-    restoreElementAnimate();
-  });
-
-  async function addGate() {
-    renderTyped(StreamManager, {
-      props: {
-        streams: [],
-        disabled: false,
-        onUpdateStreams: (streams: StreamConfig[], options: CommitOptions) =>
-          commitSetting('rtsp', { streams }, options),
-      },
-    });
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Gate' } });
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://gate/live' },
     });
-    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    expect(add).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('refuses a name another stream has, describes the input with why, and clears it when the field is edited', async () => {
+    const { onUpdateStreams } = renderRows([streamA]);
+    await fillAddForm('a', 'rtsp://gate/live');
+    await fireEvent.click(addFormTestButton());
+
     await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-  }
+
+    expect(onUpdateStreams).not.toHaveBeenCalled();
+    const name = screen.getByTestId(NAME_TESTID);
+    expect(name).toHaveAttribute('aria-invalid', 'true');
+    expect(name).toHaveAccessibleDescription('settings.audio.streams.errors.duplicateName');
+
+    await fireEvent.input(name, { target: { value: 'Gate' } });
+    expect(name).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('refuses a URL another stream has, describes the input with why, and clears it when the field is edited', async () => {
+    const { onUpdateStreams } = renderRows([streamA]);
+    await fillAddForm('Gate', 'rtsp://a/stream');
+    await fireEvent.click(addFormTestButton());
+
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    expect(onUpdateStreams).not.toHaveBeenCalled();
+    const url = screen.getByTestId(URL_TESTID);
+    expect(url).toHaveAttribute('aria-invalid', 'true');
+    expect(url).toHaveAccessibleDescription('settings.audio.streams.errors.duplicate');
+
+    await fireEvent.input(url, { target: { value: 'rtsp://gate/live' } });
+    expect(url).not.toHaveAttribute('aria-invalid');
+  });
 
   it('limits the name of a new stream to what the server accepts', async () => {
-    renderTyped(StreamManager, {
-      props: { streams: [], disabled: false, onUpdateStreams: vi.fn() },
-    });
+    renderRows([]);
     await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
 
     expect(screen.getByTestId(NAME_TESTID)).toHaveAttribute('maxlength', '64');
   });
 
   it('refuses a new name longer than the server limit in bytes and describes the input with why', async () => {
-    const onUpdateStreams = vi.fn();
-    renderTyped(StreamManager, { props: { streams: [], disabled: false, onUpdateStreams } });
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    const { onUpdateStreams } = renderRows([]);
     // 22 euro signs are 22 characters, within maxlength, but 66 bytes.
-    const name = screen.getByTestId(NAME_TESTID);
-    await fireEvent.input(name, { target: { value: '\u20ac'.repeat(22) } });
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
-      target: { value: 'rtsp://gate/live' },
-    });
+    await fillAddForm('€'.repeat(22), 'rtsp://gate/live');
     await fireEvent.click(screen.getByTestId('stream-test-button'));
     await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
 
     expect(onUpdateStreams).not.toHaveBeenCalled();
+    const name = screen.getByTestId(NAME_TESTID);
     expect(name).toHaveAttribute('aria-invalid', 'true');
     expect(name).toHaveAccessibleDescription('settings.audio.streams.errors.nameTooLong');
     // The reason is shown once, by the input itself, not by a separate alert.
@@ -471,46 +535,12 @@ describe('StreamManager add outcome', () => {
     expect(name).not.toHaveAttribute('aria-invalid');
   });
 
-  it('closes the add form once the new stream is saved', async () => {
-    store.saveStagedSection.mockResolvedValue(SAVED);
-
-    await addGate();
-
-    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
-  });
-
-  it('keeps the add form open with what was typed when the save is refused', async () => {
-    store.saveStagedSection.mockResolvedValue(REFUSED);
-
-    await addGate();
-
-    await waitFor(() => expect(autoSaveStatus(STREAMS_LIST_FIELD).state).toBe('error'));
-    expect(screen.getByTestId(NAME_TESTID)).toHaveValue('Gate');
-  });
-
-  it('shows the busy label and blocks a second add while the new stream is saved', async () => {
-    const pending = deferred<typeof SAVED>();
-    store.saveStagedSection.mockReturnValueOnce(pending.promise);
-
-    await addGate();
-
-    const busy = await screen.findByRole('button', { name: 'settings.audio.soundCards.adding' });
-    expect(busy).toHaveAttribute('aria-disabled', 'true');
-    await fireEvent.click(busy);
-    expect(store.stageSectionEdit).toHaveBeenCalledOnce();
-
-    pending.resolve(SAVED);
-    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
-  });
-
   it('applies a channel analysis of the current URL when Test is clicked again meanwhile', async () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
-    renderTyped(StreamManager, {
-      props: { streams: [], disabled: false, onUpdateStreams: vi.fn() },
-    });
+    renderRows([]);
     await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://gate/live' },
     });
 
@@ -528,15 +558,13 @@ describe('StreamManager add outcome', () => {
   it('ignores a channel analysis of a URL the add form no longer holds', async () => {
     const pending = deferred<ChannelAnalysis>();
     vi.mocked(analyzeStreamChannels).mockReturnValue(pending.promise);
-    renderTyped(StreamManager, {
-      props: { streams: [], disabled: false, onUpdateStreams: vi.fn() },
-    });
+    renderRows([]);
     await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://gate/live' },
     });
     await fireEvent.click(screen.getByTestId('channel-analyze'));
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
       target: { value: 'rtsp://other/live' },
     });
 
@@ -545,36 +573,84 @@ describe('StreamManager add outcome', () => {
     await tick();
     expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-mode', 'downmix');
   });
+});
 
-  it('points the blocked Cancel at the saving explanation, and only while it is blocked', async () => {
-    const pending = deferred<typeof SAVED>();
-    store.saveStagedSection.mockReturnValueOnce(pending.promise);
-    renderTyped(StreamManager, {
-      props: {
-        streams: [],
-        disabled: false,
-        onUpdateStreams: (streams: StreamConfig[], options: CommitOptions) =>
-          commitSetting('rtsp', { streams }, options),
-      },
-    });
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
-    expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveAttribute('aria-describedby');
-    await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Gate' } });
-    await fireEvent.input(screen.getByTestId('new-stream-url'), {
-      target: { value: 'rtsp://gate/live' },
-    });
-    await fireEvent.click(screen.getByTestId('stream-test-button'));
-    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+describe('StreamManager health follows the saved streams', () => {
+  const healthOf = (stream: StreamConfig) => ({
+    name: stream.name,
+    type: stream.type,
+    url: stream.url,
+    is_healthy: true,
+    process_state: 'running',
+    last_data_received: null,
+    restart_count: 0,
+    total_bytes_received: 0,
+    bytes_per_second: 0,
+    is_receiving_data: true,
+  });
+  const CONNECTED_KEY = 'settings.audio.streams.status.connected';
+  const UNKNOWN_KEY = 'settings.audio.streams.status.unknown';
 
-    const cancel = await screen.findByRole('button', { name: 'Cancel' });
-    expect(cancel).toHaveAttribute('aria-disabled', 'true');
-    const explanationId = cancel.getAttribute('aria-describedby');
-    expect(explanationId).toBeTruthy();
-    expect(document.getElementById(explanationId ?? '')).toHaveTextContent(
-      'settings.actions.saving'
-    );
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sse.opened = 0;
+    sse.closed = 0;
+    vi.mocked(api.get).mockResolvedValue([healthOf(streamA), healthOf(streamB)]);
+    stubElementAnimate();
+  });
 
-    pending.resolve(SAVED);
-    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
+  afterEach(() => {
+    cleanup();
+    restoreElementAnimate();
+  });
+
+  it('shows the health of a saved stream, and none for a URL the form changed', async () => {
+    const edited = { ...streamA, url: 'rtsp://a/new' };
+    renderRows([edited, streamB], { savedStreams: [streamA, streamB] });
+
+    await waitFor(() => expect(within(header('B')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['named', (stream: StreamConfig) => healthOf(stream)],
+    // Older responses carry no name and are matched by URL.
+    ['unnamed', (stream: StreamConfig) => ({ ...healthOf(stream), name: undefined })],
+  ])(
+    'keeps the health of a stream that is deleted in the form until Reset, for %s entries',
+    async (_label, entry) => {
+      vi.mocked(api.get).mockResolvedValue([entry(streamA), entry(streamB)]);
+      // A is deleted in the form before the health arrives; it is still saved.
+      const view = renderRows([streamB], { savedStreams: [streamA, streamB] });
+      await waitFor(() => expect(within(header('B')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+
+      await view.rerender({ streams: [streamA, streamB], savedStreams: [streamA, streamB] });
+
+      expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument();
+      expect(api.get).toHaveBeenCalledOnce();
+    }
+  );
+
+  it('asks for the health again when the saved list changes, not when the form does', async () => {
+    const view = renderRows([streamA], { savedStreams: [streamA] });
+    await waitFor(() => expect(api.get).toHaveBeenCalledOnce());
+
+    await view.rerender({ streams: [streamA, streamB], savedStreams: [streamA] });
+    expect(api.get).toHaveBeenCalledOnce();
+
+    await view.rerender({ streams: [streamA, streamB], savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(api.get).toHaveBeenCalledTimes(2));
+  });
+
+  it('listens for live health while a stream is saved, and not when none is', async () => {
+    const view = renderRows([streamA], { savedStreams: [] });
+    await tick();
+    expect(sse.opened).toBe(0);
+
+    await view.rerender({ streams: [streamA], savedStreams: [streamA] });
+    expect(sse.opened).toBe(1);
+
+    await view.rerender({ streams: [streamA], savedStreams: [] });
+    expect(sse.closed).toBe(1);
   });
 });

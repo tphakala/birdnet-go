@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Legalább egy modellt ki kell választani"
         },
         "captureTitle": "Rögzítés",
-        "levelTitle": "Bemeneti szint",
-        "applying": "Alkalmazás...",
-        "adding": "Hozzáadás..."
+        "levelTitle": "Bemeneti szint"
       },
       "audioCapture": {
         "title": "Hangkártya konfiguráció",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Hang stream konfiguráció",
-        "noStreamsConfigured": "Nincs stream konfigurálva"
+        "noStreamsConfigured": "Nincs stream konfigurálva",
+        "description": "Hálózati hang streamek konfigurálása távoli hang rögzítéshez. Támogatja az RTSP, HTTP, HLS, RTMP és UDP protokollokat. A kapcsolat módosítása mentéskor újracsatlakoztatja a streamet."
       },
       "streams": {
         "streamLabel": "Adatfolyam",
@@ -3904,12 +3903,7 @@
           "message": "Sztereó stream észlelve. A több csatorna keverése csökkentheti az érzékelési pontosságot a csatornák közötti fáziskülönbségek miatt. Válasszon konkrét csatornát (bal/jobb) vagy használja a csatornaészlelőt a legjobb eredményekhez.",
           "short": "Sztereó downmix aktív. Az érzékelési pontosság csökkent lehet. Válasszon konkrét csatornát a Kapcsolat részben."
         },
-        "autoSaveHelp": "A módosítások azonnal mentésre kerülnek. A kapcsolat módosítása újracsatlakoztatja a streamet, ezért ezek az Alkalmaz gombra kattintásig várnak.",
         "connectionTitle": "Kapcsolat",
-        "connectionApplyHint": "A stream az alkalmazáskor újracsatlakozik.",
-        "connectionApplyFailed": "A kapcsolat nem változott. Alkalmazza újra, vagy szakítsa meg.",
-        "applyConnection": "Alkalmazás és újracsatlakozás",
-        "testBeforeApply": "Az alkalmazás előtt tesztelje az új URL-t.",
         "statsLine": "Összesen: {total} · Sebesség: {rate} · Utoljára: {last}",
         "ago": {
           "seconds": "{count} mp-e",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Mentés előtt javítsa ki a hangkártyákat a(z) {tab} lapon: {names}",
         "unnamedSource": "{position}. forrás (név nélkül)",
-        "needsAttention": "Figyelmet igényel"
+        "needsAttention": "Figyelmet igényel",
+        "streams": "Mentés előtt javítsa ki a streameket a(z) {tab} lapon: {names}",
+        "streamsUntested": "Mentés előtt tesztelje az új stream URL-jét a(z) {tab} lapon: {names}",
+        "unnamedStream": "{position}. stream (név nélkül)"
       }
     },
     "security": {

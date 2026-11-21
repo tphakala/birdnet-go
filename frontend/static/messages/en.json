@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "At least one model must be selected"
         },
         "captureTitle": "Capture",
-        "levelTitle": "Input level",
-        "applying": "Applying...",
-        "adding": "Adding..."
+        "levelTitle": "Input level"
       },
       "audioCapture": {
         "title": "Sound Card Configuration",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Audio Stream Configuration",
-        "noStreamsConfigured": "No streams configured"
+        "noStreamsConfigured": "No streams configured",
+        "description": "Configure network audio streams for remote audio capture. Supports RTSP, HTTP, HLS, RTMP, and UDP protocols. A connection change reconnects the stream when you save."
       },
       "streams": {
         "streamLabel": "Stream",
@@ -3904,12 +3903,7 @@
           "message": "Stereo stream detected. Downmixing multiple channels can reduce detection accuracy due to phase differences between channels. Select a specific channel (left/right) or use the channel detector for best results.",
           "short": "Stereo downmix active. Detection accuracy may be reduced. Select a specific channel under Connection."
         },
-        "autoSaveHelp": "Changes are saved as you make them. Connection changes reconnect the stream, so they wait until you press Apply.",
         "connectionTitle": "Connection",
-        "connectionApplyHint": "The stream reconnects when you apply.",
-        "connectionApplyFailed": "The connection was not changed. Apply again or cancel.",
-        "applyConnection": "Apply and reconnect",
-        "testBeforeApply": "Test the new URL before you apply it.",
         "statsLine": "Total: {total} · Rate: {rate} · Last: {last}",
         "ago": {
           "seconds": "{count}s ago",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Fix the sound cards on the {tab} tab before saving: {names}",
         "unnamedSource": "source {position} (no name)",
-        "needsAttention": "Needs attention"
+        "needsAttention": "Needs attention",
+        "streams": "Fix the streams on the {tab} tab before saving: {names}",
+        "streamsUntested": "Test the new stream URL on the {tab} tab before saving: {names}",
+        "unnamedStream": "stream {position} (no name)"
       }
     },
     "security": {

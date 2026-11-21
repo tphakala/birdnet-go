@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Mindst én model skal vælges"
         },
         "captureTitle": "Optagelse",
-        "levelTitle": "Indgangsniveau",
-        "applying": "Anvender...",
-        "adding": "Tilføjer..."
+        "levelTitle": "Indgangsniveau"
       },
       "audioCapture": {
         "title": "Lydkortkonfiguration",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Konfiguration af lydstrøm",
-        "noStreamsConfigured": "Ingen strømme konfigureret"
+        "noStreamsConfigured": "Ingen strømme konfigureret",
+        "description": "Konfigurer netværkslydstrømme til fjernoptagelse af lyd. Understøtter RTSP, HTTP, HLS, RTMP og UDP-protokoller. Ændring af forbindelsen genopretter forbindelsen til strømmen, når du gemmer."
       },
       "streams": {
         "streamLabel": "Strøm",
@@ -3904,12 +3903,7 @@
           "message": "Stereostream detekteret. Downmixing af flere kanaler kan reducere detektionsnøjagtigheden på grund af faseforskelle mellem kanaler. Vælg en specifik kanal (venstre/højre) eller brug kanaldetektoren for bedste resultater.",
           "short": "Stereo downmix aktiv. Detektionsnøjagtighed kan være reduceret. Vælg en specifik kanal under Forbindelse."
         },
-        "autoSaveHelp": "Ændringer gemmes med det samme. Ændringer af forbindelsen genforbinder streamen og venter derfor, til du klikker på Anvend.",
         "connectionTitle": "Forbindelse",
-        "connectionApplyHint": "Streamen genforbindes, når du anvender.",
-        "connectionApplyFailed": "Forbindelsen blev ikke ændret. Anvend igen, eller annullér.",
-        "applyConnection": "Anvend og genforbind",
-        "testBeforeApply": "Test den nye URL, før du anvender den.",
         "statsLine": "I alt: {total} · Hastighed: {rate} · Seneste: {last}",
         "ago": {
           "seconds": "{count} s siden",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Ret lydkortene under fanen {tab}, før du gemmer: {names}",
         "unnamedSource": "kilde {position} (uden navn)",
-        "needsAttention": "Kræver opmærksomhed"
+        "needsAttention": "Kræver opmærksomhed",
+        "streams": "Ret strømmene under fanen {tab}, før du gemmer: {names}",
+        "streamsUntested": "Test den nye strøm-URL under fanen {tab}, før du gemmer: {names}",
+        "unnamedStream": "strøm {position} (uden navn)"
       }
     },
     "security": {

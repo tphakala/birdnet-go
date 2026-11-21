@@ -1,9 +1,9 @@
 /**
- * The sound card tab saves with the page: edits go into the settings form, the
- * Save Changes bar persists them with one full-form PUT, and an invalid source
- * blocks Save with the reason whichever tab is open. Runs over the real settings
- * store with a mocked settings API; the sound card manager is a stand-in whose
- * buttons send changed source lists.
+ * The sound card and streams tabs save with the page: edits go into the settings
+ * form, the Save Changes bar persists them with one full-form PUT, and an invalid
+ * source or stream, or a new stream URL that was not tested, blocks Save with the
+ * reason whichever tab is open. Runs over the real settings store with a mocked
+ * settings API; the two managers are stand-ins whose buttons send changed lists.
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
@@ -16,7 +16,8 @@ import {
   hasUnsavedChanges,
   settingsValidationErrors,
 } from '$lib/stores/settings';
-import type { AudioSourceConfig } from '$lib/stores/settings';
+import type { AudioSourceConfig, StreamConfig } from '$lib/stores/settings';
+import { t } from '$lib/i18n';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { serveConfirmedSettings } from '../../../../../test/settings-store-helpers';
 import { serverSettings } from '../../../../../test/settings-helpers';
@@ -29,14 +30,13 @@ const TAB_NOTE_KEY = 'settings.autoSave.tabNote';
 const BLOCKED_KEY = 'settings.actions.validationBlocked';
 const SOUND_CARD_ISSUE_KEY = 'audio-soundcards-invalid';
 const SOUND_CARD_REASON_KEY = 'settings.audio.validation.soundCards';
+const STREAMS_ISSUE_KEY = 'audio-streams-invalid';
+const STREAMS_UNTESTED_ISSUE_KEY = 'audio-streams-untested';
+const STREAMS_REASON_KEY = 'settings.audio.validation.streams';
+const STREAMS_UNTESTED_REASON_KEY = 'settings.audio.validation.streamsUntested';
 const RECORDING_TAB_KEY = 'settings.audio.tabs.recording';
-
-// The Streams tab still saves as it changes through the auto-save engine.
-const { commitSetting } = vi.hoisted(() => ({ commitSetting: vi.fn() }));
-vi.mock('$lib/stores/settingsAutoSave.svelte', async importOriginal => ({
-  ...(await importOriginal<typeof import('$lib/stores/settingsAutoSave.svelte')>()),
-  commitSetting,
-}));
+const STREAMS_TAB_KEY = 'settings.audio.tabs.streams';
+const NEW_URL = 'rtsp://new/stream';
 
 vi.mock('$lib/utils/settingsApi.js', () => ({
   settingsAPI: {
@@ -68,14 +68,25 @@ vi.mock('$lib/stores/appState.svelte', () => ({
   refreshCsrfToken: vi.fn().mockResolvedValue(false),
 }));
 
-const STREAM = { name: 'Old', url: 'rtsp://old', enabled: true, type: 'rtsp' };
+// The server always sends a stream's gain.
+const STREAM: StreamConfig = {
+  name: 'Old',
+  url: 'rtsp://old',
+  enabled: true,
+  type: 'rtsp',
+  gain: 0,
+  models: [],
+};
+const FFMPEG_PARAMETERS = ['-x'];
 const SOURCE = { name: 'Garden', device: 'hw:1,0', gain: 0, models: ['birdnet'] };
 
-function seedStore(sources: AudioSourceConfig[]) {
+function seedStore(sources: AudioSourceConfig[], streams: StreamConfig[] = [STREAM]) {
   const settings = serverSettings();
   const audio = settings.realtime?.audio;
   if (!audio) throw new Error('serverSettings() has no realtime.audio section');
   audio.sources = sources;
+  const rtsp = settings.realtime?.rtsp;
+  if (rtsp) rtsp.streams = streams;
   settingsStore.set({
     formData: globalThis.structuredClone(settings),
     originalData: globalThis.structuredClone(settings),
@@ -93,6 +104,10 @@ function seedStore(sources: AudioSourceConfig[]) {
     ...state,
     originalData: globalThis.structuredClone(state.formData),
   }));
+}
+
+function formStreams() {
+  return get(settingsStore).formData.realtime?.rtsp?.streams ?? [];
 }
 
 function formSources(): AudioSourceConfig[] {
@@ -246,20 +261,6 @@ describe('AudioSettingsPage sound card tab saves with the page', () => {
     );
   });
 
-  it('keeps the Streams tab on the auto-save engine with its tab note and no save bar', async () => {
-    renderTab('streams');
-
-    expect(await screen.findByText(TAB_NOTE_KEY)).toBeInTheDocument();
-    expect(screen.queryByText(SAVE_KEY)).toBeNull();
-
-    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
-    expect(commitSetting).toHaveBeenCalledExactlyOnceWith(
-      'rtsp',
-      { streams: [{ ...STREAM, gain: 1 }] },
-      { field: 'rtsp:streams:row:gain', debounceMs: 400 }
-    );
-  });
-
   it('keeps the empty state on screen while Refresh reloads the devices after an empty first load', async () => {
     await renderTab('soundcard', []);
     await screen.findByText('settings.audio.emptyStates.soundCard.title');
@@ -296,5 +297,177 @@ describe('AudioSettingsPage sound card tab saves with the page', () => {
     expect(status).toBeInTheDocument();
     // The skeleton header keeps the loaded card's header spacing and divider
     expect(status.parentElement).toHaveClass(...SETTINGS_CARD_HEADER_CLASSES.split(/\s+/));
+  });
+});
+
+describe('AudioSettingsPage streams tab saves with the page', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    serveConfirmedSettings();
+  });
+
+  afterEach(() => {
+    localStorage.removeItem(TAB_STORAGE_KEY);
+    navigation.navigate('/');
+  });
+
+  it('shows the Save Changes bar and no tab note', async () => {
+    renderTab('streams');
+
+    expect(await screen.findByRole('button', { name: 'commit-streams' })).toBeInTheDocument();
+    expect(screen.getByText(SAVE_KEY)).toBeInTheDocument();
+    expect(screen.queryByText(TAB_NOTE_KEY)).toBeNull();
+  });
+
+  it('writes an edit into the form without a request, and Save sends one full-form PUT', async () => {
+    renderTab('streams');
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
+
+    expect(formStreams()).toEqual([{ ...STREAM, gain: 1 }]);
+    expect(get(hasUnsavedChanges)).toBe(true);
+    expect(settingsAPI.patchSection).not.toHaveBeenCalled();
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+
+    await fireEvent.click(saveButton());
+    await waitFor(() => expect(settingsAPI.save).toHaveBeenCalledOnce());
+    expect(settingsAPI.patchSection).not.toHaveBeenCalled();
+    expect(vi.mocked(settingsAPI.save).mock.calls[0][0].realtime?.rtsp?.streams).toEqual([
+      { ...STREAM, gain: 1 },
+    ]);
+  });
+
+  it('keeps the other rtsp keys, such as ffmpegParameters, when a stream is written', async () => {
+    renderTab('streams');
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
+
+    expect(get(settingsStore).formData.realtime?.rtsp?.ffmpegParameters).toEqual(FFMPEG_PARAMETERS);
+    await fireEvent.click(saveButton());
+    await waitFor(() => expect(settingsAPI.save).toHaveBeenCalledOnce());
+    expect(vi.mocked(settingsAPI.save).mock.calls[0][0].realtime?.rtsp?.ffmpegParameters).toEqual(
+      FFMPEG_PARAMETERS
+    );
+  });
+
+  it.each([
+    ['gain', 'commit-streams', 'revert-streams'],
+    ['name', 'rename-stream', 'rename-back'],
+    ['URL', 'new-url', 'old-url'],
+  ])('leaves nothing unsaved after a %s edit and its inverse', async (_field, edit, back) => {
+    renderTab('streams');
+
+    await fireEvent.click(await screen.findByRole('button', { name: edit }));
+    expect(get(hasUnsavedChanges)).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: back }));
+
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('blocks Save with the reason for an invalid name, also from the recording tab, naming the stream once', async () => {
+    renderTab('streams');
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'blank-name' }));
+    expect(await screen.findByText(STREAMS_REASON_KEY)).toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith(STREAMS_REASON_KEY, {
+      tab: STREAMS_TAB_KEY,
+      names: 'settings.audio.validation.unnamedStream',
+    });
+    expect(screen.queryByText(STREAMS_UNTESTED_REASON_KEY)).toBeNull();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+
+    await fireEvent.click(screen.getByRole('tab', { name: RECORDING_TAB_KEY }));
+    expect(await screen.findByText(STREAMS_REASON_KEY)).toBeInTheDocument();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.click(saveButton());
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+  });
+
+  it('blocks Save for a new URL that was not tested, and lifts the block when it is tested', async () => {
+    renderTab('streams');
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'new-url' }));
+    expect(await screen.findByText(STREAMS_UNTESTED_REASON_KEY)).toBeInTheDocument();
+    expect(t).toHaveBeenCalledWith(STREAMS_UNTESTED_REASON_KEY, {
+      tab: STREAMS_TAB_KEY,
+      names: 'Old',
+    });
+    expect(screen.queryByText(STREAMS_REASON_KEY)).toBeNull();
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.click(saveButton());
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'test-new-url' }));
+
+    await waitFor(() => expect(screen.queryByText(STREAMS_UNTESTED_REASON_KEY)).toBeNull());
+    expect(saveButton()).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps the tested URLs when the tab is left and entered again, and the block from the recording tab', async () => {
+    renderTab('streams');
+    await fireEvent.click(await screen.findByRole('button', { name: 'new-url' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'test-new-url' }));
+
+    await fireEvent.click(screen.getByRole('tab', { name: RECORDING_TAB_KEY }));
+    await fireEvent.click(await screen.findByRole('tab', { name: STREAMS_TAB_KEY }));
+
+    expect(await screen.findByTestId('manager-state')).toHaveAttribute('data-tested', NEW_URL);
+    expect(screen.queryByText(STREAMS_UNTESTED_REASON_KEY)).toBeNull();
+    expect(get(settingsValidationErrors)).toEqual([]);
+  });
+
+  it('does not block Save on an untested URL after the edit is undone', async () => {
+    renderTab('streams');
+    await fireEvent.click(await screen.findByRole('button', { name: 'new-url' }));
+    await screen.findByText(STREAMS_UNTESTED_REASON_KEY);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'old-url' }));
+
+    await waitFor(() => expect(screen.queryByText(STREAMS_UNTESTED_REASON_KEY)).toBeNull());
+  });
+
+  it('does not block Save on an invalid value the saved configuration already has', async () => {
+    // A stored duplicate must not stop a save on another tab: only what the user changed counts.
+    seedStore([SOURCE], [STREAM, { ...STREAM, name: 'old', url: 'rtsp://old2' }]);
+    localStorage.setItem(TAB_STORAGE_KEY, 'streams');
+    render(AudioSettingsPage);
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
+
+    expect(get(hasUnsavedChanges)).toBe(true);
+    expect(screen.queryByText(STREAMS_REASON_KEY)).toBeNull();
+  });
+
+  it('clears both stream blocks when the page unmounts', async () => {
+    const view = renderTab('streams');
+    await fireEvent.click(await screen.findByRole('button', { name: 'blank-name' }));
+    await waitFor(() => expect(get(settingsValidationErrors)).toContain(STREAMS_ISSUE_KEY));
+    await fireEvent.click(screen.getByRole('button', { name: 'new-url' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'blank-name' }));
+
+    view.unmount();
+
+    expect(get(settingsValidationErrors)).not.toContain(STREAMS_ISSUE_KEY);
+    expect(get(settingsValidationErrors)).not.toContain(STREAMS_UNTESTED_ISSUE_KEY);
+  });
+
+  it('disables the manager while a save runs and says why', async () => {
+    renderTab('streams');
+    const state = await screen.findByTestId('manager-state');
+    expect(state).toHaveAttribute('data-disabled', 'false');
+
+    settingsStore.update(current => ({ ...current, isSaving: true }));
+
+    await waitFor(() => expect(state).toHaveAttribute('data-disabled', 'true'));
+    expect(state).toHaveTextContent('settings.actions.saving');
+  });
+
+  it('gives the manager the saved streams, not the edited ones', async () => {
+    renderTab('streams');
+    await fireEvent.click(await screen.findByRole('button', { name: 'new-url' }));
+
+    expect(formStreams()[0].url).toBe(NEW_URL);
+    expect(screen.getByTestId('manager-state')).toHaveAttribute('data-saved', '1');
   });
 });

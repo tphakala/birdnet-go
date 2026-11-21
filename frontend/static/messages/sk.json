@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Musí byť vybraný aspoň jeden model"
         },
         "captureTitle": "Záznam",
-        "levelTitle": "Vstupná úroveň",
-        "applying": "Používa sa...",
-        "adding": "Pridáva sa..."
+        "levelTitle": "Vstupná úroveň"
       },
       "audioCapture": {
         "title": "Konfigurácia zvukovej karty",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Konfigurácia zvukových streamov",
-        "noStreamsConfigured": "Žiadne nakonfigurované streamy"
+        "noStreamsConfigured": "Žiadne nakonfigurované streamy",
+        "description": "Nakonfigurujte sieťové zvukové streamy pre vzdialené zachytávanie zvuku. Podporuje protokoly RTSP, HTTP, HLS, RTMP a UDP. Zmena pripojenia znovu pripojí stream pri uložení."
       },
       "streams": {
         "streamLabel": "Stream",
@@ -3904,12 +3903,7 @@
           "message": "Detekovaný stereo stream. Zmiešanie viacerých kanálov môže znížiť presnosť detekcie kvôli fázovým rozdielom medzi kanálmi. Pre najlepšie výsledky vyberte konkrétny kanál (ľavý/pravý) alebo použite detektor kanálov.",
           "short": "Stereo downmix aktívny. Presnosť detekcie môže byť znížená. Vyberte konkrétny kanál v časti Pripojenie."
         },
-        "autoSaveHelp": "Zmeny sa ukladajú okamžite. Zmeny pripojenia znova pripoja stream, preto čakajú, kým nekliknete na Použiť.",
         "connectionTitle": "Pripojenie",
-        "connectionApplyHint": "Stream sa po použití znova pripojí.",
-        "connectionApplyFailed": "Pripojenie sa nezmenilo. Použite znova alebo zrušte.",
-        "applyConnection": "Použiť a znova pripojiť",
-        "testBeforeApply": "Pred použitím novú URL otestujte.",
         "statsLine": "Celkom: {total} · Rýchlosť: {rate} · Naposledy: {last}",
         "ago": {
           "seconds": "pred {count} s",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Pred uložením opravte zvukové karty na karte {tab}: {names}",
         "unnamedSource": "zdroj {position} (bez názvu)",
-        "needsAttention": "Vyžaduje pozornosť"
+        "needsAttention": "Vyžaduje pozornosť",
+        "streams": "Pred uložením opravte streamy na karte {tab}: {names}",
+        "streamsUntested": "Pred uložením otestujte novú URL streamu na karte {tab}: {names}",
+        "unnamedStream": "stream {position} (bez názvu)"
       }
     },
     "security": {
