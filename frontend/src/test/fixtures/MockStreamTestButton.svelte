@@ -4,7 +4,8 @@
   decides when a stream counts as tested. A second button reports the cleared
   result the real button sends when its URL changes. A third pair reports a test
   that finishes after the URL field moved on: the first remembers the URL, the
-  second reports the result for the remembered URL, as the real button does.
+  second reports the result for the remembered URL, as the real button does. Like
+  the real button it reports a cleared result for the new URL when the URL changes.
 
   @component
 -->
@@ -19,6 +20,14 @@
 
   let { url = '', onResult }: Props = $props();
   let startedUrl = '';
+
+  let prevUrl = '';
+  $effect(() => {
+    if (url !== prevUrl) {
+      if (prevUrl !== '') onResult?.(null, url.trim());
+      prevUrl = url;
+    }
+  });
 </script>
 
 <button

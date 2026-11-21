@@ -6,6 +6,7 @@
  * are pinned in full below.
  */
 import { tick } from 'svelte';
+import { SvelteSet } from 'svelte/reactivity';
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { deferred } from '../../../../test/async-helpers';
@@ -503,6 +504,35 @@ describe('StreamManager add form', () => {
     expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
   });
 
+  it('marks the add form URL field while its URL needs a test, and clears the mark once tested', async () => {
+    renderRows([]);
+    await fillAddForm('Gate', 'rtsp://gate/live');
+
+    const url = screen.getByTestId(URL_TESTID);
+    expect(url).toHaveAttribute('aria-invalid', 'true');
+    expect(url).toHaveAccessibleDescription(TEST_REQUIRED_KEY);
+
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    expect(url).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('accepts a URL that passed a test this session when the field is edited away and back', async () => {
+    const tested = new SvelteSet<string>();
+    renderRows([], { testedUrls: tested, onUrlTested: (url: string) => tested.add(url) });
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+    const add = screen.getByRole('button', { name: ADD_KEY });
+    expect(add).not.toHaveAttribute('aria-disabled');
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: 'rtsp://gate/two' } });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
+      target: { value: 'rtsp://gate/live' },
+    });
+
+    expect(add).not.toHaveAttribute('aria-disabled');
+  });
+
   it('explains a blocked Add by the missing test and links the reason', async () => {
     renderRows([]);
     await fillAddForm('Gate', 'rtsp://gate/live');
@@ -601,7 +631,8 @@ describe('StreamManager add form', () => {
     expect(url).toHaveAccessibleDescription('settings.audio.streams.errors.duplicate');
 
     await fireEvent.input(url, { target: { value: 'rtsp://gate/live' } });
-    expect(url).not.toHaveAttribute('aria-invalid');
+    // The duplicate message is gone; the new URL still needs its test.
+    expect(url).toHaveAccessibleDescription(TEST_REQUIRED_KEY);
   });
 
   it('clears the URL error when the type select is changed', async () => {
@@ -756,14 +787,18 @@ describe('StreamManager blocked actions', () => {
     expect(refresh).not.toHaveAttribute('aria-describedby');
   });
 
-  it('shows the reason with an empty list instead of an Add stream button that would do nothing', async () => {
+  it('keeps the empty state Add stream button while blocked, marked and linked to the reason', async () => {
     const view = renderRows([]);
-    expect(screen.getByRole('button', { name: ADD_KEY })).toBeInTheDocument();
+    const add = screen.getByRole('button', { name: ADD_KEY });
+    expect(add).not.toHaveAttribute('aria-disabled');
 
     await view.rerender({ streams: [], disabled: true, disabledReason: SAVING_KEY });
 
-    expect(screen.getByText(SAVING_KEY)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: ADD_KEY })).toBeNull();
+    expect(screen.getByRole('button', { name: ADD_KEY })).toBe(add);
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add).toHaveAccessibleDescription(SAVING_KEY);
+    await fireEvent.click(add);
+    expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
   });
 
   it('falls back to the loading reason when the caller gives none, for the add form too', async () => {

@@ -164,8 +164,8 @@
     disabledReason?: string;
     onUpdateStreams: (_streams: StreamConfig[]) => void;
     /**
-     * Called with the trimmed URL of every successful test of a card, and with the URL
-     * of the stream the add form adds (its test passed before Add was allowed).
+     * Called with the trimmed URL of every successful connection test, from a card or
+     * from the add form.
      */
     onUrlTested: (_url: string) => void;
   }
@@ -206,7 +206,10 @@
   let newTestResult = $state<{ sampleRate: number; channels: number } | null>(null);
   // The URL the test result belongs to; any other URL needs a new test.
   let newTestedUrl = $state<string | null>(null);
-  let newNeedsTest = $derived(newUrl.trim() !== '' && newTestedUrl !== newUrl.trim());
+  // A URL needs a test unless this form tested it or the page knows it passed one this session.
+  let newNeedsTest = $derived(
+    newUrl.trim() !== '' && newTestedUrl !== newUrl.trim() && !testedUrls.has(newUrl.trim())
+  );
   let newSourceSampleRate = $derived(newTestResult?.sampleRate ?? DEFAULT_SAMPLE_RATE);
   // Detected channel count for a new stream comes only from a stream test
   // (0 = not yet tested). Drives the adaptive channel controls.
@@ -425,6 +428,7 @@
     if (testedUrl.trim() !== newUrl.trim()) return;
     newTestResult = result;
     newTestedUrl = result ? testedUrl : null;
+    if (result) onUrlTested(testedUrl);
     if (!result) {
       analysisResult = null;
       analysisError = null;
@@ -597,7 +601,6 @@
     const rowId = generateId(ROW_ID_PREFIX);
     rowIds = [...rowIds, rowId];
     if (streams.length === 0) expandedRows.add(rowId);
-    onUrlTested(trimmedUrl);
     sendStreams([...streams, newStream]);
     resetAddForm();
   }
@@ -740,9 +743,13 @@
         t('settings.audio.streams.emptyState.hints.protocol'),
       ]}
       hintsTitle={t('settings.audio.streams.emptyState.hintsTitle')}
-      primaryAction={disabled
-        ? undefined
-        : { label: t('settings.audio.streams.addStream'), icon: Plus, onclick: openAddForm }}
+      primaryAction={{
+        label: t('settings.audio.streams.addStream'),
+        icon: Plus,
+        onclick: openAddForm,
+        disabled,
+        describedBy: blockedReasonId,
+      }}
     />
   {:else}
     <div class="space-y-3">
@@ -799,11 +806,14 @@
                 bind:value={newUrl}
                 label={t('settings.audio.streams.urlLabel')}
                 placeholder="rtsp://user:password@192.168.1.100:554/stream"
-                helpText={urlError ? undefined : t('settings.audio.streams.urlHelp')}
+                helpText={urlError || newNeedsTest
+                  ? undefined
+                  : t('settings.audio.streams.urlHelp')}
                 required
                 oninput={handleUrlInput}
                 {disabled}
-                error={urlError ?? undefined}
+                error={urlError ??
+                  (newNeedsTest ? t('settings.audio.streams.testRequired') : undefined)}
               />
             </div>
 
