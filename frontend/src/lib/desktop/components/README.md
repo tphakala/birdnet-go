@@ -98,6 +98,7 @@ This folder contains **shared components** used across the application. Feature-
 ## Modals
 
 - `ConfirmModal.svelte` - Confirmation dialog
+- `KeyboardShortcutsModal.svelte` - Keyboard shortcut cheat sheet, mounted once in the root layout; lists the current page's shortcuts, then the ones for all pages, under the switch that turns shortcuts off, and registers the `?` key that opens it
 - `LoginModal.svelte` - User login modal
 - `ReviewModal.svelte` - Detection review modal
 - `SpeciesBadges.svelte` - Reusable species status and lock badges for modals

@@ -4,7 +4,10 @@ import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { theme } from '$lib/stores/theme';
+import { tick } from 'svelte';
+import { shortcuts } from '$lib/stores/shortcuts.svelte';
 import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
+import HeaderSettingsMenuShortcutsHost from './HeaderSettingsMenu.shortcuts.test.svelte';
 
 /**
  * Guards the fix for issue #4112: dashboard customization (Edit + Reset) is an
@@ -140,5 +143,30 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
         await waitFor(() => expect(trigger).toHaveFocus());
       }
     );
+  });
+});
+
+describe('HeaderSettingsMenu keyboard shortcuts item', () => {
+  afterEach(() => {
+    cleanup();
+    shortcuts.closeHelp();
+    shortcuts.setEnabled(true);
+    localStorage.clear();
+  });
+
+  it('closes the menu, opens the cheat sheet, and returns focus to the gear when it closes', async () => {
+    render(HeaderSettingsMenuShortcutsHost);
+    const gear = screen.getByRole('button', { name: MENU_LABEL });
+    await fireEvent.click(gear);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'shortcuts.menuItem' }));
+
+    expect(gear).toHaveAttribute('aria-expanded', 'false');
+    expect(shortcuts.helpOpen).toBe(true);
+    await tick();
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await tick();
+    expect(shortcuts.helpOpen).toBe(false);
+    await waitFor(() => expect(gear).toHaveFocus());
   });
 });

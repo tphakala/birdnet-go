@@ -55,7 +55,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 
 - [AudioLevelIndicator](#audiolevelindicator) - Audio level visualization
 - [ThemeToggle](#themetoggle) - Theme switching component
-- [HeaderSettingsMenu](#headersettingsmenu) - Header dropdown menu with theme toggle, edit dashboard, and links
+- [HeaderSettingsMenu](#headersettingsmenu) - Header dropdown menu with theme toggle, edit dashboard, keyboard shortcuts, and links
 - [TimeOfDayIcon](#timeofdayicon) - Time-based icon display
 
 ### Advanced
@@ -819,7 +819,7 @@ interface Props {
 
 ### HeaderSettingsMenu
 
-Cogwheel dropdown menu for the header bar. Contains theme toggle, edit dashboard (admin-only), and GitHub link.
+Cogwheel dropdown menu for the header bar. Contains theme toggle, edit and reset dashboard (admin-only), the keyboard shortcuts item, and the help and GitHub links. The keyboard shortcuts item opens the cheat sheet (`KeyboardShortcutsModal`, mounted in the root layout) and shows its `?` key while shortcuts are on; focus returns to the cogwheel when the sheet closes.
 
 #### Props
 
