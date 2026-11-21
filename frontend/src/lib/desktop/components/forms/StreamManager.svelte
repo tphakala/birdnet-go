@@ -486,9 +486,9 @@
     onUpdateStreams(list);
   }
 
-  // A list this manager did not produce (Reset, a reload) gives every row a
-  // fresh id, so the cards are recreated and no open confirmation or open state
-  // lands on a different stream.
+  // A list with another name and URL sequence than the one this manager sent
+  // (Reset, a reload) gives every row a fresh id, so the cards are recreated and
+  // no open confirmation or open state lands on a different stream.
   $effect.pre(() => {
     const identity = listIdentity(streams);
     untrack(() => {
