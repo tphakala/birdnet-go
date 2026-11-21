@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Opname",
         "levelTitle": "Ingangsniveau",
-        "captureApplyHint": "De opname wordt herstart wanneer u toepast.",
-        "applyCapture": "Toepassen en opname herstarten",
         "applying": "Bezig met toepassen...",
-        "adding": "Bezig met toevoegen...",
-        "captureApplyFailed": "De opname is niet gewijzigd. Pas opnieuw toe of annuleer."
+        "adding": "Bezig met toevoegen..."
       },
       "audioCapture": {
         "title": "Audio Opname",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Geluidskaart geselecteerd en klaar voor opname",
         "availableDevices": "Beschikbare Audio Apparaten",
         "active": "Actief",
-        "streamsConfigured": "{count} stream(s) geconfigureerd"
+        "streamsConfigured": "{count} stream(s) geconfigureerd",
+        "description": "Geluidskaarten waar BirdNET-Go naar luistert. Een wijziging van apparaat of samplefrequentie herstart de opname van die bron wanneer u bewaart."
       },
       "quietHours": {
         "title": "Stille uren",
@@ -4152,8 +4150,10 @@
         "listFailed": "De modellijst kon niet worden geladen.",
         "warningBadge": "Classificatiemodellen controleren"
       },
-      "sources": {
-        "autoSaveHelp": "Wijzigingen worden direct opgeslagen. Wijzigingen van apparaat en samplefrequentie herstarten de opname en wachten daarom tot u op Toepassen klikt."
+      "validation": {
+        "soundCards": "Herstel de geluidskaarten op het tabblad {tab} voordat u bewaart: {names}",
+        "unnamedSource": "bron {position} (zonder naam)",
+        "needsAttention": "Vereist aandacht"
       }
     },
     "security": {

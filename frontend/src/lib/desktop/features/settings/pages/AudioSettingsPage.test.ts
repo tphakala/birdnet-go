@@ -179,6 +179,7 @@ vi.mock('$lib/stores/settings', async () => {
     settingsActions,
     hasUnsavedChanges,
     defaultQuietHoursConfig,
+    setValidationIssues: vi.fn(),
   };
 });
 

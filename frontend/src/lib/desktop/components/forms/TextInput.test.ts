@@ -477,3 +477,20 @@ describe('TextInput error region and autocomplete', () => {
     expect(region).toHaveTextContent('Token is wrong');
   });
 });
+
+describe('TextInput aria-required', () => {
+  it('forwards aria-required to the native input, not the wrapper', () => {
+    render(TextInput, { props: { value: '', 'aria-required': 'true' } });
+
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveAttribute('aria-required', 'true');
+    expect(input).not.toHaveAttribute('required');
+    expect(input.parentElement).not.toHaveAttribute('aria-required');
+  });
+
+  it('renders no aria-required when the prop is not set', () => {
+    render(TextInput, { props: { value: '' } });
+
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-required');
+  });
+});

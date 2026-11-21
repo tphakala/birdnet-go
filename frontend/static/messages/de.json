@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Aufnahme",
         "levelTitle": "Eingangspegel",
-        "captureApplyHint": "Die Aufnahme wird beim Übernehmen neu gestartet.",
-        "applyCapture": "Übernehmen und Aufnahme neu starten",
         "applying": "Wird übernommen...",
-        "adding": "Wird hinzugefügt...",
-        "captureApplyFailed": "Die Aufnahme wurde nicht geändert. Erneut übernehmen oder abbrechen."
+        "adding": "Wird hinzugefügt..."
       },
       "audioCapture": {
         "title": "Audioaufnahme",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Soundkarte ausgewählt und bereit zur Aufnahme",
         "availableDevices": "Verfügbare Audiogeräte",
         "active": "Aktiv",
-        "streamsConfigured": "{count} Stream(s) konfiguriert"
+        "streamsConfigured": "{count} Stream(s) konfiguriert",
+        "description": "Soundkarten, auf die BirdNET-Go hört. Eine Änderung von Gerät oder Abtastrate startet die Aufnahme dieser Quelle beim Speichern neu."
       },
       "quietHours": {
         "title": "Ruhezeiten",
@@ -4152,8 +4150,10 @@
         "listFailed": "Die Modellliste konnte nicht geladen werden.",
         "warningBadge": "Klassifikatoren prüfen"
       },
-      "sources": {
-        "autoSaveHelp": "Änderungen werden sofort gespeichert. Änderungen an Gerät und Abtastrate starten die Aufnahme neu und warten daher, bis Sie auf Übernehmen klicken."
+      "validation": {
+        "soundCards": "Korrigieren Sie vor dem Speichern die Soundkarten im Tab {tab}: {names}",
+        "unnamedSource": "Quelle {position} (ohne Namen)",
+        "needsAttention": "Erfordert Aufmerksamkeit"
       }
     },
     "security": {

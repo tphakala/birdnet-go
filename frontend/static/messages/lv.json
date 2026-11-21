@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Ierakstīšana",
         "levelTitle": "Ieejas līmenis",
-        "captureApplyHint": "Ierakstīšana tiks restartēta, kad lietosiet izmaiņas.",
-        "applyCapture": "Lietot un restartēt ierakstīšanu",
         "applying": "Lieto...",
-        "adding": "Pievieno...",
-        "captureApplyFailed": "Ierakstīšana netika mainīta. Lietojiet vēlreiz vai atceliet."
+        "adding": "Pievieno..."
       },
       "audioCapture": {
         "title": "Skaņas kartes konfigurācija",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Skaņas karte izvēlēta un gatava uztveršanai",
         "availableDevices": "Pieejamās audio ierīces",
         "active": "Aktīvs",
-        "streamsConfigured": "{count} straume(-es) konfigurēta(-as)"
+        "streamsConfigured": "{count} straume(-es) konfigurēta(-as)",
+        "description": "Skaņas kartes, kuras BirdNET-Go klausās. Ierīces vai diskretizācijas frekvences maiņa saglabājot restartē ierakstīšanu šajā avotā."
       },
       "quietHours": {
         "title": "Klusās stundas",
@@ -4152,8 +4150,10 @@
         "listFailed": "Modeļu sarakstu neizdevās ielādēt.",
         "warningBadge": "Pārbaudiet klasifikatorus"
       },
-      "sources": {
-        "autoSaveHelp": "Izmaiņas tiek saglabātas uzreiz. Ierīces un iztveršanas frekvences izmaiņas restartē ierakstīšanu, tāpēc tās gaida, līdz noklikšķināt uz Lietot."
+      "validation": {
+        "soundCards": "Pirms saglabāšanas izlabojiet skaņas kartes cilnē {tab}: {names}",
+        "unnamedSource": "avots {position} (bez nosaukuma)",
+        "needsAttention": "Nepieciešama uzmanība"
       }
     },
     "security": {

@@ -2729,11 +2729,8 @@ export type TranslationKey =
   | 'settings.audio.soundCards.compatibility.atLeastOneModel'
   | 'settings.audio.soundCards.captureTitle'
   | 'settings.audio.soundCards.levelTitle'
-  | 'settings.audio.soundCards.captureApplyHint'
-  | 'settings.audio.soundCards.applyCapture'
   | 'settings.audio.soundCards.applying'
   | 'settings.audio.soundCards.adding'
-  | 'settings.audio.soundCards.captureApplyFailed'
   | 'settings.audio.audioCapture.title'
   | 'settings.audio.audioCapture.soundCardSource'
   | 'settings.audio.audioCapture.audioSourceLabel'
@@ -2750,6 +2747,7 @@ export type TranslationKey =
   | 'settings.audio.audioCapture.availableDevices'
   | 'settings.audio.audioCapture.active'
   | 'settings.audio.audioCapture.streamsConfigured' // params: count
+  | 'settings.audio.audioCapture.description'
   | 'settings.audio.quietHours.title'
   | 'settings.audio.quietHours.sectionTitle'
   | 'settings.audio.quietHours.sectionDescription'
@@ -3069,7 +3067,9 @@ export type TranslationKey =
   | 'settings.audio.models.followsDefaults'
   | 'settings.audio.models.listFailed'
   | 'settings.audio.models.warningBadge'
-  | 'settings.audio.sources.autoSaveHelp'
+  | 'settings.audio.validation.soundCards' // params: tab, names
+  | 'settings.audio.validation.unnamedSource' // params: position
+  | 'settings.audio.validation.needsAttention'
   | 'settings.security.pageLabel'
   | 'settings.security.baseUrlLabel'
   | 'settings.security.baseUrlHelp'
@@ -5179,6 +5179,8 @@ export type TranslationParams = {
   'settings.audio.exportDenoise.lossyNote': { minBitrate: string | number };
   'settings.audio.models.defaultBadge': { models: string | number };
   'settings.audio.models.removeMissingAria': { model: string | number; source: string | number };
+  'settings.audio.validation.soundCards': { tab: string | number; names: string | number };
+  'settings.audio.validation.unnamedSource': { position: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
   'settings.security.oauth.oidc.postLogoutRedirectHelpText': { url: string | number };

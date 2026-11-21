@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Capture",
         "levelTitle": "Input level",
-        "captureApplyHint": "Capture restarts when you apply.",
-        "applyCapture": "Apply and restart capture",
         "applying": "Applying...",
-        "adding": "Adding...",
-        "captureApplyFailed": "Capture was not changed. Apply again or cancel."
+        "adding": "Adding..."
       },
       "audioCapture": {
         "title": "Sound Card Configuration",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Sound card selected and ready for capture",
         "availableDevices": "Available Audio Devices",
         "active": "Active",
-        "streamsConfigured": "{count} stream(s) configured"
+        "streamsConfigured": "{count} stream(s) configured",
+        "description": "Sound cards BirdNET-Go listens to. A device or sample rate change restarts capture on that source when you save."
       },
       "quietHours": {
         "title": "Quiet Hours",
@@ -4152,8 +4150,10 @@
         "listFailed": "The model list could not be loaded.",
         "warningBadge": "Check classifiers"
       },
-      "sources": {
-        "autoSaveHelp": "Changes are saved as you make them. Device and sample rate changes restart capture, so they wait until you press Apply."
+      "validation": {
+        "soundCards": "Fix the sound cards on the {tab} tab before saving: {names}",
+        "unnamedSource": "source {position} (no name)",
+        "needsAttention": "Needs attention"
       }
     },
     "security": {

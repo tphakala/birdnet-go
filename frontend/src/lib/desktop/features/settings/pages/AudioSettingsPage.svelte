@@ -29,10 +29,8 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import StreamManager from '$lib/desktop/components/forms/StreamManager.svelte';
   import SoundCardManager from '$lib/desktop/components/forms/SoundCardManager.svelte';
-  import {
-    AUDIO_SOURCES_FIELD_PREFIX,
-    STREAMS_FIELD_PREFIX,
-  } from '$lib/desktop/components/forms/sourceFields';
+  import { STREAMS_FIELD_PREFIX } from '$lib/desktop/components/forms/sourceFields';
+  import { soundCardProblems } from '$lib/desktop/components/forms/sourceRules';
   import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -44,6 +42,7 @@
     rtspSettings,
     realtimeSettings,
     extendedCaptureSettings,
+    setValidationIssues,
     type AudioSourceConfig,
     type DenoiseSettings,
     type EqualizerFilterType,
@@ -52,6 +51,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { cn } from '$lib/utils/cn';
   import { commitSetting, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
+  import { onDestroy } from 'svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import {
@@ -255,8 +255,14 @@
   }
 
   // PERFORMANCE OPTIMIZATION: Reactive change detection per tab with $derived.
-  // The sound card and streams tabs save as they change, so they have no unsaved
-  // state to track.
+
+  // Sound card tab changes
+  let soundCardTabHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.realtime?.audio?.sources,
+      store.formData.realtime?.audio?.sources
+    )
+  );
 
   // Audio Normalization section changes (moved here for dependency order)
   let normalizationHasChanges = $derived(
@@ -505,11 +511,44 @@
     keepSpectrograms: settings.audio.export?.retention?.keepSpectrograms || false,
   });
 
+  // What blocks Save is a pure function of the form and the saved values, so the
+  // page evaluates it whichever tab is open (only the active tab is mounted). The
+  // key set is fixed: one key per kind of problem, never one per row.
+  const SOUNDCARDS_ISSUE_KEY = 'audio-soundcards-invalid';
+  const VALIDATION_ISSUE_KEYS = [SOUNDCARDS_ISSUE_KEY];
+  let savedSources = $derived(store.originalData.realtime?.audio?.sources ?? []);
+
+  let soundCardIssue = $derived.by(() => {
+    const problems = soundCardProblems(settings.audio.sources, savedSources);
+    const names = settings.audio.sources
+      .map((source, index) =>
+        problems.at(index)?.name || problems.at(index)?.device
+          ? source.name.trim() ||
+            t('settings.audio.validation.unnamedSource', { position: index + 1 })
+          : undefined
+      )
+      .filter(name => name !== undefined);
+    return names.length > 0
+      ? t('settings.audio.validation.soundCards', {
+          tab: t('settings.audio.tabs.soundCard'),
+          names: names.join(', '),
+        })
+      : undefined;
+  });
+
+  $effect(() => {
+    setValidationIssues(
+      VALIDATION_ISSUE_KEYS,
+      new Map(soundCardIssue ? [[SOUNDCARDS_ISSUE_KEY, soundCardIssue]] : [])
+    );
+  });
+  onDestroy(() => setValidationIssues(VALIDATION_ISSUE_KEYS, new Map()));
+
   // Update handlers
-  // The sound card tab saves each change at once: the whole sources array, under
-  // the field key of the control that made the change.
-  function updateAudioSources(sources: AudioSourceConfig[], options: CommitOptions) {
-    commitSetting('audio', { sources }, options);
+  // The sound card tab writes the whole sources array into the form; the page's
+  // Save Changes bar persists it.
+  function updateAudioSources(sources: AudioSourceConfig[]) {
+    settingsActions.updateSection('realtime', { audio: { ...settings.audio, sources } });
   }
 
   // The streams tab saves each change at once: the whole streams array, under the
@@ -680,8 +719,7 @@
       id: 'soundcard',
       label: t('settings.audio.tabs.soundCard'),
       icon: Volume2,
-      saveMode: 'immediate',
-      autoSaveScope: AUDIO_SOURCES_FIELD_PREFIX,
+      hasChanges: soundCardTabHasChanges,
       content: soundCardTabContent,
     },
     {
@@ -777,13 +815,16 @@
       <SettingsSection
         title={t('settings.audio.audioCapture.title')}
         icon={Mic}
-        description={t('settings.audio.sources.autoSaveHelp')}
+        description={t('settings.audio.audioCapture.description')}
+        originalData={store.originalData.realtime?.audio?.sources}
+        currentData={store.formData.realtime?.audio?.sources}
       >
         <SoundCardManager
           sources={settings.audio.sources}
+          {savedSources}
           audioDevices={audioDevices.data}
           audioDevicesLoading={audioDevices.loading}
-          disabled={store.isLoading}
+          disabled={store.isLoading || store.isSaving}
           onUpdateSources={updateAudioSources}
           onRefreshDevices={loadAudioDevices}
         />

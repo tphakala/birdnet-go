@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Tallennus",
         "levelTitle": "Tulotaso",
-        "captureApplyHint": "Tallennus käynnistyy uudelleen, kun otat muutokset käyttöön.",
-        "applyCapture": "Ota käyttöön ja käynnistä tallennus uudelleen",
         "applying": "Otetaan käyttöön...",
-        "adding": "Lisätään...",
-        "captureApplyFailed": "Tallennusta ei muutettu. Ota käyttöön uudelleen tai peruuta."
+        "adding": "Lisätään..."
       },
       "audioCapture": {
         "title": "Äänen tallennus",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Äänikortti valittu ja valmis tallennukseen",
         "availableDevices": "Saatavilla olevat äänilaitteet",
         "active": "Aktiivinen",
-        "streamsConfigured": "{count} striimi(ä) määritetty"
+        "streamsConfigured": "{count} striimi(ä) määritetty",
+        "description": "Äänikortit, joita BirdNET-Go kuuntelee. Laitteen tai näytteenottotaajuuden muutos käynnistää kyseisen lähteen tallennuksen uudelleen, kun tallennat."
       },
       "quietHours": {
         "title": "Hiljaiset tunnit",
@@ -4152,8 +4150,10 @@
         "listFailed": "Malliluetteloa ei voitu ladata.",
         "warningBadge": "Tarkista luokittimet"
       },
-      "sources": {
-        "autoSaveHelp": "Muutokset tallennetaan heti. Laitteen ja näytteenottotaajuuden muutokset käynnistävät tallennuksen uudelleen, joten ne odottavat, kunnes valitset Ota käyttöön."
+      "validation": {
+        "soundCards": "Korjaa välilehden {tab} äänikortit ennen tallennusta: {names}",
+        "unnamedSource": "lähde {position} (ei nimeä)",
+        "needsAttention": "Vaatii huomiota"
       }
     },
     "security": {

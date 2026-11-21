@@ -1,13 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import { screen, cleanup, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
-import { deferred } from '../../../../test/async-helpers';
 import {
   restoreElementAnimate,
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
 import SoundCardManager from './SoundCardManager.svelte';
-import { AUDIO_SOURCES_LIST_FIELD } from './sourceFields';
 import type { AudioSourceConfig } from '$lib/stores/settings';
 import {
   ADD_SOURCE_KEY,
@@ -68,25 +66,7 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
   acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
 }));
 
-const store = vi.hoisted(() => ({
-  stageSectionEdit: vi.fn(),
-  saveStagedSection: vi.fn(),
-  onStagedEditsDropped: vi.fn(() => () => undefined),
-}));
-
-// The add outcome tests run the real auto-save engine over a mocked store.
-vi.mock('$lib/stores/settings', async importOriginal => {
-  const actual = await importOriginal<typeof import('$lib/stores/settings')>();
-  return { ...actual, settingsActions: { ...actual.settingsActions, ...store } };
-});
-
 import { getAvailableModels, watchModels } from '$lib/stores/models.svelte';
-import {
-  autoSaveStatus,
-  commitSetting,
-  resetAutoSaveForTest,
-  type CommitOptions,
-} from '$lib/stores/settingsAutoSave.svelte';
 import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
 
 const USB_MIC = 'usb-mic';
@@ -436,7 +416,7 @@ describe('SoundCardManager default model pre-selection (model de-privilege, N=0)
 
     // One save, under the list field, carrying the whole array with the new source.
     expect(onUpdateSources).toHaveBeenCalledTimes(1);
-    expect(onUpdateSources.mock.calls[0][1]).toEqual({ field: AUDIO_SOURCES_LIST_FIELD });
+    expect(onUpdateSources.mock.calls[0]).toHaveLength(1);
     const savedSources = onUpdateSources.mock.calls[0][0] as AudioSourceConfig[];
     expect(savedSources).toHaveLength(1);
     // The saved source carries an empty model list; no default is invented.
@@ -507,14 +487,48 @@ describe('SoundCardManager rows', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('keeps a row open when its source changes, since rows are keyed by their own id', async () => {
+  /** Opens the delete confirmation of the named source and returns the dialog. */
+  async function openDelete(name: string) {
+    const button = within(header(name).closest('div') as HTMLElement).getByRole('button', {
+      name: 'common.delete',
+    });
+    await fireEvent.click(button);
+    return screen.getByRole('alertdialog');
+  }
+
+  async function confirmDelete(dialog: HTMLElement) {
+    const confirm = Array.from(dialog.querySelectorAll('button')).find(
+      button => button.textContent.trim() === 'common.delete'
+    );
+    expect(confirm).toBeDefined();
+    if (confirm) await fireEvent.click(confirm);
+  }
+
+  it('keeps a row open when its own edit comes back as the list', async () => {
+    const { rerender, onUpdateSources } = renderRows([sourceA, sourceB]);
+    await fireEvent.click(header('B'));
+
+    await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'B2' } });
+    const edited = onUpdateSources.mock.calls.at(-1)?.[0] as AudioSourceConfig[];
+    expect(edited.map(source => source.name)).toEqual(['A', 'B2']);
+
+    // The parent writes the list into the form and hands it back: same rows.
+    await rerender({ sources: edited });
+    expect(header('B2')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('gives every row a fresh id when a list of the same length that it did not send replaces it', async () => {
     const { rerender } = renderRows([sourceA, sourceB]);
     await fireEvent.click(header('B'));
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+    await openDelete('A');
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
 
-    // A saved device change replaces the source object; the row id stays.
-    await rerender({ sources: [sourceA, { ...sourceB, device: 'dev-c' }] });
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+    await rerender({ sources: [sourceB, sourceC] });
+
+    // No open state or confirmation follows the row position to another source.
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
+    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('gives every row a fresh id when the list length changes from outside', async () => {
@@ -525,108 +539,45 @@ describe('SoundCardManager rows', () => {
     expect(header('B')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('keeps the open state of every card when a refused add takes the list back', async () => {
-    const { rerender } = renderRows([sourceA, sourceB]);
-    await fireEvent.click(header('B'));
+  it('keeps no open delete confirmation on the wrong source after add, delete and Reset', async () => {
+    const { rerender, onUpdateSources } = renderRows([sourceA, sourceB]);
 
+    // Delete A, then add C: each list is sent by the manager and written back.
+    await confirmDelete(await openDelete('A'));
+    await rerender({ sources: [sourceB] });
     await fireEvent.click(screen.getByText(ADD_SOURCE_KEY));
-    // The open card has a device select of its own; the add form comes last.
-    const deviceSelect = (await screen.findAllByTestId(DEVICE_SELECT_TESTID)).at(-1);
-    if (deviceSelect) await fireEvent.change(deviceSelect, { target: { value: 'dev-c' } });
+    await fireEvent.change(await screen.findByTestId(DEVICE_SELECT_TESTID), {
+      target: { value: 'dev-c' },
+    });
     await fireEvent.input(screen.getByTestId('new-soundcard-name'), { target: { value: 'C' } });
     await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
+    const added = onUpdateSources.mock.calls.at(-1)?.[0] as AudioSourceConfig[];
+    expect(added.map(source => source.name)).toEqual(['B', 'C']);
+    await rerender({ sources: added });
 
-    // The list grows at once, then the refusal takes it back.
-    await rerender({ sources: [sourceA, sourceB, sourceC] });
+    // C's delete confirmation is open when Reset brings the saved list back.
+    await openDelete('C');
     await rerender({ sources: [sourceA, sourceB] });
 
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(header('A')).toHaveAttribute('aria-expanded', 'false');
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
+    expect(header('B')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('brings a refused delete back with its open state', async () => {
-    const { rerender } = renderRows([sourceA, sourceB]);
-    await fireEvent.click(header('A'));
-    await fireEvent.click(header('B'));
-
-    const deleteButtons = screen.getAllByRole('button', { name: 'common.delete' });
-    await fireEvent.click(deleteButtons[0]);
-    const dialog = screen.getByRole('alertdialog');
-    const confirm = Array.from(dialog.querySelectorAll('button')).find(
-      button => button.textContent.trim() === 'common.delete'
-    );
-    if (confirm) await fireEvent.click(confirm);
-
-    await rerender({ sources: [sourceB] });
-    await rerender({ sources: [sourceA, sourceB] });
-
-    expect(header('A')).toHaveAttribute('aria-expanded', 'true');
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('brings the original rows back when a refused save undoes two deletes made before its result', async () => {
-    const { rerender } = renderRows([sourceA, sourceB, sourceC]);
-    await fireEvent.click(header('A'));
-    await fireEvent.click(header('B'));
-
-    async function deleteFirstCard() {
-      const deleteButtons = screen.getAllByRole('button', { name: 'common.delete' });
-      await fireEvent.click(deleteButtons[0]);
-      const dialog = screen.getByRole('alertdialog');
-      const confirm = Array.from(dialog.querySelectorAll('button')).find(
-        button => button.textContent.trim() === 'common.delete'
-      );
-      expect(confirm).toBeDefined();
-      if (confirm) await fireEvent.click(confirm);
-    }
-
-    // The engine coalesces the second delete into the save that is still running.
-    await deleteFirstCard();
-    await rerender({ sources: [sourceB, sourceC] });
-    await deleteFirstCard();
-    await rerender({ sources: [sourceC] });
-
-    // The refusal takes the list back to where it was before the first delete.
-    await rerender({ sources: [sourceA, sourceB, sourceC] });
-
-    expect(header('A')).toHaveAttribute('aria-expanded', 'true');
-    expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-    expect(header('C')).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('deletes a source after confirmation with one list save', async () => {
+  it('deletes a source after confirmation with one list update', async () => {
     const { onUpdateSources } = renderRows([sourceA, sourceB]);
 
-    const deleteButtons = screen.getAllByRole('button', { name: 'common.delete' });
-    await fireEvent.click(deleteButtons[0]);
-    const dialog = screen.getByRole('alertdialog');
-    const confirm = Array.from(dialog.querySelectorAll('button')).find(
-      button => button.textContent.trim() === 'common.delete'
-    );
-    if (confirm) await fireEvent.click(confirm);
+    await confirmDelete(await openDelete('A'));
 
-    expect(onUpdateSources).toHaveBeenCalledExactlyOnceWith([sourceB], {
-      field: AUDIO_SOURCES_LIST_FIELD,
-    });
+    expect(onUpdateSources).toHaveBeenCalledExactlyOnceWith([sourceB]);
   });
 });
 
-describe('SoundCardManager add outcome', () => {
+describe('SoundCardManager add', () => {
   const NAME_TESTID = 'new-soundcard-name';
-  const SAVED = { saved: [['sources']], dropped: [], failed: [], remaining: false };
-  const REFUSED = {
-    saved: [],
-    dropped: [],
-    failed: [['sources']],
-    remaining: false,
-    error: new Error('no'),
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetAutoSaveForTest();
-    store.stageSectionEdit.mockReset();
-    store.saveStagedSection.mockReset();
     vi.mocked(getAvailableModels).mockReturnValue([]);
     vi.mocked(acousticModelAvailability).mockReturnValue({
       kind: 'none',
@@ -634,20 +585,17 @@ describe('SoundCardManager add outcome', () => {
     });
   });
 
-  afterEach(() => {
-    cleanup();
-    resetAutoSaveForTest();
-  });
+  afterEach(cleanup);
 
-  async function addMic() {
+  it('appends the source, sends the list once and closes the form in the same call', async () => {
+    const onUpdateSources = vi.fn();
     renderTyped(SoundCardManager, {
       props: {
         sources: [],
         audioDevices: [{ index: 0, name: 'USB Mic', id: USB_MIC }],
         audioDevicesLoading: false,
         disabled: false,
-        onUpdateSources: (sources: AudioSourceConfig[], options: CommitOptions) =>
-          commitSetting('audio', { sources }, options),
+        onUpdateSources,
         onRefreshDevices: vi.fn(),
       },
     });
@@ -657,115 +605,14 @@ describe('SoundCardManager add outcome', () => {
     });
     await fireEvent.input(screen.getByTestId(NAME_TESTID), { target: { value: 'Mic 1' } });
     await fireEvent.click(screen.getByRole('button', { name: ADD_SOURCE_KEY }));
-  }
 
-  it('shows the busy label and blocks a second add while the new source is saved', async () => {
-    const pending = deferred<typeof SAVED>();
-    store.saveStagedSection.mockReturnValueOnce(pending.promise);
-
-    await addMic();
-
-    const busy = await screen.findByRole('button', { name: 'settings.audio.soundCards.adding' });
-    expect(busy).toHaveAttribute('aria-disabled', 'true');
-    await fireEvent.click(busy);
-    expect(store.stageSectionEdit).toHaveBeenCalledOnce();
-
-    pending.resolve(SAVED);
-    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
-  });
-
-  it('closes the add form once the new source is saved', async () => {
-    store.saveStagedSection.mockResolvedValue(SAVED);
-
-    await addMic();
-
-    await waitFor(() => expect(screen.queryByTestId(NAME_TESTID)).toBeNull());
-  });
-
-  it('keeps the add form open with what was typed when the save is refused', async () => {
-    store.saveStagedSection.mockResolvedValue(REFUSED);
-
-    await addMic();
-
-    await waitFor(() => expect(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD).state).toBe('error'));
-    expect(screen.getByTestId(NAME_TESTID)).toHaveValue('Mic 1');
-  });
-
-  describe('rows after a list save outcome', () => {
-    const ids = ['A', 'B', 'C', 'P', 'Q', 'R', 'S'];
-    const source = (name: string): AudioSourceConfig => ({
-      name,
-      device: `dev-${name}`,
-      gain: 0,
-      models: [],
-    });
-    const list = (...names: string[]) => names.map(source);
-
-    function renderList(sources: AudioSourceConfig[]) {
-      stubElementAnimate();
-      onTestFinished(restoreElementAnimate);
-      return createComponentTestFactory(SoundCardManager, {
-        sources,
-        audioDevices: ids.map((id, index) => ({ index, name: `Mic ${id}`, id: `dev-${id}` })),
-        audioDevicesLoading: false,
-        disabled: false,
-        onUpdateSources: (next: AudioSourceConfig[], options: CommitOptions) =>
-          commitSetting('audio', { sources: next }, options),
-        onRefreshDevices: vi.fn(),
-      }).render();
-    }
-
-    function header(name: string): HTMLElement {
-      return screen.getByRole('button', { name: accessible => accessible.startsWith(`${name} `) });
-    }
-
-    async function deleteFirstCard() {
-      await fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
-      const dialog = screen.getByRole('alertdialog');
-      const confirm = Array.from(dialog.querySelectorAll('button')).find(
-        button => button.textContent.trim() === 'common.delete'
-      );
-      expect(confirm).toBeDefined();
-      if (confirm) await fireEvent.click(confirm);
-    }
-
-    it('restores the right rows for a refused edit that follows a confirmed one', async () => {
-      store.saveStagedSection.mockResolvedValueOnce(SAVED).mockResolvedValueOnce(REFUSED);
-      const { rerender } = renderList(list('A', 'B', 'C'));
-      await fireEvent.click(header('A'));
-      await fireEvent.click(header('B'));
-
-      await deleteFirstCard();
-      await rerender({ sources: list('B', 'C') });
-      await waitFor(() => expect(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD).state).toBe('saved'));
-
-      await deleteFirstCard();
-      await rerender({ sources: list('C') });
-      await waitFor(() => expect(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD).state).toBe('error'));
-      await rerender({ sources: list('B', 'C') });
-
-      expect(header('B')).toHaveAttribute('aria-expanded', 'true');
-      expect(header('C')).toHaveAttribute('aria-expanded', 'false');
-    });
-
-    it('restores the rows from before a refused edit that follows an outside length change', async () => {
-      store.saveStagedSection.mockResolvedValue(REFUSED);
-      const { rerender } = renderList(list('A', 'B', 'C'));
-
-      await deleteFirstCard();
-      await rerender({ sources: list('B', 'C') });
-      await waitFor(() => expect(store.saveStagedSection).toHaveBeenCalledOnce());
-
-      // Another window grows the list: every row gets a fresh id.
-      await rerender({ sources: list('P', 'Q', 'R', 'S') });
-      await fireEvent.click(header('Q'));
-
-      await deleteFirstCard();
-      await rerender({ sources: list('Q', 'R', 'S') });
-      await waitFor(() => expect(store.saveStagedSection).toHaveBeenCalledTimes(2));
-      await rerender({ sources: list('P', 'Q', 'R', 'S') });
-
-      expect(header('Q')).toHaveAttribute('aria-expanded', 'true');
-    });
+    expect(onUpdateSources).toHaveBeenCalledOnce();
+    expect(onUpdateSources.mock.calls[0]).toHaveLength(1);
+    expect((onUpdateSources.mock.calls[0][0] as AudioSourceConfig[]).map(s => s.name)).toEqual([
+      'Mic 1',
+    ]);
+    // No wait for a save result: the form is gone and the button has no busy label.
+    expect(screen.queryByTestId(NAME_TESTID)).toBeNull();
+    expect(screen.queryByText('settings.audio.soundCards.adding')).toBeNull();
   });
 });

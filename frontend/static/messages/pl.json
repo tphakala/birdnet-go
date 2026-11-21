@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Przechwytywanie",
         "levelTitle": "Poziom wejściowy",
-        "captureApplyHint": "Przechwytywanie uruchomi się ponownie po zastosowaniu.",
-        "applyCapture": "Zastosuj i uruchom ponownie przechwytywanie",
         "applying": "Stosowanie...",
-        "adding": "Dodawanie...",
-        "captureApplyFailed": "Przechwytywanie nie zostało zmienione. Zastosuj ponownie lub anuluj."
+        "adding": "Dodawanie..."
       },
       "audioCapture": {
         "title": "Przechwytywanie Audio",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Karta dźwiękowa wybrana i gotowa do przechwytywania",
         "availableDevices": "Dostępne Urządzenia Audio",
         "active": "Aktywne",
-        "streamsConfigured": "{count, plural, one {Skonfigurowany # strumień} few {Skonfigurowane # strumienie} other {Skonfigurowanych # strumieni}}"
+        "streamsConfigured": "{count, plural, one {Skonfigurowany # strumień} few {Skonfigurowane # strumienie} other {Skonfigurowanych # strumieni}}",
+        "description": "Karty dźwiękowe, których słucha BirdNET-Go. Zmiana urządzenia lub częstotliwości próbkowania uruchamia ponownie przechwytywanie na tym źródle po zapisaniu."
       },
       "quietHours": {
         "title": "Godziny ciszy",
@@ -4152,8 +4150,10 @@
         "listFailed": "Nie udało się wczytać listy modeli.",
         "warningBadge": "Sprawdź klasyfikatory"
       },
-      "sources": {
-        "autoSaveHelp": "Zmiany są zapisywane od razu. Zmiany urządzenia i częstotliwości próbkowania ponownie uruchamiają przechwytywanie, więc czekają, aż klikniesz Zastosuj."
+      "validation": {
+        "soundCards": "Przed zapisaniem popraw karty dźwiękowe na karcie {tab}: {names}",
+        "unnamedSource": "źródło {position} (bez nazwy)",
+        "needsAttention": "Wymaga uwagi"
       }
     },
     "security": {

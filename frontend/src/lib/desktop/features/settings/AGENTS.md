@@ -90,7 +90,17 @@ afterwards, so the form shows the server values without losing unsaved edits.
 A tab marked `saveMode: 'immediate'` in `SettingsTabs` saves each change as it
 is made, so it has no save bar. The page shows a one line note and the state of
 the saves in its place. Every other tab keeps the bar. Use it for settings that
-take effect without a restart; the rest keep an explicit Apply.
+take effect without a restart; the rest keep an explicit Apply. Of the Audio
+page, only the Streams tab uses it for now.
+
+The Audio page's Sound Card tab does not: its cards write the whole sources array
+into the form with `settingsActions.updateSection` and the Save Changes bar
+persists it. Its save rules (`soundCardProblems` in
+`$lib/desktop/components/forms/sourceRules.ts`) are pure functions of the form and
+the saved values, so the page evaluates them whichever tab is open and reports
+them through `setValidationIssues` under a fixed set of owned keys (never one key
+per row); a problem the saved configuration already has is not reported. The cards
+use the same functions for their inline messages.
 
 What saves when:
 

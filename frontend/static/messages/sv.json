@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Inspelning",
         "levelTitle": "Ingångsnivå",
-        "captureApplyHint": "Inspelningen startas om när du verkställer.",
-        "applyCapture": "Verkställ och starta om inspelningen",
         "applying": "Verkställer...",
-        "adding": "Lägger till...",
-        "captureApplyFailed": "Inspelningen ändrades inte. Verkställ igen eller avbryt."
+        "adding": "Lägger till..."
       },
       "audioCapture": {
         "title": "Ljudkortskonfiguration",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Ljudkort valt och redo för inspelning",
         "availableDevices": "Tillgängliga ljudenheter",
         "active": "Aktiv",
-        "streamsConfigured": "{count} ström(mar) konfigurerade"
+        "streamsConfigured": "{count} ström(mar) konfigurerade",
+        "description": "Ljudkort som BirdNET-Go lyssnar på. En ändring av enhet eller samplingsfrekvens startar om inspelningen på den källan när du sparar."
       },
       "quietHours": {
         "title": "Tysta timmar",
@@ -4152,8 +4150,10 @@
         "listFailed": "Modellistan kunde inte läsas in.",
         "warningBadge": "Kontrollera klassificerare"
       },
-      "sources": {
-        "autoSaveHelp": "Ändringar sparas direkt. Ändringar av enhet och samplingsfrekvens startar om inspelningen och väntar därför tills du klickar på Verkställ."
+      "validation": {
+        "soundCards": "Åtgärda ljudkorten på fliken {tab} innan du sparar: {names}",
+        "unnamedSource": "källa {position} (utan namn)",
+        "needsAttention": "Kräver uppmärksamhet"
       }
     },
     "security": {
