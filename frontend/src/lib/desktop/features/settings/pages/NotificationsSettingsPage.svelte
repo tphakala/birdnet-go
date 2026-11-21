@@ -1071,11 +1071,15 @@
 
       const rec = result.recommended;
       if (rec === 'https' || rec === 'http') {
-        // The probe picks the protocol without a user edit, so a form that was clean stays clean.
-        const wasClean = !providerFormDirty;
         serviceFormData.ntfyProtocol = rec;
         serviceFormData.ntfyCheckStatus = rec;
-        if (wasClean) providerFormInitial = providerFormSnapshot();
+        // The probe picks the protocol without a user edit, so only the baseline's protocol moves
+        // with it: other edits stay edits, and undoing them leaves the form clean.
+        if (providerFormInitial !== null) {
+          const baseline = JSON.parse(providerFormInitial);
+          baseline.editable.ntfyProtocol = rec;
+          providerFormInitial = JSON.stringify(baseline);
+        }
       } else {
         serviceFormData.ntfyCheckStatus = 'unreachable';
       }

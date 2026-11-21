@@ -165,4 +165,34 @@ describe('NotificationsSettingsPage unsaved-changes guard', () => {
     });
     expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(true);
   });
+
+  it('does not block once the user undoes their own edit, whatever protocol the probe chose', async () => {
+    providers = [NTFY_PROVIDER];
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'settings.notifications.push.providers.editButton',
+      })
+    );
+    const name = await screen.findByLabelText('settings.notifications.push.form.name.label');
+    await user.type(name, 'x');
+    await user.tab();
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'settings.notifications.push.services.ntfy.testConnection',
+      })
+    );
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    await screen.findByText(/settings\.notifications\.push\.services\.ntfy\./, {
+      selector: 'span.text-xs',
+    });
+
+    // Undo the name edit: the only difference left is the protocol the probe wrote itself.
+    await user.clear(name);
+    await user.type(name, NTFY_PROVIDER.name);
+    await user.tab();
+
+    expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(false);
+  });
 });
