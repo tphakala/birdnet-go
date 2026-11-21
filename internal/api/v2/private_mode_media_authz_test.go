@@ -1,8 +1,8 @@
 // private_mode_media_authz_test.go: regression tests for GHSA-c7jx-552f-94hh.
 //
 // The stored-detection-media routes GET /api/v2/audio/:id,
-// GET /api/v2/spectrogram/:id, GET /api/v2/spectrogram/:id/status and
-// POST /api/v2/spectrogram/:id/generate are registered directly on the root Echo
+// GET /api/v2/spectrogram/:id, GET /api/v2/spectrogram/:id/status,
+// POST /api/v2/spectrogram/:id/generate and POST /api/v2/audio/:id/audible-bats are registered directly on the root Echo
 // instance (media.RegisterRoutes uses c.Echo, not the v2 group), so they do NOT
 // inherit the group-level c.Group.Use(c.PrivateModeAuth) gate. They therefore
 // carry PrivateModeAuth as per-route middleware. These tests drive real requests
@@ -149,6 +149,7 @@ var mediaByIDRoutes = []struct {
 	{http.MethodGet, "/api/v2/spectrogram/1"},
 	{http.MethodGet, "/api/v2/spectrogram/1/status"},
 	{http.MethodPost, "/api/v2/spectrogram/1/generate"},
+	{http.MethodPost, "/api/v2/audio/1/audible-bats"},
 }
 
 // TestPrivateMode_MediaByIDRoutes_RequireAuth asserts that with Private Mode
@@ -212,7 +213,7 @@ func TestPublicMode_MediaByIDRoutes_RemainPublic(t *testing.T) {
 // replaceLastIDSegment swaps the numeric "1" id segment for a non-numeric value
 // so the handler's numeric validation rejects it (400) before touching the
 // datastore. The routes are /api/v2/audio/1, /api/v2/spectrogram/1,
-// /api/v2/spectrogram/1/status and /api/v2/spectrogram/1/generate.
+// /api/v2/spectrogram/1/status, /api/v2/spectrogram/1/generate, and /api/v2/audio/1/audible-bats.
 func replaceLastIDSegment(path string) string {
 	switch path {
 	case "/api/v2/audio/1":
@@ -223,6 +224,8 @@ func replaceLastIDSegment(path string) string {
 		return "/api/v2/spectrogram/not-a-number/status"
 	case "/api/v2/spectrogram/1/generate":
 		return "/api/v2/spectrogram/not-a-number/generate"
+	case "/api/v2/audio/1/audible-bats":
+		return "/api/v2/audio/not-a-number/audible-bats"
 	default:
 		return path
 	}

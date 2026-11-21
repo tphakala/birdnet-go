@@ -110,6 +110,7 @@ var publicMutationRoutes = map[string]bool{
 	"POST /api/v2/search": true,
 	// Registered with PrivateModeAuth only (media/media.go), so public outside private mode.
 	"POST /api/v2/spectrogram/:id/generate": true,
+	"POST /api/v2/audio/:id/audible-bats":   true,
 }
 
 // authOnlyPrefixes are path prefixes where every route requires authentication

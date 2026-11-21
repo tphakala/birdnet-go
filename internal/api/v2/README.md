@@ -188,7 +188,7 @@ The MQTT and BirdWeather test endpoints stream one JSON object per line: the sta
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`     | ❌   | Get spectrogram generation status       |
 | POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`     | ✅   | Extract audio clip from time range      |
 | POST   | `/audio/:id/process`                 | `ProcessAudioByID`         | ✅   | Denoise, normalize or gain a clip (WAV) |
-| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`          | ✅   | Time-expand bat clip into audible range |
+| POST   | `/audio/:id/audible-bats`            | `AudibleBatsByID`          | ❌   | Time-expand bat clip into audible range |
 | POST   | `/spectrogram/:id/process`           | `ProcessedSpectrogramByID` | ✅   | Spectrogram of denoised/normalized clip |
 
 **On-demand clip processing.** `clip`, `process`, `audible-bats` and the processed

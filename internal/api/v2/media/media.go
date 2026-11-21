@@ -412,8 +412,8 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Audio processing / preview (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/process", c.ProcessAudioByID, c.AuthMiddleware)
 
-	// Audible bats derived playback (requires authentication)
-	c.Echo.POST("/api/v2/audio/:id/audible-bats", c.AudibleBatsByID, c.AuthMiddleware)
+	// Audible bats derived playback (public like audio playback; gated only in Private Mode)
+	c.Echo.POST("/api/v2/audio/:id/audible-bats", c.AudibleBatsByID, c.PrivateModeAuth)
 
 	// Processed spectrogram preview (requires authentication)
 	c.Echo.POST("/api/v2/spectrogram/:id/process", c.ProcessedSpectrogramByID, c.AuthMiddleware)
@@ -1688,7 +1688,7 @@ func (c *Handler) resolveBatClipFile(ctx echo.Context, noteID string) (absoluteP
 // conversion) and gain-adjusted. The
 // result is returned as WAV for browser playback and cached ephemerally; the
 // original recording and AI pipeline are never touched. The cache is keyed per
-// clip file (path, size and mtime). Requires authentication. The job runs on the
+// clip file (path, size and mtime). Accessible in public mode; requires authentication when Private Mode is enabled. The job runs on the
 // request context, outside the shared processing flight, so a client abort
 // cancels it and frees its processing slot.
 //
@@ -1724,6 +1724,18 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	if !transcode.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
 			gainRangeMessage(), http.StatusBadRequest)
+	}
+
+	// Unauthenticated guests in public mode are restricted to the server's
+	// playback denoise default without custom normalize/gain overrides (matching
+	// serveDenoisedAudio and useAudibleBats.svelte.ts) so arbitrary bodies
+	// cannot bypass processingCache to exhaust the processing slots.
+	if !c.clientAuthenticated(ctx) {
+		if !c.mayDenoise(ctx, req.Denoise) {
+			req.Denoise = ""
+		}
+		req.Normalize = false
+		req.GainDB = 0
 	}
 
 	// Confirm this is a bat detection and resolve its validated source clip path.

@@ -172,6 +172,7 @@ func TestProcessAudioByID_SemaphoreFullIs503(t *testing.T) {
 
 func TestAudibleBatsByID(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
+	controller.isClientAuthenticated = signedIn
 
 	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
 	writeToneWAV(t, fixturePath(tempDir, "low.wav"), 48000, 0.2, fixtureToneHz)
@@ -248,6 +249,7 @@ func TestAudibleBatsByID_CacheFollowsClipFile(t *testing.T) {
 
 func TestAudibleBatsByID_DenoiseSeparatesCacheEntries(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
+	controller.isClientAuthenticated = signedIn
 
 	writeToneWAV(t, fixturePath(tempDir, "bat.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
 	mockDS := mocks.NewMockInterface(t)
@@ -385,6 +387,7 @@ func wavPeak(body []byte) int {
 // dropping a field would leave the response unprocessed.
 func TestProcessEndpoints_ForwardFilterFields(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
+	controller.isClientAuthenticated = signedIn
 
 	const quietAmp = 0.01
 	var quiet bytes.Buffer
@@ -490,4 +493,28 @@ func TestProcessEndpoints_DeletedClipIs404(t *testing.T) {
 			assert.Contains(t, rec.Body.String(), "Audio clip not found")
 		})
 	}
+}
+
+func TestAudibleBatsByID_GuestClampsCustomFilters(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+	// controller.isClientAuthenticated stays nil (unauthenticated guest).
+
+	const quietAmp = 0.01
+	var quiet bytes.Buffer
+	require.NoError(t, wavpcm.EncodeInterleaved(&quiet, wavpcm.Config{SampleRate: batTestRate, BitDepth: 16, Channels: 1}, toneBytes(batTestRate, batTestSeconds, fixtureBatToneHz, quietAmp)))
+	require.NoError(t, os.WriteFile(fixturePath(tempDir, "bat.wav"), quiet.Bytes(), 0o600))
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteModelType", "40").Return("bat", nil)
+	mockDS.On("GetNoteClipPath", "40").Return("bat.wav", nil)
+	controller.DS = mockDS
+
+	plain := postJSON(e, "/api/v2/audio/40/audible-bats", `{"expansion": 10}`)
+	require.Equal(t, http.StatusOK, plain.Code, plain.Body.String())
+
+	// Arbitrary denoise/normalize/gain_db from a guest must clamp to plain defaults
+	// and share the plain cache entry rather than amplifying or busting the cache.
+	custom := postJSON(e, "/api/v2/audio/40/audible-bats", `{"expansion": 10, "denoise": "heavy", "normalize": true, "gain_db": 12}`)
+	require.Equal(t, http.StatusOK, custom.Code, custom.Body.String())
+	assert.Equal(t, plain.Body.Bytes(), custom.Body.Bytes())
 }
