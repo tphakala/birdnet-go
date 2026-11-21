@@ -7,7 +7,7 @@
  */
 import { tick } from 'svelte';
 import { SvelteSet } from 'svelte/reactivity';
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished, type Mock } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { deferred } from '../../../../test/async-helpers';
 import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
@@ -15,7 +15,11 @@ import {
   restoreElementAnimate,
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
-import type { ChannelAnalysis, StreamConfig } from '$lib/stores/settings';
+import {
+  defaultQuietHoursConfig,
+  type ChannelAnalysis,
+  type StreamConfig,
+} from '$lib/stores/settings';
 
 vi.mock('./SelectDropdown.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockSelectDropdown.svelte')).default,
@@ -57,8 +61,17 @@ vi.mock('$lib/stores/acousticModels.svelte', () => ({
   acousticModelAvailability: vi.fn(() => ({ kind: 'unknown' })),
 }));
 
+const quietHours = vi.hoisted(() => ({
+  status: null as { suppressedStreams: Record<string, boolean> } | null,
+}));
 vi.mock('$lib/stores/quietHours.svelte', () => ({
-  quietHoursStore: { startPolling: vi.fn(), stopPolling: vi.fn(), status: null },
+  quietHoursStore: {
+    startPolling: vi.fn(),
+    stopPolling: vi.fn(),
+    get status() {
+      return quietHours.status;
+    },
+  },
 }));
 
 vi.mock('$lib/utils/api', async importOriginal => ({
@@ -963,6 +976,53 @@ describe('StreamManager health follows the saved streams', () => {
     await fireEvent.input(url, { target: { value: streamA.url } });
     await echoLast(view, view.onUpdateStreams);
     expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument();
+  });
+
+  it('does not show a suppressed status a card borrows from a saved stream with the same URL', async () => {
+    const quiet = { ...streamA, quietHours: { ...defaultQuietHoursConfig, enabled: true } };
+    quietHours.status = { suppressedStreams: { [streamA.url]: true } };
+    onTestFinished(() => {
+      quietHours.status = null;
+    });
+    vi.mocked(api.get).mockResolvedValue([]);
+    const copy = { ...quiet, name: 'C' };
+    renderRows([quiet, copy], { savedStreams: [quiet] });
+
+    expect(
+      within(header('A')).getByText('settings.audio.streams.status.suppressed')
+    ).toBeInTheDocument();
+    expect(within(header('C')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
+  });
+
+  it('gives a row that was deleted and added again with the same name and URL its health once saved', async () => {
+    const view = renderRows([streamA], { savedStreams: [streamA] });
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+
+    await confirmDelete(0);
+    await echoLast(view, view.onUpdateStreams);
+    await fillAddForm('A', streamA.url);
+    await fireEvent.click(addFormTestButton());
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+    const readded = await echoLast(view, view.onUpdateStreams);
+
+    // Saved: the saved list holds an equal stream again, so its name and URL list is unchanged.
+    await view.rerender({ streams: readded, savedStreams: readded.map(stream => ({ ...stream })) });
+
+    expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument();
+  });
+
+  it('drops the saved URL of a row when the saved list loses it, so a later stream with that URL lends no health', async () => {
+    const view = renderRows([streamA, streamB], { savedStreams: [streamA, streamB] });
+    await waitFor(() => expect(within(header('A')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+
+    // The saved list no longer holds A; the form still does.
+    await view.rerender({ streams: [streamA, streamB], savedStreams: [streamB] });
+    const other = { ...streamA, name: 'Z' };
+    vi.mocked(api.get).mockResolvedValue([healthOf(other), healthOf(streamB)]);
+    await view.rerender({ streams: [streamA, streamB], savedStreams: [streamB, other] });
+
+    await waitFor(() => expect(within(header('B')).getByText(CONNECTED_KEY)).toBeInTheDocument());
+    expect(within(header('A')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
   });
 
   it('gives a card its health back once its edited URL is saved', async () => {

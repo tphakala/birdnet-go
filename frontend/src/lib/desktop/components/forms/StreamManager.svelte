@@ -275,7 +275,9 @@
     if (!health) {
       // No health data means the stream was removed from the active map.
       // Check per-stream suppression state rather than global anyActive flag.
-      if (isStreamSuppressed(healthUrl ?? stream.url, stream)) {
+      // Only a stream that has a saved counterpart can be suppressed: an unsaved card
+      // with the URL of a suppressed stream must not borrow its status.
+      if (healthUrl !== undefined && isStreamSuppressed(healthUrl, stream)) {
         return 'suppressed';
       }
       return 'unknown';
@@ -484,17 +486,26 @@
   // stream, so a row shows it only while its URL is still that saved URL: an edited
   // URL, or a URL copied from another stream, shows none. A row counts as saved when
   // its name and URL are those of a saved stream at the moment its id is given out
-  // (the first list, Reset, a reload) or the saved list changes (a Save).
+  // (the first list, Reset, a reload) or the saved list is replaced (a Save). The
+  // map is rebuilt from scratch each time: a row keeps the saved URL it had only
+  // while a saved stream still has that URL, so a stale entry cannot outlive it.
   const savedRowUrls = new SvelteMap<string, string>();
 
   function adoptSavedUrls() {
-    const saved = new Set(savedStreams.map(stream => JSON.stringify([stream.name, stream.url])));
+    const savedPairs = new Set(
+      savedStreams.map(stream => JSON.stringify([stream.name, stream.url]))
+    );
+    const savedUrls = new Set(savedStreams.map(stream => stream.url));
+    const next = new Map<string, string>();
     streams.forEach((stream, index) => {
       const id = rowIds.at(index);
-      if (id !== undefined && saved.has(JSON.stringify([stream.name, stream.url]))) {
-        savedRowUrls.set(id, stream.url);
-      }
+      if (id === undefined) return;
+      const known = savedRowUrls.get(id);
+      if (savedPairs.has(JSON.stringify([stream.name, stream.url]))) next.set(id, stream.url);
+      else if (known !== undefined && savedUrls.has(known)) next.set(id, known);
     });
+    savedRowUrls.clear();
+    next.forEach((url, id) => savedRowUrls.set(id, url));
   }
 
   /** The URL a row's health is filed under: its saved URL while the row still has it. */
@@ -656,12 +667,16 @@
         eventSource.close();
         eventSource = null;
       }
-      if (savedIdentity !== undefined && savedIdentity !== identity) {
-        adoptSavedUrls();
-        void loadHealthStatus();
-      }
+      if (savedIdentity !== undefined && savedIdentity !== identity) void loadHealthStatus();
       savedIdentity = identity;
     });
+  });
+
+  // The saved list is replaced by every Save (also by one that leaves its names and
+  // URLs as they were), so the row to saved URL map is rebuilt on each replacement.
+  $effect(() => {
+    void savedStreams;
+    untrack(adoptSavedUrls);
   });
 </script>
 
