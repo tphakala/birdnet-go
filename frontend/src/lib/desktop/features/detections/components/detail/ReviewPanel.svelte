@@ -376,6 +376,7 @@
     flex-wrap: wrap;
     gap: 0.5rem;
     margin-top: 0.5rem;
+
     /* The group takes focus from a shortcut: a ring that hugs the buttons, not the whole row */
     width: fit-content;
     max-width: 100%;
