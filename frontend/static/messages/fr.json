@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Au moins un modèle doit être sélectionné"
         },
         "captureTitle": "Capture audio",
-        "levelTitle": "Niveau d'entrée",
-        "applying": "Application...",
-        "adding": "Ajout..."
+        "levelTitle": "Niveau d'entrée"
       },
       "audioCapture": {
         "title": "Capture audio",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Configuration des Flux Audio",
-        "noStreamsConfigured": "Aucun flux configuré"
+        "noStreamsConfigured": "Aucun flux configuré",
+        "description": "Configurez les flux audio réseau pour la capture audio à distance. Supporte les protocoles RTSP, HTTP, HLS, RTMP et UDP. Une modification de la connexion reconnecte le flux lors de l'enregistrement."
       },
       "streams": {
         "streamLabel": "Flux",
@@ -3904,12 +3903,7 @@
           "message": "Flux stéréo détecté. Le mixage de plusieurs canaux peut réduire la précision de détection en raison des différences de phase entre les canaux. Sélectionnez un canal spécifique (gauche/droit) ou utilisez le détecteur de canaux pour de meilleurs résultats.",
           "short": "Downmix stéréo actif. La précision de détection peut être réduite. Sélectionnez un canal spécifique dans Connexion."
         },
-        "autoSaveHelp": "Les modifications sont enregistrées immédiatement. Les modifications de la connexion reconnectent le flux : elles attendent donc que vous cliquiez sur Appliquer.",
         "connectionTitle": "Connexion",
-        "connectionApplyHint": "Le flux se reconnecte lorsque vous appliquez.",
-        "connectionApplyFailed": "La connexion n'a pas été modifiée. Appliquez à nouveau ou annulez.",
-        "applyConnection": "Appliquer et reconnecter",
-        "testBeforeApply": "Testez la nouvelle URL avant de l'appliquer.",
         "statsLine": "Total : {total} · Débit : {rate} · Dernier : {last}",
         "ago": {
           "seconds": "il y a {count} s",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Corrigez les cartes son de l'onglet {tab} avant d'enregistrer : {names}",
         "unnamedSource": "source {position} (sans nom)",
-        "needsAttention": "Attention requise"
+        "needsAttention": "Attention requise",
+        "streams": "Corrigez les flux de l'onglet {tab} avant d'enregistrer : {names}",
+        "streamsUntested": "Testez la nouvelle URL du flux de l'onglet {tab} avant d'enregistrer : {names}",
+        "unnamedStream": "flux {position} (sans nom)"
       }
     },
     "security": {

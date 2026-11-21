@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Minst én modell må velges"
         },
         "captureTitle": "Opptak",
-        "levelTitle": "Inngangsnivå",
-        "applying": "Bruker...",
-        "adding": "Legger til..."
+        "levelTitle": "Inngangsnivå"
       },
       "audioCapture": {
         "title": "Lydkortkonfigurasjon",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Lydstrøm-konfigurasjon",
-        "noStreamsConfigured": "Ingen strømmer konfigurert"
+        "noStreamsConfigured": "Ingen strømmer konfigurert",
+        "description": "Konfigurer nettverkslydstrømmer for ekstern lydopptak. Støtter RTSP, HTTP, HLS, RTMP og UDP-protokoller. En endring av tilkoblingen kobler til strømmen på nytt når du lagrer."
       },
       "streams": {
         "streamLabel": "Strøm",
@@ -3904,12 +3903,7 @@
           "message": "Stereostrøm registrert. Nedmiks av flere kanaler kan redusere deteksjonsnøyaktigheten på grunn av faseforskjeller mellom kanaler. Velg en spesifikk kanal (venstre/høyre) eller bruk kanaldetektoren for best resultat.",
           "short": "Stereo-nedmiks aktiv. Deteksjonsnøyaktigheten kan være redusert. Velg en spesifikk kanal under Tilkobling."
         },
-        "autoSaveHelp": "Endringer lagres umiddelbart. Endringer av tilkoblingen kobler strømmen til på nytt og venter derfor til du klikker Bruk.",
         "connectionTitle": "Tilkobling",
-        "connectionApplyHint": "Strømmen kobles til på nytt når du bruker endringene.",
-        "connectionApplyFailed": "Tilkoblingen ble ikke endret. Bruk på nytt eller avbryt.",
-        "applyConnection": "Bruk og koble til på nytt",
-        "testBeforeApply": "Test den nye URL-en før du bruker den.",
         "statsLine": "Totalt: {total} · Hastighet: {rate} · Sist: {last}",
         "ago": {
           "seconds": "{count} s siden",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Rett opp lydkortene i fanen {tab} før du lagrer: {names}",
         "unnamedSource": "kilde {position} (uten navn)",
-        "needsAttention": "Trenger oppmerksomhet"
+        "needsAttention": "Trenger oppmerksomhet",
+        "streams": "Rett opp strømmene i fanen {tab} før du lagrer: {names}",
+        "streamsUntested": "Test den nye strøm-URL-en i fanen {tab} før du lagrer: {names}",
+        "unnamedStream": "strøm {position} (uten navn)"
       }
     },
     "security": {

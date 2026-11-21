@@ -17,6 +17,8 @@
   - hints: Optional array of hint strings to display
   - primaryAction: Primary button configuration
   - secondaryAction: Secondary button configuration
+  An action can be marked `disabled` (aria-disabled, the button stays reachable and its
+  handler must ignore the click) and name the element that says why in `describedBy`.
 
   @component
 -->
@@ -30,6 +32,8 @@
     label: string;
     icon?: Component<LucideProps>;
     onclick: () => void;
+    disabled?: boolean;
+    describedBy?: string;
   }
 
   interface Props {
@@ -101,7 +105,13 @@
     <div class="flex flex-wrap items-center justify-center gap-3">
       {#if primaryAction}
         {@const PrimaryIcon = primaryAction.icon}
-        <button type="button" class="btn btn-primary btn-sm gap-2" onclick={primaryAction.onclick}>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm gap-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          onclick={primaryAction.onclick}
+          aria-disabled={primaryAction.disabled ? 'true' : undefined}
+          aria-describedby={primaryAction.disabled ? primaryAction.describedBy : undefined}
+        >
           {#if PrimaryIcon}
             <PrimaryIcon class="size-4" aria-hidden="true" />
           {/if}
@@ -111,7 +121,13 @@
 
       {#if secondaryAction}
         {@const SecondaryIcon = secondaryAction.icon}
-        <button type="button" class="btn btn-ghost btn-sm gap-2" onclick={secondaryAction.onclick}>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm gap-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          onclick={secondaryAction.onclick}
+          aria-disabled={secondaryAction.disabled ? 'true' : undefined}
+          aria-describedby={secondaryAction.disabled ? secondaryAction.describedBy : undefined}
+        >
           {#if SecondaryIcon}
             <SecondaryIcon class="size-4" aria-hidden="true" />
           {/if}

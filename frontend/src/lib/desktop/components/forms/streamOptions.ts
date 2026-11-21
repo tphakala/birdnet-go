@@ -24,6 +24,33 @@ export function streamNameTooLongMessage(): string {
   return t('settings.audio.streams.errors.nameTooLong', { max: MAX_STREAM_NAME_LENGTH });
 }
 
+/** What the save rules can find wrong with a stream name. */
+export type StreamNameProblem = 'required' | 'tooLong' | 'duplicate';
+
+/** What the save rules can find wrong with a stream URL. */
+export type StreamUrlProblem = 'required' | 'invalid' | 'duplicate' | 'untested';
+
+/** The message for a name problem of the save rules, for the add form and the card. */
+export function streamNameProblemMessage(problem: StreamNameProblem): string {
+  if (problem === 'required') return t('settings.audio.streams.errors.nameRequired');
+  if (problem === 'tooLong') return streamNameTooLongMessage();
+  return t('settings.audio.streams.errors.duplicateName');
+}
+
+/** The message for a URL problem of the save rules, for the add form and the card. */
+export function streamUrlProblemMessage(problem: StreamUrlProblem): string {
+  switch (problem) {
+    case 'required':
+      return t('settings.audio.streams.errors.urlRequired');
+    case 'invalid':
+      return t('settings.audio.streams.errors.invalidUrl');
+    case 'duplicate':
+      return t('settings.audio.streams.errors.duplicate');
+    case 'untested':
+      return t('settings.audio.streams.testRequired');
+  }
+}
+
 /** Rate a stream is assumed to deliver until a test reports its own. */
 export const DEFAULT_SAMPLE_RATE = 48000;
 

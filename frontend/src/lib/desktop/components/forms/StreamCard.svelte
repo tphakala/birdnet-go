@@ -1,37 +1,38 @@
 <!--
   Stream Card Component
 
-  Purpose: One audio stream whose settings save as they change. The header is
-  always visible and toggles the body: status pill, masked URL, badges, the
-  enabled switch and delete, with the live stats and warnings below it. The
-  body holds the stream's settings in groups, each with its own save status,
-  and the diagnostics.
+  Purpose: One audio stream whose settings go into the settings form; the
+  page's Save Changes bar persists them. The header is always visible and
+  toggles the body: status pill, masked URL, badges, the enabled switch and
+  delete, with the live stats and warnings below it. The body holds the stream's
+  settings in groups and the diagnostics.
 
-  Saving:
-  - Enabled and model switches, selects of the equalizer and quiet hours:
-    committed at once.
-  - Name: a local draft, committed on blur or Enter; Escape restores it. An
-    empty or duplicate name is not committed and the field says why. A rename
-    reconnects the stream.
-  - Connection (URL, type, transport, media mode, channel mode): a local draft
-    with a scoped "Apply and reconnect", since a change reconnects the stream.
-    A changed URL must be valid, unused by another stream and tested first;
-    until then Apply is blocked and says why. A failed apply keeps the draft.
-  - Gain, equalizer numbers, quiet hours times and offsets: committed after the
-    auto-save debounce (gain on release).
+  Editing:
+  - Every control writes the complete stream with the key it changes (the URL
+    field also sets the type its scheme names) through onChange. A name and a
+    URL are written as typed and trimmed when the field is left. A connection
+    change reconnects the stream when it is saved.
+  - A URL that is not in the saved configuration is saved only after a
+    successful test of exactly that URL; until then the field says so and the
+    page blocks Save (the rules are in sourceRules.ts).
+  - A name or URL error hides while that field is edited and shows again when it
+    is left (also when a save or a collapse ends the edit without a blur). A
+    problem another card caused shows at once, and so does the untested URL.
 
   Props:
-  - stream: The saved stream
-  - index: Position of the stream in streams
-  - streams: Every stream, for the duplicate checks
-  - rowId: UI-only id of the row, part of every field key
+  - stream: The stream as it is in the form
   - status: Connection status shown in the header
+  - healthUrl: The saved URL the stream's live health is filed under, when the stream
+    still has it; without it the card shows no live health
+  - problem: What the page's save rules report for this stream
   - availableModels: Models the server lists for the source editors
   - modelOptions: Labels of the listed models, for the header summary
   - disabled: Blocks every change
+  - disabledReason: Why it is disabled, shown beside delete (default: loading)
   - expanded: Whether the body is shown
   - onToggleExpanded: Called by the header button
-  - onCommit: Receives the complete changed stream and the auto-save options
+  - onChange: Receives the complete changed stream
+  - onUrlTested: Called with the URL a successful test was run for
   - onDelete: Called after the delete was confirmed
 
   @component
@@ -51,11 +52,6 @@
     type BackendModel,
   } from '$lib/stores/models.svelte';
   import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
-  import {
-    AUTOSAVE_DEBOUNCE_MS,
-    autoSaveStatus,
-    type CommitOptions,
-  } from '$lib/stores/settingsAutoSave.svelte';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
@@ -66,27 +62,15 @@
   import SourceModelBadges from './SourceModelBadges.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
-  import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
   import SourceCard from '$lib/desktop/features/settings/components/SourceCard.svelte';
   import SettingsGroup from '$lib/desktop/features/settings/components/SettingsGroup.svelte';
   import { SETTINGS_GROUP_DISCLOSURE_CLASSES } from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
-  import CommitTextField from '$lib/desktop/features/settings/components/CommitTextField.svelte';
-  import ScopedApplyGroup from '$lib/desktop/features/settings/components/ScopedApplyGroup.svelte';
-  import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
-  import {
-    STREAMS_FIELD_PREFIX,
-    isContinuousEqualizerChange,
-    isContinuousQuietHoursChange,
-    savedEqualizer,
-    sourceField,
-    type SourceFieldPart,
-  } from './sourceFields';
+  import { savedEqualizer } from './sourceFields';
+  import type { StreamProblem } from './sourceRules';
   import type {
     StreamConfig,
-    StreamType,
     EqualizerSettings,
     QuietHoursConfig,
-    ChannelMode,
     MediaMode,
     ChannelAnalysis,
   } from '$lib/stores/settings';
@@ -108,10 +92,9 @@
     getMediaModeOptions,
     analyzeStreamChannels,
     detectStreamType,
-    isStreamNameTooLong,
-    isValidStreamUrl,
     streamHasTransport,
-    streamNameTooLongMessage,
+    streamNameProblemMessage,
+    streamUrlProblemMessage,
     toStreamType,
   } from './streamOptions';
   import { normalizeChannelMode } from './streamChannel';
@@ -122,31 +105,33 @@
 
   interface Props {
     stream: StreamConfig;
-    index: number;
-    streams: StreamConfig[];
-    rowId: string;
     status?: StreamStatus;
+    healthUrl?: string;
+    problem?: StreamProblem;
     availableModels: BackendModel[];
     modelOptions: Array<{ value: string; label: string }>;
     disabled?: boolean;
+    disabledReason?: string;
     expanded: boolean;
     onToggleExpanded: () => void;
-    onCommit: (_stream: StreamConfig, _options: CommitOptions) => void;
+    onChange: (_stream: StreamConfig) => void;
+    onUrlTested: (_url: string) => void;
     onDelete: () => void;
   }
 
   let {
     stream,
-    index,
-    streams,
-    rowId,
     status = 'unknown',
+    healthUrl,
+    problem,
     availableModels,
     modelOptions,
     disabled = false,
+    disabledReason,
     expanded,
     onToggleExpanded,
-    onCommit,
+    onChange,
+    onUrlTested,
     onDelete,
   }: Props = $props();
 
@@ -165,24 +150,8 @@
   const equalizerHeadingId = `${cardId}-equalizer`;
   const diagnosticsId = `${cardId}-diagnostics`;
 
-  function field(part: SourceFieldPart): string {
-    return sourceField(STREAMS_FIELD_PREFIX, rowId, part);
-  }
-
-  function statusId(part: SourceFieldPart): string {
-    return `${cardId}-${part}-status`;
-  }
-
-  function commit(change: Partial<StreamConfig>, part: SourceFieldPart, debounce = false) {
-    onCommit(
-      { ...stream, ...change },
-      debounce ? { field: field(part), debounceMs: AUTOSAVE_DEBOUNCE_MS } : { field: field(part) }
-    );
-  }
-
-  /** aria-describedby for a control: its status message while that shows an error. */
-  function errorDescription(part: SourceFieldPart): string | undefined {
-    return autoSaveStatus(field(part)).state === 'error' ? statusId(part) : undefined;
+  function change(patch: Partial<StreamConfig>) {
+    onChange({ ...stream, ...patch });
   }
 
   const acousticAvailability = $derived(acousticModelAvailability());
@@ -195,7 +164,10 @@
 
   // The manager passes its $state object directly; reading its keys is reactive.
   const streamHealthMap = getContext<Record<string, StreamHealthResponse>>('streamHealth');
-  let health = $derived(streamHealthMap[stream.url] ?? null);
+  // Filed under the saved URL the manager says this card still has, never under a URL
+  // typed into the field.
+  // eslint-disable-next-line security/detect-object-injection -- saved URL from validated stream config, not user input
+  let health = $derived(healthUrl === undefined ? null : (streamHealthMap[healthUrl] ?? null));
 
   function formatBytes(bytes: number): string {
     // Guard <= 0 (not just === 0): a negative value would make Math.log return NaN.
@@ -329,124 +301,109 @@
 
   // ----- Name -----
 
-  function validateName(name: string): string | null {
-    if (!name) return t('settings.audio.streams.errors.nameRequired');
-    if (isStreamNameTooLong(name)) return streamNameTooLongMessage();
-    const lower = name.toLowerCase();
-    if (streams.some((s, i) => i !== index && s.name.toLowerCase() === lower)) {
-      return t('settings.audio.streams.errors.duplicateName');
-    }
-    return null;
-  }
-
-  // ----- Connection (applied together, the stream reconnects) -----
-
-  interface ConnectionDraft {
-    url: string;
-    type: StreamType;
-    transport: 'tcp' | 'udp';
-    mediaMode: MediaMode;
-    channelMode: ChannelMode;
-  }
-
-  const connection = new ApplyDraft<ConnectionDraft>(
-    () => ({
-      url: stream.url,
-      type: stream.type,
-      transport: stream.transport ?? DEFAULT_TRANSPORT,
-      // An empty or unset media mode is the full-stream default.
-      mediaMode: stream.mediaMode || DEFAULT_MEDIA_MODE,
-      channelMode: normalizeChannelMode(stream.channelMode),
-    }),
-    untrack(() => field('connection'))
+  // The field shows its problem once it was left, and hides it again while the
+  // user edits it. A problem this field did not cause (a duplicate typed on
+  // another card) shows at once, also on a card that opens with one.
+  let nameTouched = $state(untrack(() => Boolean(problem?.name)));
+  // Reactive, so an edit that ends without a blur (see the collapse and disable
+  // effect below) shows a problem the edit had hidden.
+  let nameEditing = $state(false);
+  $effect(() => {
+    if (problem?.name && !nameEditing) nameTouched = true;
+  });
+  let nameError = $derived(
+    problem?.name && nameTouched ? streamNameProblemMessage(problem.name) : undefined
   );
+  let hasProblem = $derived(Boolean(problem?.name || problem?.url));
 
-  /** The stream with the connection applied; fields a type does not use are left out. */
-  function withConnection(value: ConnectionDraft): StreamConfig {
-    const next: StreamConfig = {
-      ...stream,
-      url: value.url.trim(),
-      type: value.type,
-      channelMode: value.channelMode,
-    };
-    delete next.transport;
-    delete next.mediaMode;
-    if (streamHasTransport(value.type)) next.transport = value.transport;
-    if (value.type === 'rtsp') next.mediaMode = value.mediaMode;
-    return next;
+  function handleNameInput(name: string) {
+    nameEditing = true;
+    nameTouched = false;
+    if (name !== stream.name) change({ name });
   }
 
-  let draftUrl = $derived(connection.draft.url.trim());
-  let urlChanged = $derived(draftUrl !== stream.url);
+  function handleNameBlur(name: string) {
+    nameEditing = false;
+    nameTouched = true;
+    const trimmed = name.trim();
+    if (trimmed !== stream.name) change({ name: trimmed });
+  }
 
-  // The connection test of the current draft URL; any other URL needs a new test.
-  let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
-  let testedUrl = $state<string | null>(null);
-  let needsTest = $derived(urlChanged && testedUrl !== draftUrl);
+  // ----- Connection (URL, type, transport, media mode, channel mode) -----
 
-  let typeChanged = $derived(connection.draft.type !== stream.type);
-
-  // The URL must fit the type whenever either differs from the saved stream, so
-  // a type switch alone cannot apply a URL of another scheme.
-  let urlProblem = $derived.by(() => {
-    if (!urlChanged && !typeChanged) return null;
-    if (!draftUrl) return t('settings.audio.streams.errors.urlRequired');
-    if (!isValidStreamUrl(draftUrl, connection.draft.type)) {
-      return t('settings.audio.streams.errors.invalidUrl');
-    }
-    if (urlChanged && streams.some((s, i) => i !== index && s.url === draftUrl)) {
-      return t('settings.audio.streams.errors.duplicate');
-    }
-    return null;
+  // Like the name: the field shows its problem once it was left, hides it while
+  // it is edited, and shows a problem another card caused at once. An untested
+  // URL is shown always, since the test is the next step.
+  let urlTouched = $state(untrack(() => Boolean(problem?.url)));
+  let urlEditing = $state(false);
+  $effect(() => {
+    if (problem?.url && !urlEditing) urlTouched = true;
+  });
+  let urlError = $derived.by(() => {
+    if (!problem?.url) return undefined;
+    return problem.url === 'untested' || urlTouched
+      ? streamUrlProblemMessage(problem.url)
+      : undefined;
   });
 
-  // The field shows its problem once it was left, the Apply row at once.
-  let urlTouched = $state(false);
-  let applyBlocked = $derived(urlProblem !== null || needsTest);
-  let connectionHint = $derived(
-    urlProblem ??
-      (needsTest
-        ? t('settings.audio.streams.testBeforeApply')
-        : t('settings.audio.streams.connectionApplyHint'))
-  );
+  // The result of the connection test of the current URL; any other URL clears it.
+  let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
 
-  function setUrl(value: string) {
+  // The trimmed URL of the field at its last input.
+  let lastTrimmedUrl = untrack(() => stream.url.trim());
+
+  function handleUrlInput(url: string) {
+    urlEditing = true;
+    urlTouched = false;
+    const trimmed = url.trim();
+    if (trimmed !== lastTrimmedUrl) {
+      lastTrimmedUrl = trimmed;
+      // A run, a result or a rejection of an earlier URL must not land on this one.
+      analysisSeq++;
+      isAnalyzing = false;
+      analysisResult = null;
+      analysisError = null;
+    }
+    if (url === stream.url) return;
     // A URL that names its scheme picks the matching type, as in the add form.
-    connection.set(
-      value.includes('://') ? { url: value, type: detectStreamType(value) } : { url: value }
-    );
+    change({ url, type: trimmed.includes('://') ? detectStreamType(trimmed) : stream.type });
+  }
+
+  function handleUrlBlur(url: string) {
+    urlEditing = false;
+    urlTouched = true;
+    const trimmed = url.trim();
+    if (trimmed !== stream.url) change({ url: trimmed });
   }
 
   function setType(value: string | string[]) {
     const type = toStreamType(value);
-    if (type) connection.set({ type });
+    if (type && type !== stream.type) change({ type });
   }
 
   function setTransport(value: string | string[]) {
-    if (value === 'tcp' || value === 'udp') connection.set({ transport: value });
+    if (value === 'tcp' || value === 'udp') change({ transport: value });
   }
 
   function setMediaMode(value: string | string[]) {
     if (value === 'auto' || value === 'audio-only' || value === 'full-stream') {
-      connection.set({ mediaMode: value });
+      change({ mediaMode: value });
     }
   }
 
-  function applyConnection(value: ConnectionDraft) {
-    if (applyBlocked) return;
-    onCommit(withConnection(value), { field: field('connection') });
-  }
-
-  function handleTestResult(result: { sampleRate: number; channels: number } | null) {
+  function handleTestResult(result: { sampleRate: number; channels: number } | null, url: string) {
+    if (result) onUrlTested(url);
+    // A result for an earlier URL (a probe that finished after the field changed) says
+    // nothing about the URL the card holds now.
+    if (url.trim() !== stream.url.trim()) return;
     testResult = result;
-    testedUrl = result ? draftUrl : null;
     if (!result) {
       analysisResult = null;
       analysisError = null;
     }
   }
 
-  // Channel analysis of the draft URL; a newer run or a collapse discards a late result.
+  // Channel analysis of the URL; a newer run or a collapse discards a late result.
   let isAnalyzing = $state(false);
   let analysisResult = $state<ChannelAnalysis | null>(null);
   let analysisError = $state<string | null>(null);
@@ -459,10 +416,10 @@
     analysisError = null;
     try {
       const result = await analyzeStreamChannels(url);
-      if (seq !== analysisSeq || url.trim() !== (draftUrl || stream.url).trim()) return;
+      if (seq !== analysisSeq || url.trim() !== stream.url.trim()) return;
       analysisResult = result;
       if (result.recommended && result.recommended !== 'downmix') {
-        connection.set({ channelMode: result.recommended });
+        change({ channelMode: result.recommended });
       }
     } catch (err: unknown) {
       if (seq !== analysisSeq) return;
@@ -472,12 +429,25 @@
     }
   }
 
+  // A collapsed or disabled card (a save is running) drops a pending analysis, so
+  // its late result cannot write into the form while a save runs or after a Reset.
   $effect(() => {
-    if (expanded) return;
+    if (expanded && !disabled) return;
     untrack(() => {
       analysisSeq++;
       isAnalyzing = false;
     });
+  });
+
+  // A collapsed or disabled card (a save is running) is not being edited: a field
+  // can lose focus without a blur event when it is disabled or unmounted.
+  $effect(() => {
+    if (!expanded || disabled) {
+      untrack(() => {
+        nameEditing = false;
+        urlEditing = false;
+      });
+    }
   });
 
   // A fresh test wins; otherwise the running stream's probe. 0 means not known yet.
@@ -489,24 +459,16 @@
   let showEqualizer = $state(false);
   let equalizer = $derived<EqualizerSettings>(stream.equalizer ?? { enabled: false, filters: [] });
 
-  function commitEqualizer(updated: EqualizerSettings) {
-    commit(
-      { equalizer: savedEqualizer(updated) },
-      'equalizer',
-      isContinuousEqualizerChange(updated, equalizer)
-    );
+  function changeEqualizer(updated: EqualizerSettings) {
+    change({ equalizer: savedEqualizer(updated) });
   }
 
   // ----- Quiet hours -----
 
   let quietHours = $derived<QuietHoursConfig>({ ...defaultQuietHoursConfig, ...stream.quietHours });
 
-  function commitQuietHours(updated: QuietHoursConfig) {
-    commit(
-      { quietHours: updated },
-      'quietHours',
-      isContinuousQuietHoursChange(updated, quietHours)
-    );
+  function changeQuietHours(updated: QuietHoursConfig) {
+    change({ quietHours: updated });
   }
 
   // ----- Diagnostics -----
@@ -524,7 +486,7 @@
   deleteConfirm={t('settings.audio.streams.deleteConfirm', { name: stream.name })}
   {onDelete}
   {disabled}
-  disabledReason={t('common.loading')}
+  disabledReason={disabledReason ?? t('common.loading')}
 >
   {#snippet nameAddon()}
     <StatusPill
@@ -536,6 +498,11 @@
   {/snippet}
 
   {#snippet badges()}
+    {#if hasProblem}
+      <span class={cn(BADGE_CLASS, 'bg-[var(--color-error)]/15 text-[var(--text-error)]')}>
+        {t('settings.audio.validation.needsAttention')}
+      </span>
+    {/if}
     {#if stream.quietHours?.enabled}
       <span
         class={cn(BADGE_CLASS, 'inline-flex items-center gap-1', NEUTRAL_BADGE_CLASS)}
@@ -568,8 +535,8 @@
       label={t('settings.audio.streams.enabled')}
       value={stream.enabled}
       {disabled}
-      describedBy={[nameTextId, errorDescription('enabled')].filter(Boolean).join(' ')}
-      onUpdate={enabled => commit({ enabled }, 'enabled')}
+      describedBy={nameTextId}
+      onUpdate={enabled => change({ enabled })}
     />
   {/snippet}
 
@@ -609,7 +576,6 @@
         {t('settings.audio.streams.stereoWarning.short')}
       </p>
     {/if}
-    <AutoSaveStatus field={field('enabled')} id={statusId('enabled')} />
   {/snippet}
 
   <!-- Name and level -->
@@ -618,35 +584,31 @@
       title={t('settings.audio.streams.nameLabel')}
       labelFor={nameInputId}
       required
-      field={field('name')}
-      statusId={statusId('name')}
       class="space-y-1.5"
     >
-      <CommitTextField
+      <TextInput
         id={nameInputId}
         value={stream.name}
-        validate={validateName}
-        onCommit={name => commit({ name }, 'name')}
         placeholder={t('settings.audio.streams.namePlaceholder')}
         maxlength={MAX_STREAM_NAME_LENGTH}
-        required
+        aria-required="true"
         {disabled}
-        describedBy={errorDescription('name')}
+        error={nameError}
+        oninput={handleNameInput}
+        onblur={handleNameBlur}
       />
     </SettingsGroup>
 
     <SettingsGroup
       title={t('settings.audio.soundCards.levelTitle')}
       headingId="{cardId}-level"
-      field={field('gain')}
-      statusId={statusId('gain')}
       class="space-y-1.5"
     >
       <InlineSlider
         label={t('settings.audio.soundCards.gainLabel')}
         value={stream.gain ?? 0}
         updateOn="change"
-        onUpdate={value => commit({ gain: value }, 'gain', true)}
+        onUpdate={value => change({ gain: value })}
         min={AUDIO_GAIN_MIN_DB}
         max={AUDIO_GAIN_MAX_DB}
         step={1}
@@ -656,106 +618,100 @@
     </SettingsGroup>
   </div>
 
-  <!-- Connection: a draft with a scoped apply -->
+  <!-- Connection -->
   <SettingsGroup
     title={t('settings.audio.streams.connectionTitle')}
     headingId="{cardId}-connection"
-    field={field('connection')}
-    statusId={statusId('connection')}
     class="py-4"
     titleVariant="group"
   >
-    <ScopedApplyGroup
-      draft={connection}
-      onApply={applyConnection}
-      hint={connectionHint}
-      failedHint={t('settings.audio.streams.connectionApplyFailed')}
-      applyLabel={t('settings.audio.streams.applyConnection')}
-      applyingLabel={t('settings.audio.soundCards.applying')}
-      statusId={statusId('connection')}
-      disabled={disabled || applyBlocked}
-    >
-      <div class="space-y-4">
+    <div class="space-y-4">
+      <div class="space-y-1.5">
+        <!-- The label of a TextInput, drawn here so the input need not carry the native
+             required attribute (its validation message is fixed English). -->
+        <label class="label justify-start" for={urlInputId}>
+          <span class="label-text capitalize">
+            {t('settings.audio.streams.urlLabel')}
+            <span class="ml-1 text-[var(--text-error)]" aria-hidden="true">*</span>
+          </span>
+        </label>
         <TextInput
           id={urlInputId}
-          value={connection.draft.url}
-          label={t('settings.audio.streams.urlLabel')}
+          value={stream.url}
           placeholder="rtsp://user:password@host:port/path"
           maxlength={MAX_STREAM_URL_LENGTH}
-          required
+          aria-required="true"
           {disabled}
-          error={urlTouched && urlProblem ? urlProblem : undefined}
-          oninput={setUrl}
-          onblur={() => (urlTouched = true)}
+          error={urlError}
+          oninput={handleUrlInput}
+          onblur={handleUrlBlur}
         />
+      </div>
 
-        <StreamTestButton
-          url={connection.draft.url}
-          models={availableModels}
-          {selectedModels}
+      <StreamTestButton
+        url={stream.url}
+        models={availableModels}
+        {selectedModels}
+        {disabled}
+        onResult={handleTestResult}
+      />
+
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <SelectDropdown
+          value={stream.type}
+          label={t('settings.audio.streams.typeLabel')}
+          options={streamTypeOptions}
           {disabled}
-          onResult={handleTestResult}
+          onChange={setType}
+          groupBy={false}
+          menuSize="sm"
         />
-
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {#if streamHasTransport(stream.type)}
           <SelectDropdown
-            value={connection.draft.type}
-            label={t('settings.audio.streams.typeLabel')}
-            options={streamTypeOptions}
+            value={stream.transport ?? DEFAULT_TRANSPORT}
+            label={t('settings.audio.streams.transportLabel')}
+            options={transportOptions}
             {disabled}
-            onChange={setType}
-            groupBy={false}
-            menuSize="sm"
-          />
-          {#if streamHasTransport(connection.draft.type)}
-            <SelectDropdown
-              value={connection.draft.transport}
-              label={t('settings.audio.streams.transportLabel')}
-              options={transportOptions}
-              {disabled}
-              onChange={setTransport}
-              groupBy={false}
-              menuSize="sm"
-            />
-          {/if}
-        </div>
-
-        <!-- RTSP media mode: audio-only handshake, full stream, or auto fallback -->
-        {#if connection.draft.type === 'rtsp'}
-          <SelectDropdown
-            value={connection.draft.mediaMode}
-            label={t('settings.audio.streams.mediaModeLabel')}
-            helpText={t('settings.audio.streams.mediaModeHelp')}
-            options={getMediaModeOptions()}
-            {disabled}
-            onChange={setMediaMode}
+            onChange={setTransport}
             groupBy={false}
             menuSize="sm"
           />
         {/if}
-
-        <StreamChannelControls
-          channelMode={connection.draft.channelMode}
-          channels={detectedChannels}
-          sampleRate={testResult?.sampleRate}
-          analyzeUrl={draftUrl || stream.url}
-          {isAnalyzing}
-          {analysisResult}
-          {analysisError}
-          {disabled}
-          onChange={mode => connection.set({ channelMode: mode })}
-          onAnalyze={url => void analyzeChannels(url)}
-        />
       </div>
-    </ScopedApplyGroup>
+
+      <!-- RTSP media mode: audio-only handshake, full stream, or auto fallback -->
+      {#if stream.type === 'rtsp'}
+        <SelectDropdown
+          value={stream.mediaMode || DEFAULT_MEDIA_MODE}
+          label={t('settings.audio.streams.mediaModeLabel')}
+          helpText={t('settings.audio.streams.mediaModeHelp')}
+          options={getMediaModeOptions()}
+          {disabled}
+          onChange={setMediaMode}
+          groupBy={false}
+          menuSize="sm"
+        />
+      {/if}
+
+      <StreamChannelControls
+        channelMode={normalizeChannelMode(stream.channelMode)}
+        channels={detectedChannels}
+        sampleRate={testResult?.sampleRate}
+        analyzeUrl={stream.url}
+        {isAnalyzing}
+        {analysisResult}
+        {analysisError}
+        {disabled}
+        onChange={mode => change({ channelMode: mode })}
+        onAnalyze={url => void analyzeChannels(url)}
+      />
+    </div>
   </SettingsGroup>
 
   <!-- Classifiers -->
   <SettingsGroup
     title={t('settings.audio.soundCards.modelLabel')}
     headingId={modelsHeadingId}
-    field={field('models')}
-    statusId={statusId('models')}
     class="py-4"
     titleVariant="group"
   >
@@ -771,7 +727,7 @@
       availability={acousticAvailability}
       labelledBy={modelsHeadingId}
       {disabled}
-      onChange={models => commit({ models }, 'models')}
+      onChange={models => change({ models })}
       onRetry={() => void refreshModels()}
     />
   </SettingsGroup>
@@ -796,7 +752,6 @@
         {t('settings.audio.audioFilters.title')}
       </button>
       <div class="flex items-center gap-3">
-        <AutoSaveStatus field={field('equalizer')} id={statusId('equalizer')} />
         {#if equalizer.enabled}
           <span class={cn(BADGE_CLASS, 'bg-[var(--color-primary)]/15 text-[var(--text-primary)]')}>
             {t('common.enabled')}
@@ -813,7 +768,7 @@
         <AudioEqualizerSettings
           equalizerSettings={equalizer}
           {disabled}
-          onUpdate={commitEqualizer}
+          onUpdate={changeEqualizer}
         />
       </div>
     {/if}
@@ -823,14 +778,12 @@
   <SettingsGroup
     title={t('settings.audio.quietHours.title')}
     headingId="{cardId}-quiet"
-    field={field('quietHours')}
-    statusId={statusId('quietHours')}
     class="py-4"
     titleVariant="group"
   >
     <QuietHoursEditor
       config={quietHours}
-      onChange={commitQuietHours}
+      onChange={changeQuietHours}
       {disabled}
       idPrefix="{cardId}-qh"
       enableLabel={t('settings.audio.quietHours.enableLabel')}

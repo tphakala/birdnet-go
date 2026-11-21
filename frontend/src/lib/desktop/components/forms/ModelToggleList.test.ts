@@ -1,5 +1,5 @@
 /**
- * Tests for ModelToggleList, the classifier list of an immediately saved audio
+ * Tests for ModelToggleList, the classifier list of an audio
  * source. Each row state of the list decides what a toggle may do, and every
  * change is handed to the parent as the complete new model list.
  */

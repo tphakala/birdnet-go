@@ -1,7 +1,7 @@
 <!--
   SourceCard
 
-  Purpose: The shell of one audio source on an immediately saved tab (a sound
+  Purpose: The shell of one audio source on a tab that saves with the page (a sound
   card, a stream). The header is always visible: a disclosure button with the
   icon, name and subtitle that opens and closes the body, the badges, and a
   delete button that asks for confirmation in an overlay first. The body holds

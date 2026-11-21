@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Se debe seleccionar al menos un modelo"
         },
         "captureTitle": "Captura",
-        "levelTitle": "Nivel de entrada",
-        "applying": "Aplicando...",
-        "adding": "Añadiendo..."
+        "levelTitle": "Nivel de entrada"
       },
       "audioCapture": {
         "title": "Captura de audio",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Configuración de Flujos de Audio",
-        "noStreamsConfigured": "No hay streams configurados"
+        "noStreamsConfigured": "No hay streams configurados",
+        "description": "Configura flujos de audio de red para captura de audio remota. Soporta protocolos RTSP, HTTP, HLS, RTMP y UDP. Un cambio de conexión reconecta el stream al guardar."
       },
       "streams": {
         "streamLabel": "Transmisión",
@@ -3904,12 +3903,7 @@
           "message": "Transmisión estéreo detectada. La mezcla de múltiples canales puede reducir la precisión de detección debido a diferencias de fase entre canales. Seleccione un canal específico (izquierdo/derecho) o use el detector de canales para mejores resultados.",
           "short": "Downmix estéreo activo. La precisión de detección puede estar reducida. Seleccione un canal específico en Conexión."
         },
-        "autoSaveHelp": "Los cambios se guardan al instante. Los cambios de conexión reconectan el stream, así que esperan hasta que pulse Aplicar.",
         "connectionTitle": "Conexión",
-        "connectionApplyHint": "El stream se reconecta al aplicar.",
-        "connectionApplyFailed": "La conexión no se ha cambiado. Vuelva a aplicar o cancele.",
-        "applyConnection": "Aplicar y reconectar",
-        "testBeforeApply": "Pruebe la nueva URL antes de aplicarla.",
         "statsLine": "Total: {total} · Velocidad: {rate} · Último: {last}",
         "ago": {
           "seconds": "hace {count} s",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Corrija las tarjetas de sonido de la pestaña {tab} antes de guardar: {names}",
         "unnamedSource": "fuente {position} (sin nombre)",
-        "needsAttention": "Requiere atención"
+        "needsAttention": "Requiere atención",
+        "streams": "Corrija los streams de la pestaña {tab} antes de guardar: {names}",
+        "streamsUntested": "Pruebe la nueva URL del stream en la pestaña {tab} antes de guardar: {names}",
+        "unnamedStream": "stream {position} (sin nombre)"
       }
     },
     "security": {

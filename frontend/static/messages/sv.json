@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Minst en modell måste väljas"
         },
         "captureTitle": "Inspelning",
-        "levelTitle": "Ingångsnivå",
-        "applying": "Verkställer...",
-        "adding": "Lägger till..."
+        "levelTitle": "Ingångsnivå"
       },
       "audioCapture": {
         "title": "Ljudkortskonfiguration",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Konfiguration av ljudströmmar",
-        "noStreamsConfigured": "Inga strömmar konfigurerade"
+        "noStreamsConfigured": "Inga strömmar konfigurerade",
+        "description": "Konfigurera nätverksljudströmmar för fjärrinspelning av ljud. Stöder RTSP, HTTP, HLS, RTMP och UDP-protokoll. En ändring av anslutningen ansluter strömmen igen när du sparar."
       },
       "streams": {
         "streamLabel": "Ström",
@@ -3904,12 +3903,7 @@
           "message": "Stereoström detekterad. Nedmixning av flera kanaler kan minska detektionsnoggrannheten på grund av fasskillnader mellan kanaler. Välj en specifik kanal (vänster/höger) eller använd kanaldetektorn för bästa resultat.",
           "short": "Stereo nedmix aktiv. Detektionsnoggrannheten kan vara nedsatt. Välj en specifik kanal under Anslutning."
         },
-        "autoSaveHelp": "Ändringar sparas direkt. Ändringar av anslutningen ansluter strömmen på nytt och väntar därför tills du klickar på Verkställ.",
         "connectionTitle": "Anslutning",
-        "connectionApplyHint": "Strömmen ansluts på nytt när du verkställer.",
-        "connectionApplyFailed": "Anslutningen ändrades inte. Verkställ igen eller avbryt.",
-        "applyConnection": "Verkställ och anslut på nytt",
-        "testBeforeApply": "Testa den nya URL:en innan du verkställer den.",
         "statsLine": "Totalt: {total} · Hastighet: {rate} · Senast: {last}",
         "ago": {
           "seconds": "{count} s sedan",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Åtgärda ljudkorten på fliken {tab} innan du sparar: {names}",
         "unnamedSource": "källa {position} (utan namn)",
-        "needsAttention": "Kräver uppmärksamhet"
+        "needsAttention": "Kräver uppmärksamhet",
+        "streams": "Åtgärda strömmarna på fliken {tab} innan du sparar: {names}",
+        "streamsUntested": "Testa den nya ström-URL:en på fliken {tab} innan du sparar: {names}",
+        "unnamedStream": "ström {position} (utan namn)"
       }
     },
     "security": {

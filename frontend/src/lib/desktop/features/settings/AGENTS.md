@@ -85,23 +85,43 @@ on the server outside the form (the model gallery installs, reinstalls,
 swaps and removes models) calls `settingsActions.refreshKeepingEdits()`
 afterwards, so the form shows the server values without losing unsaved edits.
 
-## Immediate Save
+## Save Model
 
-A tab marked `saveMode: 'immediate'` in `SettingsTabs` saves each change as it
-is made, so it has no save bar. The page shows a one line note and the state of
-the saves in its place. Every other tab keeps the bar. Use it for settings that
-take effect without a restart; the rest keep an explicit Apply. Of the Audio
-page, only the Streams tab uses it for now.
+Every settings tab saves with the page's Save Changes bar: controls write into
+the form with `settingsActions.updateSection` and the bar persists the whole
+form. A page blocks Save with a reason through `setValidationIssues`.
 
-The Audio page's Sound Card tab does not: its cards write the whole sources array
-into the form with `settingsActions.updateSection` and the Save Changes bar
-persists it. Its save rules (`soundCardProblems` in
-`$lib/desktop/components/forms/sourceRules.ts`) are pure functions of the form and
-the saved values, so the page evaluates them whichever tab is open and reports
-them through `setValidationIssues` under a fixed set of owned keys (never one key
-per row); a duplicate the saved configuration already has is not reported, while
-an empty name or device is always reported because the server refuses it. The cards
-use the same functions for their inline messages.
+The Audio page's Sound Card and Streams tabs are the model for lists of cards.
+Their cards write the whole sources or streams array into the form (the page
+spreads the store's own `rtsp` object, not its two-key view, so
+`ffmpegParameters` survives). Their save rules (`soundCardProblems` and
+`streamProblems` in `$lib/desktop/components/forms/sourceRules.ts`) are pure
+functions of the form and the saved values, so the page evaluates them whichever
+tab is open and reports them through `setValidationIssues` under a fixed set of
+owned keys (never one key per row); the reason names each invalid card once. A
+duplicate or malformed value the saved configuration already has is not reported,
+while an empty name, device or URL is always reported because the server refuses
+it. A stream URL that is not in the saved configuration needs a successful test
+of exactly that URL in this page session before Save; the page holds the tested
+URLs, since only the active tab is mounted. The cards use the same functions for
+their inline messages.
+
+Card field errors follow one rule: an error hides while its field is edited and
+shows again when the field is left, so keep the editing flag in `$state` and end
+it when the card is disabled or collapsed (the field can lose focus without a
+blur event). A problem another card caused shows at once. A disabled action shows
+its reason and points `aria-describedby` at it, and an add form clears an error
+when its field is edited.
+
+## Immediate Save (engine, not used by any tab now)
+
+No tab saves as it changes any more: the Audio page's Sound Card and Streams tabs
+moved to the Save Changes bar. The auto-save engine (`SettingsTabs`' `saveMode:
+'immediate'`, `commitSetting`, `AutoSaveStatus`, `ApplyDraft`, `ScopedApplyGroup`,
+`CommitTextField`) stays in the repository until it is decided whether any page
+saves that way again. A tab marked `saveMode: 'immediate'` would save each change
+as it is made and show a one line note and the state of the saves in place of the
+bar.
 
 What saves when:
 

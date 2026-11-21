@@ -1,8 +1,8 @@
 <!--
   SettingsGroup
 
-  Purpose: One group of settings on an immediately saved tab: a title row with
-  the group's AutoSaveStatus on the right, then the controls.
+  Purpose: One group of settings: a title row with the group's AutoSaveStatus on
+  the right when a `field` is given, then the controls.
 
   Props:
   - title: Group title

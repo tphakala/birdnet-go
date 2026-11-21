@@ -3736,9 +3736,7 @@
           "atLeastOneModel": "Jāizvēlas vismaz viens modelis"
         },
         "captureTitle": "Ierakstīšana",
-        "levelTitle": "Ieejas līmenis",
-        "applying": "Lieto...",
-        "adding": "Pievieno..."
+        "levelTitle": "Ieejas līmenis"
       },
       "audioCapture": {
         "title": "Skaņas kartes konfigurācija",
@@ -3781,7 +3779,8 @@
       },
       "rtspStreams": {
         "title": "Audio straumju konfigurācija",
-        "noStreamsConfigured": "Nav konfigurētu straumju"
+        "noStreamsConfigured": "Nav konfigurētu straumju",
+        "description": "Konfigurēt tīkla audio straumes attālinātai audio uztveršanai. Atbalsta RTSP, HTTP, HLS, RTMP un UDP protokolus. Savienojuma maiņa saglabājot atkārtoti savieno straumi."
       },
       "streams": {
         "streamLabel": "Straume",
@@ -3904,12 +3903,7 @@
           "message": "Konstatēta stereo straume. Vairāku kanālu samazināšana var pazemināt noteikšanas precizitāti fāzu atšķirību dēļ starp kanāliem. Izvēlieties konkrētu kanālu (kreiso/labo) vai izmantojiet kanālu detektoru labākajiem rezultātiem.",
           "short": "Stereo downmix aktīvs. Noteikšanas precizitāte var būt samazināta. Izvēlieties konkrētu kanālu sadaļā Savienojums."
         },
-        "autoSaveHelp": "Izmaiņas tiek saglabātas uzreiz. Savienojuma izmaiņas atkārtoti savieno straumi, tāpēc tās gaida, līdz noklikšķināt uz Lietot.",
         "connectionTitle": "Savienojums",
-        "connectionApplyHint": "Straume tiks atkārtoti savienota, kad lietosiet izmaiņas.",
-        "connectionApplyFailed": "Savienojums netika mainīts. Lietojiet vēlreiz vai atceliet.",
-        "applyConnection": "Lietot un savienot atkārtoti",
-        "testBeforeApply": "Pirms lietošanas pārbaudiet jauno URL.",
         "statsLine": "Kopā: {total} · Ātrums: {rate} · Pēdējie: {last}",
         "ago": {
           "seconds": "pirms {count} s",
@@ -4153,7 +4147,10 @@
       "validation": {
         "soundCards": "Pirms saglabāšanas izlabojiet skaņas kartes cilnē {tab}: {names}",
         "unnamedSource": "avots {position} (bez nosaukuma)",
-        "needsAttention": "Nepieciešama uzmanība"
+        "needsAttention": "Nepieciešama uzmanība",
+        "streams": "Pirms saglabāšanas izlabojiet straumes cilnē {tab}: {names}",
+        "streamsUntested": "Pirms saglabāšanas pārbaudiet jauno straumes URL cilnē {tab}: {names}",
+        "unnamedStream": "straume {position} (bez nosaukuma)"
       }
     },
     "security": {

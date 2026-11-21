@@ -88,3 +88,80 @@ describe('StreamTestButton model minimum rate', () => {
     expect(screen.queryByText(INCOMPATIBLE_KEY)).toBeNull();
   });
 });
+
+describe('StreamTestButton result URL', () => {
+  const URL_WITH_SPACES = '  rtsp://example.test/stream  ';
+  const TESTED_URL = 'rtsp://example.test/stream';
+
+  beforeEach(() => {
+    vi.mocked(api.post).mockReset();
+  });
+  afterEach(cleanup);
+
+  async function runTest(onResult: (_result: unknown, _url: string) => void) {
+    render(StreamTestButton, {
+      props: { url: URL_WITH_SPACES, models: MODELS, selectedModels: [], onResult },
+    });
+    await userEvent.setup().click(screen.getByRole('button', { name: new RegExp(BUTTON_KEY) }));
+  }
+
+  it('reports the trimmed URL it tested with a successful result', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce({ channels: 1, warnings: [], ...probe(48000) });
+    const onResult = vi.fn();
+
+    await runTest(onResult);
+
+    await waitFor(() => expect(onResult).toHaveBeenCalledTimes(2));
+    expect(onResult).toHaveBeenNthCalledWith(1, null, TESTED_URL);
+    expect(onResult).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ sampleRate: 48000 }),
+      TESTED_URL
+    );
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/v2/streams/test',
+      { url: TESTED_URL },
+      expect.anything()
+    );
+  });
+
+  it('reports the URL it tested with a failed result', async () => {
+    vi.mocked(api.post).mockRejectedValueOnce(new Error('refused'));
+    const onResult = vi.fn();
+
+    await runTest(onResult);
+
+    await waitFor(() => expect(onResult).toHaveBeenCalledTimes(2));
+    expect(onResult).toHaveBeenLastCalledWith(null, TESTED_URL);
+  });
+
+  it('reports the URL it tested when the result arrives after the field moved on', async () => {
+    let resolveProbe: (_value: unknown) => void = () => {};
+    // The request ignores the abort signal, as a response that was already on its way does.
+    vi.mocked(api.post).mockReturnValueOnce(
+      new Promise(resolve => {
+        resolveProbe = resolve;
+      })
+    );
+    const onResult = vi.fn();
+    const view = render(StreamTestButton, {
+      props: { url: URL_WITH_SPACES, models: MODELS, selectedModels: [], onResult },
+    });
+    await userEvent.setup().click(screen.getByRole('button', { name: new RegExp(BUTTON_KEY) }));
+
+    await view.rerender({
+      url: 'rtsp://example.test/other',
+      models: MODELS,
+      selectedModels: [],
+      onResult,
+    });
+    resolveProbe({ channels: 1, warnings: [], ...probe(48000) });
+
+    await waitFor(() =>
+      expect(onResult).toHaveBeenCalledWith(
+        expect.objectContaining({ sampleRate: 48000 }),
+        TESTED_URL
+      )
+    );
+  });
+});
