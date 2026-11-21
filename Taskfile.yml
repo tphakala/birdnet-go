@@ -92,8 +92,8 @@ vars:
   #   .github/workflows/golangci-lint.yml         (put it in the literal -tags; it is a
   #                                                workflow_call target and does not
   #                                                inherit the caller's env)
-  #   .github/workflows/macos-test.yml            (literal -tags)
-  #   .github/workflows/windows-test.yml          (literal -tags)
+  #   .github/workflows/macos-test.yml            (literal -tags in every go command, and TEST_TAGS in the select step)
+  #   .github/workflows/windows-test.yml          (literal -tags in every go command, and TEST_TAGS in the select step)
   BASE_BUILD_TAGS: ''
   # Emits nothing when the joined list is empty, mirroring the ${BUILD_TAGS:+...}
   # guard on the linux_amd64 / linux_arm64 build lines. (noembed_build needs no
