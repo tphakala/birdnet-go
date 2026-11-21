@@ -156,23 +156,24 @@
   interface Props {
     streams: StreamConfig[];
     /** The saved streams: health follows them and only problems the user introduced are reported. */
-    savedStreams?: StreamConfig[];
+    savedStreams: StreamConfig[];
     /** URLs tested in this page session, kept by the page so they outlive a tab switch. */
-    testedUrls?: ReadonlySet<string>;
+    testedUrls: ReadonlySet<string>;
     disabled?: boolean;
     /** Why the cards and the add form are disabled, shown beside their blocked actions. */
     disabledReason?: string;
     onUpdateStreams: (_streams: StreamConfig[]) => void;
-    /** Called with a URL whose test succeeded and that the user added. */
-    onUrlTested?: (_url: string) => void;
+    /**
+     * Called with the trimmed URL of every successful test of a card, and with the URL
+     * of the stream the add form adds (its test passed before Add was allowed).
+     */
+    onUrlTested: (_url: string) => void;
   }
-
-  const NO_URLS: ReadonlySet<string> = new Set();
 
   let {
     streams = [],
-    savedStreams = [],
-    testedUrls = NO_URLS,
+    savedStreams,
+    testedUrls,
     disabled = false,
     disabledReason,
     onUpdateStreams,
@@ -561,7 +562,7 @@
     const rowId = generateId(ROW_ID_PREFIX);
     rowIds = [...rowIds, rowId];
     if (streams.length === 0) expandedRows.add(rowId);
-    onUrlTested?.(trimmedUrl);
+    onUrlTested(trimmedUrl);
     sendStreams([...streams, newStream]);
     resetAddForm();
   }
@@ -709,7 +710,7 @@
           expanded={expandedRows.has(row.id)}
           onToggleExpanded={() => toggleRow(row.id)}
           problem={problems.at(row.index)}
-          onUrlTested={url => onUrlTested?.(url)}
+          {onUrlTested}
           onChange={updated => changeStream(row.id, updated)}
           onDelete={() => void deleteStream(row.index)}
         />

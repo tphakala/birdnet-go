@@ -106,6 +106,8 @@ function renderRows(streams: StreamConfig[], extra: Record<string, unknown> = {}
   const onUrlTested = vi.fn();
   const view = createComponentTestFactory(StreamManager, {
     streams,
+    savedStreams: [],
+    testedUrls: new Set<string>(),
     disabled: false,
     onUpdateStreams,
     onUrlTested,
@@ -167,7 +169,14 @@ describe('StreamManager', () => {
 
   it('keeps the model list live while mounted, through watchModels', () => {
     renderTyped(StreamManager, {
-      props: { streams: [], disabled: false, onUpdateStreams: vi.fn() },
+      props: {
+        streams: [],
+        savedStreams: [],
+        testedUrls: new Set<string>(),
+        disabled: false,
+        onUpdateStreams: vi.fn(),
+        onUrlTested: vi.fn(),
+      },
     });
 
     expect(watchModels).toHaveBeenCalledTimes(1);
