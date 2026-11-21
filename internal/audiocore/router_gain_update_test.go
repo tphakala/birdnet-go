@@ -34,7 +34,8 @@ const (
 	// gainUpdateWaitTimeout bounds each wait for a delivered frame.
 	gainUpdateWaitTimeout = 5 * time.Second
 
-	// gainUpdateFlips is how many times the concurrent test flips the gain.
+	// gainUpdateFlips is the minimum number of times the concurrent test flips the
+	// gain; it keeps flipping until the first frame is delivered.
 	gainUpdateFlips = 1000
 
 	// gainUpdateFinalDB is set after the concurrent flips and differs from every
