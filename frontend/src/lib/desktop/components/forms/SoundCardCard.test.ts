@@ -245,6 +245,21 @@ describe('SoundCardCard editing', () => {
     expect(screen.getByText('settings.audio.validation.needsAttention')).toBeInTheDocument();
   });
 
+  it.each([
+    ['required', 'settings.audio.soundCards.errors.deviceRequired'],
+    ['duplicate', 'settings.audio.soundCards.errors.duplicateDevice'],
+  ] as const)('says at the device field that the device is %s', (problem, message) => {
+    renderCard({ problem: { device: problem } });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+  });
+
+  it('shows no device message without a device problem', () => {
+    renderCard({ problem: { name: 'required' } });
+
+    expect(screen.queryByText(/soundCards\.errors\.(deviceRequired|duplicateDevice)/)).toBeNull();
+  });
+
   it('shows no attention badge without a problem', () => {
     renderCard();
 

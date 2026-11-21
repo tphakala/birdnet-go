@@ -116,6 +116,8 @@
     audioDevices: AudioDevice[];
     audioDevicesLoading: boolean;
     disabled?: boolean;
+    /** Why the cards are disabled, shown beside each card's delete button. */
+    disabledReason?: string;
     onUpdateSources: (_sources: AudioSourceConfig[]) => void;
     onRefreshDevices: () => void;
   }
@@ -126,6 +128,7 @@
     audioDevices,
     audioDevicesLoading,
     disabled = false,
+    disabledReason,
     onUpdateSources,
     onRefreshDevices,
   }: Props = $props();
@@ -410,6 +413,7 @@
           {modelOptions}
           {availableModels}
           {disabled}
+          {disabledReason}
           expanded={expandedRows.has(row.id)}
           onToggleExpanded={() => toggleRow(row.id)}
           problem={problems.at(row.index)}

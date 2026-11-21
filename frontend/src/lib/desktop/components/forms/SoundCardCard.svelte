@@ -21,6 +21,7 @@
   - modelOptions: Labels of the listed models, for the header summary
   - availableModels: Models the server lists for the source editors
   - disabled: Blocks every change
+  - disabledReason: Why it is disabled, shown beside delete (default: loading)
   - expanded: Whether the body is shown
   - onToggleExpanded: Called by the header button
   - onChange: Receives the complete changed source
@@ -84,6 +85,7 @@
     modelOptions: Array<{ value: string; label: string }>;
     availableModels: BackendModel[];
     disabled?: boolean;
+    disabledReason?: string;
     expanded: boolean;
     onToggleExpanded: () => void;
     onChange: (_source: AudioSourceConfig) => void;
@@ -98,6 +100,7 @@
     modelOptions,
     availableModels,
     disabled = false,
+    disabledReason,
     expanded,
     onToggleExpanded,
     onChange,
@@ -114,6 +117,7 @@
 
   const cardId = generateId('soundcard');
   const nameInputId = `${cardId}-name`;
+  const deviceErrorId = `${cardId}-device-error`;
   const captureHeadingId = `${cardId}-capture`;
   const modelsHeadingId = `${cardId}-models`;
   const equalizerHeadingId = `${cardId}-equalizer`;
@@ -148,6 +152,12 @@
       : t('settings.audio.soundCards.errors.duplicateName');
   });
   let hasProblem = $derived(Boolean(problem?.name || problem?.device));
+  let deviceError = $derived.by(() => {
+    if (!problem?.device) return undefined;
+    return problem.device === 'required'
+      ? t('settings.audio.soundCards.errors.deviceRequired')
+      : t('settings.audio.soundCards.errors.duplicateDevice');
+  });
 
   function handleNameInput(name: string) {
     if (name !== source.name) change({ name });
@@ -205,9 +215,9 @@
     });
   });
 
-  // A collapsed card holds no pending pick.
+  // A collapsed or disabled card (a save is running) holds no pending pick.
   $effect(() => {
-    if (!expanded) untrack(() => (pendingDevice = null));
+    if (!expanded || disabled) untrack(() => (pendingDevice = null));
   });
 
   // Probes the shown device while the body is open to fill the rate list. Only
@@ -273,7 +283,7 @@
   deleteConfirm={t('settings.audio.soundCards.deleteConfirm', { name: source.name })}
   {onDelete}
   {disabled}
-  disabledReason={t('common.loading')}
+  disabledReason={disabledReason ?? t('common.loading')}
 >
   {#snippet badges()}
     {#if hasProblem}
@@ -356,16 +366,24 @@
     titleVariant="group"
   >
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <SelectDropdown
-        value={shownDevice}
-        label={t('settings.audio.soundCards.deviceLabel')}
-        options={deviceOptions}
-        required
-        {disabled}
-        onChange={pickDevice}
-        groupBy={false}
-        menuSize="sm"
-      />
+      <div>
+        <SelectDropdown
+          value={shownDevice}
+          label={t('settings.audio.soundCards.deviceLabel')}
+          options={deviceOptions}
+          required
+          {disabled}
+          aria-describedby={deviceError ? deviceErrorId : undefined}
+          onChange={pickDevice}
+          groupBy={false}
+          menuSize="sm"
+        />
+        {#if deviceError}
+          <p id={deviceErrorId} role="alert" class="mt-1 text-xs text-[var(--text-error)]">
+            {deviceError}
+          </p>
+        {/if}
+      </div>
       <div>
         <SelectDropdown
           value={String(currentRate)}

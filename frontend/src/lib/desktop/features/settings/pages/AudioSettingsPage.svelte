@@ -516,6 +516,8 @@
   // key set is fixed: one key per kind of problem, never one per row.
   const SOUNDCARDS_ISSUE_KEY = 'audio-soundcards-invalid';
   const VALIDATION_ISSUE_KEYS = [SOUNDCARDS_ISSUE_KEY];
+  // Counts Resets of the form; keys the sound card manager.
+  let resetCount = $state(0);
   let savedSources = $derived(store.originalData.realtime?.audio?.sources ?? []);
 
   let soundCardIssue = $derived.by(() => {
@@ -819,15 +821,19 @@
         originalData={store.originalData.realtime?.audio?.sources}
         currentData={store.formData.realtime?.audio?.sources}
       >
-        <SoundCardManager
-          sources={settings.audio.sources}
-          {savedSources}
-          audioDevices={audioDevices.data}
-          audioDevicesLoading={audioDevices.loading}
-          disabled={store.isLoading || store.isSaving}
-          onUpdateSources={updateAudioSources}
-          onRefreshDevices={loadAudioDevices}
-        />
+        <!-- A Reset recreates the manager, so a device pick that is waiting for its probe is dropped. -->
+        {#key resetCount}
+          <SoundCardManager
+            sources={settings.audio.sources}
+            {savedSources}
+            audioDevices={audioDevices.data}
+            audioDevicesLoading={audioDevices.loading}
+            disabled={store.isLoading || store.isSaving}
+            disabledReason={store.isSaving ? t('settings.actions.saving') : t('common.loading')}
+            onUpdateSources={updateAudioSources}
+            onRefreshDevices={loadAudioDevices}
+          />
+        {/key}
       </SettingsSection>
     {/if}
   </div>
@@ -1674,5 +1680,5 @@
 
 <!-- Main Content -->
 <div class="settings-page-content">
-  <SettingsTabs {tabs} bind:activeTab />
+  <SettingsTabs {tabs} bind:activeTab onReset={() => resetCount++} />
 </div>

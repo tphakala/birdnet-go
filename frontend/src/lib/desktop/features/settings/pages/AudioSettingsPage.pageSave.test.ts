@@ -10,7 +10,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { api } from '$lib/utils/api';
 import { navigation } from '$lib/stores/navigation.svelte';
-import { settingsStore, settingsActions, hasUnsavedChanges } from '$lib/stores/settings';
+import {
+  settingsStore,
+  settingsActions,
+  hasUnsavedChanges,
+  settingsValidationErrors,
+} from '$lib/stores/settings';
 import type { AudioSourceConfig, SettingsFormData } from '$lib/stores/settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { serveConfirmedSettings } from '../../../../../test/settings-store-helpers';
@@ -22,8 +27,16 @@ const TAB_STORAGE_KEY = 'birdnet-audio-settings-active-tab';
 const SAVE_KEY = 'settings.actions.save';
 const TAB_NOTE_KEY = 'settings.autoSave.tabNote';
 const BLOCKED_KEY = 'settings.actions.validationBlocked';
+const SOUND_CARD_ISSUE_KEY = 'audio-soundcards-invalid';
 const SOUND_CARD_REASON_KEY = 'settings.audio.validation.soundCards';
 const RECORDING_TAB_KEY = 'settings.audio.tabs.recording';
+
+// The Streams tab still saves as it changes through the auto-save engine.
+const { commitSetting } = vi.hoisted(() => ({ commitSetting: vi.fn() }));
+vi.mock('$lib/stores/settingsAutoSave.svelte', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/stores/settingsAutoSave.svelte')>()),
+  commitSetting,
+}));
 
 vi.mock('$lib/utils/settingsApi.js', () => ({
   settingsAPI: {
@@ -55,6 +68,7 @@ vi.mock('$lib/stores/appState.svelte', () => ({
   refreshCsrfToken: vi.fn().mockResolvedValue(false),
 }));
 
+const STREAM = { name: 'Old', url: 'rtsp://old', enabled: true, type: 'rtsp' };
 const SOURCE = { name: 'Garden', device: 'hw:1,0', gain: 0, models: ['birdnet'] };
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -90,7 +104,8 @@ function renderTab(tab: string, sources: AudioSourceConfig[] = [SOURCE]) {
   return render(AudioSettingsPage);
 }
 
-const saveButton = () => screen.getByText(SAVE_KEY).closest('button') as HTMLButtonElement;
+const saveButton = () =>
+  screen.getByRole<HTMLButtonElement>('button', { name: 'settings.actions.saveAriaLabel' });
 
 describe('AudioSettingsPage sound card tab saves with the page', () => {
   beforeEach(() => {
@@ -195,6 +210,53 @@ describe('AudioSettingsPage sound card tab saves with the page', () => {
 
     expect(get(hasUnsavedChanges)).toBe(true);
     expect(screen.queryByText(SOUND_CARD_REASON_KEY)).toBeNull();
+  });
+
+  it('clears the sound card block when the page unmounts', async () => {
+    const view = renderTab('soundcard');
+    await fireEvent.click(await screen.findByRole('button', { name: 'blank-name' }));
+    await waitFor(() => expect(get(settingsValidationErrors)).toContain(SOUND_CARD_ISSUE_KEY));
+
+    view.unmount();
+
+    expect(get(settingsValidationErrors)).not.toContain(SOUND_CARD_ISSUE_KEY);
+  });
+
+  it('disables the manager while a save runs and says why', async () => {
+    renderTab('soundcard');
+    const state = await screen.findByTestId('manager-state');
+    expect(state).toHaveAttribute('data-disabled', 'false');
+
+    settingsStore.update(current => ({ ...current, isSaving: true }));
+
+    await waitFor(() => expect(state).toHaveAttribute('data-disabled', 'true'));
+    expect(state).toHaveTextContent('settings.actions.saving');
+  });
+
+  it('remounts the manager when the form is reset', async () => {
+    renderTab('soundcard');
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-sources' }));
+    const before = screen.getByTestId('manager-state').getAttribute('data-mount');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'settings.actions.resetAriaLabel' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('manager-state').getAttribute('data-mount')).not.toBe(before)
+    );
+  });
+
+  it('keeps the Streams tab on the auto-save engine with its tab note and no save bar', async () => {
+    renderTab('streams');
+
+    expect(await screen.findByText(TAB_NOTE_KEY)).toBeInTheDocument();
+    expect(screen.queryByText(SAVE_KEY)).toBeNull();
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'commit-streams' }));
+    expect(commitSetting).toHaveBeenCalledExactlyOnceWith(
+      'rtsp',
+      { streams: [{ ...STREAM, gain: 1 }] },
+      { field: 'rtsp:streams:row:gain', debounceMs: 400 }
+    );
   });
 
   it('keeps the empty state on screen while Refresh reloads the devices after an empty first load', async () => {

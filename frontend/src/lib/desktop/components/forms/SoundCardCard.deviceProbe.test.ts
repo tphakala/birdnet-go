@@ -286,6 +286,20 @@ describe('SoundCardCard device capability probe (issue #3593, open card)', () =>
     expect(view.onChange).not.toHaveBeenCalled();
   });
 
+  it('writes nothing when the card is disabled by a running save before the probe returns', async () => {
+    const view = renderCard();
+    await openCard(view);
+    await waitFor(() => expect(hasRate(RATE_96K.value)).toBe(true));
+    const probe = holdNextProbe([RATE_48K, RATE_192K]);
+
+    await pickDevice(DEV2);
+    await view.rerender({ disabled: true, expanded: true });
+    probe.release();
+    await settled();
+
+    expect(view.onChange).not.toHaveBeenCalled();
+  });
+
   it('writes nothing when the form device changes from outside while a pick is pending', async () => {
     const view = renderCard();
     await openCard(view);
