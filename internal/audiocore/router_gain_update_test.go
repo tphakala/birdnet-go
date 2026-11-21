@@ -3,6 +3,7 @@ package audiocore
 import (
 	"bytes"
 	"math"
+	"runtime"
 	"slices"
 	"sync"
 	"testing"
@@ -278,16 +279,42 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 	}
 
 	stop := make(chan struct{})
+	firstFrame := make(chan struct{})
 	flipErr := make(chan error, 1)
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		for i := range gainUpdateFlips {
-			if err := router.UpdateGain(gainUpdateSource, gains[i%len(gains)]); err != nil {
+		defer close(stop)
+		flip := 0
+		flipOnce := func() error {
+			err := router.UpdateGain(gainUpdateSource, gains[flip%len(gains)])
+			flip++
+			return err
+		}
+		for range gainUpdateFlips {
+			if err := flipOnce(); err != nil {
 				flipErr <- err
-				break
+				return
 			}
 		}
-		close(stop)
+		// Keep flipping until the main loop has seen a frame, so a frame is always
+		// delivered while the gain is still changing. The timer only ends a run in
+		// which no frame can be delivered at all, which assert.Positive then reports.
+		timer := time.NewTimer(gainUpdateWaitTimeout)
+		defer timer.Stop()
+		for {
+			select {
+			case <-firstFrame:
+				return
+			case <-timer.C:
+				return
+			default:
+				if err := flipOnce(); err != nil {
+					flipErr <- err
+					return
+				}
+				runtime.Gosched()
+			}
+		}
 	})
 	wg.Go(func() {
 		for {
@@ -305,6 +332,9 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 		select {
 		case f := <-consumer.frames:
 			delivered++
+			if delivered == 1 {
+				close(firstFrame)
+			}
 			matched := false
 			for _, ref := range refs {
 				if bytes.Equal(ref, f.Data) {
