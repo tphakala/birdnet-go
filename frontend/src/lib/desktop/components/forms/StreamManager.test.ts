@@ -587,6 +587,23 @@ describe('StreamManager add form', () => {
     expect(add).toHaveAccessibleDescription('settings.actions.saving');
   });
 
+  it('remembers a URL whose test finished after the field moved on, so going back needs no new test', async () => {
+    const tested = new SvelteSet<string>();
+    renderRows([], { testedUrls: tested, onUrlTested: (url: string) => tested.add(url) });
+    await fillAddForm('Gate', 'rtsp://gate/live');
+    await fireEvent.click(screen.getByTestId('stream-test-start'));
+    await fireEvent.input(screen.getByTestId(URL_TESTID), { target: { value: 'rtsp://gate/two' } });
+    await fireEvent.click(screen.getByTestId('stream-test-finish'));
+    const add = screen.getByRole('button', { name: ADD_KEY });
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+
+    await fireEvent.input(screen.getByTestId(URL_TESTID), {
+      target: { value: 'rtsp://gate/live' },
+    });
+
+    expect(add).not.toHaveAttribute('aria-disabled');
+  });
+
   it('does not count a test result that arrives after the field moved to another URL', async () => {
     const { onUpdateStreams } = renderRows([]);
     await fillAddForm('Gate', 'rtsp://gate/live');
@@ -1358,6 +1375,21 @@ describe('StreamManager health ownership of a row', () => {
     renderRows([draft], { savedStreams: [quiet] });
 
     expect(within(header('A')).getByText(SUPPRESSED_KEY)).toBeInTheDocument();
+  });
+
+  it('suppresses only the saved stream whose own quiet hours are on, when saved streams share a URL', async () => {
+    const quietOn = { ...streamA, quietHours: { ...defaultQuietHoursConfig, enabled: true } };
+    const quietOff = { ...streamB, url: streamA.url };
+    quietHours.status = { suppressedStreams: { [streamA.url]: true } };
+    onTestFinished(() => {
+      quietHours.status = null;
+    });
+    vi.mocked(api.get).mockResolvedValue([]);
+
+    renderRows([quietOn, quietOff], { savedStreams: [quietOn, quietOff] });
+
+    expect(within(header('A')).getByText(SUPPRESSED_KEY)).toBeInTheDocument();
+    expect(within(header('B')).getByText(UNKNOWN_KEY)).toBeInTheDocument();
   });
 
   it('does not lend a row the health of another saved stream that took its URL', async () => {

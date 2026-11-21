@@ -265,20 +265,21 @@
   }
 
   // Convert backend process state to UI status
-  function getStreamStatus(healthUrl: string | undefined, stream: StreamConfig): StreamStatus {
+  function getStreamStatus(source: SavedSource | undefined, stream: StreamConfig): StreamStatus {
     if (!stream.enabled) {
       return 'disabled';
     }
+    const healthUrl = source?.url;
 
     // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
     const health = healthUrl === undefined ? undefined : streamHealth[healthUrl];
     if (!health) {
       // No health data means the stream was removed from the active map.
       // Check per-stream suppression state rather than global anyActive flag.
-      // Suppression belongs to the saved stream: its saved quiet hours decide, not the
-      // draft, and a card without a saved counterpart must not borrow another's status.
-      const saved =
-        healthUrl === undefined ? undefined : savedStreams.find(s => s.url === healthUrl);
+      // Suppression belongs to the row's own saved stream (found by name and URL, since
+      // saved streams may share a URL): its saved quiet hours decide, not the draft, and
+      // a card without a saved counterpart must not borrow another's status.
+      const saved = source && savedStreams.find(s => sourceKey(s) === sourceKey(source));
       if (healthUrl !== undefined && saved && isStreamSuppressed(healthUrl, saved)) {
         return 'suppressed';
       }
@@ -452,12 +453,14 @@
     result: { sampleRate: number; channels: number } | null,
     testedUrl: string
   ) {
-    // A result for an earlier URL (a probe that finished after the field changed)
-    // says nothing about the URL the form holds now.
+    // A successful test is remembered for the URL it ran for, even when the field has
+    // moved on meanwhile (going back to that URL then needs no new test).
+    if (result) onUrlTested(testedUrl);
+    // Everything else about a result for an earlier URL (a probe that finished after
+    // the field changed) says nothing about the URL the form holds now.
     if (testedUrl.trim() !== newUrl.trim()) return;
     newTestResult = result;
     newTestedUrl = result ? testedUrl : null;
-    if (result) onUrlTested(testedUrl);
     if (!result) {
       analysisResult = null;
       analysisError = null;
@@ -543,10 +546,15 @@
     next.forEach((source, id) => savedRowSources.set(id, source));
   }
 
+  /** The saved source a row's health belongs to: its own, while the row still has its URL. */
+  function savedSourceOf(id: string | undefined, stream: StreamConfig): SavedSource | undefined {
+    const saved = id === undefined ? undefined : savedRowSources.get(id);
+    return saved !== undefined && saved.url === stream.url ? saved : undefined;
+  }
+
   /** The URL a row's health is filed under: its saved URL while the row still has it. */
   function healthUrlOf(id: string | undefined, stream: StreamConfig): string | undefined {
-    const saved = id === undefined ? undefined : savedRowSources.get(id)?.url;
-    return saved !== undefined && saved === stream.url ? saved : undefined;
+    return savedSourceOf(id, stream)?.url;
   }
 
   untrack(adoptSavedUrls);
@@ -833,7 +841,7 @@
       {#each rows as row (row.id)}
         <StreamCard
           stream={row.stream}
-          status={getStreamStatus(healthUrlOf(row.id, row.stream), row.stream)}
+          status={getStreamStatus(savedSourceOf(row.id, row.stream), row.stream)}
           healthUrl={healthUrlOf(row.id, row.stream)}
           {availableModels}
           {modelOptions}
