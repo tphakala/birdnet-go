@@ -1410,7 +1410,13 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// Restore non-expired tokens
+	// Restore non-expired tokens. A file without a credentials ID cannot tie
+	// its codes or sessions to the credentials that issued them, so none of
+	// them is restored; startup then adopts the live credentials.
+	if storedData.CredentialsID == "" {
+		storedData.AuthCodes = nil
+		storedData.Sessions = nil
+	}
 	loadedAuthCodes := 0
 	now := time.Now()
 	for code, authCode := range storedData.AuthCodes {

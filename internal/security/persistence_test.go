@@ -120,6 +120,24 @@ func TestTokenPersistenceIgnoresOldShape(t *testing.T) {
 	assert.ErrorIs(t, server.ValidateAccessToken("old-token"), ErrTokenNotFound)
 }
 
+// TestTokenPersistenceDropsEntriesWithoutCredentialsID verifies that unexpired
+// authorization codes and sessions from a file with no credentials ID are not
+// restored: the file cannot say which credentials issued them, so after a
+// password change made while the server was stopped they must not be usable.
+func TestTokenPersistenceDropsEntriesWithoutCredentialsID(t *testing.T) {
+	tokensFile := filepath.Join(t.TempDir(), "tokens.json")
+	expires := time.Now().Add(time.Hour).Format(time.RFC3339)
+	old := `{"auth_codes":{"old-code":{"Code":"old-code","ExpiresAt":"` + expires +
+		`"}},"sessions":{"old-key":{"ExpiresAt":"` + expires + `"}}}`
+	require.NoError(t, os.WriteFile(tokensFile, []byte(old), FilePermissions))
+
+	server := newPersistingServer(tokensFile, persistenceTestSettings())
+	require.NoError(t, server.loadTokens(ctx))
+
+	assert.Empty(t, server.authCodes)
+	assert.Empty(t, server.accessTokens)
+}
+
 // TestEndSessionSurvivesRestartAfterRacingPersist verifies that a session ended
 // by EndSession stays ended in the file even when a persist that took its
 // snapshot before the logout is still writing after it: the save lock makes the

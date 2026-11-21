@@ -324,10 +324,16 @@ func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Reque
 }
 
 // EndSession ends the request's session: the record is deleted and, when the
-// token file can be written, the deletion is written before it returns; a
-// failed write is logged at error level. Then the cookie is cleared.
+// request presents a session token, the token file is written before it
+// returns (also when another request already deleted that record, so an
+// overlapping logout waits for the deletion to reach the file); a failed write
+// is logged at error level. Then the cookie is cleared.
 func (s *OAuth2Server) EndSession(w http.ResponseWriter, r *http.Request) {
-	if s.revokeRequestSession(r, "") {
+	// A request that presents a token always waits for the save, so a logout
+	// that overlaps another logout of the same token does not return before
+	// the deletion is written.
+	if sessionTokenFromRequest(r) != "" {
+		s.revokeRequestSession(r, "")
 		if err := s.trySaveTokens(); err != nil {
 			GetLogger().Error("Failed to persist the end of a session, the record may return after a restart", logger.Error(err))
 		}
