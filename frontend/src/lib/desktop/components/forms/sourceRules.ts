@@ -127,9 +127,9 @@ export function streamProblems(
     const problem: StreamProblem = {};
     const name = nameKey(stream.name);
     if (!name) problem.name = 'required';
-    else if (isStreamNameTooLong(stream.name.trim()) && !savedNames.has(name))
+    else if (isStreamNameTooLong(stream.name.trim()) && !savedNames.has(name)) {
       problem.name = 'tooLong';
-    else if (isNewDuplicate(name, names, savedNames)) problem.name = 'duplicate';
+    } else if (isNewDuplicate(name, names, savedNames)) problem.name = 'duplicate';
 
     const url = stream.url.trim();
     if (!url) problem.url = 'required';

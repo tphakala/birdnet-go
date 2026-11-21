@@ -72,8 +72,8 @@
     isTesting = true;
     testResult = null;
     testError = null;
-    onResult?.(null, url.trim());
     const testedUrl = url.trim();
+    onResult?.(null, testedUrl);
     try {
       const result = await api.post<ProbeResult>(
         '/api/v2/streams/test',

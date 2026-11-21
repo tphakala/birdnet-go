@@ -601,7 +601,7 @@
   // saved list changes.
   let savedIdentity: string | undefined;
   $effect(() => {
-    const identity = JSON.stringify(savedStreams.map(stream => [stream.name, stream.url]));
+    const identity = listIdentity(savedStreams);
     const hasSaved = savedStreams.length > 0;
     untrack(() => {
       if (hasSaved && !eventSource) connectSSE();

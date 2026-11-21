@@ -558,26 +558,30 @@
 
   // The save bar names each invalid stream once: a stream whose only problem is an
   // untested URL is listed apart from the streams with a name or URL error.
-  function streamIssue(
-    messageKey: 'settings.audio.validation.streams' | 'settings.audio.validation.streamsUntested',
-    kind: 'invalid' | 'untested'
-  ): string | undefined {
-    const streams = settings.rtsp.streams;
+  const STREAM_ISSUE_MESSAGES = new Map([
+    ['invalid', 'settings.audio.validation.streams'],
+    ['untested', 'settings.audio.validation.streamsUntested'],
+  ] as const);
+  let streamProblemList = $derived(streamProblems(settings.rtsp.streams, savedStreams, testedUrls));
+
+  function streamIssue(kind: 'invalid' | 'untested'): string | undefined {
     const names = problemStreamNames(
-      streams,
-      streamProblems(streams, savedStreams, testedUrls),
+      settings.rtsp.streams,
+      streamProblemList,
       position => t('settings.audio.validation.unnamedStream', { position }),
       kind
     );
-    return names.length > 0
-      ? t(messageKey, { tab: t('settings.audio.tabs.streams'), names: names.join(', ') })
+    const messageKey = STREAM_ISSUE_MESSAGES.get(kind);
+    return names.length > 0 && messageKey
+      ? t(messageKey, {
+          tab: t('settings.audio.tabs.streams'),
+          names: names.join(', '),
+        })
       : undefined;
   }
 
-  let streamsIssue = $derived(streamIssue('settings.audio.validation.streams', 'invalid'));
-  let streamsUntestedIssue = $derived(
-    streamIssue('settings.audio.validation.streamsUntested', 'untested')
-  );
+  let streamsIssue = $derived(streamIssue('invalid'));
+  let streamsUntestedIssue = $derived(streamIssue('untested'));
 
   $effect(() => {
     const active = new Map<string, string>();
