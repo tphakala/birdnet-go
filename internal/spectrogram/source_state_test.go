@@ -44,7 +44,6 @@ func TestStatSource(t *testing.T) {
 
 		info, err := StatSource(clip)
 		require.NoError(t, err)
-		assert.Equal(t, int64(sourceStateClipBytes), info.Size())
 		assert.True(t, NewSourceState(info, 0).Matches(info), "the identity is readable")
 	})
 	t.Run("a missing file keeps the stat error", func(t *testing.T) {

@@ -79,14 +79,11 @@ type SourceState struct {
 }
 
 // StatSource stats the audio file at path and reads its identity in the same
-// step, so the identity, size and modification time of the returned info
-// describe one file. On Windows os.Stat defers reading the file id until the
-// first os.SameFile call and then reads it from the path at that moment
-// (loadFileId in Go's os/types_windows.go), so a file renamed over the path
-// after the stat would hand its id to the old file's info. Reading it here closes
-// that window. On other systems the id comes from the stat itself and the extra
-// call compares the info with itself. A file whose identity cannot be read is
-// reported as ErrSourceChanged: it vanished or was replaced after the stat.
+// step, so identity, size and modification time describe one file. On Windows
+// os.Stat defers the file id to the first os.SameFile call, which reads it from
+// the path at that moment (loadFileId in Go's os/types_windows.go), by which time
+// another file may have been renamed over it. A file whose identity cannot be
+// read is reported as ErrSourceChanged.
 func StatSource(path string) (os.FileInfo, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -101,8 +98,8 @@ func StatSource(path string) (os.FileInfo, error) {
 // NewSourceState captures info, the os.FileInfo of the audio file at the moment
 // it was judged ready, and decodedBytes, the most bytes its decode can hold
 // (transcode.ProbeInfo.DecodedBytes), which sizes the render's memory budget.
-// It reads the identity of info if StatSource has not already; use StatSource to
-// obtain info when the file can be replaced between the stat and this call.
+// Obtain info from StatSource: it reads the identity at stat time, which
+// NewSourceState cannot do after the fact.
 func NewSourceState(info os.FileInfo, decodedBytes int64) SourceState {
 	return SourceState{info: info, pinned: info != nil && os.SameFile(info, info), decodedBytes: decodedBytes}
 }
