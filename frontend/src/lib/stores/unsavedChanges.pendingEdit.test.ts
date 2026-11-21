@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { unsavedChanges } from './unsavedChanges.svelte';
@@ -46,15 +46,32 @@ describe('unsaved changes with an edit still being typed', () => {
     expect(unsavedChanges.prompting).toBe(true);
   });
 
-  it('keeps the field focused when nothing blocks the move', async () => {
-    // No guard is registered here; a plain field must not lose focus.
+  it('leaves the field alone when no guard is registered', () => {
     const other = document.createElement('input');
     document.body.append(other);
     other.focus();
+    const onBlur = vi.fn();
+    other.addEventListener('blur', onBlur);
+
     unsavedChanges.request(TO, FROM);
 
+    expect(onBlur).not.toHaveBeenCalled();
     expect(other).toHaveFocus();
     other.remove();
+  });
+
+  it('leaves the field alone when every guard admits the move', async () => {
+    await typeWithoutLeavingTheField();
+    const field = screen.getByLabelText('Name');
+    const onBlur = vi.fn();
+    field.addEventListener('blur', onBlur);
+
+    // A query-only move stays on the page, so the default guard admits it.
+    const decision = unsavedChanges.request({ path: FROM.path, search: '?tab=x' }, FROM);
+
+    expect(decision).toBeNull();
+    expect(onBlur).not.toHaveBeenCalled();
+    expect(field).toHaveFocus();
   });
 
   it('puts the cursor back in the field when the user stays', async () => {

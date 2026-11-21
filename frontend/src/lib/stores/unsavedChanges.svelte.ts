@@ -82,11 +82,15 @@ export function createUnsavedChanges(): UnsavedChanges {
     return (record.guard.allows ?? samePath)(to, from);
   }
 
+  /** True when the guard can hold this move if it is dirty: it neither admits nor was released. */
+  function couldBlock(record: GuardRecord, to: NavigationTarget, from: NavigationTarget): boolean {
+    if (admits(record, to, from)) return false;
+    return record.leftAt === null || from.path === record.leftAt;
+  }
+
   function isBlocking(record: GuardRecord, to: NavigationTarget, from: NavigationTarget): boolean {
     // Cheap checks first: isDirty can stringify a whole form.
-    if (admits(record, to, from)) return false;
-    if (record.leftAt !== null && from.path !== record.leftAt) return false;
-    return record.guard.isDirty();
+    return couldBlock(record, to, from) && record.guard.isDirty();
   }
 
   /**
@@ -171,10 +175,10 @@ export function createUnsavedChanges(): UnsavedChanges {
 
     request(to, from) {
       if (prompting) return Promise.resolve(false);
-      // Only a guard that does not admit the move can be affected by a pending edit.
-      const candidates = [...records].filter(record => !admits(record, to, from));
-      if (candidates.length > 0) commitPendingEdit();
-      const leavers = candidates.filter(record => isBlocking(record, to, from));
+      // Only a guard that can hold the move can be affected by a pending edit. Committing it runs
+      // the field's handlers, which may register or drop guards, so the leavers are read afterwards.
+      if ([...records].some(record => couldBlock(record, to, from))) commitPendingEdit();
+      const leavers = [...records].filter(record => isBlocking(record, to, from));
       if (leavers.length === 0) return null;
       return openPrompt(leavers, from.path);
     },
