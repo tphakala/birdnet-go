@@ -618,19 +618,23 @@
     savingTemplate = true;
     templateStatusMessage = '';
 
+    // What goes out is what counts as saved: text typed while the request is pending is not.
+    const submittedTitle = editedTitle;
+    const submittedMessage = editedMessage;
+
     try {
       await api.patch('/api/v2/settings/notification', {
         templates: {
           newSpecies: {
-            title: editedTitle,
-            message: editedMessage,
+            title: submittedTitle,
+            message: submittedMessage,
           },
         },
       });
 
       if (templateConfig) {
-        templateConfig.title = editedTitle;
-        templateConfig.message = editedMessage;
+        templateConfig.title = submittedTitle;
+        templateConfig.message = submittedMessage;
       }
 
       templateStatusMessage = t('settings.notifications.templates.saveSuccess');

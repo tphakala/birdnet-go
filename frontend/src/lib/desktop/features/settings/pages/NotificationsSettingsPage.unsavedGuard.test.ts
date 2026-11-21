@@ -195,4 +195,29 @@ describe('NotificationsSettingsPage unsaved-changes guard', () => {
 
     expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(false);
   });
+
+  it('keeps guarding text typed into the template while its save is pending', async () => {
+    let finishSave: () => void = () => {};
+    vi.mocked(api.patch).mockReturnValueOnce(
+      new Promise(resolve => {
+        finishSave = () => resolve({});
+      })
+    );
+    const user = userEvent.setup();
+    await renderLoaded();
+    const title = await screen.findByLabelText('settings.notifications.templates.titleLabel');
+    await user.type(title, 'one');
+    await user.click(
+      screen.getByRole('button', { name: /settings\.notifications\.templates\.saveButtonUnsaved/ })
+    );
+
+    await user.type(title, 'two');
+    finishSave();
+    await waitFor(() =>
+      expect(screen.queryByText('settings.notifications.templates.saveSuccess')).not.toBeNull()
+    );
+
+    // 'two' went out after the submitted text, so it is still unsaved.
+    expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(true);
+  });
 });
