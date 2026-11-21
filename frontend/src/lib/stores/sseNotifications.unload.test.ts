@@ -23,4 +23,22 @@ describe('sseNotifications unload handling', () => {
 
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
+
+  // A page restored from the back/forward cache ran pagehide when it was stored, so the stream
+  // is closed and nothing else would open it again.
+  it('reconnects when the page is restored from the back/forward cache', () => {
+    const connect = vi.spyOn(sseNotifications, 'connect').mockImplementation(() => {});
+
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reconnect on an ordinary page show', () => {
+    const connect = vi.spyOn(sseNotifications, 'connect').mockImplementation(() => {});
+
+    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
+
+    expect(connect).not.toHaveBeenCalled();
+  });
 });
