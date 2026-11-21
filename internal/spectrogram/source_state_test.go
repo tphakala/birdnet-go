@@ -53,6 +53,20 @@ func TestStatSource(t *testing.T) {
 	})
 }
 
+// TestSourceState_UnpinnedNeverMatches pins that a state whose identity could not
+// be read when it was created matches no file, the one it was built from
+// included. NewSourceState leaves pinned false only for an info whose id cannot
+// be loaded (a case Linux does not produce), so the state is built directly.
+func TestSourceState_UnpinnedNeverMatches(t *testing.T) {
+	clip := filepath.Join(t.TempDir(), "clip.wav")
+	require.NoError(t, os.WriteFile(clip, make([]byte, sourceStateClipBytes), 0o600))
+	info, err := StatSource(clip)
+	require.NoError(t, err)
+
+	assert.True(t, NewSourceState(info, 0).Matches(info), "a pinned state matches the file it describes")
+	assert.False(t, SourceState{info: info}.Matches(info), "an unpinned state matches nothing")
+}
+
 func TestGenerateFromFile_RefusesToPublishWhenSourceChanged(t *testing.T) {
 
 	appendBytes := func(t *testing.T, path string) {
