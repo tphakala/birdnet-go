@@ -196,7 +196,7 @@ describe('navigation with an unsaved-changes guard', () => {
       window.history.back();
       await first;
       expect(unsavedChanges.prompting).toBe(true);
-      const firstDecision = request.mock.results[0]?.value as Promise<boolean>;
+      const firstDecision: Promise<boolean> | undefined = request.mock.results[0]?.value;
 
       const second = nextPop();
       window.history.back();
