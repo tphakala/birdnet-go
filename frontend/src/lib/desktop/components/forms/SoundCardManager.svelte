@@ -1,14 +1,16 @@
 <!--
   Sound Card Manager Component
 
-  Purpose: Manage the sound card audio sources of a tab that saves as it
-  changes: source cards, an add form that saves the new source at once, delete,
-  a summary bar and empty state guidance.
+  Purpose: Manage the sound card audio sources of a tab that saves with the
+  page: source cards, an add form that appends the new source to the form,
+  delete, a summary bar and empty state guidance.
 
-  Every change goes out through onUpdateSources as the whole sources array with
-  the auto-save options of the control that made it. Rows carry a UI-only id
-  (never persisted) that keys the cards, their field keys and their expanded
-  state; a length change the manager did not make gives every row a fresh id.
+  Every change goes out through onUpdateSources as the whole sources array; the
+  page's Save Changes bar persists it. Rows carry a UI-only id (never persisted)
+  that keys the cards and their expanded state. The manager remembers the
+  identity (name and device of every row) of the list it last sent; a list with
+  another identity (Reset, a reload) is foreign and gives every row a fresh id,
+  so no card state lands on a different source.
 
   Features:
   - Source cards: one source opens by default, several start closed
@@ -45,9 +47,8 @@
     modelsFailed,
     refreshModels,
   } from '$lib/stores/models.svelte';
-  import { autoSaveStatus, type CommitOptions } from '$lib/stores/settingsAutoSave.svelte';
-  import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
-  import { AUDIO_SOURCES_LIST_FIELD, savedEqualizer, RowRollback } from './sourceFields';
+  import { savedEqualizer } from './sourceFields';
+  import { soundCardProblems } from './sourceRules';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
@@ -110,18 +111,24 @@
 
   interface Props {
     sources: AudioSourceConfig[];
+    /** The saved sources, so only problems the user introduced are reported. */
+    savedSources?: AudioSourceConfig[];
     audioDevices: AudioDevice[];
     audioDevicesLoading: boolean;
     disabled?: boolean;
-    onUpdateSources: (_sources: AudioSourceConfig[], _options: CommitOptions) => void;
+    /** Why the cards are disabled, shown beside each card's delete button. */
+    disabledReason?: string;
+    onUpdateSources: (_sources: AudioSourceConfig[]) => void;
     onRefreshDevices: () => void;
   }
 
   let {
     sources = [],
+    savedSources = [],
     audioDevices,
     audioDevicesLoading,
     disabled = false,
+    disabledReason,
     onUpdateSources,
     onRefreshDevices,
   }: Props = $props();
@@ -190,6 +197,11 @@
     showAddForm = true;
   }
 
+  /** Id of the reason shown beside the add form's Add button while it is disabled. */
+  const addDisabledReasonId = generateId('add-source-disabled-reason');
+  /** Id of the add form's device error, which describes the device select. */
+  const addDeviceErrorId = generateId('add-source-device-error');
+
   // ----- Rows -----
 
   function newRowIds(count: number): string[] {
@@ -200,30 +212,36 @@
   // One source opens by default, several start closed.
   const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
 
-  const rollback = new RowRollback();
+  // A source is identified by its name and device, the fields a card's open
+  // state and pending device pick are about; other edits keep the identity.
+  function listIdentity(list: readonly AudioSourceConfig[]): string {
+    return JSON.stringify(list.map(source => [source.name, source.device]));
+  }
 
-  // A refused add or delete takes the list back to the rows this manager
-  // remembered, which keeps every card's id, open state and drafts. Any other
-  // length change (a reload, another window) gives every row a fresh id, so no
-  // status or open state lands on the wrong source.
+  // The identity of the list this manager last held or sent.
+  let expectedIdentity = untrack(() => listIdentity(sources));
+
+  /** Sends a list to the parent and remembers its identity as the expected one. */
+  function sendSources(list: AudioSourceConfig[]) {
+    expectedIdentity = listIdentity(list);
+    onUpdateSources(list);
+  }
+
+  // A list this manager did not produce (Reset, a reload) gives every row a
+  // fresh id, so the cards are recreated and no open confirmation, pending
+  // device pick or open state lands on a different source.
   $effect.pre(() => {
-    const count = sources.length;
+    const identity = listIdentity(sources);
     untrack(() => {
-      if (rowIds.length === count) return;
-      const previous = rollback.take(count);
-      if (previous) {
-        rowIds = previous.ids;
-        expandedRows.clear();
-        for (const id of previous.expanded) expandedRows.add(id);
-        return;
-      }
-      rollback.clear();
-      rowIds = newRowIds(count);
+      if (identity === expectedIdentity) return;
+      expectedIdentity = identity;
+      rowIds = newRowIds(sources.length);
       expandedRows.clear();
-      if (count === 1) expandedRows.add(rowIds[0]);
+      if (sources.length === 1) expandedRows.add(rowIds[0]);
     });
   });
 
+  let problems = $derived(soundCardProblems(sources, savedSources));
   let rows = $derived(
     sources.map((source, index) => ({ source, index, id: rowIds.at(index) ?? `${index}` }))
   );
@@ -235,47 +253,13 @@
 
   let addButton = $state<HTMLButtonElement>();
 
-  // ----- Add (saved at once) -----
-
-  let listStatus = $derived(autoSaveStatus(AUDIO_SOURCES_LIST_FIELD));
-  let addPending = $state(false);
-  let adding = $derived(addPending && listStatus.state === 'saving');
-
-  // Ends an add: a save closes the form, a failure keeps it open with the reason.
-  $effect(() => {
-    const state = listStatus.state;
-    untrack(() => {
-      if (state === 'saved') rollback.clear();
-      if (!addPending || state === 'saving') return;
-      addPending = false;
-      if (state !== 'error') resetAddForm();
-    });
-  });
+  // ----- Add -----
 
   function addSource() {
-    if (adding || disabled) return;
+    if (disabled) return;
     clearErrors();
 
     const trimmedName = newName.trim();
-
-    if (!trimmedName) {
-      nameError = t('settings.audio.soundCards.errors.nameRequired');
-      return;
-    }
-    // Check duplicate name (case-insensitive)
-    if (sources.some(s => s.name.toLowerCase() === trimmedName.toLowerCase())) {
-      nameError = t('settings.audio.soundCards.errors.duplicateName');
-      return;
-    }
-    if (!newDevice) {
-      deviceError = t('settings.audio.soundCards.errors.deviceRequired');
-      return;
-    }
-    if (sources.some(s => s.device === newDevice)) {
-      deviceError = t('settings.audio.soundCards.errors.duplicateDevice');
-      return;
-    }
-
     const newSource: AudioSourceConfig = {
       name: trimmedName,
       device: newDevice,
@@ -286,37 +270,46 @@
       quietHours: newQuietHours,
     };
 
+    // The new row against the current rows only: the saved list is not a reason to accept it.
+    const problem = soundCardProblems([...sources, newSource], []).at(-1);
+    if (problem?.name) {
+      nameError =
+        problem.name === 'required'
+          ? t('settings.audio.soundCards.errors.nameRequired')
+          : t('settings.audio.soundCards.errors.duplicateName');
+      return;
+    }
+    if (problem?.device) {
+      deviceError =
+        problem.device === 'required'
+          ? t('settings.audio.soundCards.errors.deviceRequired')
+          : t('settings.audio.soundCards.errors.duplicateDevice');
+      return;
+    }
+
     logger.debug('Adding sound card source', {
       component: 'SoundCardManager',
       action: 'addSource',
     });
     const rowId = generateId(ROW_ID_PREFIX);
-    rollback.remember(rowIds, expandedRows);
     rowIds = [...rowIds, rowId];
     if (sources.length === 0) expandedRows.add(rowId);
-    addPending = true;
-    onUpdateSources([...sources, newSource], { field: AUDIO_SOURCES_LIST_FIELD });
+    sendSources([...sources, newSource]);
+    resetAddForm();
   }
 
   // ----- Change and delete -----
 
-  function commitSource(index: number, updated: AudioSourceConfig, options: CommitOptions) {
+  function changeSource(index: number, updated: AudioSourceConfig) {
     if (index < 0 || index >= sources.length) return;
-    onUpdateSources(
-      sources.map((source, i) => (i === index ? updated : source)),
-      options
-    );
+    sendSources(sources.map((source, i) => (i === index ? updated : source)));
   }
 
   async function deleteSource(index: number) {
     const id = rowIds.at(index);
-    rollback.remember(rowIds, expandedRows);
     rowIds = rowIds.filter((_, i) => i !== index);
     if (id !== undefined) expandedRows.delete(id);
-    onUpdateSources(
-      sources.filter((_, i) => i !== index),
-      { field: AUDIO_SOURCES_LIST_FIELD }
-    );
+    sendSources(sources.filter((_, i) => i !== index));
     // The deleted card took focus with it; land on the add button instead.
     await tick();
     addButton?.focus();
@@ -420,24 +413,20 @@
       {#each rows as row (row.id)}
         <SoundCardCard
           source={row.source}
-          index={row.index}
           {sources}
-          rowId={row.id}
           {audioDevices}
           {modelOptions}
           {availableModels}
           {disabled}
+          {disabledReason}
           expanded={expandedRows.has(row.id)}
           onToggleExpanded={() => toggleRow(row.id)}
-          onCommit={(updated, options) => commitSource(row.index, updated, options)}
+          problem={problems.at(row.index)}
+          onChange={updated => changeSource(row.index, updated)}
           onDelete={() => void deleteSource(row.index)}
         />
       {/each}
     </div>
-
-    {#if !showAddForm}
-      <AutoSaveStatus field={AUDIO_SOURCES_LIST_FIELD} />
-    {/if}
 
     <!-- Add Source Form -->
     {#if showAddForm}
@@ -455,6 +444,7 @@
               <TextInput
                 id="new-soundcard-name"
                 bind:value={newName}
+                oninput={() => (nameError = null)}
                 label={t('settings.audio.soundCards.nameLabel')}
                 placeholder={t('settings.audio.soundCards.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.soundCards.nameHelp')}
@@ -473,12 +463,17 @@
                 options={deviceOptions}
                 required
                 {disabled}
-                onChange={value => (newDevice = value as string)}
+                aria-invalid={Boolean(deviceError)}
+                aria-describedby={deviceError ? addDeviceErrorId : undefined}
+                onChange={value => {
+                  newDevice = value as string;
+                  deviceError = null;
+                }}
                 groupBy={false}
                 menuSize="sm"
               />
               {#if deviceError}
-                <p role="alert" class="text-xs text-[var(--text-error)] mt-1">
+                <p id={addDeviceErrorId} role="alert" class="text-xs text-[var(--text-error)] mt-1">
                   {deviceError}
                 </p>
               {/if}
@@ -585,27 +580,27 @@
 
             <!-- Action Buttons -->
             <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
-              <AutoSaveStatus field={AUDIO_SOURCES_LIST_FIELD} class="mr-auto" />
+              {#if disabled && disabledReason}
+                <p id={addDisabledReasonId} class="mr-auto text-sm text-[var(--text-subtle)]">
+                  {disabledReason}
+                </p>
+              {/if}
               <button
                 type="button"
                 class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                aria-disabled={adding ? 'true' : undefined}
-                onclick={() => {
-                  if (!adding) resetAddForm();
-                }}
+                onclick={resetAddForm}
               >
                 {t('common.cancel')}
               </button>
               <button
                 type="button"
                 class="btn btn-primary btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
-                aria-disabled={adding || disabled ? 'true' : undefined}
+                aria-disabled={disabled ? 'true' : undefined}
+                aria-describedby={disabled && disabledReason ? addDisabledReasonId : undefined}
                 onclick={addSource}
               >
                 <Plus class="size-4" aria-hidden="true" />
-                {adding
-                  ? t('settings.audio.soundCards.adding')
-                  : t('settings.audio.soundCards.addSource')}
+                {t('settings.audio.soundCards.addSource')}
               </button>
             </div>
           </div>

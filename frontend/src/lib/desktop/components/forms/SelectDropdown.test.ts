@@ -1013,6 +1013,20 @@ describe('SelectDropdown Accessibility', () => {
     expect(unnamed).not.toHaveAttribute('aria-label');
   });
 
+  it('marks the trigger invalid only while aria-invalid is set', async () => {
+    const view = selectTest.render({
+      props: { options: fruit, value: 'banana', 'aria-label': 'Fruit picker' },
+    });
+    const trigger = screen.getByRole('combobox', { name: 'Fruit picker' });
+    expect(trigger).not.toHaveAttribute('aria-invalid');
+
+    await view.rerender({ 'aria-invalid': true });
+    expect(trigger).toHaveAttribute('aria-invalid', 'true');
+
+    await view.rerender({ 'aria-invalid': false });
+    expect(trigger).not.toHaveAttribute('aria-invalid');
+  });
+
   it('names the trigger and the open listbox from the aria-label prop, not the selected value', async () => {
     const user = userEvent.setup();
     selectTest.render({ props: { options: fruit, value: 'banana', 'aria-label': 'Fruit picker' } });

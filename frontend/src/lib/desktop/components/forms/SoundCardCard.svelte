@@ -1,31 +1,31 @@
 <!--
   Sound Card Card Component
 
-  Purpose: One sound card audio source whose settings save as they change. The
-  header is always visible and toggles the body; the body holds the source's
-  settings in groups, each with its own save status.
+  Purpose: One sound card audio source whose settings go into the settings
+  form; the page's Save Changes bar persists them. The header is always visible
+  and toggles the body, which holds the source's settings in groups.
 
-  Saving:
-  - Name: a local draft, committed on blur or Enter; Escape restores it. An
-    empty or duplicate name is not committed and the field says why.
-  - Capture (device and sample rate): a local draft with a scoped "Apply and
-    restart capture", since a change restarts capture. A failed apply keeps the
-    draft.
-  - Gain, equalizer numbers, quiet hours times and offsets: committed after the
-    auto-save debounce. Toggles, selects and model switches: committed at once.
+  Editing:
+  - Every control writes the complete changed source through onChange as it
+    changes. A name is written as typed and trimmed when the field is left.
+  - Device: the pick waits for the sample rate probe of that device and is then
+    written together with a rate the device supports. Collapsing the card,
+    disabling it (a save runs), a recreated card (Reset) or a change of the
+    form's device meanwhile drops the pick. Opening the card probes the saved
+    device to fill the rate list and writes nothing.
 
   Props:
-  - source: The saved source
-  - index: Position of the source in sources
-  - sources: Every source, for the duplicate checks and the free devices
-  - rowId: UI-only id of the row, part of every field key
+  - source: The source as it is in the form
+  - sources: Every source, for the free-device filter
+  - problem: What the page's save rules report for this source
   - audioDevices: Devices the server reports
   - modelOptions: Labels of the listed models, for the header summary
   - availableModels: Models the server lists for the source editors
   - disabled: Blocks every change
+  - disabledReason: Why it is disabled, shown beside delete (default: loading)
   - expanded: Whether the body is shown
   - onToggleExpanded: Called by the header button
-  - onCommit: Receives the complete changed source and the auto-save options
+  - onChange: Receives the complete changed source
   - onDelete: Called after the delete was confirmed
 
   @component
@@ -54,11 +54,6 @@
     type BackendModel,
   } from '$lib/stores/models.svelte';
   import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
-  import {
-    AUTOSAVE_DEBOUNCE_MS,
-    autoSaveStatus,
-    type CommitOptions,
-  } from '$lib/stores/settingsAutoSave.svelte';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
@@ -66,21 +61,12 @@
   import SourceModelBadges from './SourceModelBadges.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
-  import AutoSaveStatus from '$lib/desktop/features/settings/components/AutoSaveStatus.svelte';
   import SourceCard from '$lib/desktop/features/settings/components/SourceCard.svelte';
   import SettingsGroup from '$lib/desktop/features/settings/components/SettingsGroup.svelte';
   import { SETTINGS_GROUP_DISCLOSURE_CLASSES } from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
-  import CommitTextField from '$lib/desktop/features/settings/components/CommitTextField.svelte';
-  import ScopedApplyGroup from '$lib/desktop/features/settings/components/ScopedApplyGroup.svelte';
-  import { ApplyDraft } from '$lib/desktop/features/settings/components/applyDraft.svelte';
-  import {
-    AUDIO_SOURCES_FIELD_PREFIX,
-    isContinuousEqualizerChange,
-    isContinuousQuietHoursChange,
-    savedEqualizer,
-    sourceField,
-    type SourceFieldPart,
-  } from './sourceFields';
+  import TextInput from './TextInput.svelte';
+  import { savedEqualizer } from './sourceFields';
+  import type { SoundCardProblem } from './sourceRules';
   import type {
     AudioSourceConfig,
     EqualizerSettings,
@@ -94,31 +80,31 @@
 
   interface Props {
     source: AudioSourceConfig;
-    index: number;
     sources: AudioSourceConfig[];
-    rowId: string;
+    problem?: SoundCardProblem;
     audioDevices: AudioDevice[];
     modelOptions: Array<{ value: string; label: string }>;
     availableModels: BackendModel[];
     disabled?: boolean;
+    disabledReason?: string;
     expanded: boolean;
     onToggleExpanded: () => void;
-    onCommit: (_source: AudioSourceConfig, _options: CommitOptions) => void;
+    onChange: (_source: AudioSourceConfig) => void;
     onDelete: () => void;
   }
 
   let {
     source,
-    index,
     sources,
-    rowId,
+    problem,
     audioDevices,
     modelOptions,
     availableModels,
     disabled = false,
+    disabledReason,
     expanded,
     onToggleExpanded,
-    onCommit,
+    onChange,
     onDelete,
   }: Props = $props();
 
@@ -132,28 +118,13 @@
 
   const cardId = generateId('soundcard');
   const nameInputId = `${cardId}-name`;
+  const deviceErrorId = `${cardId}-device-error`;
   const captureHeadingId = `${cardId}-capture`;
   const modelsHeadingId = `${cardId}-models`;
   const equalizerHeadingId = `${cardId}-equalizer`;
 
-  function field(part: SourceFieldPart): string {
-    return sourceField(AUDIO_SOURCES_FIELD_PREFIX, rowId, part);
-  }
-
-  function statusId(part: SourceFieldPart): string {
-    return `${cardId}-${part}-status`;
-  }
-
-  function commit(change: Partial<AudioSourceConfig>, part: SourceFieldPart, debounce = false) {
-    onCommit(
-      { ...source, ...change },
-      debounce ? { field: field(part), debounceMs: AUTOSAVE_DEBOUNCE_MS } : { field: field(part) }
-    );
-  }
-
-  /** aria-describedby for a control: its status message while that shows an error. */
-  function errorDescription(part: SourceFieldPart): string | undefined {
-    return autoSaveStatus(field(part)).state === 'error' ? statusId(part) : undefined;
+  function change(patch: Partial<AudioSourceConfig>) {
+    onChange({ ...source, ...patch });
   }
 
   const acousticAvailability = $derived(acousticModelAvailability());
@@ -172,31 +143,53 @@
 
   // ----- Name -----
 
-  function validateName(name: string): string | null {
-    if (!name) return t('settings.audio.soundCards.errors.nameRequired');
-    const lower = name.toLowerCase();
-    if (sources.some((s, i) => i !== index && s.name.toLowerCase() === lower)) {
-      return t('settings.audio.soundCards.errors.duplicateName');
-    }
-    return null;
+  // The field shows its problem once it was left, and hides it again while the
+  // user edits it. A problem this field did not cause (a duplicate typed on
+  // another card) shows at once, also on a card that opens with one.
+  let nameTouched = $state(untrack(() => Boolean(problem?.name)));
+  // Reactive, so an edit that ends without a blur (see the collapse and disable
+  // effect below) shows a problem the edit had hidden.
+  let nameEditing = $state(false);
+  $effect(() => {
+    if (problem?.name && !nameEditing) nameTouched = true;
+  });
+  let nameError = $derived.by(() => {
+    if (!problem?.name || !nameTouched) return undefined;
+    return problem.name === 'required'
+      ? t('settings.audio.soundCards.errors.nameRequired')
+      : t('settings.audio.soundCards.errors.duplicateName');
+  });
+  let hasProblem = $derived(Boolean(problem?.name || problem?.device));
+  let deviceError = $derived.by(() => {
+    if (!problem?.device) return undefined;
+    return problem.device === 'required'
+      ? t('settings.audio.soundCards.errors.deviceRequired')
+      : t('settings.audio.soundCards.errors.duplicateDevice');
+  });
+
+  function handleNameInput(name: string) {
+    nameEditing = true;
+    nameTouched = false;
+    if (name !== source.name) change({ name });
   }
 
-  // ----- Capture (device and sample rate, applied together) -----
+  function handleNameBlur(name: string) {
+    nameEditing = false;
+    nameTouched = true;
+    const trimmed = name.trim();
+    if (trimmed !== source.name) change({ name: trimmed });
+  }
 
-  // Device and sample rate restart capture, so they are a draft with a scoped Apply.
-  const capture = new ApplyDraft(
-    () => ({ device: source.device, sampleRate: source.sampleRate || DEFAULT_SAMPLE_RATE }),
-    untrack(() => field('capture'))
-  );
-  // The device alone, so the probe below reruns only when it changes, not on every draft edit.
-  let draftDevice = $derived(capture.draft.device);
+  // ----- Capture (device and sample rate) -----
+
   let sampleRateOptions = $state<Array<{ value: string; label: string }>>(DEFAULT_RATE_OPTIONS);
   let sampleRateVerified = $state(true);
   let sampleRateLoading = $state(false);
-  // Plain (non-reactive) ref: the probe effect both reads (abort) and writes this
-  // controller in its synchronous prefix. As $state that would make the effect
-  // depend on it and rerun at once, aborting the new probe (issue #3593).
-  let fetchController: AbortController | null = null;
+  // The device the user picked while its probe runs; null when none is pending.
+  // The form keeps its device until the probe has returned.
+  let pendingDevice = $state<string | null>(null);
+  let shownDevice = $derived(pendingDevice ?? source.device);
+  let currentRate = $derived(source.sampleRate || DEFAULT_SAMPLE_RATE);
 
   // The current source's device keeps its saved value (which may be a legacy ALSA
   // id) so the dropdown preselects it; other devices use the reboot-stable token
@@ -212,63 +205,77 @@
       }))
   );
 
-  function setDraftDevice(value: string | string[]) {
+  function pickDevice(value: string | string[]) {
     if (typeof value !== 'string') return;
-    // Back on the saved device the saved rate returns with it, so a rate the probe
-    // coerced for another device does not leave a change to apply.
-    capture.set(
-      value === source.device
-        ? { device: value, sampleRate: source.sampleRate || DEFAULT_SAMPLE_RATE }
-        : { device: value }
-    );
+    // Picking the form's device again cancels a pending pick.
+    pendingDevice = value === source.device ? null : value;
   }
 
-  function setDraftRate(value: string | string[]) {
-    if (typeof value === 'string') capture.set({ sampleRate: Number(value) });
+  function pickRate(value: string | string[]) {
+    if (typeof value === 'string') change({ sampleRate: Number(value) });
   }
 
-  async function fetchDeviceCapabilities(deviceId: string) {
-    fetchController?.abort();
-    const controller = new AbortController();
-    fetchController = controller;
-    sampleRateLoading = true;
-    // Drop the previous device's probed rates so a slower probe cannot leave
-    // stale, unverified options on screen while the new one is in flight.
-    sampleRateOptions = DEFAULT_RATE_OPTIONS;
-    sampleRateVerified = true;
-    try {
-      const result = await fetchCapabilities(deviceId, controller.signal);
-      // Ignore a superseded probe: a newer device selection replaced this controller.
-      if (fetchController !== controller) return;
-      sampleRateOptions = result.options;
-      sampleRateVerified = result.verified;
-      // A changed draft gets a rate the device supports. Only a draft that still
-      // equals the saved values is left alone, so opening a card never creates a
-      // change to apply.
-      const savedRate = source.sampleRate || DEFAULT_SAMPLE_RATE;
-      if (capture.draft.device !== source.device || capture.draft.sampleRate !== savedRate) {
-        const sampleRate = coerceSupportedRate(result.options, capture.draft.sampleRate);
-        if (sampleRate !== capture.draft.sampleRate) capture.set({ sampleRate });
-      }
-    } catch {
-      // Only AbortError reaches here (the utility handles all other failures)
-    } finally {
-      if (fetchController === controller) {
-        sampleRateLoading = false;
-      }
-    }
-  }
-
-  // Probes the draft device while the body is open.
+  // Any move of the form's device ends a pending pick: the card's own write (which
+  // the pick is then shown through) and an outside one (Reset, a reload), which
+  // the pick must not write over.
+  let formDevice = $derived(source.device);
   $effect(() => {
-    const device = draftDevice;
-    if (!expanded || !device) return;
-    untrack(() => void fetchDeviceCapabilities(device));
-    // Capture the controller this run started so the cleanup only aborts that probe.
-    const controllerToAbort = fetchController;
-    return () => {
-      controllerToAbort?.abort();
-    };
+    void formDevice;
+    untrack(() => {
+      pendingDevice = null;
+    });
+  });
+
+  // A collapsed or disabled card (a save is running) holds no pending pick, and
+  // its name field is not being edited: the field can lose focus without a blur
+  // event when it is disabled or unmounted.
+  $effect(() => {
+    if (!expanded || disabled) {
+      untrack(() => {
+        pendingDevice = null;
+        nameEditing = false;
+      });
+    }
+  });
+
+  // Probes the shown device while the body is open to fill the rate list. Only
+  // a pick by the user writes: the device and a rate it supports, in one change.
+  // Cleanup aborts a probe that the collapse, a new pick or unmount supersedes.
+  $effect(() => {
+    const device = shownDevice;
+    const pick = untrack(() => pendingDevice);
+    if (!expanded || !device) {
+      // An aborted probe leaves the flag set: its finally block skips aborted runs.
+      untrack(() => (sampleRateLoading = false));
+      return;
+    }
+    const controller = new AbortController();
+    untrack(() => {
+      sampleRateLoading = true;
+      // Drop the previous device's probed rates so a slower probe cannot leave
+      // stale, unverified options on screen while the new one is in flight.
+      sampleRateOptions = DEFAULT_RATE_OPTIONS;
+      sampleRateVerified = true;
+    });
+    void (async () => {
+      try {
+        const result = await fetchCapabilities(device, controller.signal);
+        if (controller.signal.aborted) return;
+        sampleRateOptions = result.options;
+        sampleRateVerified = result.verified;
+        if (pick !== null) {
+          change({
+            device: pick,
+            sampleRate: coerceSupportedRate(result.options, currentRate),
+          });
+        }
+      } catch {
+        // Only AbortError reaches here (the utility handles all other failures)
+      } finally {
+        if (!controller.signal.aborted) sampleRateLoading = false;
+      }
+    })();
+    return () => controller.abort();
   });
 
   // ----- Equalizer -----
@@ -276,24 +283,16 @@
   let showEqualizer = $state(false);
   let equalizer = $derived<EqualizerSettings>(source.equalizer ?? { enabled: false, filters: [] });
 
-  function commitEqualizer(updated: EqualizerSettings) {
-    commit(
-      { equalizer: savedEqualizer(updated) },
-      'equalizer',
-      isContinuousEqualizerChange(updated, equalizer)
-    );
+  function changeEqualizer(updated: EqualizerSettings) {
+    change({ equalizer: savedEqualizer(updated) });
   }
 
   // ----- Quiet hours -----
 
   let quietHours = $derived<QuietHoursConfig>(source.quietHours ?? { ...defaultQuietHoursConfig });
 
-  function commitQuietHours(updated: QuietHoursConfig) {
-    commit(
-      { quietHours: updated },
-      'quietHours',
-      isContinuousQuietHoursChange(updated, quietHours)
-    );
+  function changeQuietHours(updated: QuietHoursConfig) {
+    change({ quietHours: updated });
   }
 </script>
 
@@ -306,9 +305,14 @@
   deleteConfirm={t('settings.audio.soundCards.deleteConfirm', { name: source.name })}
   {onDelete}
   {disabled}
-  disabledReason={t('common.loading')}
+  disabledReason={disabledReason ?? t('common.loading')}
 >
   {#snippet badges()}
+    {#if hasProblem}
+      <span class={cn(BADGE_CLASS, 'bg-[var(--color-error)]/15 text-[var(--text-error)]')}>
+        {t('settings.audio.validation.needsAttention')}
+      </span>
+    {/if}
     {#if source.quietHours?.enabled}
       <span
         class={cn(
@@ -343,34 +347,30 @@
       title={t('settings.audio.soundCards.nameLabel')}
       labelFor={nameInputId}
       required
-      field={field('name')}
-      statusId={statusId('name')}
       class="space-y-1.5"
     >
-      <CommitTextField
+      <TextInput
         id={nameInputId}
         value={source.name}
-        validate={validateName}
-        onCommit={name => commit({ name }, 'name')}
         maxlength={NAME_MAX_LENGTH}
-        required
+        aria-required="true"
         {disabled}
-        describedBy={errorDescription('name')}
+        error={nameError}
+        oninput={handleNameInput}
+        onblur={handleNameBlur}
       />
     </SettingsGroup>
 
     <SettingsGroup
       title={t('settings.audio.soundCards.levelTitle')}
       headingId="{cardId}-level"
-      field={field('gain')}
-      statusId={statusId('gain')}
       class="space-y-1.5"
     >
       <InlineSlider
         label={t('settings.audio.soundCards.gainLabel')}
         value={source.gain}
         updateOn="change"
-        onUpdate={value => commit({ gain: value }, 'gain', true)}
+        onUpdate={value => change({ gain: value })}
         min={AUDIO_GAIN_MIN_DB}
         max={AUDIO_GAIN_MAX_DB}
         step={1}
@@ -380,73 +380,67 @@
     </SettingsGroup>
   </div>
 
-  <!-- Capture: drafts with a scoped apply -->
+  <!-- Capture -->
   <SettingsGroup
     title={t('settings.audio.soundCards.captureTitle')}
     headingId={captureHeadingId}
-    field={field('capture')}
-    statusId={statusId('capture')}
     class="py-4"
     titleVariant="group"
   >
-    <ScopedApplyGroup
-      draft={capture}
-      onApply={value => commit(value, 'capture')}
-      hint={t('settings.audio.soundCards.captureApplyHint')}
-      failedHint={t('settings.audio.soundCards.captureApplyFailed')}
-      applyLabel={t('settings.audio.soundCards.applyCapture')}
-      applyingLabel={t('settings.audio.soundCards.applying')}
-      statusId={statusId('capture')}
-      {disabled}
-    >
-      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div>
         <SelectDropdown
-          value={capture.draft.device}
+          value={shownDevice}
           label={t('settings.audio.soundCards.deviceLabel')}
           options={deviceOptions}
           required
           {disabled}
-          onChange={setDraftDevice}
+          aria-describedby={deviceError ? deviceErrorId : undefined}
+          aria-invalid={Boolean(deviceError)}
+          onChange={pickDevice}
           groupBy={false}
           menuSize="sm"
         />
-        <div>
-          <SelectDropdown
-            value={String(capture.draft.sampleRate)}
-            label={t('settings.audio.soundCards.sampleRateLabel')}
-            options={sampleRateOptions}
-            {disabled}
-            onChange={setDraftRate}
-            groupBy={false}
-            menuSize="sm"
-          />
-          {#if sampleRateLoading}
-            <p class="mt-1 text-xs text-muted">
-              {t('settings.audio.soundCards.sampleRateProbing')}
-            </p>
-          {:else if !sampleRateVerified}
-            <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-warning)]">
-              <AlertTriangle class="size-3 shrink-0" aria-hidden="true" />
-              {t('settings.audio.soundCards.sampleRateUnverified')}
-            </p>
-          {/if}
-          {#if capture.draft.sampleRate > SHARED_ACCESS_MAX_RATE}
-            <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-info)]">
-              <Info class="size-3 shrink-0" aria-hidden="true" />
-              {t('settings.audio.soundCards.sampleRateExclusive')}
-            </p>
-          {/if}
-        </div>
+        {#if deviceError}
+          <p id={deviceErrorId} role="alert" class="mt-1 text-xs text-[var(--text-error)]">
+            {deviceError}
+          </p>
+        {/if}
       </div>
-    </ScopedApplyGroup>
+      <div>
+        <SelectDropdown
+          value={String(currentRate)}
+          label={t('settings.audio.soundCards.sampleRateLabel')}
+          options={sampleRateOptions}
+          disabled={disabled || sampleRateLoading}
+          onChange={pickRate}
+          groupBy={false}
+          menuSize="sm"
+        />
+        {#if sampleRateLoading}
+          <p class="mt-1 text-xs text-muted">
+            {t('settings.audio.soundCards.sampleRateProbing')}
+          </p>
+        {:else if !sampleRateVerified}
+          <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-warning)]">
+            <AlertTriangle class="size-3 shrink-0" aria-hidden="true" />
+            {t('settings.audio.soundCards.sampleRateUnverified')}
+          </p>
+        {/if}
+        {#if currentRate > SHARED_ACCESS_MAX_RATE}
+          <p class="mt-1 flex items-center gap-1 text-xs text-[var(--text-info)]">
+            <Info class="size-3 shrink-0" aria-hidden="true" />
+            {t('settings.audio.soundCards.sampleRateExclusive')}
+          </p>
+        {/if}
+      </div>
+    </div>
   </SettingsGroup>
 
   <!-- Classifiers -->
   <SettingsGroup
     title={t('settings.audio.soundCards.modelLabel')}
     headingId={modelsHeadingId}
-    field={field('models')}
-    statusId={statusId('models')}
     class="py-4"
     titleVariant="group"
   >
@@ -455,13 +449,13 @@
       {selectedModels}
       {defaultModels}
       sourceName={source.name}
-      sourceSampleRate={capture.draft.sampleRate}
+      sourceSampleRate={currentRate}
       loading={listLoading}
       failed={listFailed}
       availability={acousticAvailability}
       labelledBy={modelsHeadingId}
       {disabled}
-      onChange={models => commit({ models }, 'models')}
+      onChange={models => change({ models })}
       onRetry={() => void refreshModels()}
     />
   </SettingsGroup>
@@ -486,7 +480,6 @@
         {t('settings.audio.audioFilters.title')}
       </button>
       <div class="flex items-center gap-3">
-        <AutoSaveStatus field={field('equalizer')} id={statusId('equalizer')} />
         {#if equalizer.enabled}
           <span class={cn(BADGE_CLASS, 'bg-[var(--color-primary)]/15 text-[var(--text-primary)]')}>
             {t('common.enabled')}
@@ -499,8 +492,8 @@
         <AudioEqualizerSettings
           equalizerSettings={equalizer}
           {disabled}
-          onUpdate={commitEqualizer}
-          sampleRate={capture.draft.sampleRate}
+          onUpdate={changeEqualizer}
+          sampleRate={currentRate}
         />
       </div>
     {/if}
@@ -510,14 +503,12 @@
   <SettingsGroup
     title={t('settings.audio.quietHours.title')}
     headingId="{cardId}-quiet"
-    field={field('quietHours')}
-    statusId={statusId('quietHours')}
     class="py-4"
     titleVariant="group"
   >
     <QuietHoursEditor
       config={quietHours}
-      onChange={commitQuietHours}
+      onChange={changeQuietHours}
       {disabled}
       idPrefix="{cardId}-qh"
       enableLabel={t('settings.audio.quietHours.enableLabel')}

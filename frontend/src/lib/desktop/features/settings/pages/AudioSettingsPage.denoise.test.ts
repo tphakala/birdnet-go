@@ -71,6 +71,7 @@ vi.mock('$lib/stores/settings', async () => {
     settingsActions,
     hasUnsavedChanges: writable(false),
     defaultQuietHoursConfig: {},
+    setValidationIssues: vi.fn(),
   };
 });
 

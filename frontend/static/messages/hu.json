@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Rögzítés",
         "levelTitle": "Bemeneti szint",
-        "captureApplyHint": "A rögzítés az alkalmazáskor újraindul.",
-        "applyCapture": "Alkalmazás és a rögzítés újraindítása",
         "applying": "Alkalmazás...",
-        "adding": "Hozzáadás...",
-        "captureApplyFailed": "A rögzítés nem változott. Alkalmazza újra, vagy szakítsa meg."
+        "adding": "Hozzáadás..."
       },
       "audioCapture": {
         "title": "Hangkártya konfiguráció",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Hangkártya kiválasztva és készen a rögzítésre",
         "availableDevices": "Elérhető hang eszközök",
         "active": "Aktív",
-        "streamsConfigured": "{count} stream konfigurálva"
+        "streamsConfigured": "{count} stream konfigurálva",
+        "description": "A BirdNET-Go által figyelt hangkártyák. Az eszköz vagy a mintavételezési frekvencia módosítása mentéskor újraindítja az adott forrás rögzítését."
       },
       "quietHours": {
         "title": "Csendes órák",
@@ -4152,8 +4150,10 @@
         "listFailed": "A modellek listáját nem sikerült betölteni.",
         "warningBadge": "Osztályozók ellenőrzése"
       },
-      "sources": {
-        "autoSaveHelp": "A módosítások azonnal mentésre kerülnek. Az eszköz és a mintavételi frekvencia módosítása újraindítja a rögzítést, ezért ezek az Alkalmaz gombra kattintásig várnak."
+      "validation": {
+        "soundCards": "Mentés előtt javítsa ki a hangkártyákat a(z) {tab} lapon: {names}",
+        "unnamedSource": "{position}. forrás (név nélkül)",
+        "needsAttention": "Figyelmet igényel"
       }
     },
     "security": {

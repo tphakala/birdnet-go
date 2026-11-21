@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Capture audio",
         "levelTitle": "Niveau d'entrée",
-        "captureApplyHint": "La capture redémarre lorsque vous appliquez.",
-        "applyCapture": "Appliquer et redémarrer la capture",
         "applying": "Application...",
-        "adding": "Ajout...",
-        "captureApplyFailed": "La capture n'a pas été modifiée. Appliquez à nouveau ou annulez."
+        "adding": "Ajout..."
       },
       "audioCapture": {
         "title": "Capture audio",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Carte son sélectionnée et prête pour la capture",
         "availableDevices": "Périphériques audio disponibles",
         "active": "Actif",
-        "streamsConfigured": "{count} flux configuré(s)"
+        "streamsConfigured": "{count} flux configuré(s)",
+        "description": "Cartes son écoutées par BirdNET-Go. Modifier le périphérique ou la fréquence d'échantillonnage redémarre la capture de cette source lorsque vous enregistrez."
       },
       "quietHours": {
         "title": "Heures calmes",
@@ -4152,8 +4150,10 @@
         "listFailed": "La liste des modèles n'a pas pu être chargée.",
         "warningBadge": "Vérifier les classificateurs"
       },
-      "sources": {
-        "autoSaveHelp": "Les modifications sont enregistrées immédiatement. Les modifications du périphérique et de la fréquence d'échantillonnage redémarrent la capture : elles attendent donc que vous cliquiez sur Appliquer."
+      "validation": {
+        "soundCards": "Corrigez les cartes son de l'onglet {tab} avant d'enregistrer : {names}",
+        "unnamedSource": "source {position} (sans nom)",
+        "needsAttention": "Attention requise"
       }
     },
     "security": {

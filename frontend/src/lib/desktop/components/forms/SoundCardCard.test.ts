@@ -1,19 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
-import { screen, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
-import { renderTyped } from '../../../../test/render-helpers';
+import { screen, cleanup, fireEvent } from '@testing-library/svelte';
+import { createComponentTestFactory } from '../../../../test/render-helpers';
 import {
   restoreElementAnimate,
   stubElementAnimate,
 } from '../../../../test/fixtures/elementAnimate';
 import {
   DEVICE_SELECT_TESTID,
-  SAMPLE_RATE_SELECT_TESTID,
   makeAbortableProbe,
 } from '../../../../test/fixtures/soundCardProbeTest';
 import type { AudioSourceConfig } from '$lib/stores/settings';
+import type { SoundCardProblem } from './sourceRules';
 import type { AcousticModelAvailability } from '$lib/types/models';
 import type { BackendModel } from '$lib/stores/models.svelte';
-import { AUTOSAVE_DEBOUNCE_MS } from '$lib/stores/settingsAutoSave.svelte';
 
 // Mocks for common form dependencies to keep the render lightweight.
 vi.mock('./SelectDropdown.svelte', async () => ({
@@ -58,10 +57,7 @@ const DEFAULT_PENDING_BADGE_KEY = 'settings.audio.models.defaultPendingBadge';
 const DEFAULT_BADGE_KEY = 'settings.audio.models.defaultBadge';
 const NONE_BADGE_KEY = 'settings.audio.models.noneBadge';
 const NAME_LABEL_KEY = 'settings.audio.soundCards.nameLabel';
-const APPLY_KEY = 'settings.audio.soundCards.applyCapture';
 const WARNING_BADGE_KEY = 'settings.audio.models.warningBadge';
-
-const ROW_ID = 'row-1';
 
 const audioDevices = [
   { index: 0, name: 'Default Mic', id: 'sysdefault' },
@@ -88,6 +84,7 @@ interface RenderOptions {
   sources?: AudioSourceConfig[];
   expanded?: boolean;
   models?: BackendModel[];
+  problem?: SoundCardProblem;
 }
 
 function renderCard(options: RenderOptions = {}) {
@@ -95,22 +92,19 @@ function renderCard(options: RenderOptions = {}) {
   const onCommit = vi.fn();
   const onDelete = vi.fn();
   const onToggleExpanded = vi.fn();
-  const result = renderTyped(SoundCardCard, {
-    props: {
-      source,
-      index: 0,
-      sources: options.sources ?? [source],
-      rowId: ROW_ID,
-      audioDevices,
-      modelOptions,
-      availableModels: options.models ?? availableModels,
-      disabled: false,
-      expanded: options.expanded ?? true,
-      onToggleExpanded,
-      onCommit,
-      onDelete,
-    },
-  });
+  const result = createComponentTestFactory(SoundCardCard, {
+    source,
+    sources: options.sources ?? [source],
+    audioDevices,
+    modelOptions,
+    availableModels: options.models ?? availableModels,
+    disabled: false,
+    problem: options.problem,
+    expanded: options.expanded ?? true,
+    onToggleExpanded,
+    onChange: onCommit,
+    onDelete,
+  }).render();
   return { ...result, onCommit, onDelete, onToggleExpanded };
 }
 
@@ -190,7 +184,7 @@ describe('SoundCardCard header', () => {
   });
 });
 
-describe('SoundCardCard immediate save', () => {
+describe('SoundCardCard editing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     acousticModelAvailability.mockReturnValue({ kind: 'unknown' });
@@ -200,85 +194,134 @@ describe('SoundCardCard immediate save', () => {
     cleanup();
   });
 
-  it('commits a name on blur, not on every keystroke', async () => {
+  it('writes the whole source with the name as typed and the trimmed name when the field is left', async () => {
     const { onCommit } = renderCard();
     const input = nameInput();
 
-    await fireEvent.input(input, { target: { value: 'Back yard' } });
-    expect(onCommit).not.toHaveBeenCalled();
+    await fireEvent.input(input, { target: { value: 'Back yard ' } });
+    expect(onCommit).toHaveBeenLastCalledWith({ ...baseSource, name: 'Back yard ' });
 
     await fireEvent.blur(input);
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith(
-      { ...baseSource, name: 'Back yard' },
-      { field: `audio:sources:${ROW_ID}:name` }
+    expect(onCommit).toHaveBeenCalledTimes(2);
+    expect(onCommit).toHaveBeenLastCalledWith({ ...baseSource, name: 'Back yard' });
+  });
+
+  it('writes nothing on blur when the name is already trimmed and unchanged', async () => {
+    const { onCommit } = renderCard();
+
+    await fireEvent.blur(nameInput());
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('marks the name field required for assistive technology without the native attribute', () => {
+    renderCard();
+
+    expect(nameInput()).toHaveAttribute('aria-required', 'true');
+    expect(nameInput()).not.toHaveAttribute('required');
+  });
+
+  it.each([
+    ['required', 'settings.audio.soundCards.errors.nameRequired'],
+    ['duplicate', 'settings.audio.soundCards.errors.duplicateName'],
+  ] as const)(
+    'shows a %s name problem that arrives while typing only once the field was left',
+    async (problem, message) => {
+      const view = renderCard();
+      const input = nameInput();
+
+      await fireEvent.input(input, { target: { value: 'Typed' } });
+      await view.rerender({ problem: { name: problem } });
+      expect(input).not.toHaveAttribute('aria-invalid');
+
+      await fireEvent.blur(input);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(input).toHaveAccessibleDescription(message);
+
+      await view.rerender({ problem: {} });
+      expect(input).not.toHaveAttribute('aria-invalid');
+    }
+  );
+
+  it('shows a duplicate made on another card at once, without the field being left', async () => {
+    const view = renderCard();
+
+    await view.rerender({ problem: { name: 'duplicate' } });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+    expect(nameInput()).toHaveAccessibleDescription(
+      'settings.audio.soundCards.errors.duplicateName'
     );
   });
 
-  it('commits a name on Enter and restores it on Escape', async () => {
-    const { onCommit } = renderCard();
+  it('hides a shown name error while the field is edited and shows it again when left', async () => {
+    renderCard({ problem: { name: 'duplicate' } });
     const input = nameInput();
-
-    await fireEvent.input(input, { target: { value: 'Typo' } });
-    await fireEvent.keyDown(input, { key: 'Escape' });
-    expect(input.value).toBe('Living room');
-    await fireEvent.blur(input);
-    expect(onCommit).not.toHaveBeenCalled();
-
-    await fireEvent.input(input, { target: { value: 'Back yard' } });
-    await fireEvent.keyDown(input, { key: 'Enter' });
-    expect(onCommit).toHaveBeenCalledOnce();
-  });
-
-  it('does not commit an empty or duplicate name and says why at the field', async () => {
-    const other: AudioSourceConfig = { ...baseSource, name: 'Porch', device: 'usb-2' };
-    const { onCommit } = renderCard({ sources: [baseSource, other] });
-    const input = nameInput();
-
-    await fireEvent.input(input, { target: { value: '   ' } });
-    await fireEvent.blur(input);
-    expect(onCommit).not.toHaveBeenCalled();
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(input).toHaveAccessibleDescription('settings.audio.soundCards.errors.nameRequired');
 
-    await fireEvent.input(input, { target: { value: 'porch' } });
-    // Editing clears the message until the field is left again.
+    await fireEvent.input(input, { target: { value: 'Still taken' } });
     expect(input).not.toHaveAttribute('aria-invalid');
+
     await fireEvent.blur(input);
-    expect(onCommit).not.toHaveBeenCalled();
-    expect(input).toHaveAccessibleDescription('settings.audio.soundCards.errors.duplicateName');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('keeps a device change as a draft until Apply, and Cancel restores it', async () => {
-    const { onCommit } = renderCard();
-    const device = screen.getByTestId<HTMLSelectElement>(DEVICE_SELECT_TESTID);
-    expect(screen.queryByRole('button', { name: APPLY_KEY })).toBeNull();
+  it('shows a duplicate from another card after a save interrupted an edit of the name', async () => {
+    const view = renderCard();
+    // Typing, then a save disables the field: focus leaves without a blur event.
+    await fireEvent.input(nameInput(), { target: { value: 'Typed' } });
+    await view.rerender({ disabled: true });
+    await view.rerender({ disabled: false });
 
-    await fireEvent.change(device, { target: { value: 'usb-2' } });
-    expect(onCommit).not.toHaveBeenCalled();
+    await view.rerender({ problem: { name: 'duplicate' } });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.getByTestId<HTMLSelectElement>(DEVICE_SELECT_TESTID).value).toBe('sysdefault');
-    expect(screen.queryByRole('button', { name: APPLY_KEY })).toBeNull();
-
-    await fireEvent.change(screen.getByTestId(DEVICE_SELECT_TESTID), {
-      target: { value: 'usb-2' },
-    });
-    await waitFor(() => {
-      expect(
-        screen.getByTestId(SAMPLE_RATE_SELECT_TESTID).querySelector('option[value="96000"]')
-      ).not.toBeNull();
-    });
-    await fireEvent.change(screen.getByTestId(SAMPLE_RATE_SELECT_TESTID), {
-      target: { value: '96000' },
-    });
-    await fireEvent.click(screen.getByRole('button', { name: APPLY_KEY }));
-    expect(onCommit).toHaveBeenCalledExactlyOnceWith(
-      { ...baseSource, device: 'usb-2', sampleRate: 96000 },
-      { field: `audio:sources:${ROW_ID}:capture` }
-    );
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('commits gain once on release, not while dragging, with the debounce option', async () => {
+  it('shows the name error again when a save ends an edit that hid it', async () => {
+    const view = renderCard({ problem: { name: 'duplicate' } });
+    await fireEvent.input(nameInput(), { target: { value: 'Still taken' } });
+    expect(nameInput()).not.toHaveAttribute('aria-invalid');
+
+    // The save disables the field: the edit ends without a blur event.
+    await view.rerender({ disabled: true });
+    await view.rerender({ disabled: false });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('shows a problem at once on a card that opens with one, and flags the header', async () => {
+    renderCard({ problem: { name: 'duplicate' } });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText('settings.audio.validation.needsAttention')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['required', 'settings.audio.soundCards.errors.deviceRequired'],
+    ['duplicate', 'settings.audio.soundCards.errors.duplicateDevice'],
+  ] as const)('shows the %s device problem text in the card', (problem, message) => {
+    renderCard({ problem: { device: problem } });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    const device = screen.getByTestId(DEVICE_SELECT_TESTID);
+    expect(device).toHaveAttribute('aria-invalid', 'true');
+    expect(device).toHaveAccessibleDescription(message);
+  });
+
+  it('shows no device message without a device problem', () => {
+    renderCard({ problem: { name: 'required' } });
+
+    expect(screen.queryByText(/soundCards\.errors\.(deviceRequired|duplicateDevice)/)).toBeNull();
+    expect(screen.getByTestId(DEVICE_SELECT_TESTID)).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('shows no attention badge without a problem', () => {
+    renderCard();
+
+    expect(screen.queryByText('settings.audio.validation.needsAttention')).toBeNull();
+  });
+
+  it('writes the gain once on release, not while dragging, with the whole source', async () => {
     const { onCommit } = renderCard();
     const slider = screen.getByRole('slider');
 
@@ -287,21 +330,14 @@ describe('SoundCardCard immediate save', () => {
     expect(onCommit).not.toHaveBeenCalled();
 
     await fireEvent.change(slider, { target: { value: '6' } });
-    expect(onCommit).toHaveBeenCalledOnce();
-    expect(onCommit).toHaveBeenLastCalledWith(
-      { ...baseSource, gain: 6 },
-      { field: `audio:sources:${ROW_ID}:gain`, debounceMs: AUTOSAVE_DEBOUNCE_MS }
-    );
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith({ ...baseSource, gain: 6 });
   });
 
-  it('commits a model toggle at once with the complete list', async () => {
+  it('writes a model toggle with the complete list', async () => {
     const { onCommit } = renderCard();
 
     await fireEvent.click(screen.getByRole('switch', { name: 'Perch v2' }));
-    expect(onCommit).toHaveBeenLastCalledWith(
-      { ...baseSource, models: ['birdnet', 'perch_v2'] },
-      { field: `audio:sources:${ROW_ID}:models` }
-    );
+    expect(onCommit).toHaveBeenLastCalledWith({ ...baseSource, models: ['birdnet', 'perch_v2'] });
   });
 
   it('asks for confirmation before deleting', async () => {
@@ -321,27 +357,14 @@ describe('SoundCardCard immediate save', () => {
     expect(onDelete).toHaveBeenCalledOnce();
   });
 
-  it('passes the draft rate, not the saved one, to the equalizer preview', async () => {
+  it('passes the source rate to the equalizer preview', async () => {
     stubElementAnimate();
     onTestFinished(restoreElementAnimate);
-    renderCard();
+    renderCard({ source: { ...baseSource, sampleRate: 96000 } });
 
     await fireEvent.click(
       screen.getByRole('button', { name: 'settings.audio.audioFilters.title' })
     );
-    expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('48000');
-
-    await fireEvent.change(screen.getByTestId(DEVICE_SELECT_TESTID), {
-      target: { value: 'usb-2' },
-    });
-    await waitFor(() => {
-      expect(
-        screen.getByTestId(SAMPLE_RATE_SELECT_TESTID).querySelector('option[value="96000"]')
-      ).not.toBeNull();
-    });
-    await fireEvent.change(screen.getByTestId(SAMPLE_RATE_SELECT_TESTID), {
-      target: { value: '96000' },
-    });
     expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('96000');
   });
 

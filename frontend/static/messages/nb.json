@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Opptak",
         "levelTitle": "Inngangsnivå",
-        "captureApplyHint": "Opptaket startes på nytt når du bruker endringene.",
-        "applyCapture": "Bruk og start opptaket på nytt",
         "applying": "Bruker...",
-        "adding": "Legger til...",
-        "captureApplyFailed": "Opptaket ble ikke endret. Bruk på nytt eller avbryt."
+        "adding": "Legger til..."
       },
       "audioCapture": {
         "title": "Lydkortkonfigurasjon",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Lydkort valgt og klart for opptak",
         "availableDevices": "Tilgjengelige lydenheter",
         "active": "Aktiv",
-        "streamsConfigured": "{count} strøm(mer) konfigurert"
+        "streamsConfigured": "{count} strøm(mer) konfigurert",
+        "description": "Lydkort BirdNET-Go lytter til. En endring av enhet eller samplingshastighet starter opptaket på den kilden på nytt når du lagrer."
       },
       "quietHours": {
         "title": "Stille timer",
@@ -4152,8 +4150,10 @@
         "listFailed": "Modellisten kunne ikke lastes inn.",
         "warningBadge": "Kontroller klassifikatorer"
       },
-      "sources": {
-        "autoSaveHelp": "Endringer lagres umiddelbart. Endringer av enhet og samplingsfrekvens starter opptaket på nytt og venter derfor til du klikker Bruk."
+      "validation": {
+        "soundCards": "Rett opp lydkortene i fanen {tab} før du lagrer: {names}",
+        "unnamedSource": "kilde {position} (uten navn)",
+        "needsAttention": "Trenger oppmerksomhet"
       }
     },
     "security": {

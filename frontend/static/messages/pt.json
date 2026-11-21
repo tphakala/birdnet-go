@@ -3737,11 +3737,8 @@
         },
         "captureTitle": "Captura",
         "levelTitle": "Nível de entrada",
-        "captureApplyHint": "A captura é reiniciada ao aplicar.",
-        "applyCapture": "Aplicar e reiniciar a captura",
         "applying": "A aplicar...",
-        "adding": "A adicionar...",
-        "captureApplyFailed": "A captura não foi alterada. Aplique novamente ou cancele."
+        "adding": "A adicionar..."
       },
       "audioCapture": {
         "title": "Captura de áudio",
@@ -3759,7 +3756,8 @@
         "deviceSelected": "Placa de som selecionada e pronta para captura",
         "availableDevices": "Dispositivos de áudio disponíveis",
         "active": "Ativo",
-        "streamsConfigured": "{count} fluxo(s) configurado(s)"
+        "streamsConfigured": "{count} fluxo(s) configurado(s)",
+        "description": "Placas de som que o BirdNET-Go escuta. Uma alteração de dispositivo ou de taxa de amostragem reinicia a captura dessa fonte ao salvar."
       },
       "quietHours": {
         "title": "Horas silenciosas",
@@ -4152,8 +4150,10 @@
         "listFailed": "Não foi possível carregar a lista de modelos.",
         "warningBadge": "Verificar classificadores"
       },
-      "sources": {
-        "autoSaveHelp": "As alterações são guardadas de imediato. As alterações de dispositivo e taxa de amostragem reiniciam a captura, por isso aguardam até clicar em Aplicar."
+      "validation": {
+        "soundCards": "Corrija as placas de som na aba {tab} antes de salvar: {names}",
+        "unnamedSource": "fonte {position} (sem nome)",
+        "needsAttention": "Requer atenção"
       }
     },
     "security": {
