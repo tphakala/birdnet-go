@@ -1071,8 +1071,11 @@
 
       const rec = result.recommended;
       if (rec === 'https' || rec === 'http') {
+        // The probe picks the protocol without a user edit, so a form that was clean stays clean.
+        const wasClean = !providerFormDirty;
         serviceFormData.ntfyProtocol = rec;
         serviceFormData.ntfyCheckStatus = rec;
+        if (wasClean) providerFormInitial = providerFormSnapshot();
       } else {
         serviceFormData.ntfyCheckStatus = 'unreachable';
       }

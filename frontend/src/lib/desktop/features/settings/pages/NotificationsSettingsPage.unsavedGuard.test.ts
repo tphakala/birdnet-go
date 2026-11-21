@@ -10,7 +10,8 @@ const NTFY_PROVIDER = {
   type: 'shoutrrr',
   name: 'Garden ntfy',
   enabled: true,
-  urls: ['ntfy://ntfy.example.com/birds'],
+  // A stored http scheme, so the probe's https recommendation switches the protocol.
+  urls: ['ntfy://ntfy.example.com/birds?scheme=http'],
   filter: { types: ['detection'] },
 };
 
@@ -113,7 +114,7 @@ describe('NotificationsSettingsPage unsaved-changes guard', () => {
     expect(unsavedChanges.blocks(OTHER_PAGE, HERE)).toBe(true);
   });
 
-  it('does not block an untouched ntfy provider form after Test Connection', async () => {
+  it('does not block an untouched ntfy provider form after Test Connection switches its protocol', async () => {
     providers = [NTFY_PROVIDER];
     const user = userEvent.setup();
     await renderLoaded();
