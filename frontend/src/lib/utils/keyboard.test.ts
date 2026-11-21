@@ -5,6 +5,7 @@ import {
   hasCommandModifier,
   isArrowKeyWidget,
   isImeComposition,
+  isApplePlatform,
   isInteractiveTarget,
   isTextEntryTarget,
   matchesBinding,
@@ -204,7 +205,37 @@ describe('target classification', () => {
   });
 });
 
+describe('isApplePlatform', () => {
+  const nav = (platform: string, userAgent = ''): Navigator => {
+    const fake = { platform, userAgent };
+    return fake as unknown as Navigator;
+  };
+
+  it.each([
+    { name: 'a Mac', navigator: nav('MacIntel'), expected: true },
+    { name: 'an iPhone', navigator: nav('iPhone'), expected: true },
+    {
+      name: 'an iPad reporting only its user agent',
+      navigator: nav('', 'Mozilla iPad'),
+      expected: true,
+    },
+    { name: 'Linux', navigator: nav('Linux x86_64', 'Mozilla X11'), expected: false },
+    { name: 'Windows', navigator: nav('Win32', 'Mozilla Windows'), expected: false },
+  ])('is $expected for $name', ({ navigator, expected }) => {
+    expect(isApplePlatform(navigator)).toBe(expected);
+  });
+});
+
 describe('describeBinding', () => {
+  it('speaks a Shift combination, an arrow, a comma and a period as words', () => {
+    expect(describeBinding({ key: KEYS.arrowLeft, shift: true }, false).label).toBe(
+      'Shift plus Left Arrow'
+    );
+    expect(describeBinding({ key: KEYS.arrowRight }, false).label).toBe('Right Arrow');
+    expect(describeBinding({ key: KEYS.comma }, false).label).toBe('Comma');
+    expect(describeBinding({ key: KEYS.period }, false).label).toBe('Period');
+  });
+
   const shift = t('shortcuts.keys.shift');
   const space = t('shortcuts.keys.space');
 

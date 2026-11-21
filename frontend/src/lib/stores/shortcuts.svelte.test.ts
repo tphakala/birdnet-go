@@ -486,6 +486,50 @@ describe('shortcut store', () => {
     });
   });
 
+  describe('definitions hidden from the sheet', () => {
+    it('still match their key, so a blocked one announces its reason and a ready one runs', async () => {
+      const store = listeningStore();
+      store.register(
+        scope('page', [
+          definition(
+            'blocked',
+            { key: 'f' },
+            { visible: () => false, status: () => ({ blocked: BLOCKED_REASON }) }
+          ),
+          definition('ready', { key: 'c' }, { visible: () => false }),
+        ])
+      );
+
+      press('f');
+      await tick();
+      expect(store.announcement).toBe(BLOCKED_REASON);
+      press('c');
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the platform', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    const shiftLeft = { key: KEYS.arrowLeft, shift: true };
+
+    it('shows Shift combinations as glyphs on an Apple platform', () => {
+      vi.stubGlobal('navigator', { platform: 'MacIntel', userAgent: '' });
+      const store = makeStore();
+      store.register(scope('page', [definition('older', shiftLeft)]));
+
+      expect(store.hint('older')?.display).toBe('⇧←');
+    });
+
+    it('shows Shift combinations as words elsewhere', () => {
+      vi.stubGlobal('navigator', { platform: 'Linux x86_64', userAgent: 'Mozilla X11' });
+      const store = makeStore();
+      store.register(scope('page', [definition('older', shiftLeft)]));
+
+      expect(store.hint('older')?.display).toBe('Shift+←');
+    });
+  });
+
   describe('clearing the announcement', () => {
     it('empties the region and cancels an announcement that is still pending', async () => {
       const store = listeningStore();

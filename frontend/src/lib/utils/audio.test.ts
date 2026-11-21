@@ -45,6 +45,13 @@ describe('playButtonAction', () => {
       out: 'playSelection',
     },
     { name: 'idle without a selection', isPlaying: false, sel: false, has: false, out: 'toggle' },
+    {
+      name: 'selection playing after the selection was cleared',
+      isPlaying: true,
+      sel: true,
+      has: false,
+      out: 'toggle',
+    },
   ])('$name gives $out', ({ isPlaying, sel, has, out }) => {
     expect(playButtonAction({ isPlaying, isPlayingSelection: sel, hasSelection: has })).toBe(out);
   });
