@@ -154,6 +154,31 @@ describe('HeaderSettingsMenu keyboard shortcuts item', () => {
     localStorage.clear();
   });
 
+  it('shows the question mark key on the item while shortcuts are on', async () => {
+    render(HeaderSettingsMenuShortcutsHost);
+    await fireEvent.click(screen.getByRole('button', { name: MENU_LABEL }));
+
+    const item = screen.getByRole('button', { name: 'shortcuts.menuItem' });
+
+    expect(item).toHaveAttribute('aria-keyshortcuts', '?');
+    const cap = item.querySelector('kbd');
+    expect(cap).toHaveTextContent('?');
+    expect(cap).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('keeps the item, without a key hint, while shortcuts are off, and it still opens the sheet', async () => {
+    shortcuts.setEnabled(false);
+    render(HeaderSettingsMenuShortcutsHost);
+    await fireEvent.click(screen.getByRole('button', { name: MENU_LABEL }));
+
+    const item = screen.getByRole('button', { name: 'shortcuts.menuItem' });
+
+    expect(item).not.toHaveAttribute('aria-keyshortcuts');
+    expect(item.querySelector('kbd')).toBeNull();
+    await fireEvent.click(item);
+    expect(shortcuts.helpOpen).toBe(true);
+  });
+
   it('closes the menu, opens the cheat sheet, and returns focus to the gear when it closes', async () => {
     render(HeaderSettingsMenuShortcutsHost);
     const gear = screen.getByRole('button', { name: MENU_LABEL });

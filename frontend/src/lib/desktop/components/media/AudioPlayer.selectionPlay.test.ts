@@ -450,6 +450,19 @@ describe('AudioPlayer selection play', () => {
       expect(ctl.play).not.toHaveBeenCalled();
     });
 
+    it('does nothing while the toolbar play button is disabled for loading', async () => {
+      const probe = controlsProbe();
+      mount({ onPlaybackControls: probe.onPlaybackControls });
+      ctl.dispatch('loadstart');
+      await settle();
+      expect(screen.getByLabelText('media.audio.loading')).toBeDisabled();
+
+      probe.current().togglePlayback();
+      await settle();
+
+      expect(ctl.play).not.toHaveBeenCalled();
+    });
+
     it('seeks from the live element time and clamps at both ends of the clip', async () => {
       const probe = controlsProbe();
       mount({ onPlaybackControls: probe.onPlaybackControls });

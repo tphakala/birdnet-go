@@ -1885,6 +1885,68 @@ describe('DetectionDetail keyboard shortcuts', () => {
     await waitFor(() => expect(shortcuts.announcement).toBe(''));
   });
 
+  it('leaves the arrow keys alone when the server cannot step between detections', async () => {
+    stubApi([
+      ['/neighbors', () => Promise.resolve(jsonResponse({ error: 'legacy' }, 409))],
+      ['/api/v2/detections/3', makeDetection({ id: 3 })],
+      ['/api/v2/species/stats', statsOf(0, 0)],
+    ]);
+
+    detailTest.render({ detectionId: '3' });
+    // The review panel names the legacy database once the 409 was applied to a loaded detection
+    await waitFor(() =>
+      expect(document.querySelector('.dd-review-status')).toHaveTextContent(
+        'detections.detail.review.legacyHelp'
+      )
+    );
+    expect(document.querySelector('.dd-nav-groups')).toBeNull();
+
+    const event = await press('ArrowRight');
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(shortcuts.announcement).toBe('');
+  });
+
+  it('says that stepping failed when the neighbours could not be loaded', async () => {
+    stubApi([
+      ['/neighbors', () => Promise.resolve(jsonResponse({ error: 'down' }, 500))],
+      ['/api/v2/detections/3', makeDetection({ id: 3 })],
+      ['/api/v2/species/stats', statsOf(0, 0)],
+    ]);
+
+    detailTest.render({ detectionId: '3' });
+    await waitFor(() =>
+      expect(screen.getAllByRole('link', { name: `${NAV}.stepFailed` })).toHaveLength(4)
+    );
+
+    const event = await press('ArrowLeft');
+
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(shortcuts.announcement).toContain(`${NAV}.stepFailed`));
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('tells a visitor to log in, sends nothing and shows no review key hints', async () => {
+    auth.setSecurity(true, false);
+    const calls = stubDetections({});
+
+    detailTest.render({ detectionId: '8' });
+    const correct = await screen.findByRole('button', {
+      name: /detections\.detail\.review\.correct/,
+    });
+    await waitFor(() => expect(shortcuts.hint('detail.correct')).toBeNull());
+    expect(correct).not.toHaveAttribute('aria-keyshortcuts');
+    expect(correct.querySelector('kbd')).toBeNull();
+
+    await press('c');
+
+    await waitFor(() =>
+      expect(shortcuts.announcement).toBe('detections.detail.review.loginRequired')
+    );
+    expect(reviewPosts(calls)).toHaveLength(0);
+  });
+
   it('opens the species dialog with w and then leaves the review keys alone behind it', async () => {
     const calls = stubDetections({});
 
