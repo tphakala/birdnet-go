@@ -2611,6 +2611,22 @@ export const settingsActions = {
     return pending.done;
   },
 
+  /**
+   * Resolves once every queued load, rebase and save, and every staged section save, has
+   * settled. Work queued while it waited is waited for too, so isSaving going false between two
+   * queued saves does not count as idle.
+   */
+  async whenIdle(): Promise<void> {
+    for (;;) {
+      const tail = serverSyncTail;
+      const pending = pendingFullSave;
+      await Promise.allSettled([tail, pending?.done, ...inFlightSectionSaves]);
+      if (tail === serverSyncTail && pendingFullSave === null && inFlightSectionSaves.size === 0) {
+        return;
+      }
+    }
+  },
+
   resetSection<K extends keyof SettingsFormData>(section: K) {
     invalidateStaged(section);
     settingsStore.update(state => {

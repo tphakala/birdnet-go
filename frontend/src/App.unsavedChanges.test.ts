@@ -68,7 +68,7 @@ vi.mock('./lib/stores/appState.svelte', async importOriginal => {
 import App from './App.svelte';
 import { navigation } from './lib/stores/navigation.svelte';
 import { unsavedChanges } from './lib/stores/unsavedChanges.svelte';
-import { settingsStore } from './lib/stores/settings';
+import { settingsStore, settingsActions } from './lib/stores/settings';
 import { settingsAPI } from './lib/utils/settingsApi.js';
 import { SETTINGS_BASE_PATH } from './lib/utils/settingsAlias';
 import { resetBasePath, setBasePath } from './lib/utils/urlHelpers';
@@ -217,7 +217,36 @@ describe('App unsaved-changes guard', () => {
     // The save fails: the store clears isSaving and keeps the form as it was.
     settingsStore.update(state => ({ ...state, isSaving: false }));
 
-    expect(get(settingsStore).formData).toEqual(get(settingsStore).originalData);
+    await waitFor(() =>
+      expect(get(settingsStore).formData).toEqual(get(settingsStore).originalData)
+    );
+  });
+
+  it('waits for queued saves before discarding, so a queued save never sends reset data', async () => {
+    let queuedWorkDone: () => void = () => {};
+    const whenIdle = vi.spyOn(settingsActions, 'whenIdle').mockReturnValue(
+      new Promise<void>(resolve => {
+        queuedWorkDone = resolve;
+      })
+    );
+    makeUnsavedEdit();
+    settingsStore.update(state => ({ ...state, isSaving: true }));
+    void navigation.navigate(DASHBOARD);
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'common.unsavedChanges.leave' })
+    );
+    await waitFor(() => expect(navigation.currentPath).toBe(DASHBOARD));
+
+    // The first save finished, but another one is still queued behind it.
+    settingsStore.update(state => ({ ...state, isSaving: false }));
+    await waitFor(() => expect(whenIdle).toHaveBeenCalled());
+    expect(editIsKept()).toBe(true);
+
+    queuedWorkDone();
+    await waitFor(() =>
+      expect(get(settingsStore).formData).toEqual(get(settingsStore).originalData)
+    );
+    whenIdle.mockRestore();
   });
 
   it('leaves the edits of a new Settings visit alone when an earlier save fails', async () => {

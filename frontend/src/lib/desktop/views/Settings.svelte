@@ -78,12 +78,17 @@
         settingsActions.resetAllSettings();
         return;
       }
-      // A save in flight would send the reset data, so wait for it. A failed save leaves the
-      // edits in the store; discard them then, unless Settings was opened again meanwhile.
+      // A save in flight would send the reset data, so wait for it. isSaving going false only says
+      // one save ended: another may be queued behind it, so wait until the store is idle. A failed
+      // save leaves the edits in the store; discard them then, unless Settings was opened again.
       const unsubscribe = settingsStore.subscribe(state => {
         if (state.isSaving) return;
         unsubscribe();
-        if (liveShells === 0 && get(hasUnsavedChanges)) settingsActions.resetAllSettings();
+        void settingsActions.whenIdle().then(() => {
+          if (!get(settingsStore).isSaving && liveShells === 0 && get(hasUnsavedChanges)) {
+            settingsActions.resetAllSettings();
+          }
+        });
       });
     };
   });
