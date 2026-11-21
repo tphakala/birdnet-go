@@ -207,6 +207,7 @@ describe('target classification', () => {
 
 describe('isApplePlatform', () => {
   const nav = (platform: string, userAgent = ''): Navigator => {
+    // Only the two fields isApplePlatform reads are faked, so the object is asserted to Navigator
     const fake = { platform, userAgent };
     return fake as unknown as Navigator;
   };
