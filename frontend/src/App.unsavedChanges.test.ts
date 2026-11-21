@@ -220,6 +220,26 @@ describe('App unsaved-changes guard', () => {
     expect(get(settingsStore).formData).toEqual(get(settingsStore).originalData);
   });
 
+  it('leaves the edits of a new Settings visit alone when an earlier save fails', async () => {
+    makeUnsavedEdit();
+    settingsStore.update(state => ({ ...state, isSaving: true }));
+    void navigation.navigate(DASHBOARD);
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'common.unsavedChanges.leave' })
+    );
+    await waitFor(() => expect(navigation.currentPath).toBe(DASHBOARD));
+
+    // Settings is opened again and its form edited while the first save is still out.
+    const loadsBefore = vi.mocked(settingsAPI.load).mock.calls.length;
+    await navigation.navigate(SETTINGS_MAIN);
+    await settingsLoadsSettled(loadsBefore + 1);
+    settingsStore.update(state => ({ ...state, isSaving: true }));
+    makeUnsavedEdit();
+    settingsStore.update(state => ({ ...state, isSaving: false }));
+
+    expect(editIsKept()).toBe(true);
+  });
+
   it('keeps the edit when Settings is left while a save is in flight', async () => {
     makeUnsavedEdit();
     settingsStore.update(state => ({ ...state, isSaving: true }));
