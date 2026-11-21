@@ -190,8 +190,14 @@ func TestORTFetchScriptIsTheOnlyDownloader(t *testing.T) {
 			assert.NotContains(t, string(data), f, "%s must not carry its own download source", path)
 		}
 	}
+}
 
-	// The published base image tag must change with every input of runtime-base.
+// TestORTBaseImageTagHashesFetchInputs keeps the published base image tag
+// content-addressed on every input of runtime-base, so a pin or source change
+// rebuilds the base.
+func TestORTBaseImageTagHashesFetchInputs(t *testing.T) {
+	t.Parallel()
+
 	data, err := os.ReadFile("../../.github/workflows/base-image.yml")
 	require.NoError(t, err)
 	var tagLine string
