@@ -661,18 +661,13 @@
 
   function addStream() {
     if (disabled) return;
-    clearErrors();
 
     const newStream = buildNewStream();
     const problem = newStreamProblem(newStream);
-    if (problem?.name) {
-      nameError = streamNameProblemMessage(problem.name);
-      return;
-    }
-    if (problem?.url) {
-      urlError = streamUrlProblemMessage(problem.url);
-      return;
-    }
+    // Both fields show what is wrong with them, then Add stops.
+    nameError = problem?.name ? streamNameProblemMessage(problem.name) : null;
+    urlError = problem?.url ? streamUrlProblemMessage(problem.url) : null;
+    if (problem?.name || problem?.url) return;
     // Both fields are otherwise valid: the test gate decides. The reminder is showing.
     if (newNeedsTest) return;
 

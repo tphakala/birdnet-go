@@ -1310,6 +1310,22 @@ describe('StreamManager add form validation on blur', () => {
     expect(onUpdateStreams).not.toHaveBeenCalled();
   });
 
+  it('shows the name and the URL error together when Add is clicked with both wrong', async () => {
+    const { onUpdateStreams } = renderRows([]);
+    await fillAddForm('', 'not a url');
+    await fireEvent.blur(screen.getByTestId(URL_TESTID));
+
+    await fireEvent.click(screen.getByRole('button', { name: ADD_KEY }));
+
+    expect(screen.getByTestId(NAME_TESTID)).toHaveAccessibleDescription(
+      'settings.audio.streams.errors.nameRequired'
+    );
+    expect(screen.getByTestId(URL_TESTID)).toHaveAccessibleDescription(
+      'settings.audio.streams.errors.invalidUrl'
+    );
+    expect(onUpdateStreams).not.toHaveBeenCalled();
+  });
+
   it('still blocks Add for a valid untested URL when the name is fine', async () => {
     const { onUpdateStreams } = renderRows([]);
     await fillAddForm('Gate', 'rtsp://gate/live');
