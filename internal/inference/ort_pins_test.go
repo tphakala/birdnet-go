@@ -100,6 +100,11 @@ func TestORTInstallGuidesMatchPin(t *testing.T) {
 
 		// A failed check must stop the snippet: the lines that extract and install
 		// the library only run inside the block the check opens.
+		// The PowerShell check has no output of its own, so its else branch is the
+		// only error a Windows user sees.
+		assert.Equal(t, strings.Count(string(data), "Get-FileHash"),
+			strings.Count(string(data), `throw "onnxruntime.nupkg does not match the expected SHA-256"`),
+			"%s: every PowerShell check needs its throw", guide)
 		for line := range strings.SplitSeq(string(data), "\n") {
 			switch {
 			case strings.Contains(line, " -c - "), strings.HasSuffix(line, " -c -"):
