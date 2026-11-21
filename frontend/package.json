@@ -132,14 +132,14 @@
   },
   "dependencies": {
     "@bybas/weather-icons": "^2.0.0",
-    "@lucide/svelte": "1.74.0",
+    "@lucide/svelte": "1.75.0",
     "@sentry/browser": "^10.75.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "d3": "^7.9.0",
     "d3-time-format": "^4.1.0",
     "hls.js": "^1.7.3",
-    "maplibre-gl": "^6.10.0",
+    "maplibre-gl": "^6.19.0",
     "svelte-dnd-action": "^0.9.76"
   },
   "bundleDependencies": [
