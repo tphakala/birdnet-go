@@ -9,9 +9,10 @@
   - Every control writes the complete changed source through onChange as it
     changes. A name is written as typed and trimmed when the field is left.
   - Device: the pick waits for the sample rate probe of that device and is then
-    written together with a rate the device supports. Collapsing the card or a
-    change of the form's device meanwhile drops the pick. Opening the card
-    probes the saved device to fill the rate list and writes nothing.
+    written together with a rate the device supports. Collapsing the card,
+    disabling it (a save runs), a recreated card (Reset) or a change of the
+    form's device meanwhile drops the pick. Opening the card probes the saved
+    device to fill the rate list and writes nothing.
 
   Props:
   - source: The source as it is in the form
