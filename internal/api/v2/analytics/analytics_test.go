@@ -1643,7 +1643,7 @@ func TestApplySpeciesStatusToSummary_FlagPassThrough(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			var summary SpeciesDailySummary
-			applySpeciesStatusToSummary(&summary, &tt.status)
+			applySpeciesStatusToSummary(&summary, &tt.status, 0)
 			assert.Equal(t, tt.expectNewSpecies, summary.IsNewSpecies, "IsNewSpecies")
 			assert.Equal(t, tt.expectNewThisYear, summary.IsNewThisYear, "IsNewThisYear")
 			assert.Equal(t, tt.expectNewSeason, summary.IsNewThisSeason, "IsNewThisSeason")
@@ -1651,4 +1651,55 @@ func TestApplySpeciesStatusToSummary_FlagPassThrough(t *testing.T) {
 			assert.Equal(t, tt.status.CurrentSeason, summary.CurrentSeason, "CurrentSeason")
 		})
 	}
+}
+
+func TestApplySpeciesStatusToSummary_IsInfrequent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		daysLastSeen   int
+		absenceDays    int
+		wantInfrequent bool
+	}{
+		{name: "gap above threshold", daysLastSeen: 15, absenceDays: 14, wantInfrequent: true},
+		{name: "gap equal to threshold", daysLastSeen: 14, absenceDays: 14, wantInfrequent: false},
+		{name: "gap below threshold", daysLastSeen: 3, absenceDays: 14, wantInfrequent: false},
+		{name: "first ever detection", daysLastSeen: -1, absenceDays: 14, wantInfrequent: false},
+		{name: "same day repeat", daysLastSeen: 0, absenceDays: 14, wantInfrequent: false},
+		{name: "infrequent tracking disabled", daysLastSeen: 100, absenceDays: 0, wantInfrequent: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var summary SpeciesDailySummary
+			status := speciestracker.SpeciesStatus{DaysSinceLastSeen: tt.daysLastSeen}
+			applySpeciesStatusToSummary(&summary, &status, tt.absenceDays)
+			assert.Equal(t, tt.wantInfrequent, summary.IsInfrequent)
+		})
+	}
+}
+
+func TestInfrequentAbsenceDays(t *testing.T) {
+	// Not parallel: CurrentSettings prefers the process-global snapshot, so the
+	// controller's own snapshot is only consulted when no global one is set.
+	if conf.GetSettings() != nil {
+		t.Skip("global settings snapshot is set; handler falls back to it")
+	}
+
+	build := func(trackingEnabled, infrequentEnabled bool, days int) *Handler {
+		core := &apicore.Core{}
+		settings := &conf.Settings{}
+		settings.Realtime.SpeciesTracking.Enabled = trackingEnabled
+		settings.Realtime.SpeciesTracking.InfrequentTracking.Enabled = infrequentEnabled
+		settings.Realtime.SpeciesTracking.InfrequentTracking.AbsenceDays = days
+		core.Settings.Store(settings)
+		return &Handler{Core: core}
+	}
+
+	assert.Equal(t, 21, build(true, true, 21).infrequentAbsenceDays())
+	assert.Equal(t, 0, build(false, true, 21).infrequentAbsenceDays(), "species tracking disabled")
+	assert.Equal(t, 0, build(true, false, 21).infrequentAbsenceDays(), "infrequent tracking disabled")
+	assert.Equal(t, 0, (&Handler{Core: &apicore.Core{}}).infrequentAbsenceDays(), "no settings")
 }

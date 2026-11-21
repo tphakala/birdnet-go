@@ -73,7 +73,7 @@ Responsive Breakpoints:
     getTemperatureSymbol,
     type TemperatureUnit,
   } from '$lib/utils/formatters';
-  import { dashboardSettings, speciesTrackingSettings } from '$lib/stores/settings';
+  import { dashboardSettings } from '$lib/stores/settings';
   import {
     resolveNoveltyCategory,
     noveltyCategoryTextColor,
@@ -708,16 +708,6 @@ Responsive Breakpoints:
   });
   const isToday = $derived(selectedDate === serverTodayDate);
 
-  // Absence threshold for the infrequent novelty tier; undefined disables it so
-  // the category never activates when species tracking (or its infrequent
-  // sub-toggle) is turned off, matching the gating in NewSpeciesHighlightsCard.
-  const infrequentThresholdDays = $derived(
-    $speciesTrackingSettings?.enabled === true &&
-      $speciesTrackingSettings.infrequentTracking?.enabled === true
-      ? ($speciesTrackingSettings.infrequentTracking.absenceDays ?? 14)
-      : undefined
-  );
-
   // Check for reduced motion preference for performance and accessibility
   const prefersReducedMotion = $derived(
     typeof window !== 'undefined'
@@ -1056,10 +1046,7 @@ Responsive Breakpoints:
           <div class="flex flex-col" style:gap="var(--grid-gap)">
             {#each sortedData as item, index (`${item.scientific_name}_${index}`)}
               {@const displayName = localizeSpeciesName(item.scientific_name, item.common_name)}
-              {@const noveltyCat = resolveNoveltyCategory(item, {
-                infrequentThresholdDays,
-                isToday,
-              })}
+              {@const noveltyCat = resolveNoveltyCategory(item, { isToday })}
               <div
                 class="flex items-center species-row"
                 class:new-species={item.isNew && !prefersReducedMotion}

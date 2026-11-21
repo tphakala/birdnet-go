@@ -133,6 +133,10 @@ type SpeciesDailySummary struct {
 	DaysThisYear    int    `json:"days_this_year,omitempty"`     // Days since first this year
 	DaysThisSeason  int    `json:"days_this_season,omitempty"`   // Days since first this season
 	CurrentSeason   string `json:"current_season,omitempty"`     // Current season name
+	// IsInfrequent is true for a returning species whose absence gap exceeds the
+	// configured infrequent-tracking threshold. It is decided on the server so
+	// clients that cannot read the protected settings (guests) can still show it.
+	IsInfrequent bool `json:"is_infrequent,omitempty"`
 }
 
 // SpeciesSummary represents a bird in the overall species summary API response
@@ -524,6 +528,8 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 	// Batch fetch species tracking status
 	batchSpeciesStatus := c.batchFetchSpeciesStatus(scientificNames, statusTime)
 
+	infrequentAbsenceDays := c.infrequentAbsenceDays()
+
 	// Build the final result slice
 	result := make([]SpeciesDailySummary, 0, len(scientificNames))
 	for _, scientificName := range scientificNames {
@@ -537,7 +543,7 @@ func (c *Handler) buildDailySpeciesSummaryResponse(aggregatedData map[string]agg
 		thumbnailURL := buildThumbnailURL(scientificName)
 		summary := buildSpeciesSummaryFromData(&data, thumbnailURL)
 		if status, exists := batchSpeciesStatus[scientificName]; exists {
-			applySpeciesStatusToSummary(&summary, &status)
+			applySpeciesStatusToSummary(&summary, &status, infrequentAbsenceDays)
 		}
 		result = append(result, summary)
 	}
@@ -602,10 +608,28 @@ func buildSpeciesSummaryFromData(data *aggregatedBirdInfo, thumbnailURL string) 
 	}
 }
 
+// infrequentAbsenceDays returns the absence threshold (in days) above which a
+// returning species counts as "infrequent", or 0 when species tracking or its
+// infrequent sub-toggle is disabled. Config validation keeps an enabled
+// threshold within 1..365, so 0 is unambiguous as "disabled".
+func (c *Handler) infrequentAbsenceDays() int {
+	settings := c.CurrentSettings()
+	if settings == nil || !settings.Realtime.SpeciesTracking.Enabled {
+		return 0
+	}
+	infrequent := settings.Realtime.SpeciesTracking.InfrequentTracking
+	if !infrequent.Enabled {
+		return 0
+	}
+	return infrequent.AbsenceDays
+}
+
 // applySpeciesStatusToSummary applies tracking metadata to summary.
 // Uses the tracker's window-based flags so that "new" indicators persist
 // for the configured window period, not just the first-seen calendar day.
-func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.SpeciesStatus) {
+// infrequentAbsenceDays is the infrequent-tracking threshold, or 0 when the
+// infrequent tier is disabled.
+func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.SpeciesStatus, infrequentAbsenceDays int) {
 	summary.IsNewSpecies = status.IsNew
 
 	if status.DaysSinceFirst >= 0 {
@@ -616,6 +640,7 @@ func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.S
 	// (already seen the same day) are omitted.
 	if status.DaysSinceLastSeen > 0 {
 		summary.DaysSinceLastSeen = status.DaysSinceLastSeen
+		summary.IsInfrequent = infrequentAbsenceDays > 0 && status.DaysSinceLastSeen > infrequentAbsenceDays
 	}
 
 	summary.IsNewThisYear = status.IsNewThisYear

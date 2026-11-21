@@ -24,48 +24,36 @@ describe('resolveNoveltyCategory', () => {
   });
 
   describe('infrequent tier', () => {
-    const infrequentItem: NoveltyFlags = { days_since_last_seen: 30 };
+    const infrequentItem: NoveltyFlags = { is_infrequent: true };
 
-    it('claims a returning species over the threshold on today', () => {
-      expect(
-        resolveNoveltyCategory(infrequentItem, { infrequentThresholdDays: 14, isToday: true })
-      ).toBe('infrequent');
+    it('claims a server-flagged returning species on today', () => {
+      expect(resolveNoveltyCategory(infrequentItem, { isToday: true })).toBe('infrequent');
     });
 
     it('does not activate on past dates (isToday false)', () => {
-      expect(
-        resolveNoveltyCategory(infrequentItem, { infrequentThresholdDays: 14, isToday: false })
-      ).toBeNull();
+      expect(resolveNoveltyCategory(infrequentItem, { isToday: false })).toBeNull();
     });
 
-    it('does not activate when threshold is undefined (tracking disabled)', () => {
-      expect(resolveNoveltyCategory(infrequentItem, { isToday: true })).toBeNull();
+    it('does not activate without isToday', () => {
+      expect(resolveNoveltyCategory(infrequentItem)).toBeNull();
     });
 
-    it('does not activate when the gap is at or below the threshold', () => {
-      expect(
-        resolveNoveltyCategory(
-          { days_since_last_seen: 14 },
-          { infrequentThresholdDays: 14, isToday: true }
-        )
-      ).toBeNull();
+    it('does not activate when the server did not flag the row', () => {
+      expect(resolveNoveltyCategory({}, { isToday: true })).toBeNull();
+      expect(resolveNoveltyCategory({ is_infrequent: false }, { isToday: true })).toBeNull();
     });
 
-    it('treats missing days_since_last_seen as 0 (never infrequent)', () => {
-      expect(resolveNoveltyCategory({}, { infrequentThresholdDays: 14, isToday: true })).toBeNull();
-    });
-
-    it('is a fallback tier: lifetime/year/season win even with a large absence gap', () => {
-      const opts = { infrequentThresholdDays: 14, isToday: true };
-      expect(resolveNoveltyCategory({ is_new_species: true, days_since_last_seen: 99 }, opts)).toBe(
+    it('is a fallback tier: lifetime/year/season win even when flagged infrequent', () => {
+      const opts = { isToday: true };
+      expect(resolveNoveltyCategory({ is_new_species: true, is_infrequent: true }, opts)).toBe(
         'lifetime'
       );
-      expect(
-        resolveNoveltyCategory({ is_new_this_year: true, days_since_last_seen: 99 }, opts)
-      ).toBe('year');
-      expect(
-        resolveNoveltyCategory({ is_new_this_season: true, days_since_last_seen: 99 }, opts)
-      ).toBe('season');
+      expect(resolveNoveltyCategory({ is_new_this_year: true, is_infrequent: true }, opts)).toBe(
+        'year'
+      );
+      expect(resolveNoveltyCategory({ is_new_this_season: true, is_infrequent: true }, opts)).toBe(
+        'season'
+      );
     });
   });
 });

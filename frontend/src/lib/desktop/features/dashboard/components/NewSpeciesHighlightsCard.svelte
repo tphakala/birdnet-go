@@ -56,16 +56,6 @@ Shows up to 12 species, ordered by novelty category then detection count.
     infrequent: 3,
   };
 
-  // Absence threshold for the infrequent tier; undefined disables it so the
-  // category never activates when species tracking or infrequent tracking is
-  // turned off (matching the gate in DailySummaryCard).
-  const infrequentThresholdDays = $derived(
-    $speciesTrackingSettings?.enabled === true &&
-      $speciesTrackingSettings.infrequentTracking?.enabled === true
-      ? ($speciesTrackingSettings.infrequentTracking.absenceDays ?? 14)
-      : undefined
-  );
-
   const highlights = $derived.by<Highlight[]>(() => {
     const result: Highlight[] = [];
     // Guard against a null payload: the default [] only applies for undefined,
@@ -79,7 +69,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
     const seen = new Set<string>();
     for (const species of data) {
       if (seen.has(species.scientific_name)) continue;
-      const category = resolveNoveltyCategory(species, { infrequentThresholdDays, isToday });
+      const category = resolveNoveltyCategory(species, { isToday });
       if (category !== null) {
         seen.add(species.scientific_name);
         result.push({ species, category });
