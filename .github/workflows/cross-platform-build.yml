@@ -80,10 +80,7 @@ jobs:
             tflite_asset: linux_arm64.tar.gz
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
       - run: go version
 
       - name: Install cross toolchains
@@ -178,10 +175,7 @@ jobs:
             apt_packages: build-essential pkg-config gcc-mingw-w64-x86-64
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
       - run: go version
 
       - name: Install Task

@@ -129,10 +129,7 @@ jobs:
           - 1883:1883
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
       - run: go version
 
       - name: Setup TensorFlow Lite
@@ -330,10 +327,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow
@@ -421,10 +415,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       - name: Set up gotestsum
         run: |
@@ -499,10 +490,7 @@ jobs:
       MYSQL_TEST_IMAGE: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow

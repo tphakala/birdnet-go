@@ -44,10 +44,7 @@ jobs:
 
       # --- Go backend setup ---
       - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow

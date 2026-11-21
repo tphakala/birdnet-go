@@ -1,0 +1,32 @@
+name: 'Setup Go'
+description: >-
+  Install the newest patch release of the Go minor line that go.mod declares.
+  go.mod only names the floor (for example 1.27.0), so reading it through
+  actions/setup-go's go-version-file would install exactly that first release.
+
+inputs:
+  cache:
+    description: 'Whether actions/setup-go restores and saves the module and build caches'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Read the Go minor line from go.mod
+      id: minor
+      shell: bash
+      run: |
+        minor=$(awk '/^go /{split($2, v, "."); print v[1] "." v[2]; exit}' go.mod)
+        if [ -z "${minor}" ]; then
+          echo "::error::no go directive found in go.mod"
+          exit 1
+        fi
+        echo "minor=${minor}" >> "${GITHUB_OUTPUT}"
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version: ${{ steps.minor.outputs.minor }}
+        check-latest: true
+        cache: ${{ inputs.cache }}

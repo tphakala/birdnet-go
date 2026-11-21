@@ -25,7 +25,8 @@ vars:
     sh: uname -s
   UNAME_M:
     sh: uname -m
-  # Go version from go.mod (single source of truth)
+  # Go language floor from go.mod, for example 1.27.0. It names the minor line
+  # to install; installs and CI build with the latest patch of that line.
   GO_VERSION:
     sh: awk '/^go /{print $2; found=1} END{if(!found) exit 1}' go.mod
   # Sentry DSN baked into the binary at link time. Read from the SENTRY_DSN
@@ -465,6 +466,13 @@ tasks:
               aarch64|arm64) GO_ARCH="arm64";;
               *) echo "❌ Unsupported architecture: $(uname -m)"; exit 1;;
             esac
+            # go.mod only names the minor line (1.27.0 is the floor), so install the
+            # newest patch release of that line and fall back to the floor if the
+            # release feed cannot be read. The feed lists releases newest first.
+            GO_LATEST=$(curl -fsSL 'https://go.dev/dl/?mode=json' 2>/dev/null \
+              | grep -oE "\"version\": \"go${REQUIRED_GO_MINOR}(\.[0-9]+)?\"" \
+              | head -n 1 | grep -oE '[0-9]+(\.[0-9]+)+' || true)
+            GO_VERSION="${GO_LATEST:-$GO_VERSION}"
             GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
             if ! wget "https://go.dev/dl/${GO_TARBALL}"; then
               echo "❌ Failed to download Go ${GO_VERSION} for ${GO_ARCH}"
