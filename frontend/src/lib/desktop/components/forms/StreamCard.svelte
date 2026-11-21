@@ -380,9 +380,12 @@
   }
 
   function handleTestResult(result: { sampleRate: number; channels: number } | null, url: string) {
-    testResult = result;
     if (result) onUrlTested(url);
-    else {
+    // A result for an earlier URL (a probe that finished after the field changed) says
+    // nothing about the URL the card holds now.
+    if (url.trim() !== stream.url.trim()) return;
+    testResult = result;
+    if (!result) {
       analysisResult = null;
       analysisError = null;
     }

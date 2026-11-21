@@ -337,6 +337,25 @@ describe('StreamCard editing', () => {
     expect(onUrlTested).toHaveBeenCalledExactlyOnceWith('rtsp://host/stream');
   });
 
+  it('keeps the detected channels of the current URL when a probe of an earlier URL finishes late', async () => {
+    const { onUrlTested, update } = renderCard();
+    await fireEvent.click(screen.getByTestId('stream-test-start'));
+
+    await update({ stream: { ...baseStream, url: 'rtsp://host/other' } });
+    await fireEvent.click(screen.getByTestId('stream-test-finish'));
+
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-channels', '0');
+    expect(onUrlTested).toHaveBeenCalledOnce();
+  });
+
+  it('shows the detected channels of a test of the current URL', async () => {
+    renderCard();
+
+    await fireEvent.click(screen.getByTestId('stream-test-button'));
+
+    expect(screen.getByTestId('channel-controls')).toHaveAttribute('data-channels', '1');
+  });
+
   it('does not report a test that was cleared or failed', async () => {
     const { onUrlTested } = renderCard();
 
