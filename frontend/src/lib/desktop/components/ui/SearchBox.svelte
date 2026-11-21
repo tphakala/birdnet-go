@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { navigation } from '$lib/stores/navigation.svelte';
   import { untrack } from 'svelte';
   import { cn } from '$lib/utils/cn';
   import {
@@ -255,6 +256,8 @@
       });
 
       globalThis.window.history.replaceState({}, '', url.toString());
+      // The store keeps the address bar URL it restores after a held Back or Forward
+      navigation.syncFromLocation();
 
       // Trigger a custom event to notify the detections page of the search change
       globalThis.window.dispatchEvent(
@@ -328,6 +331,8 @@
       const url = new URL(globalThis.window.location.href);
       url.searchParams.delete('search');
       globalThis.window.history.replaceState({}, '', url.toString());
+      // The store keeps the address bar URL it restores after a held Back or Forward
+      navigation.syncFromLocation();
 
       globalThis.window.dispatchEvent(
         new CustomEvent('searchUpdate', {

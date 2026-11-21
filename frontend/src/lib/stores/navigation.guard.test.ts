@@ -155,6 +155,21 @@ describe('navigation with an unsaved-changes guard', () => {
       expect(navigation.currentSearch).toBe('?tab=one');
     });
 
+    it('restores a query a page wrote itself once the store was told', async () => {
+      await arrive(START, GUARDED);
+      // A page rewrites its own query outside the store, then reports it.
+      window.history.replaceState(null, '', `${GUARDED}?date=2026-01-02`);
+      navigation.syncFromLocation();
+
+      const held = nextPop();
+      window.history.back();
+      await held;
+
+      expect(window.location.pathname).toBe(GUARDED);
+      expect(window.location.search).toBe('?date=2026-01-02');
+      expect(navigation.currentSearch).toBe('?date=2026-01-02');
+    });
+
     it('keeps the page on Stay after Back', async () => {
       await arrive(START, GUARDED);
 

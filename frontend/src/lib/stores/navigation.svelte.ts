@@ -43,6 +43,11 @@ export interface NavigationStore {
   redirect: (url: string) => Promise<boolean>;
   /** Applies a browser Back/Forward. Returns false when the pop was held for the unsaved-changes prompt. */
   handlePopState: () => boolean;
+  /**
+   * For pages that rewrite their own query with history.replaceState or pushState: records the
+   * address bar's query and URL as the current entry, so a held Back restores it.
+   */
+  syncFromLocation: () => void;
 }
 
 /**
@@ -274,6 +279,12 @@ export function createNavigation(): NavigationStore {
     return false;
   }
 
+  function syncFromLocation(): void {
+    if (typeof window === 'undefined') return;
+    currentSearch = window.location.search;
+    committedUrl = window.location.pathname + window.location.search + window.location.hash;
+  }
+
   return {
     get currentPath() {
       return currentPath;
@@ -284,6 +295,7 @@ export function createNavigation(): NavigationStore {
     navigate,
     redirect,
     handlePopState,
+    syncFromLocation,
   };
 }
 

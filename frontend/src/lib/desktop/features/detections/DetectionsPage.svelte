@@ -168,6 +168,8 @@
 
       // Update URL without navigation
       window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+      // The store keeps the address bar URL it restores after a held Back or Forward
+      navigation.syncFromLocation();
 
       // Fetch new data
       fetchDetections();
@@ -197,6 +199,8 @@
 
       // Update URL without navigation
       window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+      // The store keeps the address bar URL it restores after a held Back or Forward
+      navigation.syncFromLocation();
 
       // Fetch new data
       fetchDetections();
@@ -219,6 +223,8 @@
     params.set('offset', '0'); // Reset to first page
 
     window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+    // The store keeps the address bar URL it restores after a held Back or Forward
+    navigation.syncFromLocation();
     fetchDetections();
   }
 
@@ -244,6 +250,8 @@
     const url = new URL(window.location.href);
     url.search = params.toString();
     window.history.replaceState({}, '', url.toString());
+    // The store keeps the address bar URL it restores after a held Back or Forward
+    navigation.syncFromLocation();
 
     // Refresh detections with new search
     fetchDetections();
