@@ -28,7 +28,9 @@
 # way. It trusts what it downloads, so compare the package hash with the
 # publisher's before committing. With the github source it prints the library
 # pins of the release archives and carries the package pin over from the
-# current pin file.
+# current pin file. Redirect the output to a new file and move that over the
+# pin file afterwards: redirecting into the pin file truncates it before the
+# script reads it.
 #
 # Environment:
 #   ONNXRUNTIME_SOURCE   nuget or github; overrides the default below.
@@ -310,7 +312,9 @@ cmd_pins() {
     mkdir -p -- "$DL"
     echo "# ONNX Runtime $VERSION SHA-256 pins, read by scripts/fetch-onnxruntime.sh."
     echo "# Format: sha256sum lines, \"<sha256>  <label>\". Regenerate on a version bump with"
-    echo "#   sh scripts/fetch-onnxruntime.sh pins <version> <download dir> > scripts/onnxruntime-pins.sha256"
+    echo "#   sh scripts/fetch-onnxruntime.sh pins <version> <download dir> > new-pins.sha256"
+    echo "# then move new-pins.sha256 over scripts/onnxruntime-pins.sha256. Do not redirect into the pin file itself:"
+    echo "# the shell truncates it before the script reads it."
     if [ "$ONNXRUNTIME_SOURCE" = github ]; then
         [ -z "${ONNXRUNTIME_ARCHIVE:-}" ] ||
             die "pins with the github source downloads one archive per platform; unset ONNXRUNTIME_ARCHIVE"

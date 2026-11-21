@@ -510,6 +510,10 @@ func TestORTFetchScript(t *testing.T) {
 		stdout, stderr, err := runFetch(t, fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins},
 			"pins", fixtureVersion, filepath.Join(t.TempDir(), "dl"))
 		require.NoError(t, err, stderr)
+		// The regeneration command must not redirect into the pin file: the shell
+		// would truncate it before the script reads it.
+		assert.NotContains(t, stdout, "> scripts/onnxruntime-pins.sha256")
+		assert.Contains(t, stdout, "> new-pins.sha256")
 		generated := filepath.Join(f.dir, "generated.sha256")
 		require.NoError(t, os.WriteFile(generated, []byte(stdout), 0o600))
 		for _, p := range ortPlatforms {

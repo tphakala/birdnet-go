@@ -1,6 +1,8 @@
 # ONNX Runtime 1.32.0 SHA-256 pins, read by scripts/fetch-onnxruntime.sh.
 # Format: sha256sum lines, "<sha256>  <label>". Regenerate on a version bump with
-#   sh scripts/fetch-onnxruntime.sh pins <version> <download dir> > scripts/onnxruntime-pins.sha256
+#   sh scripts/fetch-onnxruntime.sh pins <version> <download dir> > new-pins.sha256
+# then move new-pins.sha256 over scripts/onnxruntime-pins.sha256. Do not redirect into the pin file itself:
+# the shell truncates it before the script reads it.
 a9150bc2992cbbb6722070da9910e1ffa989a8bfc67bdd5bb8e745ca755641db  microsoft.ml.onnxruntime.1.32.0.nupkg
 4213d6d8c42ac4754865849cb139d31fc39127db6a326babf90bbc81a6eb52fc  1.32.0/linux-amd64/libonnxruntime.so
 8ef51f6bf2c621fc129f625b22241fa6f9a5870bc08eaf2fdd279169ec40d09a  1.32.0/linux-amd64/libonnxruntime_providers_shared.so
