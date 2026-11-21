@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -16,6 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // Shared context for tests in this file
@@ -135,6 +138,87 @@ func TestEndSessionSurvivesRestartAfterRacingPersist(t *testing.T) {
 	require.NoError(t, restarted.loadTokens(ctx))
 	_, err := restarted.liveRecord(token)
 	require.ErrorIs(t, err, ErrTokenNotFound, "a logged-out session must not come back after a restart")
+}
+
+// signInSettleTime is how long a test waits to see whether a call that should be
+// blocked on the save lock returns anyway.
+const signInSettleTime = 100 * time.Millisecond
+
+// TestSignInRecordIsOnDiskBeforeCookie verifies that a sign-in writes its record
+// to the token file before it returns, so the cookie is never sent for a record
+// that a restart would lose. The test holds the save lock: a sign-in that waits
+// for the write cannot return while it is held.
+func TestSignInRecordIsOnDiskBeforeCookie(t *testing.T) {
+	tests := []struct {
+		name  string
+		start func(s *OAuth2Server, w http.ResponseWriter) (token string, err error)
+	}{
+		{"password sign-in", func(s *OAuth2Server, w http.ResponseWriter) (string, error) {
+			token := seedSession(t, s, &AccessToken{})
+			return token, s.StartSession(w, sessionRequest(""), token)
+		}},
+		{"provider sign-in", func(s *OAuth2Server, w http.ResponseWriter) (string, error) {
+			// Settle the credentials first, so the only save left to wait for is
+			// the one that carries the new record.
+			settleCredentials(s)
+			return "", s.StartProviderSession(w, sessionRequest(""),
+				&AccessToken{Provider: ProviderGoogle, UserID: "user@example.com", ProviderUserID: "12345"}, true)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokensFile := filepath.Join(t.TempDir(), "tokens.json")
+			settings := persistenceTestSettings()
+			conftest.SetTestSettings(settings)
+			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
+			server := newPersistingServer(tokensFile, settings)
+
+			server.saveMu.Lock()
+			w := httptest.NewRecorder()
+			done := make(chan struct{})
+			var token string
+			var startErr error
+			go func() {
+				defer close(done)
+				token, startErr = tt.start(server, w)
+			}()
+			select {
+			case <-done:
+				server.saveMu.Unlock()
+				require.Fail(t, "the sign-in returned while the token file could not be written")
+			case <-time.After(signInSettleTime):
+			}
+			server.saveMu.Unlock()
+			<-done
+
+			require.NoError(t, startErr)
+			require.NotNil(t, findCookie(w, SessionCookieName))
+			data, err := os.ReadFile(tokensFile) //nolint:gosec // test file path from t.TempDir()
+			require.NoError(t, err, "the record must be on disk when the sign-in returns")
+			var stored tokenFile
+			require.NoError(t, json.Unmarshal(data, &stored))
+			require.Len(t, stored.Sessions, 1)
+			if token != "" {
+				assert.Contains(t, stored.Sessions, sessionTokenKey(token))
+			}
+		})
+	}
+}
+
+// TestEndSessionLogsFailedSave verifies that a logout whose deletion cannot be
+// written says so at error level, since the record would return after a restart.
+func TestEndSessionLogsFailedSave(t *testing.T) {
+	tokensFile := filepath.Join(t.TempDir(), "missing", "tokens.json")
+	server := newPersistingServer(tokensFile, persistenceTestSettings())
+	token := seedSession(t, server, &AccessToken{})
+
+	output := logtest.Capture(t, func() {
+		server.EndSession(httptest.NewRecorder(), sessionRequest(token))
+	})
+
+	assert.Contains(t, output, "level=ERROR")
+	assert.Contains(t, output, "Failed to persist the end of a session")
+	assert.NotContains(t, output, token, "a session token must never be logged")
 }
 
 // TestFilesystemStore tests that the FilesystemStore is initialized correctly

@@ -1341,16 +1341,22 @@ type tokenFile struct {
 	CredentialsID string                 `json:"credentials_id"`
 }
 
-// persistTokensIfEnabled saves tokens if persistence is enabled
+// trySaveTokens saves tokens if persistence is enabled and returns the error of
+// a failed save. The save timeout starts inside saveTokens once the save lock is
+// held, so a save queued behind a slow one is not dropped while it waits.
+func (s *OAuth2Server) trySaveTokens() error {
+	if !s.persistTokens {
+		return nil
+	}
+	return s.saveTokens(context.Background())
+}
+
+// persistTokensIfEnabled saves tokens if persistence is enabled and logs a
+// failure, throttled.
 func (s *OAuth2Server) persistTokensIfEnabled() {
-	if s.persistTokens {
-		// Use a short background context for saving, as it runs in a goroutine
-		ctx, cancel := context.WithTimeout(context.Background(), TokenSaveTimeout)
-		defer cancel()
-		if err := s.saveTokens(ctx); err != nil {
-			// Throttle logging for repeated save errors
-			s.logThrottledError("save_tokens_error", "Failed to save tokens", err, ThrottleLogInterval)
-		}
+	if err := s.trySaveTokens(); err != nil {
+		// Throttle logging for repeated save errors
+		s.logThrottledError("save_tokens_error", "Failed to save tokens", err, ThrottleLogInterval)
 	}
 }
 
@@ -1445,6 +1451,11 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	// written after a newer one.
 	s.saveMu.Lock()
 	defer s.saveMu.Unlock()
+
+	// Start the timeout once the lock is held: a save that queued behind a slow
+	// one must not lose its time to the wait.
+	ctx, cancel := context.WithTimeout(ctx, TokenSaveTimeout)
+	defer cancel()
 
 	// Copy under the read lock and release it before marshaling and writing;
 	// saveMu alone orders the saves.

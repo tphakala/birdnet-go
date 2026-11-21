@@ -277,16 +277,16 @@ func (s *OAuth2Server) revokeRequestSession(r *http.Request, keepToken string) b
 }
 
 // StartSession starts the browser session for a password sign-in: it revokes
-// the record the request's cookie names, then sends the cookie for token, the
-// access token ExchangeAuthCode issued.
+// the record the request's cookie names, waits for the result to be written to
+// the token file (a failed write is logged and does not stop the sign-in), then
+// sends the cookie for token, the access token ExchangeAuthCode issued.
 func (s *OAuth2Server) StartSession(w http.ResponseWriter, r *http.Request, token string) error {
 	rec, err := s.liveRecord(token)
 	if err != nil {
 		return err
 	}
-	if s.revokeRequestSession(r, token) {
-		go s.persistTokensIfEnabled()
-	}
+	s.revokeRequestSession(r, token)
+	s.persistTokensIfEnabled()
 	writeSessionCookie(w, r, token, rec.Remember)
 	return nil
 }
@@ -297,8 +297,10 @@ var ErrSessionProviderMissing = errors.NewStd("session identity has no provider"
 
 // StartProviderSession starts the browser session for a social sign-in. It
 // issues a record carrying the identity (Provider, UserID, ProviderUserID and
-// IDToken of identity), revokes the browser's previous record and sends the
-// cookie. Every sign-in gets a fresh token. It refuses a nil identity or one
+// IDToken of identity), revokes the browser's previous record, waits for the
+// result to be written to the token file (a failed write is logged and does not
+// stop the sign-in) and sends the cookie. Every sign-in gets a fresh token. It
+// refuses a nil identity or one
 // without a Provider with ErrSessionProviderMissing and issues nothing.
 func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Request, identity *AccessToken, remember bool) error {
 	if identity == nil || identity.Provider == "" {
@@ -315,17 +317,20 @@ func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Reque
 	s.mutex.Lock()
 	s.accessTokens[sessionTokenKey(token)] = record
 	s.mutex.Unlock()
-	go s.persistTokensIfEnabled()
+	s.persistTokensIfEnabled()
 
 	writeSessionCookie(w, r, token, remember)
 	return nil
 }
 
-// EndSession ends the request's session: the record is deleted and the
-// deletion persisted before it returns, then the cookie is cleared.
+// EndSession ends the request's session: the record is deleted and, when the
+// token file can be written, the deletion is written before it returns; a
+// failed write is logged at error level. Then the cookie is cleared.
 func (s *OAuth2Server) EndSession(w http.ResponseWriter, r *http.Request) {
 	if s.revokeRequestSession(r, "") {
-		s.persistTokensIfEnabled()
+		if err := s.trySaveTokens(); err != nil {
+			GetLogger().Error("Failed to persist the end of a session, the record may return after a restart", logger.Error(err))
+		}
 	}
 	deleteCookie(w, r, SessionCookieName)
 }
