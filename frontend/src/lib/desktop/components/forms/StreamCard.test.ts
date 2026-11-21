@@ -161,6 +161,17 @@ describe('StreamCard editing', () => {
     }
   });
 
+  it('labels the URL field like the other fields of its group, a real label that says required', () => {
+    renderCard();
+
+    const label = screen.getByText(URL_LABEL_KEY, { selector: 'label span' });
+    expect(label).toHaveClass('label-text');
+    expect(label.closest('label')).not.toHaveClass('font-semibold');
+    expect(screen.getByLabelText(new RegExp(URL_LABEL_KEY))).toBe(urlInput());
+    expect(urlInput()).toHaveAttribute('aria-required', 'true');
+    expect(label.closest('label')).toHaveTextContent('*');
+  });
+
   it('limits the name to what the server accepts', () => {
     renderCard();
 
@@ -511,9 +522,12 @@ describe('StreamCard delete and groups', () => {
     expect(
       screen.getByRole('heading', { level: 4, name: 'settings.audio.soundCards.levelTitle' })
     ).not.toHaveClass('uppercase');
-    for (const label of ['settings.audio.streams.nameLabel', 'settings.audio.streams.urlLabel']) {
-      expect(screen.getByText(label, { selector: 'label' })).not.toHaveClass('uppercase');
-    }
+    expect(
+      screen.getByText('settings.audio.streams.nameLabel', { selector: 'label' })
+    ).not.toHaveClass('uppercase');
+    expect(
+      screen.getByText('settings.audio.streams.urlLabel', { selector: 'label span' })
+    ).not.toHaveClass('uppercase');
   });
 
   it('names the audio filters region after its disclosure button', () => {

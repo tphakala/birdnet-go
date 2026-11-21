@@ -611,12 +611,15 @@
     titleVariant="group"
   >
     <div class="space-y-4">
-      <SettingsGroup
-        title={t('settings.audio.streams.urlLabel')}
-        labelFor={urlInputId}
-        required
-        class="space-y-1.5"
-      >
+      <div class="space-y-1.5">
+        <!-- The label of a TextInput, drawn here so the input need not carry the native
+             required attribute (its validation message is fixed English). -->
+        <label class="label justify-start" for={urlInputId}>
+          <span class="label-text capitalize">
+            {t('settings.audio.streams.urlLabel')}
+            <span class="ml-1 text-[var(--text-error)]" aria-hidden="true">*</span>
+          </span>
+        </label>
         <TextInput
           id={urlInputId}
           value={stream.url}
@@ -628,7 +631,7 @@
           oninput={handleUrlInput}
           onblur={handleUrlBlur}
         />
-      </SettingsGroup>
+      </div>
 
       <StreamTestButton
         url={stream.url}
