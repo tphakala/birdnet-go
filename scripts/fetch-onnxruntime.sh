@@ -95,7 +95,7 @@ matches_pin() {
 # verify FILE LABEL: fail unless FILE has the hash pinned for LABEL.
 verify() {
     want=$(pin_of "$2")
-    [ -n "$want" ] || die "no pin for $2 in $PINS; add it with: $0 pins $VERSION DOWNLOAD_DIR"
+    [ -n "$want" ] || die "no pin for $2 in $PINS; add a '<sha256>  $2' line after reviewing the bytes (the pins command is described in the header of $0)"
     got=$(sha256_of "$1") || die "cannot hash $1"
     [ "$got" = "$want" ] || die "SHA-256 mismatch for $2 from the $ONNXRUNTIME_SOURCE source:
   pinned $want
@@ -205,7 +205,7 @@ fetch_archive() {
 open_source() {
     case "$ONNXRUNTIME_SOURCE" in
         nuget)
-            [ -n "$RID" ] || die "the NuGet package has no $1 build; use ONNXRUNTIME_SOURCE=github"
+            [ -n "$RID" ] || die "the NuGet package has no $1 build. The github source can serve it once $PINS holds pins for $VERSION/$1/"
             need unzip
             [ -n "$ARCHIVE" ] || fetch_archive "$NUGET_BASE_URL/$VERSION/$PACKAGE" "$PACKAGE" "$PACKAGE"
             ;;

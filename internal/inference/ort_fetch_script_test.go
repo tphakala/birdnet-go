@@ -483,7 +483,7 @@ func TestORTFetchScript(t *testing.T) {
 			plat    string
 			want    string
 		}{
-			{"intel mac on nuget", fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins}, fixtureVersion, "darwin-amd64", "no darwin-amd64 build"},
+			{"intel mac on nuget", fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins}, fixtureVersion, "darwin-amd64", "pins for " + fixtureVersion + "/darwin-amd64/"},
 			{"unknown source", fetchRun{source: "mirror", archive: f.nupkg, pins: f.pins}, fixtureVersion, "linux-amd64", "must be nuget or github"},
 			{"duplicate pin label", fetchRun{source: "nuget", archive: f.nupkg, pins: dup}, fixtureVersion, "linux-amd64", "duplicate"},
 			{"version without dots", fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins}, "1", "linux-amd64", "VERSION must look like"},
