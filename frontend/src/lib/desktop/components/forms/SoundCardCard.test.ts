@@ -277,6 +277,18 @@ describe('SoundCardCard editing', () => {
     expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('shows the name error again when a save ends an edit that hid it', async () => {
+    const view = renderCard({ problem: { name: 'duplicate' } });
+    await fireEvent.input(nameInput(), { target: { value: 'Still taken' } });
+    expect(nameInput()).not.toHaveAttribute('aria-invalid');
+
+    // The save disables the field: the edit ends without a blur event.
+    await view.rerender({ disabled: true });
+    await view.rerender({ disabled: false });
+
+    expect(nameInput()).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('shows a problem at once on a card that opens with one, and flags the header', async () => {
     renderCard({ problem: { name: 'duplicate' } });
 

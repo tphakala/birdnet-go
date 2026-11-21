@@ -147,7 +147,9 @@
   // user edits it. A problem this field did not cause (a duplicate typed on
   // another card) shows at once, also on a card that opens with one.
   let nameTouched = $state(untrack(() => Boolean(problem?.name)));
-  let nameEditing = false;
+  // Reactive, so an edit that ends without a blur (see the collapse and disable
+  // effect below) shows a problem the edit had hidden.
+  let nameEditing = $state(false);
   $effect(() => {
     if (problem?.name && !nameEditing) nameTouched = true;
   });
@@ -229,8 +231,10 @@
   // event when it is disabled or unmounted.
   $effect(() => {
     if (!expanded || disabled) {
-      untrack(() => (pendingDevice = null));
-      nameEditing = false;
+      untrack(() => {
+        pendingDevice = null;
+        nameEditing = false;
+      });
     }
   });
 
