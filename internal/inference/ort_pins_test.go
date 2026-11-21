@@ -223,6 +223,58 @@ func TestORTBaseImageTagHashesFetchInputs(t *testing.T) {
 	}
 }
 
+// TestORTCIKeysTrackFetchInputs keeps the CI cache keys and path filters that
+// depend on the ONNX Runtime download in step with the script and the pin file:
+// a missing entry in any one list lets a pin or source change reuse a stale
+// cache or skip a job.
+func TestORTCIKeysTrackFetchInputs(t *testing.T) {
+	t.Parallel()
+
+	files := []string{"scripts/fetch-onnxruntime.sh", "scripts/onnxruntime-pins.sha256"}
+	// pathLists is how many path lists of the workflow must hold each file as a
+	// list entry; hashLine is a line that must name both files in a hashFiles call.
+	cases := []struct {
+		file      string
+		pathLists int
+		hashLine  string
+	}{
+		{"../../.github/actions/setup-onnxruntime/action.yml", 0, "key: onnxruntime-"},
+		{"../../.github/workflows/golangci-test.yml", 2, "CI_FILES_HASH:"},
+		{"../../.github/workflows/container-test.yml", 2, ""},
+		{"../../.github/workflows/windows-test.yml", 1, ""},
+		{"../../.github/workflows/macos-test.yml", 1, ""},
+	}
+	for _, tc := range cases {
+		data, err := os.ReadFile(tc.file)
+		require.NoError(t, err)
+		lines := strings.Split(string(data), "\n")
+		for _, f := range files {
+			entries := 0
+			for _, line := range lines {
+				entry := strings.Trim(strings.TrimPrefix(strings.TrimSpace(line), "- "), `'"`)
+				if strings.HasPrefix(strings.TrimSpace(line), "- ") && entry == f {
+					entries++
+				}
+			}
+			assert.Equal(t, tc.pathLists, entries, "%s: path list entries for %s", tc.file, f)
+		}
+		if tc.hashLine == "" {
+			continue
+		}
+		var found bool
+		for _, line := range lines {
+			if !strings.Contains(line, tc.hashLine) {
+				continue
+			}
+			found = true
+			for _, f := range files {
+				assert.Contains(t, line, f, "%s: %q must hash %s", tc.file, tc.hashLine, f)
+			}
+		}
+		assert.True(t, found, "%s: no line with %q", tc.file, tc.hashLine)
+	}
+}
+
 // TestORTMinimumMatchesBindingAPIVersion ties the minimum version gate to the C
 // API level the onnxruntime_go binding requests: ONNX Runtime 1.N serves API N and
 // older, so minORTMinor must equal ORT_API_VERSION in the binding's header.

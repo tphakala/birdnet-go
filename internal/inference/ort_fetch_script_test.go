@@ -376,6 +376,12 @@ func TestORTFetchScript(t *testing.T) {
 				require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
 				return path
 			}},
+			{"single dot name", func(t *testing.T, dest string) string {
+				t.Helper()
+				path := filepath.Join(dest, ".hidden")
+				require.NoError(t, os.WriteFile(path, []byte("x"), 0o600))
+				return path
+			}},
 			{"dot dot name", func(t *testing.T, dest string) string {
 				t.Helper()
 				path := filepath.Join(dest, "..hidden")
@@ -415,6 +421,30 @@ func TestORTFetchScript(t *testing.T) {
 				assert.Equal(t, []string{filepath.Base(planted)}, entryNames(t, dest), "nothing is installed next to it")
 			})
 		}
+	})
+
+	t.Run("a link at a library name is replaced and its target is left alone", func(t *testing.T) {
+		t.Parallel()
+		f := newORTFixture(t)
+		p := platformByID(t, "linux-amd64")
+		outside := filepath.Join(t.TempDir(), "outside")
+		require.NoError(t, os.WriteFile(outside, p.content("libonnxruntime.so"), 0o600))
+		dest := filepath.Join(t.TempDir(), "lib")
+		run := fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins}
+		_, stderr, err := runFetch(t, run, "install", fixtureVersion, p.id, dest)
+		require.NoError(t, err, stderr)
+
+		// Every other library is intact, so only the link makes the directory
+		// differ from the pinned files.
+		versioned := filepath.Join(dest, "libonnxruntime.so."+fixtureVersion)
+		require.NoError(t, os.Remove(versioned))
+		require.NoError(t, os.Symlink(outside, versioned))
+		_, stderr, err = runFetch(t, run, "install", fixtureVersion, p.id, dest)
+		require.NoError(t, err, stderr)
+		assertLayout(t, p, dest)
+		info, err := os.Stat(outside)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "the link target must not be chmoded")
 	})
 
 	t.Run("installed files without a pin for the version fail", func(t *testing.T) {
@@ -475,6 +505,10 @@ func TestORTFetchScript(t *testing.T) {
 		dup := filepath.Join(f.dir, "dup.sha256")
 		line := f.pkgHash + "  microsoft.ml.onnxruntime." + fixtureVersion + ".nupkg\n"
 		require.NoError(t, os.WriteFile(dup, []byte(line+line), 0o600))
+		short := filepath.Join(f.dir, "short.sha256")
+		require.NoError(t, os.WriteFile(short, []byte(line+"abc123  "+fixtureVersion+"/linux-amd64/libonnxruntime.so\n"), 0o600))
+		upper := filepath.Join(f.dir, "upper.sha256")
+		require.NoError(t, os.WriteFile(upper, []byte(line+strings.ToUpper(hashHex([]byte("a")))+"  "+fixtureVersion+"/linux-amd64/libonnxruntime.so\n"), 0o600))
 
 		cases := []struct {
 			name    string
@@ -486,6 +520,8 @@ func TestORTFetchScript(t *testing.T) {
 			{"intel mac on nuget", fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins}, fixtureVersion, "darwin-amd64", "pins for " + fixtureVersion + "/darwin-amd64/"},
 			{"unknown source", fetchRun{source: "mirror", archive: f.nupkg, pins: f.pins}, fixtureVersion, "linux-amd64", "must be nuget or github"},
 			{"duplicate pin label", fetchRun{source: "nuget", archive: f.nupkg, pins: dup}, fixtureVersion, "linux-amd64", "duplicate"},
+			{"truncated hash in a pin line", fetchRun{source: "nuget", archive: f.nupkg, pins: short}, fixtureVersion, "linux-amd64", "malformed"},
+			{"uppercase hash in a pin line", fetchRun{source: "nuget", archive: f.nupkg, pins: upper}, fixtureVersion, "linux-amd64", "malformed"},
 			{"version without dots", fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins}, "1", "linux-amd64", "VERSION must look like"},
 			{"unknown platform", fetchRun{source: "nuget", archive: f.nupkg, pins: f.pins}, fixtureVersion, "plan9-amd64", "unsupported platform"},
 		}
