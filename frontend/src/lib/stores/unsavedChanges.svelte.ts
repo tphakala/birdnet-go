@@ -36,7 +36,7 @@ export interface UnsavedChanges {
   readonly prompting: boolean;
   /** Adds a guard; the returned function removes only that registration. */
   register(guard: UnsavedChangesGuard): () => void;
-  /** Pure query: whether some dirty, unreleased guard does not allow moving from `from` to `to`. */
+  /** Pure query (it does not commit a field being typed in): whether some dirty, unreleased guard does not allow moving from `from` to `to`. */
   blocks(to: NavigationTarget, from: NavigationTarget): boolean;
   /**
    * Asks before a route change. Null when nothing blocks (proceed synchronously). While a prompt
@@ -85,8 +85,25 @@ export function createUnsavedChanges(): UnsavedChanges {
     return record.guard.isDirty();
   }
 
+  /**
+   * Fields such as TextInput commit on change, so text still being typed is not in the draft yet.
+   * Leaving the focused field fires its change event synchronously and commits it.
+   */
+  function commitPendingEdit(): void {
+    if (typeof document === 'undefined') return;
+    const field = document.activeElement;
+    if (
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLTextAreaElement ||
+      field instanceof HTMLSelectElement
+    ) {
+      field.blur();
+    }
+  }
+
   function handleBeforeUnload(event: BeforeUnloadEvent): void {
     if (unloadAllowed) return;
+    commitPendingEdit();
     for (const record of records) {
       if (record.guard.isDirty()) {
         event.preventDefault();
@@ -148,6 +165,7 @@ export function createUnsavedChanges(): UnsavedChanges {
 
     request(to, from) {
       if (prompting) return Promise.resolve(false);
+      commitPendingEdit();
       const leavers = [...records].filter(record => isBlocking(record, to, from));
       if (leavers.length === 0) return null;
       return openPrompt(leavers, from.path);
@@ -155,6 +173,7 @@ export function createUnsavedChanges(): UnsavedChanges {
 
     confirmDiscard() {
       if (prompting) return Promise.resolve(false);
+      commitPendingEdit();
       for (const record of records) {
         if (record.guard.isDirty()) return openPrompt([], '');
       }
