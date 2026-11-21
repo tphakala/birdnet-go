@@ -117,6 +117,7 @@ This folder contains **shared components** used across the application. Feature-
 - `ErrorAlert.svelte` - Error message display
 - `ExpandableText.svelte` - Text clamped to a few lines with a Show more / Show less toggle that appears only when the text is cut off
 - `Input.svelte` - Generic input field
+- `Kbd.svelte` - Key caps for a keyboard shortcut (one key or a combination); the caps are hidden from assistive technology and an optional `label` gives the spoken form. `size="md"` for shortcut lists, `size="sm"` for badges inside buttons and menu items, which take the control's text colour
 - `LanguageSelector.svelte` - Language selection dropdown
 - `LoadingSpinner.svelte` - Loading animation
 - `Meter.svelte` - Static measurement bar (disk, CPU, table size) on the `--viz-*` tokens
