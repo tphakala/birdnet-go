@@ -4684,7 +4684,39 @@ export type TranslationKey =
   | 'health.detail.pattern'
   | 'health.detail.patternNone'
   | 'health.detail.patternTransient'
-  | 'health.detail.patternSustained';
+  | 'health.detail.patternSustained'
+  | 'shortcuts.menuItem'
+  | 'shortcuts.modal.title'
+  | 'shortcuts.modal.enable'
+  | 'shortcuts.modal.enableHelp'
+  | 'shortcuts.modal.offNote'
+  | 'shortcuts.modal.or'
+  | 'shortcuts.scopes.global'
+  | 'shortcuts.groups.navigation'
+  | 'shortcuts.groups.review'
+  | 'shortcuts.groups.audio'
+  | 'shortcuts.groups.general'
+  | 'shortcuts.keys.shift'
+  | 'shortcuts.keys.space'
+  | 'shortcuts.keys.arrowLeft'
+  | 'shortcuts.keys.arrowRight'
+  | 'shortcuts.keys.comma'
+  | 'shortcuts.keys.period'
+  | 'shortcuts.keys.questionMark'
+  | 'shortcuts.keys.combination' // params: first, second
+  | 'shortcuts.withKey' // params: label, keys
+  | 'shortcuts.detectionDetail.olderSpecies'
+  | 'shortcuts.detectionDetail.newerSpecies'
+  | 'shortcuts.detectionDetail.correct'
+  | 'shortcuts.detectionDetail.falsePositive'
+  | 'shortcuts.detectionDetail.wrongSpecies'
+  | 'shortcuts.detectionDetail.keep'
+  | 'shortcuts.detectionDetail.playPause'
+  | 'shortcuts.detectionDetail.seekBack'
+  | 'shortcuts.detectionDetail.seekForward'
+  | 'shortcuts.detectionDetail.focusReview'
+  | 'shortcuts.detectionDetail.backToList'
+  | 'shortcuts.global.help';
 
 /**
  * Parameter types for translations that require parameters
@@ -5380,6 +5412,8 @@ export type TranslationParams = {
   'analysis.scope.rangeFilter.appliesTo': { models: string | number };
   'analysis.scope.rangeFilter.notApplied': { models: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };
+  'shortcuts.keys.combination': { first: string | number; second: string | number };
+  'shortcuts.withKey': { label: string | number; keys: string | number };
 };
 
 /**
