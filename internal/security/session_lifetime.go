@@ -51,8 +51,8 @@ func sessionRenewInterval(remember bool) time.Duration {
 }
 
 // sessionTokenKey returns the map key and on-disk identifier of a session
-// token: the hex SHA-256 of the token, so the persisted file cannot be used to
-// sign in.
+// token: the hex SHA-256 of the token, so a session record read from the
+// persisted file does not reveal the token that signs in with it.
 func sessionTokenKey(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
