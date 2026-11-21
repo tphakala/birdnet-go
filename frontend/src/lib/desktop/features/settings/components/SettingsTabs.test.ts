@@ -295,4 +295,55 @@ describe('SettingsTabs with an unsaved-changes guard', () => {
 
     expect(screen.getByRole('tab', { name: 'Label two' })).toHaveFocus();
   });
+
+  it('reports a tab change to onTabChange only once the held move is allowed', async () => {
+    navigation.redirect(`${PAGE}?tab=one`);
+    unregister = unsavedChanges.register({ isDirty: () => true, allows: samePathAndQuery });
+    const onTabChange = vi.fn();
+    render(SettingsTabs, {
+      props: {
+        tabs: [tab('one', false), tab('two', false)],
+        activeTab: 'one',
+        showActions: false,
+        onTabChange,
+      },
+    });
+    const first = screen.getByRole('tab', { name: 'Label one' });
+
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+    unsavedChanges.stay();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onTabChange).not.toHaveBeenCalled();
+
+    await fireEvent.keyDown(first, { key: 'ArrowRight' });
+    unsavedChanges.leave();
+    await waitFor(() => expect(onTabChange).toHaveBeenCalledWith('two'));
+  });
+
+  it('leaves the note link and the selection alone when the user chooses Stay on it', async () => {
+    navigation.redirect(`${PAGE}?tab=live`);
+    unregister = unsavedChanges.register({ isDirty: () => true, allows: samePathAndQuery });
+    render(SettingsTabs, {
+      props: {
+        tabs: [
+          { ...tab('live', false), saveMode: 'immediate' },
+          { ...tab('rec', true), saveMode: 'manual' },
+        ],
+        activeTab: 'live',
+        showActions: true,
+      },
+    });
+    const link = screen.getByRole('button', { name: 'Label rec' });
+    link.focus();
+
+    await fireEvent.click(link);
+    unsavedChanges.stay();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(screen.getByRole('tab', { name: 'Label rec' })).toHaveAttribute(
+      'aria-selected',
+      'false'
+    );
+    expect(screen.getByRole('tab', { name: 'Label rec' })).not.toHaveFocus();
+  });
 });
