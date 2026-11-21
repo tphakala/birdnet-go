@@ -695,4 +695,41 @@ describe('ReviewPanel shortcut badges', () => {
       expect(badge).toHaveAttribute('aria-hidden', 'true');
     }
   });
+
+  it('shows the Keep key beside the switch and names it on the switch', () => {
+    render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+        shortcutHints: { keep: hint('K') },
+      },
+    });
+
+    const keep = screen.getByRole('switch', { name: 'detections.detail.review.keep' });
+    expect(keep).toHaveAttribute('aria-keyshortcuts', 'K');
+    const badge = keep.closest('.dd-review-keep')?.querySelector('kbd');
+    expect(badge).toHaveTextContent('K');
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('shows no Keep key without a hint', () => {
+    render(ReviewPanel, {
+      props: {
+        detection,
+        speciesName: 'Eurasian Woodcock',
+        canReview: true,
+        speciesBlockedReason: '',
+        onWrongSpecies: vi.fn(),
+        onChanged: vi.fn(),
+      },
+    });
+
+    const keep = screen.getByRole('switch', { name: 'detections.detail.review.keep' });
+    expect(keep).not.toHaveAttribute('aria-keyshortcuts');
+    expect(keep.closest('.dd-review-keep')?.querySelector('kbd')).toBeNull();
+  });
 });

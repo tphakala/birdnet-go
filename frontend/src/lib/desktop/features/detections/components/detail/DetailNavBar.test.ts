@@ -155,6 +155,40 @@ describe('DetailNavBar step links', () => {
     expect(links[1]).toHaveAttribute('aria-label', `${NAV}.noNewer`);
   });
 
+  it('leads the species group with the modifier cap of its steps, and no other group', () => {
+    const hint = (keys: string[]): ShortcutHint => ({
+      aria: keys.join('+'),
+      keys,
+      display: keys.join('+'),
+      label: keys.join(' '),
+    });
+    const { container } = renderBar({ ...NONE, previous: 4, previousSameSpecies: 6 }, false, {
+      older: hint(['LEFT']),
+      newer: hint(['RIGHT']),
+      olderSpecies: hint(['SHIFT', 'LEFT']),
+      newerSpecies: hint(['SHIFT', 'RIGHT']),
+    });
+
+    const groups = container.querySelectorAll('.dd-nav-group');
+    expect(groups[0].querySelector('kbd')).toBeNull();
+    const caps = groups[1].querySelectorAll('kbd');
+    expect(caps).toHaveLength(1);
+    expect(caps[0]).toHaveTextContent('SHIFT');
+    expect(caps[0]).toHaveAttribute('aria-hidden', 'true');
+    // The cap leads the group, ahead of the first step link
+    expect(groups[1].firstElementChild).toContainElement(caps[0]);
+    expect(stepLinks(container)[2]).not.toBe(groups[1].firstElementChild);
+  });
+
+  it('shows no modifier cap when the species steps have none or shortcuts are off', () => {
+    const plain: ShortcutHint = { aria: 'X', keys: ['X'], display: 'X', label: 'X' };
+    const withKeys = renderBar({ ...NONE, previous: 4 }, false, { olderSpecies: plain });
+    expect(withKeys.container.querySelector('kbd')).toBeNull();
+    cleanup();
+    const off = renderBar({ ...NONE, previous: 4 });
+    expect(off.container.querySelector('kbd')).toBeNull();
+  });
+
   it('leaves the step links without a key hint when none is given', () => {
     const { container } = renderBar({ ...NONE, previous: 4 });
     for (const link of stepLinks(container)) {

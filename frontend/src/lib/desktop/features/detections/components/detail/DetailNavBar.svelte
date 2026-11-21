@@ -13,6 +13,7 @@
   import { ArrowLeft, ChevronLeft, ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
   import { shortcutTitle, type ShortcutHint } from '$lib/utils/keyboard';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { stepBlockedLabel } from './detailFormat';
@@ -66,6 +67,10 @@
   function blockedLabel(label: string, emptyLabel: string): string {
     return stepBlockedLabel(label, emptyLabel, neighbors, failed);
   }
+
+  // The species steps differ from the all-detections steps only by a modifier, which the
+  // arrows alone do not show: its cap leads the group, ahead of the arrows it applies to.
+  let speciesModifierKeys = $derived(shortcutHints?.olderSpecies?.keys.slice(0, -1) ?? []);
 
   const listUrl = buildAppUrl('/ui/detections');
 
@@ -150,6 +155,9 @@
         role="group"
         aria-label={t('detections.detail.nav.speciesGroup', { species: speciesName })}
       >
+        {#if speciesModifierKeys.length > 0}
+          <Kbd keys={speciesModifierKeys} size="sm" className="dd-nav-modifier" />
+        {/if}
         {@render stepLink(
           neighbors?.previousSameSpecies ?? null,
           t('detections.detail.nav.olderSpecies', { species: speciesName }),
@@ -294,6 +302,12 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
+  }
+
+  /* The modifier cap leads the species group; it borrows the label colour and adds no height. */
+  .dd-nav-group :global(.dd-nav-modifier) {
+    margin-inline-start: 0.375rem;
+    color: var(--text-subtle);
   }
 
   .dd-nav-step {

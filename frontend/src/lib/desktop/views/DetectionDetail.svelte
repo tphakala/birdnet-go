@@ -272,6 +272,7 @@
     correct: shortcuts.hint(DETAIL_SHORTCUT_IDS.correct),
     falsePositive: shortcuts.hint(DETAIL_SHORTCUT_IDS.falsePositive),
     wrongSpecies: shortcuts.hint(DETAIL_SHORTCUT_IDS.wrongSpecies),
+    keep: shortcuts.hint(DETAIL_SHORTCUT_IDS.keep),
   });
   let playHint = $derived(shortcuts.hint(DETAIL_SHORTCUT_IDS.playPause));
 

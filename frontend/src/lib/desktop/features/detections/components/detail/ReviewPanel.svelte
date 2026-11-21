@@ -64,11 +64,12 @@
     shortcutHints?: ReviewShortcutHints;
   }
 
-  /** Key hints for the three verdict buttons. */
+  /** Key hints for the three verdict buttons and the Keep switch. */
   interface ReviewShortcutHints {
     correct?: ShortcutHint | null;
     falsePositive?: ShortcutHint | null;
     wrongSpecies?: ShortcutHint | null;
+    keep?: ShortcutHint | null;
   }
 
   let {
@@ -355,8 +356,13 @@
           value={keepValue}
           disabled={busy}
           describedBy={busy ? statusId : undefined}
+          ariaKeyshortcuts={shortcutHints.keep?.aria}
           onUpdate={setLocked}
-        />
+        >
+          {#snippet badges()}
+            {@render keyBadge(shortcutHints.keep)}
+          {/snippet}
+        </ToggleField>
       </div>
       <!-- A fixed slot: the button takes its place whether or not it is shown, so
            the switch beside it does not move when a verdict changes. Hidden, it is
