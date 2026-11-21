@@ -3,6 +3,7 @@ package audiocore
 import (
 	"bytes"
 	"math"
+	"runtime"
 	"slices"
 	"sync"
 	"testing"
@@ -33,7 +34,9 @@ const (
 	// gainUpdateWaitTimeout bounds each wait for a delivered frame.
 	gainUpdateWaitTimeout = 5 * time.Second
 
-	// gainUpdateFlips is how many times the concurrent test flips the gain.
+	// gainUpdateFlips is the minimum number of times the concurrent test flips the
+	// gain; it keeps flipping until the first frame is delivered, or until a flip
+	// fails or the test is aborted.
 	gainUpdateFlips = 1000
 
 	// gainUpdateFinalDB is set after the concurrent flips and differs from every
@@ -278,16 +281,37 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 	}
 
 	stop := make(chan struct{})
+	firstFrame := make(chan struct{})
+	abort := make(chan struct{})
 	flipErr := make(chan error, 1)
 	var wg sync.WaitGroup
+	// A failed require in the main loop ends the test without reaching wg.Wait;
+	// the cleanup stops the goroutines before the router is closed.
+	t.Cleanup(func() {
+		close(abort)
+		wg.Wait()
+	})
 	wg.Go(func() {
-		for i := range gainUpdateFlips {
+		defer close(stop)
+		// Flip the fixed count, then keep flipping until the main loop has seen a
+		// frame, so the flips cannot all finish before the first frame arrives.
+		// Dispatch keeps running alongside the flips either way.
+		for i := 0; ; i++ {
+			if i >= gainUpdateFlips {
+				select {
+				case <-firstFrame:
+					return
+				case <-abort:
+					return
+				default:
+					runtime.Gosched()
+				}
+			}
 			if err := router.UpdateGain(gainUpdateSource, gains[i%len(gains)]); err != nil {
 				flipErr <- err
-				break
+				return
 			}
 		}
-		close(stop)
 	})
 	wg.Go(func() {
 		for {
@@ -305,6 +329,9 @@ func TestRouter_UpdateGainConcurrentWithDispatch(t *testing.T) {
 		select {
 		case f := <-consumer.frames:
 			delivered++
+			if delivered == 1 {
+				close(firstFrame)
+			}
 			matched := false
 			for _, ref := range refs {
 				if bytes.Equal(ref, f.Data) {
