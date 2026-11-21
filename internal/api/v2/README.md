@@ -90,7 +90,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/auth/logout`   | `Logout`        | ✅   | End user session            |
 | GET    | `/auth/status`   | `GetAuthStatus` | ✅   | Check authentication status |
 
-`POST /auth/login` accepts an optional boolean `rememberBrowser`: true gives a 30 day persistent `birdnet_session` cookie, false or omitted a browser-session cookie with an 8 hour idle limit. For social sign-in the same choice is the `remember=1` query parameter of `GET /auth/:provider`.
+`POST /auth/login` accepts an optional boolean `rememberBrowser`: true gives a persistent `birdnet_session` cookie that is re-sent whenever the session is renewed and a server-side expiry of 30 days that slides with use, false or omitted a browser-session cookie with an 8 hour idle limit. For social sign-in the same choice is the `remember=1` query parameter of `GET /auth/:provider`.
 
 ### Analytics (`analytics/analytics.go`)
 

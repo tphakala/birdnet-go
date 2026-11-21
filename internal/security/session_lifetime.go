@@ -134,7 +134,7 @@ func (s *OAuth2Server) syncCredentials() *conf.Settings {
 	s.mutex.Unlock()
 
 	if hadEntries && !adopting {
-		GetLogger().Info("Basic-auth credentials changed, all sign-in sessions ended")
+		GetLogger().Info("Basic-auth credentials or session secret changed, all sign-in sessions ended")
 	}
 	s.persistTokensIfEnabled()
 	return settings
