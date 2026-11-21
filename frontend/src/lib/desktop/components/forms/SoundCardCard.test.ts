@@ -248,7 +248,7 @@ describe('SoundCardCard editing', () => {
   it.each([
     ['required', 'settings.audio.soundCards.errors.deviceRequired'],
     ['duplicate', 'settings.audio.soundCards.errors.duplicateDevice'],
-  ] as const)('says at the device field that the device is %s', (problem, message) => {
+  ] as const)('shows the %s device problem text in the card', (problem, message) => {
     renderCard({ problem: { device: problem } });
 
     expect(screen.getByRole('alert')).toHaveTextContent(message);
