@@ -106,6 +106,36 @@ func (c *Handler) tryAcquireProcessingSlot() (release func(), ok bool) {
 	}
 }
 
+// tryAcquireAudibleBatsSlot reserves a processing slot for AudibleBatsByID.
+// Unauthenticated guests also acquire guestAudibleBatsSemaphore first so
+// concurrent guest cache misses cannot occupy every processingSemaphore slot and
+// starve authenticated processing requests.
+func (c *Handler) tryAcquireAudibleBatsSlot(ctx echo.Context) (release func(), ok bool) {
+	var releaseGuest func()
+	if !c.clientAuthenticated(ctx) && c.guestAudibleBatsSemaphore != nil {
+		select {
+		case c.guestAudibleBatsSemaphore <- struct{}{}:
+			releaseGuest = func() { <-c.guestAudibleBatsSemaphore }
+		default:
+			return nil, false
+		}
+	}
+
+	releaseShared, ok := c.tryAcquireProcessingSlot()
+	if !ok {
+		if releaseGuest != nil {
+			releaseGuest()
+		}
+		return nil, false
+	}
+	return func() {
+		releaseShared()
+		if releaseGuest != nil {
+			releaseGuest()
+		}
+	}, true
+}
+
 // processedOutput is the output of a processing job (a WAV or a rendered PNG) and
 // the time it was stored.
 type processedOutput struct {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -527,4 +528,63 @@ func TestAudibleBatsByID_GuestClampsCustomFilters(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(tempDir, processingCacheDirName))
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "clamped filters and leading-zero ID aliases must share a single processing cache entry")
+}
+
+func TestAudibleBatsByID_GuestDoesNotStarveAuthenticatedProcessing(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+	// controller.isClientAuthenticated stays nil for guest requests on audible-bats.
+
+	// Long enough that guest 1 stays inside AudibleBatsByID while concurrent checks run.
+	const inFlightSeconds = 10
+	writeToneWAV(t, fixturePath(tempDir, "bat1.wav"), batTestRate, inFlightSeconds, fixtureBatToneHz)
+	writeToneWAV(t, fixturePath(tempDir, "bat2.wav"), batTestRate, batTestSeconds, fixtureBatToneHz)
+	writeToneWAV(t, fixturePath(tempDir, "bird.wav"), processTestRate, 0.2, fixtureToneHz)
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.On("GetNoteModelType", "41").Return("bat", nil)
+	mockDS.On("GetNoteClipPath", "41").Return("bat1.wav", nil)
+	mockDS.On("GetNoteModelType", "42").Return("bat", nil)
+	mockDS.On("GetNoteClipPath", "42").Return("bat2.wav", nil)
+	mockDS.On("GetNoteClipPath", "43").Return("bird.wav", nil)
+	controller.DS = mockDS
+
+	reqCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req1 := httptest.NewRequest(http.MethodPost, "/api/v2/audio/41/audible-bats",
+		strings.NewReader(`{"expansion": 10, "denoise": "light-medium"}`)).WithContext(reqCtx)
+	req1.Header.Set("Content-Type", "application/json")
+	rec1 := httptest.NewRecorder()
+
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		e.ServeHTTP(rec1, req1)
+	})
+
+	require.Eventually(t, func() bool {
+		return len(controller.guestAudibleBatsSemaphore) == 1 && len(controller.processingSemaphore) == 1
+	}, 5*time.Second, time.Millisecond, "guest 1 acquired both guest and shared slots")
+
+	// A second concurrent guest miss on a different note ID must be rejected
+	// before touching the remaining shared processing slot.
+	guest2 := postJSON(e, "/api/v2/audio/42/audible-bats", `{"expansion": 10}`)
+	assert.Equal(t, http.StatusServiceUnavailable, guest2.Code)
+
+	// Meanwhile, an authenticated processing operation can still acquire the
+	// remaining shared slot without being starved by guest traffic.
+	procRec := postJSON(e, "/api/v2/audio/43/process", `{"normalize": true}`)
+	assert.Equal(t, http.StatusOK, procRec.Code, procRec.Body.String())
+
+	cancel()
+	wg.Wait()
+	assert.Empty(t, controller.guestAudibleBatsSemaphore)
+	assert.Empty(t, controller.processingSemaphore)
+
+	// If all shared slots are already held by authenticated jobs, a guest miss
+	// must return 503 and release its guest slot immediately.
+	for range cap(controller.processingSemaphore) {
+		controller.processingSemaphore <- struct{}{}
+	}
+	busyGuest := postJSON(e, "/api/v2/audio/42/audible-bats", `{"expansion": 10}`)
+	assert.Equal(t, http.StatusServiceUnavailable, busyGuest.Code)
+	assert.Empty(t, controller.guestAudibleBatsSemaphore, "failed shared acquisition must release the guest slot")
 }

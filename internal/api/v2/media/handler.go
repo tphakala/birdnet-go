@@ -35,6 +35,11 @@ const (
 	// processingSemaphoreSize bounds the number of concurrent audio-processing
 	// (normalize/denoise/gain) operations to limit CPU/memory pressure.
 	processingSemaphoreSize = 2
+
+	// guestAudibleBatsSemaphoreSize bounds concurrent unauthenticated audible-bats
+	// jobs strictly below processingSemaphoreSize so guest cache misses cannot
+	// exhaust all processing slots and starve authenticated processing requests.
+	guestAudibleBatsSemaphoreSize = 1
 )
 
 // Handler serves the api/v2 media domain endpoints. It embeds the shared
@@ -47,8 +52,9 @@ type Handler struct {
 	// processingCache caches processed (normalize/denoise/gain) audio previews
 	// under the media export root; processingSemaphore bounds concurrent
 	// processing work. Both are owned by this handler and built in New.
-	processingCache     *processingCache
-	processingSemaphore chan struct{}
+	processingCache           *processingCache
+	processingSemaphore       chan struct{}
+	guestAudibleBatsSemaphore chan struct{}
 
 	// processingFlight deduplicates processing jobs by cache key: the denoised
 	// audio GET and POST /process for the same key share one job, so a seek during
@@ -108,6 +114,7 @@ func New(core *apicore.Core, isClientAuthenticated func(echo.Context) bool) *Han
 	cacheDir := filepath.Join(core.SFS.BaseDir(), processingCacheDirName)
 	h.processingCache = newProcessingCache(cacheDir, processingCacheMaxFiles, processingCacheMaxBytes)
 	h.processingSemaphore = make(chan struct{}, processingSemaphoreSize)
+	h.guestAudibleBatsSemaphore = make(chan struct{}, guestAudibleBatsSemaphoreSize)
 
 	// Start the cache cleanup goroutine (tracked by the core wait group, stopped
 	// when the core context is cancelled by the facade's Shutdown).

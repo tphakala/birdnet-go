@@ -1758,7 +1758,7 @@ func (c *Handler) AudibleBatsByID(ctx echo.Context) error {
 	}
 
 	// Limit concurrent processing (non-blocking, returns 503 if full).
-	release, ok := c.tryAcquireProcessingSlot()
+	release, ok := c.tryAcquireAudibleBatsSlot(ctx)
 	if !ok {
 		return c.HandleError(ctx, errProcessingBusy,
 			"Server busy, try again later", http.StatusServiceUnavailable)
