@@ -155,6 +155,12 @@
       "confirmAction": "Confirmar ação",
       "confirmMessage": "Tem certeza de que deseja executar esta ação?"
     },
+    "unsavedChanges": {
+      "title": "Sair desta página?",
+      "message": "Você tem alterações não salvas. Se sair, elas serão perdidas.",
+      "leave": "Sair da página",
+      "stay": "Ficar"
+    },
     "review": {
       "modalTitle": "Revisar detecção: {species}",
       "status": {

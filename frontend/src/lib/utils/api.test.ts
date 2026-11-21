@@ -20,6 +20,7 @@ vi.mock('$lib/stores/appState.svelte', () => ({
 }));
 
 import { getCsrfToken, fetchWithCSRF, api, resetRedirectGuard, ApiError } from './api';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 describe('API utilities', () => {
   beforeEach(() => {
@@ -488,6 +489,29 @@ describe('API utilities', () => {
 
       expect(result).toBe('pending');
       expect(window.location.href).toBe('/ui/');
+    });
+
+    it('does not let the unsaved-changes prompt hold the redirect to login', async () => {
+      // A cancelled unload would leave the redirect flag set and hang every later request.
+      const unregister = unsavedChanges.register({ isDirty: () => true });
+      try {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: new Headers(),
+        });
+        void fetchWithCSRF('/api/test');
+        await vi.waitFor(() => expect(window.location.href).toBe('/ui/'));
+
+        const unload = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(unload);
+
+        expect(unload.defaultPrevented).toBe(false);
+      } finally {
+        unregister();
+        unsavedChanges.resetForTesting();
+      }
     });
 
     it('does not call onHeaders for a 401 that redirects to login', async () => {

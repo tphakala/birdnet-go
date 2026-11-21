@@ -155,6 +155,12 @@
       "confirmAction": "Potwierdź Akcję",
       "confirmMessage": "Czy na pewno chcesz wykonać tę akcję?"
     },
+    "unsavedChanges": {
+      "title": "Opuścić tę stronę?",
+      "message": "Masz niezapisane zmiany. Jeśli opuścisz stronę, zostaną utracone.",
+      "leave": "Opuść stronę",
+      "stay": "Zostań"
+    },
     "review": {
       "modalTitle": "Przejrzyj Detekcję: {species}",
       "status": {

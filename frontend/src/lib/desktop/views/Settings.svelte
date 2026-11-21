@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { settingsStore, settingsActions } from '$lib/stores/settings';
+  import { get } from 'svelte/store';
+  import { settingsStore, settingsActions, hasUnsavedChanges } from '$lib/stores/settings';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
+  import { isSettingsPath } from '$lib/utils/settingsAlias';
   import { safeGet } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -49,9 +52,23 @@
   // Get store values
   let store = $derived($settingsStore);
 
+  // Moving between settings sub-pages keeps this shell and the shared store, so only leaving
+  // Settings asks.
+  useUnsavedChangesGuard(() => get(hasUnsavedChanges), {
+    allows: to => isSettingsPath(to.path),
+  });
+
   // Load settings data on mount
   onMount(() => {
     settingsActions.loadSettings();
+
+    return () => {
+      // The edits live in a store other pages read (dashboard cards) and the next visit reloads
+      // over them, so leaving discards them. A save in flight would otherwise send the reset data.
+      if (get(hasUnsavedChanges) && !get(settingsStore).isSaving) {
+        settingsActions.resetAllSettings();
+      }
+    };
   });
 </script>
 

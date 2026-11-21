@@ -155,6 +155,12 @@
       "confirmAction": "Bekreft handling",
       "confirmMessage": "Er du sikker på at du vil utføre denne handlingen?"
     },
+    "unsavedChanges": {
+      "title": "Forlate denne siden?",
+      "message": "Du har ulagrede endringer. Hvis du forlater siden, går de tapt.",
+      "leave": "Forlat siden",
+      "stay": "Bli"
+    },
     "review": {
       "modalTitle": "Gjennomgå registrering: {species}",
       "status": {

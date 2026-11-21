@@ -7,6 +7,7 @@
   @component
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
@@ -18,6 +19,8 @@
   import EditorSpeciesInput from './editor/EditorSpeciesInput.svelte';
   import { toLocalizedPredictions, matchTypedToCanonical } from '$lib/utils/speciesPredictions';
   import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
+  import { samePathAndQuery } from '$lib/stores/unsavedChanges.svelte';
 
   interface SavePayload {
     species: string;
@@ -82,6 +85,31 @@
     Array.isArray(existingAction?.parameters) ? existingAction.parameters.join(',') : ''
   );
   let actionExecuteDefaults = $state(existingAction?.executeDefaults !== false);
+
+  // The saved fields as they were when the editor opened (the parent re-creates the editor per
+  // species with {#key}). showActions only expands a section and is not saved, so it is left out.
+  const opening = untrack(() => ({
+    canonicalSpecies,
+    speciesName: speciesName.trim(),
+    threshold,
+    interval,
+    actionCommand,
+    actionParameters,
+    actionExecuteDefaults,
+  }));
+
+  // Typed text counts only while it differs from the opening label, so erasing back is clean.
+  const isDirty = () =>
+    canonicalSpecies !== opening.canonicalSpecies ||
+    (speciesEdited && speciesName.trim() !== opening.speciesName) ||
+    threshold !== opening.threshold ||
+    interval !== opening.interval ||
+    actionCommand !== opening.actionCommand ||
+    actionParameters !== opening.actionParameters ||
+    actionExecuteDefaults !== opening.actionExecuteDefaults;
+
+  // The editor lives in a tab, so a tab switch (query change) unmounts it as well.
+  useUnsavedChangesGuard(isDirty, { allows: samePathAndQuery });
 
   // Predictions paired with localized labels for save-time resolution.
   let localizedPredictions = $derived(toLocalizedPredictions(predictions ?? [], localizeLabel));

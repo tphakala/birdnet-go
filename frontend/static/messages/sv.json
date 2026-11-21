@@ -155,6 +155,12 @@
       "confirmAction": "Bekräfta åtgärd",
       "confirmMessage": "Är du säker på att du vill utföra denna åtgärd?"
     },
+    "unsavedChanges": {
+      "title": "Lämna den här sidan?",
+      "message": "Du har osparade ändringar. Om du lämnar sidan går de förlorade.",
+      "leave": "Lämna sidan",
+      "stay": "Stanna"
+    },
     "review": {
       "modalTitle": "Granska detektion: {species}",
       "status": {

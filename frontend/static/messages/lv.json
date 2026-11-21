@@ -155,6 +155,12 @@
       "confirmAction": "Apstiprināt darbību",
       "confirmMessage": "Vai tiešām vēlaties veikt šo darbību?"
     },
+    "unsavedChanges": {
+      "title": "Vai pamest šo lapu?",
+      "message": "Jums ir nesaglabātas izmaiņas. Ja pametīsiet lapu, tās tiks zaudētas.",
+      "leave": "Pamest lapu",
+      "stay": "Palikt"
+    },
     "review": {
       "modalTitle": "Pārskatīt noteikšanu: {species}",
       "status": {

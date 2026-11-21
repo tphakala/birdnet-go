@@ -24,7 +24,8 @@
   import { api } from '$lib/utils/api';
   import { getLogger } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
-  import type { Snippet } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
 
   const logger = getLogger('dashboard');
 
@@ -76,6 +77,14 @@
     })
   );
 
+  // The layout as edit mode opened with it; null outside an edit session.
+  let initialLayout = $state<string | null>(null);
+
+  // Leaving the dashboard with an edited layout loses it (edit mode rebuilds from the saved one).
+  useUnsavedChangesGuard(
+    () => editMode && initialLayout !== null && JSON.stringify(buildCleanLayout()) !== initialLayout
+  );
+
   // Initialize editElements when editMode becomes true
   $effect(() => {
     if (editMode && editElements.length === 0) {
@@ -83,12 +92,15 @@
         ...(JSON.parse(JSON.stringify(el)) as DashboardElement),
         id: el.id ?? `${el.type}-${i}`,
       }));
+      // untrack: reading every element here would re-run this effect on each edit
+      initialLayout = untrack(() => JSON.stringify(buildCleanLayout()));
     }
   });
 
   // Cancel: discard changes
   function cancelEdit() {
     editElements = [];
+    initialLayout = null;
     addDropdownOpen = false;
     onEditModeChange(false);
   }
@@ -134,6 +146,7 @@
 
       onLayoutChange(newLayout);
       editElements = [];
+      initialLayout = null;
       onEditModeChange(false);
     } catch (error) {
       logger.error('Failed to save dashboard layout:', error);

@@ -9,6 +9,8 @@ import DesktopSidebar from './DesktopSidebar.svelte';
 import { sidebar } from '$lib/stores/sidebar';
 import { analyticsControls } from '$lib/desktop/features/analytics/registry/analyticsControls.svelte';
 import { SETTINGS_BASE_PATH, SETTINGS_DEFAULT_PATH } from '$lib/utils/settingsAlias';
+import { auth as authStore } from '$lib/stores/auth';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 // Translation mock: return the key so aria-labels are stable and queryable.
 vi.mock('$lib/i18n', () => ({
@@ -371,5 +373,72 @@ describe('DesktopSidebar - bare settings path', () => {
   ])('marks the General item current for %s', (_label, route) => {
     const { container } = sidebarTest.render({ currentRoute: route });
     expect(currentItems(container)).toEqual([GENERAL_LABEL]);
+  });
+});
+
+describe('DesktopSidebar - login and logout with an unsaved draft', () => {
+  const sidebarTest = createComponentTestFactory(DesktopSidebar);
+  let unregister: (() => void) | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.defineProperty(window, 'getComputedStyle', {
+      value: vi.fn(() => ({
+        getPropertyValue: vi.fn(() => ''),
+        visibility: 'visible',
+        display: 'block',
+      })),
+      writable: true,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'focus', { value: vi.fn(), writable: true });
+    unregister = unsavedChanges.register({ isDirty: () => true });
+  });
+
+  afterEach(() => {
+    unregister?.();
+    unsavedChanges.resetForTesting();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    { action: 'logout', loggedIn: true, label: 'auth.logout', answer: 'stay', proceeds: false },
+    { action: 'logout', loggedIn: true, label: 'auth.logout', answer: 'leave', proceeds: true },
+    {
+      action: 'login',
+      loggedIn: false,
+      label: 'auth.openLoginModal',
+      answer: 'stay',
+      proceeds: false,
+    },
+    {
+      action: 'login',
+      loggedIn: false,
+      label: 'auth.openLoginModal',
+      answer: 'leave',
+      proceeds: true,
+    },
+  ])('$action then $answer proceeds: $proceeds', async ({ loggedIn, label, answer, proceeds }) => {
+    const logout = vi.spyOn(authStore, 'logout').mockResolvedValue();
+    const { container } = sidebarTest.render({
+      securityEnabled: true,
+      accessAllowed: loggedIn,
+      authConfig: { basicEnabled: true, enabledProviders: [] },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: label }));
+    await waitFor(() => expect(unsavedChanges.prompting).toBe(true));
+    expect(logout).not.toHaveBeenCalled();
+    expect(container.querySelector('input[name="redirect"]')).toBeNull();
+
+    if (answer === 'leave') unsavedChanges.leave();
+    else unsavedChanges.stay();
+
+    await waitFor(() => expect(unsavedChanges.prompting).toBe(false));
+    await Promise.resolve();
+    // Logout calls the auth store; login opens the modal, which renders its hidden redirect field.
+    const proceeded = loggedIn
+      ? logout.mock.calls.length > 0
+      : container.querySelector('input[name="redirect"]') !== null;
+    expect(proceeded).toBe(proceeds);
   });
 });

@@ -15,6 +15,7 @@
   import { MAX_LOGIN_REDIRECT_LENGTH } from '$lib/utils/loginRedirect';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
+  import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
   import { X, ShieldCheck, KeyRound } from '@lucide/svelte';
   import { getEnabledProviders, getProvider } from '$lib/auth';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
@@ -215,6 +216,8 @@
         // the submit button, so if the navigation never commits we avoid both a UI
         // deadlock (controls stuck disabled) and a double-submit during navigation.
         onClose();
+        // The sign-in must complete; the sidebar asked about drafts before opening this modal.
+        unsavedChanges.allowUnload();
         window.location.href = response.redirectUrl;
         return; // Exit early - OAuth callback will handle the rest
       }
@@ -226,6 +229,7 @@
 
       // Give a moment for modal to close, then refresh
       setTimeout(() => {
+        unsavedChanges.allowUnload();
         window.location.reload();
       }, 500);
     } catch (err) {
@@ -285,6 +289,7 @@
       // the server must not see it.
       providerUrl.searchParams.delete(REMEMBER_QUERY_PARAM);
     }
+    unsavedChanges.allowUnload();
     window.location.href = buildAppUrl(providerUrl.pathname + providerUrl.search);
   }
 

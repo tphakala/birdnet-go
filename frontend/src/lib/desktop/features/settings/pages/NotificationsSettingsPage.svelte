@@ -94,6 +94,7 @@
   import { schemaObjectTypeLabel } from '$lib/utils/alertSchema';
   import { translateField } from '$lib/utils/notifications';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
 
@@ -266,6 +267,27 @@
     originalPushSettings !== null &&
       JSON.stringify(pushSettings) !== JSON.stringify(originalPushSettings)
   );
+
+  // What the provider form holds that the user can change. The ntfy connection probe fields
+  // are left out: Test Connection and the delayed auto-check write them without any user edit.
+  function providerFormSnapshot(): string {
+    const editable: Partial<ServiceFormData> = { ...serviceFormData };
+    delete editable.ntfyCheckHost;
+    delete editable.ntfyCheckStatus;
+    return JSON.stringify({ selectedService, providerFormData, editable });
+  }
+
+  // Set when the add or edit form opens; the form is dirty once it differs.
+  let providerFormInitial = $state<string | null>(null);
+  let providerFormDirty = $derived(
+    showProviderForm &&
+      providerFormInitial !== null &&
+      providerFormInitial !== providerFormSnapshot()
+  );
+
+  // Template, push and provider state are page level, so tab switches keep them: only a route
+  // change asks.
+  useUnsavedChangesGuard(() => hasTemplateChanges || hasPushChanges || providerFormDirty);
 
   const templateFieldKeys = [
     'commonName',
@@ -834,6 +856,7 @@
       enabled: true,
       filterTypes: ['detection', 'warning'],
     };
+    providerFormInitial = providerFormSnapshot();
     showProviderForm = true;
   }
 
@@ -868,11 +891,13 @@
       enabled: provider.enabled,
       filterTypes: provider.filter?.types || ['detection'],
     };
+    providerFormInitial = providerFormSnapshot();
     showProviderForm = true;
   }
 
   function closeProviderForm() {
     showProviderForm = false;
+    providerFormInitial = null;
     editingProviderIndex = null;
   }
 

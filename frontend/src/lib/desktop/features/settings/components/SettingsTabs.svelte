@@ -108,18 +108,24 @@
   });
 
   // Only explicit selection writes history; restoring a URL must not push entries.
-  function selectTab(tabId: string) {
+  // Compares against the resolved tab, so the already-selected tab on a URL without the
+  // parameter pushes nothing (and cannot prompt for a change that is not one). Resolves true
+  // once the tab is selected, false when a guard held the move and the user chose to stay.
+  function selectTab(tabId: string): Promise<boolean> {
+    if (selectedTab === tabId) return Promise.resolve(true);
     const url = new URL(window.location.href);
-    if (url.searchParams.get(queryParam) === tabId) return;
     url.searchParams.set(queryParam, tabId);
-    navigation.navigate(url.pathname + url.search + url.hash);
-    onTabChange?.(tabId);
+    const applied = navigation.navigate(url.pathname + url.search + url.hash);
+    void applied.then(selected => {
+      if (selected) onTabChange?.(tabId);
+    });
+    return applied;
   }
 
   // Opening a tab from the unsaved-changes note removes the focused link with the
   // note, so focus moves to the opened tab instead of falling back to the page.
   async function openTabFromNote(tabId: string) {
-    selectTab(tabId);
+    if (!(await selectTab(tabId))) return;
     await tick();
     document.getElementById(`settings-tab-${tabId}`)?.focus();
   }
@@ -170,10 +176,17 @@
     // Focus and select the new tab
     const newTab = getTabAt(newIndex);
     if (newTab) {
-      selectTab(newTab.id);
-      // Focus the tab button
-      const tabButton = document.getElementById(`settings-tab-${newTab.id}`);
-      tabButton?.focus();
+      const focusNewTab = () => document.getElementById(`settings-tab-${newTab.id}`)?.focus();
+      const selected = selectTab(newTab.id);
+      if (selectedTab === newTab.id) {
+        // The move applied at once (nothing held it): focus now.
+        focusNewTab();
+      } else {
+        // A guard asked first: focus the new tab only after Leave. On Stay focus stays put.
+        void selected.then(applied => {
+          if (applied) focusNewTab();
+        });
+      }
     }
   }
 </script>

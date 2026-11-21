@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import ActivityLog from './ActivityLog.svelte';
 import { getLocale, t } from '$lib/i18n';
 import { toastActions } from '$lib/stores/toast';
+import { unsavedChanges, type NavigationTarget } from '$lib/stores/unsavedChanges.svelte';
 import type { DetectionDetailData } from './detailTypes';
 
 const base: DetectionDetailData = {
@@ -314,6 +315,7 @@ describe('ActivityLog names and icons', () => {
 describe('ActivityLog note form', () => {
   afterEach(() => {
     cleanup();
+    unsavedChanges.resetForTesting();
     vi.unstubAllGlobals();
     vi.mocked(toastActions.error).mockClear();
   });
@@ -374,6 +376,37 @@ describe('ActivityLog note form', () => {
       expect(vi.mocked(toastActions.error)).toHaveBeenCalledWith(
         'common.review.errors.commentFailed'
       );
+    });
+  });
+
+  describe('unsaved-changes guard', () => {
+    const FROM: NavigationTarget = { path: ['', 'ui', 'detections', '7'].join('/'), search: '' };
+    const TO: NavigationTarget = { path: ['', 'ui', 'detections', '6'].join('/'), search: '' };
+
+    it('blocks a path change while a note is typed, and not when the box is empty', async () => {
+      renderForm();
+      expect(unsavedChanges.blocks(TO, FROM)).toBe(false);
+
+      await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a note' } });
+
+      expect(unsavedChanges.blocks(TO, FROM)).toBe(true);
+    });
+
+    it('stops blocking once the note is saved', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+          )
+        )
+      );
+      renderForm();
+      await fireEvent.input(screen.getByRole('textbox'), { target: { value: 'a note' } });
+
+      await fireEvent.click(saveButton());
+
+      await waitFor(() => expect(unsavedChanges.blocks(TO, FROM)).toBe(false));
     });
   });
 });

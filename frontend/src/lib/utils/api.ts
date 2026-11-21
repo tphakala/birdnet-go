@@ -20,6 +20,7 @@ import {
 import { buildAppUrl, isRelativePath } from '$lib/utils/urlHelpers';
 import { t } from '$lib/i18n';
 import { markOnline } from '$lib/stores/connectionState.svelte';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 const logger = loggers.api;
 
@@ -138,6 +139,9 @@ function redirectToLogin(): Promise<never> {
     // /api/v2/app/config on bootstrap and either renders the dashboard
     // (when accessAllowed) or the full-screen login form (when PrivateMode
     // is enabled and the user is unauthenticated).
+    // The session is gone: a native leave prompt that was cancelled would leave the redirect
+    // flag set and hang every later request, so the prompt stands down.
+    unsavedChanges.allowUnload();
     window.location.href = buildAppUrl('/ui/');
   }
   // Return a never-resolving promise so callers don't continue

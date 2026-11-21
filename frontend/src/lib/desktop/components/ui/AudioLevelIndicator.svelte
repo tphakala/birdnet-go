@@ -617,21 +617,20 @@
 
       document.addEventListener('visibilitychange', handleVisibilityChange);
 
-      // Handle page unload
-      const handleUnload = () => {
+      // Handle the page going away. pagehide, not beforeunload: the leave prompt can be
+      // cancelled, and playback must keep its heartbeat then.
+      const handlePageHide = () => {
         if (isPlaying && playingSource) {
           stopHeartbeat();
         }
       };
 
-      window.addEventListener('beforeunload', handleUnload);
-      window.addEventListener('unload', handleUnload);
+      window.addEventListener('pagehide', handlePageHide);
 
       return () => {
         document.removeEventListener('click', handleClickOutside);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('beforeunload', handleUnload);
-        window.removeEventListener('unload', handleUnload);
+        window.removeEventListener('pagehide', handlePageHide);
 
         cleanupEventSource();
         stopHeartbeat();

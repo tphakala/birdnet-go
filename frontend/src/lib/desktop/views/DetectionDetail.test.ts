@@ -1757,7 +1757,7 @@ describe('DetectionDetail keyboard shortcuts', () => {
   let navigate: MockInstance<(url: string) => void>;
 
   beforeEach(() => {
-    navigate = vi.spyOn(navigation, 'navigate').mockImplementation(() => {});
+    navigate = vi.spyOn(navigation, 'navigate').mockResolvedValue(true);
     window.addEventListener('keydown', shortcuts.handleKeydown);
   });
 

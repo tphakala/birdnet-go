@@ -155,6 +155,12 @@
       "confirmAction": "Potvrdiť akciu",
       "confirmMessage": "Naozaj chcete vykonať túto akciu?"
     },
+    "unsavedChanges": {
+      "title": "Opustiť túto stránku?",
+      "message": "Máte neuložené zmeny. Ak stránku opustíte, stratia sa.",
+      "leave": "Opustiť stránku",
+      "stay": "Zostať"
+    },
     "review": {
       "modalTitle": "Kontrola detekcie: {species}",
       "status": {

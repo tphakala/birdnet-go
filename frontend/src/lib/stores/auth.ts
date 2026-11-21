@@ -34,6 +34,7 @@ import { writable } from 'svelte/store';
 import { loggers } from '$lib/utils/logger';
 import { getCsrfToken } from '$lib/utils/api';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 const logger = loggers.auth;
 
@@ -160,6 +161,8 @@ function createAuthStore() {
             }
           }
 
+          // The logout POST succeeded, so the page must leave; the sidebar asked about drafts first.
+          unsavedChanges.allowUnload();
           if (providerLogoutUrl) {
             window.location.href = providerLogoutUrl;
           } else {

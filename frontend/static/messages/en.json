@@ -155,6 +155,12 @@
       "confirmAction": "Confirm Action",
       "confirmMessage": "Are you sure you want to perform this action?"
     },
+    "unsavedChanges": {
+      "title": "Leave this page?",
+      "message": "You have unsaved changes. If you leave, they will be lost.",
+      "leave": "Leave page",
+      "stay": "Stay"
+    },
     "review": {
       "modalTitle": "Review Detection: {species}",
       "status": {
