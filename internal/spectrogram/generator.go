@@ -63,7 +63,8 @@ func (o *generateOptions) settingsOr(current func() *conf.Settings) *conf.Settin
 // ErrSourceChanged marks a render whose audio file differs from the state the
 // caller supplied with WithSourceState: the clip was still being written or was
 // replaced, so the image would not match the file as it stands. Nothing is
-// published; a later request decides from the current bytes.
+// published; a later request decides from the current bytes. StatSource also
+// returns it, wrapped, for a file whose identity could not be read.
 var ErrSourceChanged = errors.NewStd("audio file changed during spectrogram generation")
 
 // SourceState is an audio file as the caller's readiness check judged it ready
@@ -78,12 +79,12 @@ type SourceState struct {
 	decodedBytes int64
 }
 
-// StatSource stats the audio file at path and reads its identity in the same
-// step, so identity, size and modification time describe one file. On Windows
-// os.Stat defers the file id to the first os.SameFile call, which reads it from
-// the path at that moment (loadFileId in Go's os/types_windows.go), by which time
-// another file may have been renamed over it. A file whose identity cannot be
-// read is reported as ErrSourceChanged.
+// StatSource stats the audio file at path and reads its identity straight away.
+// On Windows os.Stat of a regular file defers the file id to the first
+// os.SameFile call, which reads it from the path at that moment (loadFileId in
+// Go's os/types_windows.go), so a state built from a plain os.Stat can take the
+// id of a file renamed over the path later. A file whose identity cannot be read
+// is returned as an error wrapping ErrSourceChanged.
 func StatSource(path string) (os.FileInfo, error) {
 	info, err := os.Stat(path)
 	if err != nil {
