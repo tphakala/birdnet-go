@@ -107,6 +107,8 @@ func TestORTInstallGuidesMatchPin(t *testing.T) {
 			"%s: every PowerShell check needs its throw", guide)
 		shellChecks, psChecks := 0, 0
 		for line := range strings.SplitSeq(string(data), "\n") {
+			// A Windows checkout can carry CRLF line endings.
+			line = strings.TrimSuffix(line, "\r")
 			switch {
 			case strings.Contains(line, " -c - "), strings.HasSuffix(line, " -c -"):
 				shellChecks++
