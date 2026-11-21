@@ -28,6 +28,8 @@ on:
       - 'scripts/onnxruntime-pins.sha256'
       - '.github/workflows/windows-test.yml'
       - '.github/actions/**'
+      # Line endings on the Windows checkout decide the result of some tests.
+      - '.gitattributes'
 
 permissions:
   contents: read
