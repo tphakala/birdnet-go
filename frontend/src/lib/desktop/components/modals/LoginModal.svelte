@@ -71,6 +71,9 @@
   }: Props = $props();
 
   function cancel() {
+    // A dismissed modal could not stop the pending request: on success it would still reload
+    // the page, past any leave prompt and over edits made after the dismissal. Wait for the answer.
+    if (loadingState === 'password') return;
     (onCancel ?? onClose)();
   }
 

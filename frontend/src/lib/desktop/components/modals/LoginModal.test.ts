@@ -185,6 +185,63 @@ describe('LoginModal', () => {
     });
   });
 
+  describe('dismissing while a password sign-in is pending', () => {
+    // A dismissed modal whose request later succeeds would still reload the page past the leave
+    // prompt, so the modal stays until the attempt has an answer.
+    function startPendingSignIn() {
+      const onClose = vi.fn();
+      const onCancel = vi.fn();
+      vi.mocked(api.post).mockReturnValueOnce(new Promise(() => {}));
+      loginModalTest.render({
+        isOpen: true,
+        onClose,
+        onCancel,
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+      return { onClose, onCancel };
+    }
+
+    async function submitPassword() {
+      await fireEvent.input(screen.getByLabelText('auth.password'), { target: { value: 'pw' } });
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+      await waitFor(() => expect(api.post).toHaveBeenCalled());
+    }
+
+    it('ignores the close button', async () => {
+      const { onClose, onCancel } = startPendingSignIn();
+      await submitPassword();
+
+      await fireEvent.click(screen.getByRole('button', { name: /close login dialog/i }));
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('ignores Escape', async () => {
+      const { onClose, onCancel } = startPendingSignIn();
+      await submitPassword();
+
+      await fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+
+    it('still closes when no sign-in is pending', async () => {
+      const onCancel = vi.fn();
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        onCancel,
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      await fireEvent.click(screen.getByRole('button', { name: /close login dialog/i }));
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('Redirect URL Validation', () => {
     it('should accept valid relative URLs', () => {
       loginModalTest.render({
