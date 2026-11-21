@@ -74,6 +74,50 @@ func TestStopPreRenderer_ClosesSecureFS(t *testing.T) {
 	assert.NotPanics(t, p.stopPreRenderer, "a second stop must be a no-op")
 }
 
+// rootProbingPreRenderer is a PreRendererSubmit whose Stop records whether the
+// SecureFS root is still usable at that moment.
+type rootProbingPreRenderer struct {
+	sfs       *securefs.SecureFS
+	stopCalls int
+	// rootProbeErr is the error from probing the root inside Stop.
+	rootProbeErr error
+}
+
+// Submit implements PreRendererSubmit.
+func (r *rootProbingPreRenderer) Submit(job interface {
+	GetPCMData() []byte
+	GetSampleRate() int
+	GetClipPath() string
+	GetNoteID() uint
+	GetTimestamp() time.Time
+	GetModelType() string
+}) error {
+	return nil
+}
+
+// Stop implements PreRendererSubmit.
+func (r *rootProbingPreRenderer) Stop() {
+	r.stopCalls++
+	_, r.rootProbeErr = r.sfs.OpenRegularRel(preRenderProbeName)
+}
+
+// TestStopPreRenderer_StopsBeforeClosingRoot pins that the pre-renderer is
+// stopped while its root is still open, so renders in flight lose the root only
+// after the workers were told to stop.
+func TestStopPreRenderer_StopsBeforeClosingRoot(t *testing.T) {
+	sfs, err := securefs.New(t.TempDir())
+	require.NoError(t, err)
+	probe := &rootProbingPreRenderer{sfs: sfs}
+	p := &Processor{Settings: newPreRenderInitSettings(t), preRenderer: probe}
+	p.preRendererSFS.Store(sfs)
+
+	p.stopPreRenderer()
+
+	require.Equal(t, 1, probe.stopCalls, "Stop must run once")
+	require.NotErrorIs(t, probe.rootProbeErr, os.ErrClosed, "the root must still be open while Stop runs")
+	requireSecureFSClosed(t, sfs)
+}
+
 // TestShutdownWithContext_ClosesPreRendererSecureFS pins that a processor
 // shutdown releases the export directory root held for the pre-renderer.
 func TestShutdownWithContext_ClosesPreRendererSecureFS(t *testing.T) {
