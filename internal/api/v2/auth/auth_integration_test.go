@@ -139,7 +139,7 @@ func isSignedIn(e *echo.Echo, h *Handler, cookie *http.Cookie) bool {
 // including the "Remember this browser" choice, logout and replay of the cookie.
 func TestV2AuthFlow_CompleteLogin(t *testing.T) {
 	const loginFmt = `{"username": "birdnet-client", "password": "testpassword123", "redirectUrl": "/ui/dashboard"%s}`
-	rememberedMaxAge := int(security.RememberedSessionDuration.Seconds())
+	rememberedMaxAge := int(security.RememberedCookieMaxAge.Seconds())
 
 	tests := []struct {
 		name       string

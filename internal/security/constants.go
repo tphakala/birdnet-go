@@ -39,17 +39,23 @@ const (
 	// "Remember this browser" ticked lasts after its last renewal.
 	RememberedSessionDuration = 30 * 24 * time.Hour
 
-	// SessionIdleTimeout is how long a session that was signed in with
+	// RememberedCookieMaxAge is the Max-Age of a remembered session's cookie,
+	// written once at sign-in: the longest lifetime browsers keep (400 days). The
+	// server record, not the cookie, decides when the session ends, so the cookie
+	// is never re-sent when the record is renewed.
+	RememberedCookieMaxAge = 400 * 24 * time.Hour
+
+	// sessionIdleTimeout is how long a session that was signed in with
 	// "Remember this browser" unticked lasts after its last renewal.
-	SessionIdleTimeout = 8 * time.Hour
+	sessionIdleTimeout = 8 * time.Hour
 
-	// RememberedSessionRenewInterval is the most often a remembered session is
+	// rememberedSessionRenewInterval is the most often a remembered session is
 	// extended (and persisted) per browser.
-	RememberedSessionRenewInterval = 24 * time.Hour
+	rememberedSessionRenewInterval = 24 * time.Hour
 
-	// IdleSessionRenewInterval is the most often an unticked session is
+	// idleSessionRenewInterval is the most often an unticked session is
 	// extended (and persisted) per browser.
-	IdleSessionRenewInterval = 15 * time.Minute
+	idleSessionRenewInterval = 15 * time.Minute
 
 	// RememberQueryParam is the query parameter of GET /auth/:provider that
 	// carries the "Remember this browser" choice, and RememberQueryValue the

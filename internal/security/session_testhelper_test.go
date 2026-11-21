@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/require"
 )
 
 // settleCredentials marks the server's live basic-auth credentials as the ones
@@ -22,8 +21,7 @@ func settleCredentials(s *OAuth2Server) {
 // lifetime from now.
 func seedSession(tb testing.TB, s *OAuth2Server, rec *AccessToken) string {
 	tb.Helper()
-	token, err := newOpaqueToken()
-	require.NoError(tb, err)
+	token := newOpaqueToken(AccessTokenByteLength)
 	if rec.ExpiresAt.IsZero() {
 		rec.ExpiresAt = time.Now().Add(sessionLifetime(rec.Remember))
 	}

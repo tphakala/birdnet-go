@@ -14,7 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 const (
@@ -66,7 +68,8 @@ func expiryOf(t *testing.T, s *OAuth2Server, token string) time.Time {
 }
 
 // TestSessionSlidingExpiry walks a session through renewals over fake time for
-// both remember values.
+// both remember values. Renewal only slides the server record: it never sends
+// the cookie again, whatever the state of the response.
 func TestSessionSlidingExpiry(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -92,29 +95,20 @@ func TestSessionSlidingExpiry(t *testing.T) {
 				assert.Equal(t, first, expiryOf(t, server, token))
 				assert.Nil(t, findCookie(rec, SessionCookieName))
 
-				// One after it extends to a full lifetime.
+				// One after it extends to a full lifetime, without a cookie or
+				// cache header.
 				time.Sleep(interval / 2)
 				ok, rec = authenticate(t, server, token, nil)
 				assert.True(t, ok)
 				extended := expiryOf(t, server, token)
 				assert.Equal(t, time.Now().Add(lifetime), extended)
-
-				cookie := findCookie(rec, SessionCookieName)
-				if tt.remember {
-					require.NotNil(t, cookie, "a remembered renewal sends the cookie again")
-					assert.Equal(t, token, cookie.Value)
-					assert.Equal(t, int(RememberedSessionDuration.Seconds()), cookie.MaxAge)
-					assert.Equal(t, "private", rec.Header().Get("Cache-Control"))
-				} else {
-					assert.Nil(t, cookie, "an unticked session never re-sends its cookie")
-					assert.Empty(t, rec.Header().Get("Cache-Control"))
-				}
+				assert.Nil(t, findCookie(rec, SessionCookieName), "renewal must not re-send the cookie")
+				assert.Empty(t, rec.Header().Get("Cache-Control"))
 
 				// Two requests in the same instant extend once.
-				ok, rec = authenticate(t, server, token, nil)
+				ok, _ = authenticate(t, server, token, nil)
 				assert.True(t, ok)
 				assert.Equal(t, extended, expiryOf(t, server, token))
-				assert.Nil(t, findCookie(rec, SessionCookieName))
 
 				// Silence longer than the lifetime ends the session.
 				time.Sleep(lifetime + time.Second)
@@ -125,10 +119,10 @@ func TestSessionSlidingExpiry(t *testing.T) {
 	}
 }
 
-// TestRememberedSessionNotExtendedWithoutCookieChannel verifies that a
-// remembered record is extended only on a request whose response can carry the
-// renewed cookie, and the next ordinary request extends it.
-func TestRememberedSessionNotExtendedWithoutCookieChannel(t *testing.T) {
+// TestSessionRenewsOnAnyResponse verifies that renewal does not depend on the
+// response being able to carry a cookie: a committed response and a WebSocket
+// upgrade slide the record like any other request.
+func TestSessionRenewsOnAnyResponse(t *testing.T) {
 	tests := []struct {
 		name string
 		prep func(*http.Request, echo.Context)
@@ -144,17 +138,11 @@ func TestRememberedSessionNotExtendedWithoutCookieChannel(t *testing.T) {
 			server, _ := newSessionTestServer(t, false, nil)
 			synctest.Test(t, func(t *testing.T) {
 				token := seedSession(t, server, &AccessToken{Remember: true})
-				first := expiryOf(t, server, token)
 
-				time.Sleep(RememberedSessionRenewInterval)
+				time.Sleep(rememberedSessionRenewInterval)
 				ok, _ := authenticate(t, server, token, tt.prep)
 				assert.True(t, ok)
-				assert.Equal(t, first, expiryOf(t, server, token), "must not extend without a way to send the cookie")
-
-				ok, rec := authenticate(t, server, token, nil)
-				assert.True(t, ok)
 				assert.Equal(t, time.Now().Add(RememberedSessionDuration), expiryOf(t, server, token))
-				assert.NotNil(t, findCookie(rec, SessionCookieName))
 			})
 		})
 	}
@@ -213,6 +201,24 @@ func TestCheckSession(t *testing.T) {
 	}
 }
 
+// TestCheckSessionStoresRecordInContext verifies that a successful session check
+// leaves its record on the request context, and a failed one leaves none.
+func TestCheckSessionStoresRecordInContext(t *testing.T) {
+	server, _ := newSessionTestServer(t, false, nil)
+	token := seedSession(t, server, &AccessToken{Provider: ProviderGoogle, UserID: testUser, ProviderUserID: testProviderSub})
+
+	c, _ := sessionContext(sessionRequest(token))
+	require.True(t, server.checkSession(c, testLogger{}))
+	rec, ok := SessionFromContext(c)
+	require.True(t, ok)
+	assert.Equal(t, testUser, rec.UserID)
+
+	c, _ = sessionContext(sessionRequest("unknown"))
+	require.False(t, server.checkSession(c, testLogger{}))
+	_, ok = SessionFromContext(c)
+	assert.False(t, ok)
+}
+
 // TestCheckSessionMismatchDoesNotLogAllowlist verifies that a provider session
 // for a user outside the allowlist is rejected without writing the configured
 // allowlist (email addresses, user IDs) to the log.
@@ -254,7 +260,14 @@ func TestCredentialsChangeEndsAllSessions(t *testing.T) {
 			social := seedSession(t, server, &AccessToken{Provider: ProviderGoogle, UserID: testUser})
 			code := server.GenerateAuthCode(false)
 
-			tt.change(&settings.Security.BasicAuth, true)
+			// Settings snapshots are immutable, so a change is a new snapshot.
+			publish := func(changed bool) {
+				next := conf.CloneSettings(settings)
+				tt.change(&next.Security.BasicAuth, changed)
+				conftest.SetTestSettings(next)
+			}
+
+			publish(true)
 			_, err := server.ExchangeAuthCode(t.Context(), code)
 			require.Error(t, err, "a code issued before the change must not be exchanged after it")
 
@@ -263,7 +276,7 @@ func TestCredentialsChangeEndsAllSessions(t *testing.T) {
 				assert.False(t, server.checkSession(c, testLogger{}))
 			}
 
-			tt.change(&settings.Security.BasicAuth, false)
+			publish(false)
 			for _, token := range []string{password, social} {
 				c, _ := sessionContext(sessionRequest(token))
 				assert.False(t, server.checkSession(c, testLogger{}), "changing it back must not bring a session back")
@@ -304,9 +317,9 @@ func TestSessionCookieAttributes(t *testing.T) {
 		assert.True(t, cookie.Secure)
 	})
 
-	t.Run("ticked carries the remembered max age", func(t *testing.T) {
+	t.Run("ticked carries the long fixed max age", func(t *testing.T) {
 		cookie, _ := signedInCookie(t, server, nil, true)
-		assert.Equal(t, int(RememberedSessionDuration.Seconds()), cookie.MaxAge)
+		assert.Equal(t, int(RememberedCookieMaxAge.Seconds()), cookie.MaxAge)
 		assert.True(t, cookie.HttpOnly)
 		assert.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
 	})
@@ -341,24 +354,24 @@ func TestEverySignInGetsAFreshToken(t *testing.T) {
 	first, _ := signedInCookie(t, server, nil, true)
 	second, _ := signedInCookie(t, server, sessionRequest(first.Value), false)
 	assert.NotEqual(t, first.Value, second.Value)
-	_, ok := server.liveRecord(first.Value)
-	assert.False(t, ok, "the previous record must be revoked")
-	rec, ok := server.liveRecord(second.Value)
-	require.True(t, ok)
+	_, err := server.liveRecord(first.Value)
+	require.ErrorIs(t, err, ErrTokenNotFound, "the previous record must be revoked")
+	rec, err := server.liveRecord(second.Value)
+	require.NoError(t, err)
 	assert.False(t, rec.Remember, "the new sign-in's choice applies, not the old one")
 
 	w := httptest.NewRecorder()
-	require.NoError(t, server.StartProviderSession(w, sessionRequest(second.Value), &AccessToken{
+	server.StartProviderSession(w, sessionRequest(second.Value), &AccessToken{
 		Provider: ProviderGoogle, UserID: testUser, ProviderUserID: testProviderSub, IDToken: "id",
-	}, true))
+	}, true)
 	third := findCookie(w, SessionCookieName)
 	require.NotNil(t, third)
 	assert.NotEqual(t, second.Value, third.Value)
-	assert.Equal(t, int(RememberedSessionDuration.Seconds()), third.MaxAge)
-	_, ok = server.liveRecord(second.Value)
-	assert.False(t, ok)
-	social, ok := server.liveRecord(third.Value)
-	require.True(t, ok)
+	assert.Equal(t, int(RememberedCookieMaxAge.Seconds()), third.MaxAge)
+	_, err = server.liveRecord(second.Value)
+	require.ErrorIs(t, err, ErrTokenNotFound)
+	social, err := server.liveRecord(third.Value)
+	require.NoError(t, err)
 	assert.Equal(t, ProviderGoogle, social.Provider)
 	assert.Equal(t, "id", social.IDToken)
 }
@@ -372,8 +385,8 @@ func TestEndSessionClearsCookie(t *testing.T) {
 	rec := httptest.NewRecorder()
 	server.EndSession(rec, sessionRequest(token))
 
-	_, ok := server.liveRecord(token)
-	assert.False(t, ok)
+	_, err := server.liveRecord(token)
+	require.ErrorIs(t, err, ErrTokenNotFound)
 	cookie := findCookie(rec, SessionCookieName)
 	require.NotNil(t, cookie)
 	assert.Negative(t, cookie.MaxAge, "the cookie must be deleted")
@@ -419,4 +432,52 @@ func TestRememberChoiceCookie(t *testing.T) {
 		req.AddCookie(&http.Cookie{Name: rememberChoiceCookieName, Value: strings.Repeat("x", 3)})
 		assert.False(t, TakeRememberChoice(httptest.NewRecorder(), req))
 	})
+}
+
+// TestWarnSupersededSessionSettings verifies that the startup warning names each
+// superseded setting whose value differs from its old default, and stays quiet
+// for the default and for an unset value.
+func TestWarnSupersededSessionSettings(t *testing.T) {
+	tests := []struct {
+		name     string
+		security conf.Security
+		want     []string
+		notWant  []string
+	}{
+		{"old defaults", conf.Security{
+			SessionDuration: legacySessionDuration,
+			BasicAuth:       conf.BasicAuth{AccessTokenExp: legacyAccessTokenExp},
+		}, nil, []string{"no longer controls"}},
+		{"unset", conf.Security{}, nil, []string{"no longer controls"}},
+		{"session duration changed", conf.Security{SessionDuration: time.Hour},
+			[]string{"security.sessionduration no longer controls"}, []string{"accesstokenexp"}},
+		{"access token expiry changed", conf.Security{BasicAuth: conf.BasicAuth{AccessTokenExp: 2 * time.Hour}},
+			[]string{"security.basicauth.accesstokenexp no longer controls"}, []string{"security.sessionduration"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := logtest.Capture(t, func() {
+				warnSupersededSessionSettings(&conf.Settings{Security: tt.security})
+			})
+			for _, want := range tt.want {
+				assert.Contains(t, output, want)
+			}
+			for _, notWant := range tt.notWant {
+				assert.NotContains(t, output, notWant)
+			}
+		})
+	}
+}
+
+// TestStartSessionRejectsDeadToken verifies that no cookie is sent for a token
+// that names no live record.
+func TestStartSessionRejectsDeadToken(t *testing.T) {
+	server, _ := newSessionTestServer(t, false, nil)
+	expired := seedSession(t, server, &AccessToken{ExpiresAt: time.Now().Add(-time.Minute)})
+
+	for token, want := range map[string]error{"unknown": ErrTokenNotFound, expired: ErrTokenExpired} {
+		rec := httptest.NewRecorder()
+		require.ErrorIs(t, server.StartSession(rec, sessionRequest(""), token), want)
+		assert.Nil(t, findCookie(rec, SessionCookieName))
+	}
 }

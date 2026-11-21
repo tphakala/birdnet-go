@@ -50,6 +50,7 @@ describe('LoginModal', () => {
   function mockWindowLocation(pathname = '/ui/', search = '') {
     const mockLocation = {
       href: '',
+      origin: 'http://localhost',
       pathname,
       search,
       reload: vi.fn(),

@@ -67,12 +67,12 @@ func TestTokenPersistence(t *testing.T) {
 	require.NoError(t, newServer.ValidateAccessToken(validToken), "Valid token should be loaded and validated")
 	require.ErrorIs(t, newServer.ValidateAccessToken(expiredToken), ErrTokenNotFound, "Expired token should not be loaded, thus not found")
 
-	loaded, ok := newServer.liveRecord(validToken)
-	require.True(t, ok)
+	loaded, err := newServer.liveRecord(validToken)
+	require.NoError(t, err)
 	assert.True(t, loaded.Remember, "the remember choice must survive a restart")
 
-	social, ok := newServer.liveRecord(socialToken)
-	require.True(t, ok)
+	social, err := newServer.liveRecord(socialToken)
+	require.NoError(t, err)
 	assert.Equal(t, ProviderGoogle, social.Provider)
 	assert.Equal(t, "user@example.com", social.UserID)
 	assert.Equal(t, "12345", social.ProviderUserID)
@@ -133,8 +133,8 @@ func TestEndSessionSurvivesRestartAfterRacingPersist(t *testing.T) {
 
 	restarted := newPersistingServer(tokensFile, settings)
 	require.NoError(t, restarted.loadTokens(ctx))
-	_, ok := restarted.liveRecord(token)
-	assert.False(t, ok, "a logged-out session must not come back after a restart")
+	_, err := restarted.liveRecord(token)
+	require.ErrorIs(t, err, ErrTokenNotFound, "a logged-out session must not come back after a restart")
 }
 
 // TestFilesystemStore tests that the FilesystemStore is initialized correctly
@@ -213,89 +213,6 @@ func TestFilesystemStore_SecureCookieFlag(t *testing.T) {
 				"Secure flag should match the secureCookies argument")
 		})
 	}
-}
-
-// TestLocalNetworkCookieStore tests configuring cookie store for local network access
-func TestLocalNetworkCookieStore(t *testing.T) {
-	// Create test server with settings
-	server := &OAuth2Server{
-		settings: &conf.Settings{
-			Security: conf.Security{
-				SessionSecret: "test-secret",
-			},
-		},
-	}
-
-	// Test with CookieStore
-	gothic.Store = sessions.NewCookieStore([]byte("test-secret"))
-	server.configureLocalNetworkCookieStore(server.settings)
-
-	cookieStore, ok := gothic.Store.(*sessions.CookieStore)
-	assert.True(t, ok, "Gothic store should be a CookieStore")
-	assert.False(t, cookieStore.Options.Secure, "Secure should be false for local network")
-
-	// Test with FilesystemStore
-	tempDir := t.TempDir()
-
-	gothic.Store = sessions.NewFilesystemStore(tempDir, []byte("test-secret"))
-	server.configureLocalNetworkCookieStore(server.settings)
-
-	fileStore, ok := gothic.Store.(*sessions.FilesystemStore)
-	assert.True(t, ok, "Gothic store should be a FilesystemStore")
-	assert.False(t, fileStore.Options.Secure, "Secure should be false for local network")
-}
-
-// TestConfigureLocalNetworkWithUnknownStore tests handling of unknown store types
-func TestConfigureLocalNetworkWithUnknownStore(t *testing.T) {
-	// Create a mock store that doesn't match our expected types
-	type mockStore struct {
-		sessions.Store
-	}
-
-	// Create test server with settings
-	server := &OAuth2Server{
-		settings: &conf.Settings{
-			Security: conf.Security{
-				SessionSecret: "test-secret",
-			},
-		},
-	}
-
-	// Set the mock store
-	gothic.Store = &mockStore{}
-
-	// This should not panic - the function handles unknown store types gracefully
-	assert.NotPanics(t, func() {
-		server.configureLocalNetworkCookieStore(server.settings)
-	}, "configureLocalNetworkCookieStore should not panic with unknown store type")
-}
-
-// TestConfigureLocalNetworkWithMissingSessionSecret verifies that the function handles
-// unknown store types gracefully regardless of session secret configuration.
-// Note: Session secret is only relevant for supported store types (CookieStore, FilesystemStore).
-func TestConfigureLocalNetworkWithMissingSessionSecret(t *testing.T) {
-	// Create test server with empty session secret
-	server := &OAuth2Server{
-		settings: &conf.Settings{
-			Security: conf.Security{
-				SessionSecret: "", // Empty session secret - should not cause issues with unknown store
-			},
-		},
-	}
-
-	// Create a mock store that doesn't match our expected types
-	type mockStore struct {
-		sessions.Store
-	}
-
-	// Set the mock store
-	gothic.Store = &mockStore{}
-
-	// This should not panic - the function handles unknown store types gracefully
-	// even with an empty session secret
-	assert.NotPanics(t, func() {
-		server.configureLocalNetworkCookieStore(server.settings)
-	}, "configureLocalNetworkCookieStore should not panic with unknown store type and empty session secret")
 }
 
 // TestLoadCorruptedTokensFile tests handling of corrupted tokens file
@@ -402,18 +319,13 @@ func TestAtomicTokenSaving(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "Temp file should not exist after successful save")
 
 	// Now test that contents are correct
-	// Define a struct to match the persisted structure
-	type StoredTokenData struct {
-		AuthCodes map[string]AuthCode    `json:"auth_codes"`
-		Sessions  map[string]AccessToken `json:"sessions"`
-	}
-	var storedData StoredTokenData
+	var storedData tokenFile
 
 	data, err := os.ReadFile(tokensFile) //nolint:gosec // test file path from t.TempDir()
 	require.NoError(t, err, "Should be able to read token file")
 
 	err = json.Unmarshal(data, &storedData)
-	require.NoError(t, err, "Token file should contain valid JSON matching StoredTokenData struct")
+	require.NoError(t, err, "Token file should contain valid JSON matching the tokenFile struct")
 	assert.NotNil(t, storedData.Sessions, "Sessions map should not be nil")
 	_, ok := storedData.Sessions["test_token"]
 	assert.True(t, ok, "Tokens file should contain the test_token in the sessions map")

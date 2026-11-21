@@ -1192,9 +1192,7 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	}
 
 	// Start the browser session. The auth middleware reads it on every
-	// subsequent request, so a failure here means the redirect would land on a
-	// page that immediately bounces the user back. Fail fast with a generic error
-	// instead of redirecting into a broken session.
+	// subsequent request.
 	userId := oauthIdentity(user.Email, user.UserID)
 
 	if s.oauth2Server == nil {
@@ -1207,10 +1205,7 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 		ProviderUserID: user.UserID,
 		IDToken:        user.IDToken,
 	}
-	if err := s.oauth2Server.StartProviderSession(c.Response(), req, &identity, remember); err != nil {
-		log.Error("OAuth login failed: could not start session", logger.Error(err))
-		return c.String(http.StatusInternalServerError, "Authentication failed")
-	}
+	s.oauth2Server.StartProviderSession(c.Response(), req, &identity, remember)
 
 	log.Info("OAuth login successful, session established, redirecting to dashboard",
 		logger.Username(userId),

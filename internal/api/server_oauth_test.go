@@ -506,7 +506,7 @@ func TestHandleOAuthRememberChoice(t *testing.T) {
 		choice     *http.Cookie
 		wantMaxAge int
 	}{
-		{"ticked gives a persistent cookie", &http.Cookie{Name: choiceCookie, Value: security.RememberQueryValue}, int(security.RememberedSessionDuration.Seconds())},
+		{"ticked gives a persistent cookie", &http.Cookie{Name: choiceCookie, Value: security.RememberQueryValue}, int(security.RememberedCookieMaxAge.Seconds())},
 		{"unticked gives a browser-session cookie", nil, 0},
 	} {
 		t.Run("callback "+tt.name, func(t *testing.T) {

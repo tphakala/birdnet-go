@@ -60,7 +60,7 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 	}
 
 	// 2. Fallback: the session record (for cases where middleware might not have set it, though it should)
-	if rec, ok := a.OAuth2Server.Session(c.Request()); ok && rec.UserID != "" {
+	if rec, ok := a.sessionRecord(c); ok && rec.UserID != "" {
 		a.log().Debug("Retrieved username from session as fallback",
 			logger.String("path", c.Request().URL.Path),
 			logger.String("ip", c.RealIP()))
@@ -73,6 +73,15 @@ func (a *SecurityAdapter) GetUsername(c echo.Context) string {
 		logger.String("path", c.Request().URL.Path),
 		logger.String("ip", c.RealIP()))
 	return ""
+}
+
+// sessionRecord returns the session record of the request: the one an earlier
+// session check left on the context, else the one the request's cookie names.
+func (a *SecurityAdapter) sessionRecord(c echo.Context) (security.AccessToken, bool) {
+	if rec, ok := security.SessionFromContext(c); ok {
+		return rec, true
+	}
+	return a.OAuth2Server.Session(c.Request())
 }
 
 // GetAuthMethod returns the authentication method used as a defined constant.
@@ -106,9 +115,10 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 		return AuthMethodLocalSubnet // Changed from AuthMethodUnknown
 	}
 
-	// 3. Check generic authentication status (if context wasn't set)
+	// 3. Check generic authentication status (if context wasn't set). A session
+	// check that already succeeded on this request left its record on the context.
 	// This might catch session types not explicitly handled by middleware context setting.
-	if a.OAuth2Server.IsUserAuthenticated(c) {
+	if _, ok := security.SessionFromContext(c); ok || a.OAuth2Server.IsUserAuthenticated(c) {
 		// Could attempt more detailed session type detection here if needed,
 		// but for now, return generic Session if middleware didn't specify.
 		return AuthMethodBrowserSession // Use BrowserSession for generic session

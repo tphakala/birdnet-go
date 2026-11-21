@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 )
 
@@ -51,4 +53,39 @@ func TestAuthenticateBasicHotReloadAfterEnable(t *testing.T) {
 	authCode, err := adapter.AuthenticateBasic(c, "admin", "correct-horse", false)
 	require.NoError(t, err, "login should succeed with credentials configured via UI without restart")
 	require.NotEmpty(t, authCode, "a non-empty auth code should be generated on success")
+}
+
+// TestSessionCheckRecordReusedByGetters verifies that GetUsername and
+// GetAuthMethod read the record a successful session check left on the context
+// instead of checking the session again: they still answer after the cookie is
+// gone from the request, and answer nothing for a request with no session.
+func TestSessionCheckRecordReusedByGetters(t *testing.T) {
+	const user = "user@example.com"
+	settings := &conf.Settings{Security: conf.Security{
+		SessionSecret:  "test-secret",
+		OAuthProviders: []conf.OAuthProviderConfig{{Provider: security.ConfigGoogle, Enabled: true, UserID: user}},
+	}}
+	server := securitytest.NewOAuth2ServerForTesting(t, settings)
+	adapter := NewSecurityAdapter(server)
+
+	signIn := httptest.NewRecorder()
+	server.StartProviderSession(signIn, httptest.NewRequest(http.MethodGet, "/", http.NoBody),
+		&security.AccessToken{Provider: security.ProviderGoogle, UserID: user, ProviderUserID: "sub"}, false)
+	cookies := signIn.Result().Cookies()
+	require.NotEmpty(t, cookies)
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	c := echo.New().NewContext(req, httptest.NewRecorder())
+	require.NoError(t, adapter.CheckAccess(c))
+
+	req.Header.Del("Cookie")
+	assert.Equal(t, user, adapter.GetUsername(c))
+	assert.Equal(t, AuthMethodBrowserSession, adapter.GetAuthMethod(c))
+
+	anonymous := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), httptest.NewRecorder())
+	assert.Empty(t, adapter.GetUsername(anonymous))
+	assert.Equal(t, AuthMethodNone, adapter.GetAuthMethod(anonymous))
 }

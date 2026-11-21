@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -15,7 +14,6 @@ import (
 	"github.com/markbates/goth/gothic"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -38,15 +36,15 @@ func sessionLifetime(remember bool) time.Duration {
 	if remember {
 		return RememberedSessionDuration
 	}
-	return SessionIdleTimeout
+	return sessionIdleTimeout
 }
 
 // sessionRenewInterval returns the most often a session is extended.
 func sessionRenewInterval(remember bool) time.Duration {
 	if remember {
-		return RememberedSessionRenewInterval
+		return rememberedSessionRenewInterval
 	}
-	return IdleSessionRenewInterval
+	return idleSessionRenewInterval
 }
 
 // sessionTokenKey returns the map key and on-disk identifier of a session
@@ -69,17 +67,39 @@ func basicCredentialsID(settings *conf.Settings) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+// credentialsMemo remembers the credentials ID computed for one settings
+// snapshot.
+type credentialsMemo struct {
+	settings *conf.Settings
+	id       string
+}
+
+// liveCredentialsID returns basicCredentialsID(settings). Settings snapshots are
+// immutable once published (internal/conf/storage.go), so the HMAC is computed
+// once per snapshot, not once per request.
+func (s *OAuth2Server) liveCredentialsID(settings *conf.Settings) string {
+	if memo := s.credentialsMemo.Load(); memo != nil && memo.settings == settings {
+		return memo.id
+	}
+	id := basicCredentialsID(settings)
+	s.credentialsMemo.Store(&credentialsMemo{settings: settings, id: id})
+	return id
+}
+
 // syncCredentials ends every session and authorization code when the basic-auth
 // client ID or password differ from those the stored sessions were issued
 // under. It persists the result before it returns, so a restart cannot bring
 // the sessions back. A store that has never recorded credentials has issued
 // nothing under any (every save follows a sync), so it adopts the live ones
-// without ending anything. It must not be called with s.mutex held.
+// without ending anything. Every read of a session record and every write of a
+// record or code goes through it first (liveRecord, GenerateAuthCode,
+// ExchangeAuthCode, StartProviderSession). It must not be called with s.mutex
+// held.
 func (s *OAuth2Server) syncCredentials(settings *conf.Settings) {
 	if settings == nil {
 		return
 	}
-	id := basicCredentialsID(settings)
+	id := s.liveCredentialsID(settings)
 
 	s.mutex.RLock()
 	same := id == s.credentialsID
@@ -108,13 +128,13 @@ func (s *OAuth2Server) syncCredentials(settings *conf.Settings) {
 	s.persistTokensIfEnabled()
 }
 
-// newOpaqueToken returns a fresh random token for a session cookie.
-func newOpaqueToken() (string, error) {
-	tokenBytes := make([]byte, AccessTokenByteLength)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return "", errors.New(err).Component("security").Category(errors.CategorySystem).Build()
-	}
-	return base64.URLEncoding.EncodeToString(tokenBytes), nil
+// newOpaqueToken returns a fresh random token of byteLen random bytes, encoded
+// for use in a cookie or a URL. crypto/rand.Read never returns an error: it
+// crashes the program instead.
+func newOpaqueToken(byteLen int) string {
+	tokenBytes := make([]byte, byteLen)
+	_, _ = rand.Read(tokenBytes)
+	return base64.URLEncoding.EncodeToString(tokenBytes)
 }
 
 // sessionTokenFromRequest returns the session token the request's cookie
@@ -143,13 +163,15 @@ func sessionCookieOptions(r *http.Request) sessions.Options {
 	return *buildSessionOptions(true, 0)
 }
 
-// writeSessionCookie sends the session cookie for token. A remembered session
-// gets a persistent cookie; an unticked one a browser-session cookie.
+// writeSessionCookie sends the session cookie for token, once, at sign-in. A
+// remembered session gets a persistent cookie with the longest lifetime browsers
+// keep; an unticked one a browser-session cookie. The server record, not the
+// cookie, decides when the session ends, so the cookie is never re-sent.
 func writeSessionCookie(w http.ResponseWriter, r *http.Request, token string, remember bool) {
 	opts := sessionCookieOptions(r)
 	opts.MaxAge = 0
 	if remember {
-		opts.MaxAge = int(RememberedSessionDuration.Seconds())
+		opts.MaxAge = int(RememberedCookieMaxAge.Seconds())
 	}
 	http.SetCookie(w, sessions.NewCookie(SessionCookieName, token, &opts))
 }
@@ -185,15 +207,22 @@ func TakeRememberChoice(w http.ResponseWriter, r *http.Request) bool {
 	return cookie.Value == RememberQueryValue
 }
 
-// liveRecord returns the unexpired session record for token.
-func (s *OAuth2Server) liveRecord(token string) (AccessToken, bool) {
+// liveRecord returns the unexpired session record for token, after ending the
+// sessions of changed credentials (syncCredentials). It returns ErrTokenNotFound
+// for an unknown token and ErrTokenExpired for an expired record.
+func (s *OAuth2Server) liveRecord(token string) (AccessToken, error) {
+	s.syncCredentials(s.currentSettings())
+
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	rec, ok := s.accessTokens[sessionTokenKey(token)]
-	if !ok || !time.Now().Before(rec.ExpiresAt) {
-		return AccessToken{}, false
+	if !ok {
+		return AccessToken{}, ErrTokenNotFound
 	}
-	return rec, true
+	if !time.Now().Before(rec.ExpiresAt) {
+		return AccessToken{}, ErrTokenExpired
+	}
+	return rec, nil
 }
 
 // Session returns the live session record the request's cookie names.
@@ -202,36 +231,37 @@ func (s *OAuth2Server) Session(r *http.Request) (AccessToken, bool) {
 	if token == "" {
 		return AccessToken{}, false
 	}
-	s.syncCredentials(s.currentSettings())
-	return s.liveRecord(token)
+	rec, err := s.liveRecord(token)
+	return rec, err == nil
 }
 
 // revokeRequestSession deletes the record the request's cookie names, if any,
-// except the one for keepToken.
-func (s *OAuth2Server) revokeRequestSession(r *http.Request, keepToken string) {
+// except the one for keepToken, and reports whether it deleted one. The caller
+// persists.
+func (s *OAuth2Server) revokeRequestSession(r *http.Request, keepToken string) bool {
 	token := sessionTokenFromRequest(r)
 	if token == "" || token == keepToken {
-		return
+		return false
 	}
 	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	key := sessionTokenKey(token)
 	_, existed := s.accessTokens[key]
 	delete(s.accessTokens, key)
-	s.mutex.Unlock()
-	if existed {
-		go s.persistTokensIfEnabled()
-	}
+	return existed
 }
 
 // StartSession starts the browser session for a password sign-in: it revokes
 // the record the request's cookie names, then sends the cookie for token, the
 // access token ExchangeAuthCode issued.
 func (s *OAuth2Server) StartSession(w http.ResponseWriter, r *http.Request, token string) error {
-	rec, ok := s.liveRecord(token)
-	if !ok {
-		return ErrTokenNotFound
+	rec, err := s.liveRecord(token)
+	if err != nil {
+		return err
 	}
-	s.revokeRequestSession(r, token)
+	if s.revokeRequestSession(r, token) {
+		go s.persistTokensIfEnabled()
+	}
 	writeSessionCookie(w, r, token, rec.Remember)
 	return nil
 }
@@ -240,14 +270,10 @@ func (s *OAuth2Server) StartSession(w http.ResponseWriter, r *http.Request, toke
 // issues a record carrying the identity (Provider, UserID, ProviderUserID and
 // IDToken of identity), revokes the browser's previous record and sends the
 // cookie. Every sign-in gets a fresh token.
-func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Request, identity *AccessToken, remember bool) error {
+func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Request, identity *AccessToken, remember bool) {
 	s.syncCredentials(s.currentSettings())
 
-	token, err := newOpaqueToken()
-	if err != nil {
-		return err
-	}
-
+	token := newOpaqueToken(AccessTokenByteLength)
 	record := *identity
 	record.Remember = remember
 	record.ExpiresAt = time.Now().Add(sessionLifetime(remember))
@@ -259,16 +285,12 @@ func (s *OAuth2Server) StartProviderSession(w http.ResponseWriter, r *http.Reque
 	go s.persistTokensIfEnabled()
 
 	writeSessionCookie(w, r, token, remember)
-	return nil
 }
 
 // EndSession ends the request's session: the record is deleted and the
 // deletion persisted before it returns, then the cookie is cleared.
 func (s *OAuth2Server) EndSession(w http.ResponseWriter, r *http.Request) {
-	if token := sessionTokenFromRequest(r); token != "" {
-		s.mutex.Lock()
-		delete(s.accessTokens, sessionTokenKey(token))
-		s.mutex.Unlock()
+	if s.revokeRequestSession(r, "") {
 		s.persistTokensIfEnabled()
 	}
 	deleteCookie(w, r, SessionCookieName)
@@ -282,26 +304,45 @@ func (s *OAuth2Server) checkSession(c echo.Context, log SecurityLogger) bool {
 		log.Debug("No session cookie")
 		return false
 	}
-	settings := s.currentSettings()
-	s.syncCredentials(settings)
-
-	rec, ok := s.liveRecord(token)
-	if !ok {
+	rec, err := s.liveRecord(token)
+	if err != nil {
 		log.Debug("Session cookie names no live session")
 		return false
 	}
-
-	if rec.Provider == "" {
-		if !settings.Security.BasicAuth.Enabled {
-			log.Debug("Password session ignored: basic authentication is disabled")
-			return false
-		}
-	} else if !providerSessionAllowed(settings, &rec, log) {
+	if !recordAllowed(s.currentSettings(), &rec, log) {
 		return false
 	}
 
-	log.Info("User authenticated: valid session")
-	s.renewSession(c, token, &rec)
+	log.Debug("User authenticated: valid session")
+	s.renewSession(token, &rec)
+	c.Set(sessionRecordContextKey, rec)
+	return true
+}
+
+// sessionRecordContextKey is the echo context key under which a successful
+// session check stores the record it found.
+const sessionRecordContextKey = "security:sessionRecord"
+
+// SessionFromContext returns the session record an earlier IsUserAuthenticated
+// on c found, so a caller later in the same request does not run the check
+// again. ok is false when no session check succeeded on c (a request let in by
+// the subnet bypass has none).
+func SessionFromContext(c echo.Context) (AccessToken, bool) {
+	rec, ok := c.Get(sessionRecordContextKey).(AccessToken)
+	return rec, ok
+}
+
+// recordAllowed reports whether a live session record is still allowed under
+// settings: a password record only while basic authentication is enabled, a
+// social record while its own provider is enabled and lists its user.
+func recordAllowed(settings *conf.Settings, rec *AccessToken, log SecurityLogger) bool {
+	if rec.Provider != "" {
+		return providerSessionAllowed(settings, rec, log)
+	}
+	if !settings.Security.BasicAuth.Enabled {
+		log.Debug("Password session ignored: basic authentication is disabled")
+		return false
+	}
 	return true
 }
 
@@ -329,34 +370,23 @@ func sessionNeedsRenewal(expiresAt time.Time, remember bool) bool {
 	return time.Until(expiresAt) <= sessionLifetime(remember)-sessionRenewInterval(remember)
 }
 
-// renewSession slides the expiry of a live session. A remembered session is
-// extended only on a request whose response can carry the renewed cookie, so
-// the cookie and the record never drift apart.
-func (s *OAuth2Server) renewSession(c echo.Context, token string, rec *AccessToken) {
+// renewSession slides the expiry of a live session on the server. The cookie is
+// not touched: a remembered session's cookie already outlives any record (see
+// RememberedCookieMaxAge), so renewal needs no response header and works for
+// committed responses and WebSocket upgrades alike.
+func (s *OAuth2Server) renewSession(token string, rec *AccessToken) {
 	if !sessionNeedsRenewal(rec.ExpiresAt, rec.Remember) {
 		return
 	}
-	if rec.Remember && (c.Response().Committed || c.IsWebSocket()) {
-		return
+	if s.extendToken(token) {
+		go s.persistTokensIfEnabled()
 	}
-	if !s.extendToken(token, rec.Remember) {
-		return
-	}
-	go s.persistTokensIfEnabled()
-
-	if !rec.Remember {
-		return
-	}
-	writeSessionCookie(c.Response(), c.Request(), token, true)
-	c.Response().Before(func() {
-		markResponsePrivate(c.Response().Header())
-	})
 }
 
 // extendToken moves the expiry of the record for token to a full lifetime from
 // now, re-checking under the write lock so that of several parallel requests
 // only one extends (and so persists). It reports whether it extended.
-func (s *OAuth2Server) extendToken(token string, remember bool) bool {
+func (s *OAuth2Server) extendToken(token string) bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	key := sessionTokenKey(token)
@@ -364,23 +394,7 @@ func (s *OAuth2Server) extendToken(token string, remember bool) bool {
 	if !ok || !time.Now().Before(rec.ExpiresAt) || !sessionNeedsRenewal(rec.ExpiresAt, rec.Remember) {
 		return false
 	}
-	rec.ExpiresAt = time.Now().Add(sessionLifetime(remember))
+	rec.ExpiresAt = time.Now().Add(sessionLifetime(rec.Remember))
 	s.accessTokens[key] = rec
 	return true
-}
-
-// markResponsePrivate keeps shared caches from storing a response that sets the
-// session cookie: some authenticated routes send Cache-Control: public.
-func markResponsePrivate(h http.Header) {
-	current := h.Get("Cache-Control")
-	switch {
-	case current == "":
-		h.Set("Cache-Control", "private")
-	case strings.Contains(current, "no-store"), strings.Contains(current, "private"):
-		// Already not shared-cacheable.
-	case strings.Contains(current, "public"):
-		h.Set("Cache-Control", strings.Replace(current, "public", "private", 1))
-	default:
-		h.Set("Cache-Control", current+", private")
-	}
 }

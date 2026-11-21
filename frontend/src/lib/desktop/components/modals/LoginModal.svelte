@@ -33,6 +33,8 @@
   // Query parameter that carries the "Remember this browser" choice to the
   // provider sign-in route (see security.RememberQueryParam in the backend)
   const REMEMBER_QUERY_PARAM = 'remember';
+  // Value of that parameter that means ticked (security.RememberQueryValue)
+  const REMEMBER_QUERY_VALUE = '1';
 
   // Logger for authentication debugging
   const logger = loggers.auth;
@@ -275,10 +277,11 @@
     // buildAppUrl is idempotent and open-redirect guarded, and the endpoint
     // validation above has already restricted this to a relative path.
     // The endpoint may already carry a query string when it is overridden.
-    const target = rememberBrowser
-      ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}${REMEMBER_QUERY_PARAM}=1`
-      : endpoint;
-    window.location.href = buildAppUrl(target);
+    const providerUrl = new URL(endpoint, window.location.origin);
+    if (rememberBrowser) {
+      providerUrl.searchParams.set(REMEMBER_QUERY_PARAM, REMEMBER_QUERY_VALUE);
+    }
+    window.location.href = buildAppUrl(providerUrl.pathname + providerUrl.search);
   }
 
   function handleSubmit(event: Event) {

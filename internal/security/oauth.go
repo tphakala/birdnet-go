@@ -2,9 +2,7 @@ package security
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -16,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -181,6 +180,9 @@ type OAuth2Server struct {
 	// credentialsID identifies the basic-auth credentials the records were
 	// issued under (see syncCredentials). Guarded by mutex.
 	credentialsID string
+	// credentialsMemo caches the ID computed for the latest settings snapshot
+	// (see liveCredentialsID).
+	credentialsMemo atomic.Pointer[credentialsMemo]
 	// saveMu serialises saveTokens so an older snapshot cannot overwrite a
 	// newer file.
 	saveMu sync.Mutex
@@ -375,15 +377,20 @@ func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 // security.sessionduration or security.basicauth.accesstokenexp differs from its
 // old default: neither governs how long a browser stays signed in any more.
 func warnSupersededSessionSettings(settings *conf.Settings) {
-	if d := settings.Security.SessionDuration; d > 0 && d != legacySessionDuration {
-		GetLogger().Warn("security.sessionduration no longer controls how long a browser stays signed in; "+
-			"sign-in length follows the \"Remember this browser\" choice",
-			logger.Duration("configured", d))
+	superseded := []struct {
+		key        string
+		configured time.Duration
+		legacy     time.Duration
+	}{
+		{"security.sessionduration", settings.Security.SessionDuration, legacySessionDuration},
+		{"security.basicauth.accesstokenexp", settings.Security.BasicAuth.AccessTokenExp, legacyAccessTokenExp},
 	}
-	if d := settings.Security.BasicAuth.AccessTokenExp; d > 0 && d != legacyAccessTokenExp {
-		GetLogger().Warn("security.basicauth.accesstokenexp no longer controls how long a browser stays signed in; "+
-			"sign-in length follows the \"Remember this browser\" choice",
-			logger.Duration("configured", d))
+	for _, setting := range superseded {
+		if setting.configured > 0 && setting.configured != setting.legacy {
+			GetLogger().Warn(setting.key+" no longer controls how long a browser stays signed in; "+
+				"sign-in length follows the \"Remember this browser\" choice",
+				logger.Duration("configured", setting.configured))
+		}
 	}
 }
 
@@ -1084,9 +1091,7 @@ func (s *OAuth2Server) GenerateAuthCode(remember bool) string {
 	secLog.Debug("Generating new authorization code")
 	s.syncCredentials(s.currentSettings())
 
-	code := make([]byte, AuthCodeByteLength)
-	rand.Read(code)
-	authCode := base64.URLEncoding.EncodeToString(code)
+	authCode := newOpaqueToken(AuthCodeByteLength)
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -1141,10 +1146,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	}
 
 	// Generate the session token; only its hash is stored.
-	accessToken, err := newOpaqueToken()
-	if err != nil {
-		return "", err
-	}
+	accessToken := newOpaqueToken(AccessTokenByteLength)
 	expiresAt := time.Now().Add(sessionLifetime(authCode.Remember))
 
 	s.accessTokens[sessionTokenKey(accessToken)] = AccessToken{
@@ -1162,33 +1164,25 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 }
 
 // ValidateAccessToken checks if an access token is valid and returns an error
-// if not. Only a live password session counts, and only while basic
-// authentication is enabled.
+// if not. Only a live password session counts (a social session is not a bearer
+// token), and only while basic authentication is enabled.
 func (s *OAuth2Server) ValidateAccessToken(token string) error {
 	// Do not log the token
 	secLog := GetLogger()
 	secLog.Debug("Validating access token")
 
-	settings := s.currentSettings()
-	s.syncCredentials(settings)
-
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	accessToken, ok := s.accessTokens[sessionTokenKey(token)]
-	if !ok || accessToken.Provider != "" || !settings.Security.BasicAuth.Enabled {
-		secLog.Debug("Access token not found")
-		return ErrTokenNotFound // Return specific error
+	rec, err := s.liveRecord(token)
+	if err != nil {
+		secLog.Debug("Access token is not live", logger.Bool("expired", errors.Is(err, ErrTokenExpired)))
+		return err
 	}
-
-	if time.Now().After(accessToken.ExpiresAt) {
-		secLog.Debug("Access token expired", logger.Time("expired_at", accessToken.ExpiresAt))
-		// No need to delete here, cleanup routine handles it
-		return ErrTokenExpired // Return specific error
+	if rec.Provider != "" || !recordAllowed(s.currentSettings(), &rec, secLog) {
+		secLog.Debug("Access token not found")
+		return ErrTokenNotFound
 	}
 
 	secLog.Debug("Access token is valid")
-	return nil // Return nil on success
+	return nil
 }
 
 // IsAuthenticationEnabled reports whether r must authenticate: an
@@ -1317,6 +1311,14 @@ func (s *OAuth2Server) isAllowedSubnetIP(settings *conf.Settings, ipStr string) 
 	return false
 }
 
+// tokenFile is the format of tokens.json. An older binary reads auth_codes and
+// ignores sessions; this one ignores the older access_tokens key.
+type tokenFile struct {
+	AuthCodes     map[string]AuthCode    `json:"auth_codes"`
+	Sessions      map[string]AccessToken `json:"sessions"`
+	CredentialsID string                 `json:"credentials_id"`
+}
+
 // persistTokensIfEnabled saves tokens if persistence is enabled
 func (s *OAuth2Server) persistTokensIfEnabled() {
 	if s.persistTokens {
@@ -1366,11 +1368,7 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	}
 
 	// Unmarshal data outside the lock
-	var storedData struct {
-		AuthCodes     map[string]AuthCode    `json:"auth_codes"`
-		Sessions      map[string]AccessToken `json:"sessions"`
-		CredentialsID string                 `json:"credentials_id"`
-	}
+	var storedData tokenFile
 
 	if err := json.Unmarshal(data, &storedData); err != nil {
 		secLog.Error("Failed to unmarshal token data from file", logger.Error(err))
@@ -1425,14 +1423,14 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	// written after a newer one.
 	s.saveMu.Lock()
 	defer s.saveMu.Unlock()
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
 
-	// Create copies to avoid holding lock during marshaling/writing
-	authCodesCopy := make(map[string]AuthCode, len(s.authCodes))
-	maps.Copy(authCodesCopy, s.authCodes)
-	accessTokensCopy := make(map[string]AccessToken, len(s.accessTokens))
-	maps.Copy(accessTokensCopy, s.accessTokens)
+	// Copy under the read lock and release it before marshaling and writing;
+	// saveMu alone orders the saves.
+	s.mutex.RLock()
+	authCodesCopy := maps.Clone(s.authCodes)
+	accessTokensCopy := maps.Clone(s.accessTokens)
+	credentialsID := s.credentialsID
+	s.mutex.RUnlock()
 
 	// Check context before marshaling/writing
 	select {
@@ -1442,14 +1440,10 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	default:
 	}
 
-	storedData := struct {
-		AuthCodes     map[string]AuthCode    `json:"auth_codes"`
-		Sessions      map[string]AccessToken `json:"sessions"`
-		CredentialsID string                 `json:"credentials_id"`
-	}{
+	storedData := tokenFile{
 		AuthCodes:     authCodesCopy,
 		Sessions:      accessTokensCopy,
-		CredentialsID: s.credentialsID,
+		CredentialsID: credentialsID,
 	}
 
 	data, err := json.MarshalIndent(storedData, "", "  ")
