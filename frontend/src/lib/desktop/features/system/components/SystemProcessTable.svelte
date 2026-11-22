@@ -211,9 +211,9 @@
       <span class="w-12 text-right font-mono text-xs whitespace-nowrap">{cpu.toFixed(1)}%</span>
     </div>
   {:else if column.key === 'memory'}
-    <span class="font-mono text-xs font-medium whitespace-nowrap"
-      >{formatBytesCompact(item.memory)}</span
-    >
+    <span class="font-mono text-xs font-medium whitespace-nowrap">
+      {formatBytesCompact(item.memory)}
+    </span>
   {:else if column.key === 'uptime'}
     <span class="font-mono text-xs whitespace-nowrap">{formatUptimeCompact(item.uptime)}</span>
   {/if}

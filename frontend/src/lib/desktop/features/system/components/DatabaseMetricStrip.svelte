@@ -54,26 +54,26 @@
           <div class="p-1.5 rounded-lg bg-blue-500/10">
             <Zap class="w-4 h-4 text-blue-500" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('system.database.dashboard.metrics.readLatency')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.dashboard.metrics.readLatency')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-lg font-semibold"
-          >{performance.read_latency_avg_ms.toFixed(1)}ms</span
-        >
+        <span class="font-mono tabular-nums text-lg font-semibold">
+          {performance.read_latency_avg_ms.toFixed(1)}ms
+        </span>
       </div>
       <div class="flex-1 min-h-[28px]">
         <Sparkline data={readLatencyHistory} color="#3b82f6" />
       </div>
       <div class="flex justify-between mt-2 text-[10px] text-muted">
-        <span
-          >{t('system.database.dashboard.metrics.avg')}
-          {performance.read_latency_avg_ms.toFixed(1)}ms</span
-        >
-        <span
-          >{t('system.database.dashboard.metrics.max')}
-          {performance.read_latency_max_ms.toFixed(1)}ms</span
-        >
+        <span>
+          {t('system.database.dashboard.metrics.avg')}
+          {performance.read_latency_avg_ms.toFixed(1)}ms
+        </span>
+        <span>
+          {t('system.database.dashboard.metrics.max')}
+          {performance.read_latency_max_ms.toFixed(1)}ms
+        </span>
       </div>
     </div>
 
@@ -86,26 +86,26 @@
           <div class="p-1.5 rounded-lg bg-violet-500/10">
             <Timer class="w-4 h-4 text-violet-500" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('system.database.dashboard.metrics.writeLatency')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.dashboard.metrics.writeLatency')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-lg font-semibold"
-          >{performance.write_latency_avg_ms.toFixed(1)}ms</span
-        >
+        <span class="font-mono tabular-nums text-lg font-semibold">
+          {performance.write_latency_avg_ms.toFixed(1)}ms
+        </span>
       </div>
       <div class="flex-1 min-h-[28px]">
         <Sparkline data={writeLatencyHistory} color="#8b5cf6" />
       </div>
       <div class="flex justify-between mt-2 text-[10px] text-muted">
-        <span
-          >{t('system.database.dashboard.metrics.avg')}
-          {performance.write_latency_avg_ms.toFixed(1)}ms</span
-        >
-        <span
-          >{t('system.database.dashboard.metrics.max')}
-          {performance.write_latency_max_ms.toFixed(1)}ms</span
-        >
+        <span>
+          {t('system.database.dashboard.metrics.avg')}
+          {performance.write_latency_avg_ms.toFixed(1)}ms
+        </span>
+        <span>
+          {t('system.database.dashboard.metrics.max')}
+          {performance.write_latency_max_ms.toFixed(1)}ms
+        </span>
       </div>
     </div>
 
@@ -118,9 +118,9 @@
           <div class="p-1.5 rounded-lg bg-emerald-500/10">
             <Activity class="w-4 h-4 text-emerald-500" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('system.database.dashboard.metrics.queriesPerSec')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.dashboard.metrics.queriesPerSec')}
+          </span>
         </div>
         <span class="font-mono tabular-nums text-lg font-semibold">{lastQps.toFixed(0)}</span>
       </div>
@@ -128,16 +128,16 @@
         <Sparkline data={queriesPerSecHistory} color="#22c55e" />
       </div>
       <div class="flex justify-between mt-2 text-[10px] text-muted">
-        <span
-          >{t('system.database.dashboard.metrics.lastHour', {
+        <span>
+          {t('system.database.dashboard.metrics.lastHour', {
             count: formatNumber(performance.queries_last_hour),
-          })}</span
-        >
-        <span
-          >{t('system.database.dashboard.metrics.slowQueries', {
+          })}
+        </span>
+        <span>
+          {t('system.database.dashboard.metrics.slowQueries', {
             count: performance.slow_query_count,
-          })}</span
-        >
+          })}
+        </span>
       </div>
     </div>
 
@@ -154,21 +154,21 @@
               class="w-4 h-4 {engine === 'mysql' ? 'text-orange-500' : 'text-emerald-500'}"
             />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('system.database.dashboard.metrics.database')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.dashboard.metrics.database')}
+          </span>
         </div>
         <div class="flex items-center gap-1">
           {#if status === 'connected'}
             <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
-            <span class="text-xs text-[var(--text-success)] font-medium"
-              >{t('system.database.stats.connected')}</span
-            >
+            <span class="text-xs text-[var(--text-success)] font-medium">
+              {t('system.database.stats.connected')}
+            </span>
           {:else}
             <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
-            <span class="text-xs text-[var(--text-error)] font-medium"
-              >{t('system.database.stats.disconnected')}</span
-            >
+            <span class="text-xs text-[var(--text-error)] font-medium">
+              {t('system.database.stats.disconnected')}
+            </span>
           {/if}
         </div>
       </div>

@@ -337,13 +337,13 @@
               onclick={() => selectPlace(place)}
             >
               <!-- The hidden comma ends the name, so a screen reader does not run it into the detail. -->
-              <span class="font-medium"
-                >{place.name}{#if detailText(place)}<span class="sr-only">,</span>{/if}</span
-              >
+              <span class="font-medium">
+                {place.name}{#if detailText(place)}<span class="sr-only">,</span>{/if}
+              </span>
               {#if detailText(place)}
-                <span class={cn('ml-1 text-xs', PLACE_OPTION_DETAIL_CLASS)}
-                  >{detailText(place)}</span
-                >
+                <span class={cn('ml-1 text-xs', PLACE_OPTION_DETAIL_CLASS)}>
+                  {detailText(place)}
+                </span>
               {/if}
             </li>
           {/each}

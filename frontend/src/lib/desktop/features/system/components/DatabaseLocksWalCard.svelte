@@ -26,8 +26,10 @@
         <span
           class="font-mono tabular-nums font-medium {details.busy_timeouts > 0
             ? 'text-[var(--text-warning)]'
-            : ''}">{details.busy_timeouts}</span
+            : ''}"
         >
+          {details.busy_timeouts}
+        </span>
       </div>
     </div>
 
@@ -37,15 +39,15 @@
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
         <span class="text-muted">{t('system.database.dashboard.locksWal.walSize')}</span>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatBytesCompact(details.wal_size_bytes)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatBytesCompact(details.wal_size_bytes)}
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <span class="text-muted">{t('system.database.dashboard.locksWal.checkpoints')}</span>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatNumber(details.wal_checkpoints)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatNumber(details.wal_checkpoints)}
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <span class="text-muted">{t('system.database.dashboard.locksWal.freelistPages')}</span>
@@ -53,9 +55,9 @@
       </div>
       <div class="flex justify-between text-sm">
         <span class="text-muted">{t('system.database.dashboard.locksWal.cacheSize')}</span>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatBytesCompact(details.cache_size_bytes)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatBytesCompact(details.cache_size_bytes)}
+        </span>
       </div>
     </div>
   </div>

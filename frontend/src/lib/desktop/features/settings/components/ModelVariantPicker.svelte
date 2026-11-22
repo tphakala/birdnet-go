@@ -286,9 +286,9 @@
              as muted technical detail on the line below. -->
         <span class="font-medium">{variantHardwareLabel(variant)}</span>
         {#if variant.recommended}
-          <span class="badge badge-primary badge-sm"
-            >{t('analysis.gallery.variants.recommended')}</span
-          >
+          <span class="badge badge-primary badge-sm">
+            {t('analysis.gallery.variants.recommended')}
+          </span>
         {/if}
         {#if variant.installed}
           <span class="badge badge-info badge-sm">{t('analysis.gallery.variants.installed')}</span>
@@ -304,11 +304,11 @@
         {/if}
         <span>{formatBytes(variant.sizeBytes)}</span>
         {#if variant.speciesCount > 0}
-          <span
-            >{t('analysis.gallery.species', {
+          <span>
+            {t('analysis.gallery.species', {
               count: formatNumber(variant.speciesCount),
-            })}</span
-          >
+            })}
+          </span>
         {/if}
       </div>
 

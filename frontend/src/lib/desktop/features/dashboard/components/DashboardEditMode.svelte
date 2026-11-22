@@ -214,9 +214,9 @@
   <div
     class="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--color-base-200)] bg-[var(--color-base-100)] px-4 py-2 shadow-xl"
   >
-    <span class="text-sm font-medium text-[var(--color-base-content)]/70"
-      >{t('dashboard.editMode.editing')}</span
-    >
+    <span class="text-sm font-medium text-[var(--color-base-content)]/70">
+      {t('dashboard.editMode.editing')}
+    </span>
     <div class="h-5 w-px bg-[var(--color-base-200)]"></div>
     <button
       onclick={saveLayout}

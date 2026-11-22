@@ -238,9 +238,9 @@
           {t('settings.species.customConfiguration.badges.customAction')}
         </span>
       {:else}
-        <span class="text-xs text-muted"
-          >{t('settings.species.customConfiguration.table.noActions')}</span
-        >
+        <span class="text-xs text-muted">
+          {t('settings.species.customConfiguration.table.noActions')}
+        </span>
       {/if}
     {:else if column.key === 'rowActions'}
       <div class="flex items-center gap-1 justify-end">

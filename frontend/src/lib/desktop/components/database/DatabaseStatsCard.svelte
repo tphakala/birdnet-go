@@ -381,9 +381,9 @@
         <span class="font-medium text-[var(--color-base-content)]">{stats.type}</span>
       </div>
       <div class="flex justify-between text-sm">
-        <span class="text-[var(--color-base-content)]/70"
-          >{t('system.database.stats.location')}:</span
-        >
+        <span class="text-[var(--color-base-content)]/70">
+          {t('system.database.stats.location')}:
+        </span>
         <span
           class="font-medium text-[var(--color-base-content)] truncate max-w-[200px]"
           title={stats.location}
@@ -393,17 +393,17 @@
       </div>
       <div class="flex justify-between text-sm">
         <span class="text-[var(--color-base-content)]/70">{t('system.database.stats.size')}:</span>
-        <span class="font-medium text-[var(--color-base-content)]"
-          >{formatBytes(stats.size_bytes)}</span
-        >
+        <span class="font-medium text-[var(--color-base-content)]">
+          {formatBytes(stats.size_bytes)}
+        </span>
       </div>
       <div class="flex justify-between text-sm">
-        <span class="text-[var(--color-base-content)]/70"
-          >{t('system.database.stats.detections')}:</span
-        >
-        <span class="font-medium text-[var(--color-base-content)]"
-          >{formatNumber(stats.total_detections)}</span
-        >
+        <span class="text-[var(--color-base-content)]/70">
+          {t('system.database.stats.detections')}:
+        </span>
+        <span class="font-medium text-[var(--color-base-content)]">
+          {formatNumber(stats.total_detections)}
+        </span>
       </div>
     {:else}
       <div class="text-sm text-[var(--color-base-content)]/70 text-center py-4">

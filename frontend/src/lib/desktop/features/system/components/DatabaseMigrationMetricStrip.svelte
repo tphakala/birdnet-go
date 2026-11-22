@@ -88,21 +88,21 @@
           <div class="p-1.5 rounded-lg bg-amber-500/10">
             <Database class="w-4 h-4 text-amber-500" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('system.database.migration.strip.legacy')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.migration.strip.legacy')}
+          </span>
         </div>
         <div class="flex items-center gap-1">
           {#if legacyStats?.connected}
             <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
-            <span class="text-xs text-[var(--text-success)] font-medium"
-              >{t('system.database.stats.connected')}</span
-            >
+            <span class="text-xs text-[var(--text-success)] font-medium">
+              {t('system.database.stats.connected')}
+            </span>
           {:else}
             <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
-            <span class="text-xs text-[var(--text-error)] font-medium"
-              >{t('system.database.stats.disconnected')}</span
-            >
+            <span class="text-xs text-[var(--text-error)] font-medium">
+              {t('system.database.stats.disconnected')}
+            </span>
           {/if}
         </div>
       </div>
@@ -113,15 +113,15 @@
         </div>
         <div class="flex justify-between">
           <span class="text-muted">{t('system.database.stats.size')}</span>
-          <span class="font-mono tabular-nums font-medium"
-            >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
-          >
+          <span class="font-mono tabular-nums font-medium">
+            {formatBytesCompact(legacyStats?.size_bytes ?? 0)}
+          </span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted">{t('system.database.stats.detections')}</span>
-          <span class="font-mono tabular-nums font-medium"
-            >{formatNumber(legacyStats?.total_detections ?? 0)}</span
-          >
+          <span class="font-mono tabular-nums font-medium">
+            {formatNumber(legacyStats?.total_detections ?? 0)}
+          </span>
         </div>
       </div>
     </div>
@@ -135,21 +135,21 @@
           <div class="p-1.5 rounded-lg bg-emerald-500/10">
             <Database class="w-4 h-4 text-emerald-500" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('system.database.migration.strip.v2Target')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.migration.strip.v2Target')}
+          </span>
         </div>
         <div class="flex items-center gap-1">
           {#if v2Stats?.connected}
             <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
-            <span class="text-xs text-[var(--text-success)] font-medium"
-              >{t('system.database.migration.strip.active')}</span
-            >
+            <span class="text-xs text-[var(--text-success)] font-medium">
+              {t('system.database.migration.strip.active')}
+            </span>
           {:else}
             <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
-            <span class="text-xs text-[var(--text-error)] font-medium"
-              >{t('system.database.stats.disconnected')}</span
-            >
+            <span class="text-xs text-[var(--text-error)] font-medium">
+              {t('system.database.stats.disconnected')}
+            </span>
           {/if}
         </div>
       </div>
@@ -160,9 +160,9 @@
         </div>
         <div class="flex justify-between">
           <span class="text-muted">{t('system.database.stats.size')}</span>
-          <span class="font-mono tabular-nums font-medium"
-            >{formatBytesCompact(v2Stats?.size_bytes ?? 0)}</span
-          >
+          <span class="font-mono tabular-nums font-medium">
+            {formatBytesCompact(v2Stats?.size_bytes ?? 0)}
+          </span>
         </div>
         <div class="flex justify-between">
           <span class="text-muted">{t('system.database.stats.detections')}</span>
@@ -180,12 +180,13 @@
           <div class="p-1.5 rounded-lg bg-blue-500/10">
             <Activity class="w-4 h-4 text-blue-500" />
           </div>
-          <span class="text-xs font-medium text-muted">{t('system.database.stats.detections')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.stats.detections')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-lg font-semibold"
-          >{formatNumber(totalDetections)}</span
-        >
+        <span class="font-mono tabular-nums text-lg font-semibold">
+          {formatNumber(totalDetections)}
+        </span>
       </div>
       <div class="flex-1 min-h-[28px]">
         <Sparkline data={detectionHistory} color={SPARKLINE_COLOR} />
@@ -211,13 +212,13 @@
               <RefreshCw class="w-4 h-4 text-orange-500" />
             {/if}
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('system.database.migration.strip.migration')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('system.database.migration.strip.migration')}
+          </span>
         </div>
-        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium {stateBadgeClass(migState)}"
-          >{stateLabel(migState)}</span
-        >
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium {stateBadgeClass(migState)}">
+          {stateLabel(migState)}
+        </span>
       </div>
 
       {#if isCompleted}
@@ -268,21 +269,21 @@
             <div class="flex justify-between mt-1 text-[10px] tabular-nums text-muted">
               <span>{(migrationStatus?.progress_percent ?? 0).toFixed(1)}%</span>
               {#if migrationStatus?.estimated_remaining}
-                <span
-                  >{t('system.database.migration.progress.remaining', {
+                <span>
+                  {t('system.database.migration.progress.remaining', {
                     time: migrationStatus.estimated_remaining,
-                  })}</span
-                >
+                  })}
+                </span>
               {/if}
             </div>
           </div>
           <div class="flex justify-between text-sm">
             <span class="text-muted">{t('system.database.migration.strip.rate')}</span>
-            <span class="font-mono tabular-nums font-medium"
-              >{t('system.database.migration.progress.rateValue', {
+            <span class="font-mono tabular-nums font-medium">
+              {t('system.database.migration.progress.rateValue', {
                 rate: formatNumber(Math.round(migrationStatus?.records_per_second ?? 0)),
-              })}</span
-            >
+              })}
+            </span>
           </div>
         </div>
       {/if}

@@ -161,9 +161,9 @@
           true,
           shortcutHints?.olderSpecies
         )}
-        <span class="dd-nav-group-label dd-nav-group-species" title={speciesName}
-          >{speciesName}</span
-        >
+        <span class="dd-nav-group-label dd-nav-group-species" title={speciesName}>
+          {speciesName}
+        </span>
         {@render stepLink(
           neighbors?.nextSameSpecies ?? null,
           t('detections.detail.nav.newerSpecies', { species: speciesName }),

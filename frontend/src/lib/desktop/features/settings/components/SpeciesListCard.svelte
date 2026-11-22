@@ -397,9 +397,9 @@
               onSort={toggleSort}
               className={SORT_HEADER_CLASS}
             />
-            <th scope="col" class="w-12"
-              ><span class="sr-only">{t('common.actionsColumn')}</span></th
-            >
+            <th scope="col" class="w-12">
+              <span class="sr-only">{t('common.actionsColumn')}</span>
+            </th>
           </tr>
         </thead>
         <tbody>

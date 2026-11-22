@@ -193,9 +193,9 @@
           class="flex items-center gap-3 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] px-4 py-3"
         >
           <LoadingSpinner size="sm" aria-hidden="true" />
-          <span class="text-sm font-medium text-[var(--color-base-content)] opacity-80"
-            >{t('wizard.steps.locationLanguage.localesLoading')}</span
-          >
+          <span class="text-sm font-medium text-[var(--color-base-content)] opacity-80">
+            {t('wizard.steps.locationLanguage.localesLoading')}
+          </span>
         </div>
       {:else}
         {#if localesFailed}

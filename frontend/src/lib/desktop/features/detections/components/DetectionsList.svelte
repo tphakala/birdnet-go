@@ -631,9 +631,9 @@
                   onSort={handleSort}
                 />
                 {#if showRecordingColumn}
-                  <th scope="col" class="hidden md:table-cell"
-                    >{t('detections.headers.recording')}</th
-                  >
+                  <th scope="col" class="hidden md:table-cell">
+                    {t('detections.headers.recording')}
+                  </th>
                 {/if}
                 <th scope="col">{t('detections.headers.actions')}</th>
               </tr>

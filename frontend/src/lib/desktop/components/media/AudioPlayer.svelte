@@ -2696,9 +2696,9 @@
             class="size-6 sm:size-8 mx-auto mb-1 text-[var(--color-base-content)]/30"
             aria-hidden="true"
           />
-          <span class="text-xs sm:text-sm text-[color:var(--text-muted)]"
-            >{t('components.audio.spectrogramUnavailable')}</span
-          >
+          <span class="text-xs sm:text-sm text-[color:var(--text-muted)]">
+            {t('components.audio.spectrogramUnavailable')}
+          </span>
         </div>
       </div>
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
@@ -2717,11 +2717,11 @@
           aria-live="polite"
         >
           {#if spectrogramStatus.status === 'queued'}
-            <span
-              >{t('components.audio.queuePosition', {
+            <span>
+              {t('components.audio.queuePosition', {
                 position: spectrogramStatus.queuePosition,
-              })}</span
-            >
+              })}
+            </span>
           {:else}
             <span>{t('components.audio.generating')}</span>
           {/if}
@@ -2753,9 +2753,9 @@
        bat axis is drawn only once its image has loaded) -->
   {#if showFreqAxis}
     {#each freqTicksKHz as freq (freq)}
-      <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
-        >{freq}k</span
-      >
+      <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true">
+        {freq}k
+      </span>
       <div
         class="freq-line"
         style:bottom="{(freq / freqNyquistKHz) * 100}%"
@@ -3002,9 +3002,9 @@
       role="alert"
       class="pointer-events-none absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] rounded-md"
     >
-      <span class="rounded bg-[var(--color-base-100)] px-2 py-0.5 text-sm text-[var(--text-error)]"
-        >{error}</span
-      >
+      <span class="rounded bg-[var(--color-base-100)] px-2 py-0.5 text-sm text-[var(--text-error)]">
+        {error}
+      </span>
     </div>
   {/if}
 </div>

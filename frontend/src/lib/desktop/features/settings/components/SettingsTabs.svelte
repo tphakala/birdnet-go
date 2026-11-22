@@ -232,9 +232,9 @@
             data-testid="tab-change-dot"
             aria-hidden="true"
           ></span>
-          <span id="settings-tab-{tab.id}-changes" class="sr-only"
-            >{t('settings.tabs.hasChanges')}</span
-          >
+          <span id="settings-tab-{tab.id}-changes" class="sr-only">
+            {t('settings.tabs.hasChanges')}
+          </span>
         {/if}
       </button>
     {/each}

@@ -87,8 +87,8 @@
     class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
   />
   {#if helpText}
-    <span id={helpId} class="text-xs text-[var(--color-base-content)]/40 mt-1 block"
-      >{helpText}</span
-    >
+    <span id={helpId} class="text-xs text-[var(--color-base-content)]/40 mt-1 block">
+      {helpText}
+    </span>
   {/if}
 </div>

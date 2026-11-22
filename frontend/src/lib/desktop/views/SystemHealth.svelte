@@ -597,9 +597,9 @@
       <div class="flex items-center gap-3 text-xs text-muted shrink-0">
         <!-- Always mounted, so a run started by Refresh is announced: a status region
              inserted together with its text often is not -->
-        <span id={RUN_STATUS_ID} role="status" class="sr-only"
-          >{running ? t('health.running') : ''}</span
-        >
+        <span id={RUN_STATUS_ID} role="status" class="sr-only">
+          {running ? t('health.running') : ''}
+        </span>
         {#if error}
           <span
             role="alert"
@@ -771,18 +771,18 @@
                     <table class="w-full text-xs">
                       <thead>
                         <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
-                          <th scope="col" class="px-3 py-1.5 font-medium"
-                            >{t('health.logs.errorComponent')}</th
-                          >
-                          <th scope="col" class="px-3 py-1.5 font-medium"
-                            >{t('health.logs.errorMessage')}</th
-                          >
-                          <th scope="col" class="px-3 py-1.5 font-medium text-right"
-                            >{t('health.logs.errorCount')}</th
-                          >
-                          <th scope="col" class="px-3 py-1.5 font-medium"
-                            >{t('health.logs.errorLevel')}</th
-                          >
+                          <th scope="col" class="px-3 py-1.5 font-medium">
+                            {t('health.logs.errorComponent')}
+                          </th>
+                          <th scope="col" class="px-3 py-1.5 font-medium">
+                            {t('health.logs.errorMessage')}
+                          </th>
+                          <th scope="col" class="px-3 py-1.5 font-medium text-right">
+                            {t('health.logs.errorCount')}
+                          </th>
+                          <th scope="col" class="px-3 py-1.5 font-medium">
+                            {t('health.logs.errorLevel')}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -912,15 +912,15 @@
                       <table class="w-full text-xs">
                         <thead>
                           <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
-                            <th scope="col" class="px-3 py-1.5 font-medium"
-                              >{t('health.detail.time')}</th
-                            >
-                            <th scope="col" class="px-3 py-1.5 font-medium"
-                              >{t('health.detail.source')}</th
-                            >
-                            <th scope="col" class="px-3 py-1.5 font-medium text-right"
-                              >{t('health.detail.count')}</th
-                            >
+                            <th scope="col" class="px-3 py-1.5 font-medium">
+                              {t('health.detail.time')}
+                            </th>
+                            <th scope="col" class="px-3 py-1.5 font-medium">
+                              {t('health.detail.source')}
+                            </th>
+                            <th scope="col" class="px-3 py-1.5 font-medium text-right">
+                              {t('health.detail.count')}
+                            </th>
                           </tr>
                         </thead>
                         <tbody>

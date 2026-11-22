@@ -309,9 +309,9 @@
               <MapPin class="h-4 w-4" aria-hidden="true" />
               {t('analysis.gallery.region.modeAuto')}
             </span>
-            <span class="text-xs text-base-content/70"
-              >{t('analysis.gallery.region.modeAutoHint')}</span
-            >
+            <span class="text-xs text-base-content/70">
+              {t('analysis.gallery.region.modeAutoHint')}
+            </span>
           </div>
         </label>
 
@@ -337,9 +337,9 @@
               <Layers class="h-4 w-4" aria-hidden="true" />
               {t('analysis.gallery.region.modeManual')}
             </span>
-            <span class="text-xs text-base-content/70"
-              >{t('analysis.gallery.region.modeManualHint')}</span
-            >
+            <span class="text-xs text-base-content/70">
+              {t('analysis.gallery.region.modeManualHint')}
+            </span>
           </div>
         </label>
       </div>
@@ -440,14 +440,14 @@
               <div class="flex items-center gap-2">
                 <span class="font-semibold">{t('analysis.gallery.region.worldwideTitle')}</span>
                 {#if isGlobal}
-                  <span class="badge badge-primary badge-sm"
-                    >{t('analysis.gallery.region.selectedBadge')}</span
-                  >
+                  <span class="badge badge-primary badge-sm">
+                    {t('analysis.gallery.region.selectedBadge')}
+                  </span>
                 {/if}
               </div>
-              <span class="text-xs text-base-content/70"
-                >{t('analysis.gallery.region.worldwideSubtitle')}</span
-              >
+              <span class="text-xs text-base-content/70">
+                {t('analysis.gallery.region.worldwideSubtitle')}
+              </span>
               <span
                 class="inline-flex items-center gap-1 self-start rounded px-1.5 py-0.5 text-xs font-medium text-warning bg-warning/10"
               >

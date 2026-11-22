@@ -163,8 +163,9 @@
           <label
             for="analyticsStartDate"
             class="text-xs font-medium text-[var(--color-base-content)]/70"
-            >{t('analytics.advanced.filters.startDate')}</label
           >
+            {t('analytics.advanced.filters.startDate')}
+          </label>
           <input
             id="analyticsStartDate"
             type="date"
@@ -179,8 +180,9 @@
           <label
             for="analyticsEndDate"
             class="text-xs font-medium text-[var(--color-base-content)]/70"
-            >{t('analytics.advanced.filters.endDate')}</label
           >
+            {t('analytics.advanced.filters.endDate')}
+          </label>
           <input
             id="analyticsEndDate"
             type="date"

@@ -315,9 +315,9 @@
         />
       {/if}
     </div>
-    <span id={SAVING_STATUS_ID} role="status" class="sr-only"
-      >{wizardState.isSaving ? t('wizard.status.saving') : ''}</span
-    >
+    <span id={SAVING_STATUS_ID} role="status" class="sr-only">
+      {wizardState.isSaving ? t('wizard.status.saving') : ''}
+    </span>
   {/snippet}
 
   {#snippet footer()}

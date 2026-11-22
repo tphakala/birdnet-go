@@ -604,8 +604,9 @@
                     {#if notification.component}
                       <span
                         class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium bg-[var(--color-base-200)] text-[var(--color-base-content)]"
-                        >{notification.component}</span
                       >
+                        {notification.component}
+                      </span>
                     {/if}
                     <span
                       class={cn(

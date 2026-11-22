@@ -347,9 +347,9 @@
                   ? t('common.review.form.hideComment')
                   : t('common.review.form.addComment')}
                 {#if comment && !showCommentSection}
-                  <span class="text-xs text-[var(--color-base-content)]/60"
-                    >{t('common.review.form.commentCount', { chars: comment.length })}</span
-                  >
+                  <span class="text-xs text-[var(--color-base-content)]/60">
+                    {t('common.review.form.commentCount', { chars: comment.length })}
+                  </span>
                 {/if}
               </span>
             </button>

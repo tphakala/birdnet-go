@@ -580,9 +580,9 @@ Performance Optimizations:
         >
           <LogoBadge size="md" variant={logoVariant} />
           {#if !isCollapsed}
-            <span class="text-xl font-bold tracking-tight text-[var(--color-base-content)]"
-              >BirdNET-Go</span
-            >
+            <span class="text-xl font-bold tracking-tight text-[var(--color-base-content)]">
+              BirdNET-Go
+            </span>
           {/if}
         </button>
         <!-- Collapse toggle - desktop only -->

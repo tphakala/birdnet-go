@@ -265,8 +265,9 @@
                   {#if detection.verified === 'correct'}
                     <span
                       class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--text-success)]"
-                      >✓</span
                     >
+                      ✓
+                    </span>
                   {/if}
                 </div>
               </button>
@@ -288,8 +289,9 @@
                   {#if detection.verified === 'false_positive'}
                     <span
                       class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--text-error)]"
-                      >✗</span
                     >
+                      ✗
+                    </span>
                   {/if}
                 </div>
               </button>
@@ -314,13 +316,15 @@
                 {#if detection.verified === 'correct'}
                   <span
                     class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--text-success)]"
-                    >✓</span
                   >
+                    ✓
+                  </span>
                 {:else if detection.verified === 'false_positive'}
                   <span
                     class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--text-error)]"
-                    >✗</span
                   >
+                    ✗
+                  </span>
                 {/if}
               </div>
             </button>

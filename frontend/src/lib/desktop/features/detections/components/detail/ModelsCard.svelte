@@ -95,11 +95,11 @@
               </div>
               <div class="dd-model-times">
                 {#if row.hitCount > 1 && row.meanConfidence !== undefined}
-                  <span
-                    >{t('detections.detail.models.mean', {
+                  <span>
+                    {t('detections.detail.models.mean', {
                       value: formatPercent(row.meanConfidence),
-                    })}</span
-                  >
+                    })}
+                  </span>
                 {/if}
                 <span>{hitTimes(row)}</span>
               </div>

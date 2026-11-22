@@ -145,9 +145,9 @@
         {#if cpuLoading}
           {@render loadingValue()}
         {:else}
-          <span class="font-mono tabular-nums text-lg font-semibold"
-            >{cpuPercent === null ? '-' : `${cpuPercent.toFixed(1)}%`}</span
-          >
+          <span class="font-mono tabular-nums text-lg font-semibold">
+            {cpuPercent === null ? '-' : `${cpuPercent.toFixed(1)}%`}
+          </span>
         {/if}
       </div>
       {#if cpuLoading}
@@ -177,9 +177,9 @@
         {#if memoryLoading}
           {@render loadingValue()}
         {:else}
-          <span class="font-mono tabular-nums text-lg font-semibold"
-            >{memoryPercent === null ? '-' : `${memoryPercent.toFixed(1)}%`}</span
-          >
+          <span class="font-mono tabular-nums text-lg font-semibold">
+            {memoryPercent === null ? '-' : `${memoryPercent.toFixed(1)}%`}
+          </span>
         {/if}
       </div>
       {#if memoryLoading}
@@ -189,16 +189,16 @@
           <Sparkline data={memoryHistory} color={sparklineColorMemory} />
         </div>
         <div class="flex justify-between mt-2 text-[10px] text-muted">
-          <span
-            >{memoryUsed === null || memoryTotal === null
+          <span>
+            {memoryUsed === null || memoryTotal === null
               ? '-'
-              : `${formatBytesCompact(memoryUsed)} / ${formatBytesCompact(memoryTotal)}`}</span
-          >
-          <span
-            >{memoryAvailable === null
+              : `${formatBytesCompact(memoryUsed)} / ${formatBytesCompact(memoryTotal)}`}
+          </span>
+          <span>
+            {memoryAvailable === null
               ? '-'
-              : `${formatBytesCompact(memoryAvailable)} ${t('system.metrics.available')}`}</span
-          >
+              : `${formatBytesCompact(memoryAvailable)} ${t('system.metrics.available')}`}
+          </span>
         </div>
       {/if}
     </div>
@@ -258,18 +258,21 @@
           {#if worstStatus === 'ok'}
             <span
               class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-success"
-              >{t('system.metrics.statusOk')}</span
             >
+              {t('system.metrics.statusOk')}
+            </span>
           {:else if worstStatus === 'warning'}
             <span
               class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-warning"
-              >{t('system.metrics.statusWarning')}</span
             >
+              {t('system.metrics.statusWarning')}
+            </span>
           {:else if worstStatus === 'critical'}
             <span
               class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-error"
-              >{t('system.metrics.statusCritical')}</span
             >
+              {t('system.metrics.statusCritical')}
+            </span>
           {/if}
           {#if inferenceLoading}
             {@render loadingValue()}
@@ -297,9 +300,9 @@
             <span class="flex items-center gap-1">
               <span class="inline-block w-1.5 h-1.5 rounded-full" style:background={m.color}></span>
               {m.name}
-              <span class="font-mono tabular-nums"
-                >{m.history[m.history.length - 1].toFixed(0)}ms</span
-              >
+              <span class="font-mono tabular-nums">
+                {m.history[m.history.length - 1].toFixed(0)}ms
+              </span>
             </span>
           {/each}
         </div>

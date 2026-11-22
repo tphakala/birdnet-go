@@ -124,17 +124,18 @@
               <td class="py-2 px-3">
                 <span
                   class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-orange-500/10 text-orange-600 dark:text-orange-400"
-                  >{table.engine}</span
                 >
+                  {table.engine}
+                </span>
               </td>
             {/if}
             <td class="py-2 px-3">
               <span class="font-mono tabular-nums text-xs">{formatNumber(table.row_count)}</span>
             </td>
             <td class="py-2 px-3">
-              <span class="font-mono tabular-nums text-xs font-medium"
-                >{formatBytesCompact(table.size_bytes)}</span
-              >
+              <span class="font-mono tabular-nums text-xs font-medium">
+                {formatBytesCompact(table.size_bytes)}
+              </span>
             </td>
             <td class="py-2 px-3">
               <div class="flex items-center gap-2">

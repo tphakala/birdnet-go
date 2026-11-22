@@ -8,9 +8,9 @@
   let upperOpen = $state(false);
 </script>
 
-<button type="button"
-  >Page button<span tabindex="-1" aria-hidden="true" data-testid="page-button-icon"></span></button
->
+<button type="button">
+  Page button<span tabindex="-1" aria-hidden="true" data-testid="page-button-icon"></span>
+</button>
 <button type="button" disabled>Disabled button</button>
 <div role="button" tabindex="0">
   Custom button<span tabindex="-1" aria-hidden="true" data-testid="custom-button-icon"></span>
@@ -34,8 +34,10 @@
   onclick={() => {
     lowerOpen = false;
     upperOpen = false;
-  }}>Close both</button
+  }}
 >
+  Close both
+</button>
 
 <Modal isOpen={lowerOpen} title="Lower modal" showCloseButton={false}>
   {#snippet children()}

@@ -467,8 +467,10 @@
         onclick={handleZeroClick}
         onkeydown={handleZeroKeydown}
         role="button"
-        tabindex="0">0</span
-      >4
+        tabindex="0"
+      >
+        0
+      </span>4
     </h1>
     <h2 class="text-3xl font-semibold text-[var(--color-base-content)] opacity-70 mb-8">
       {t('error.404.title')}

@@ -1390,13 +1390,13 @@
             >
               <Bird class="w-3.5 h-3.5 text-[var(--text-success)]" />
             </div>
-            <span class="text-xs font-medium text-muted"
-              >{t('settings.species.activeSpecies.stats.species')}</span
-            >
+            <span class="text-xs font-medium text-muted">
+              {t('settings.species.activeSpecies.stats.species')}
+            </span>
           </div>
-          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
-            >{activeSpeciesState.data.count}</span
-          >
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">
+            {activeSpeciesState.data.count}
+          </span>
         </div>
 
         <div
@@ -1406,15 +1406,15 @@
             <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]">
               <MapPin class="w-3.5 h-3.5 text-[var(--text-info)]" />
             </div>
-            <span class="text-xs font-medium text-muted"
-              >{t('settings.species.activeSpecies.stats.location')}</span
-            >
+            <span class="text-xs font-medium text-muted">
+              {t('settings.species.activeSpecies.stats.location')}
+            </span>
           </div>
-          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
-            >{activeSpeciesState.data.location.latitude.toFixed(2)}°, {activeSpeciesState.data.location.longitude.toFixed(
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">
+            {activeSpeciesState.data.location.latitude.toFixed(2)}°, {activeSpeciesState.data.location.longitude.toFixed(
               2
-            )}°</span
-          >
+            )}°
+          </span>
         </div>
 
         <div
@@ -1424,13 +1424,13 @@
             <div class="p-1 rounded-md bg-violet-500/10">
               <SlidersHorizontal class="w-3.5 h-3.5 text-violet-500" />
             </div>
-            <span class="text-xs font-medium text-muted"
-              >{t('settings.species.activeSpecies.stats.threshold')}</span
-            >
+            <span class="text-xs font-medium text-muted">
+              {t('settings.species.activeSpecies.stats.threshold')}
+            </span>
           </div>
-          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
-            >{activeSpeciesState.data.threshold}</span
-          >
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">
+            {activeSpeciesState.data.threshold}
+          </span>
         </div>
 
         <div
@@ -1442,13 +1442,13 @@
             >
               <Clock class="w-3.5 h-3.5 text-[var(--text-warning)]" />
             </div>
-            <span class="text-xs font-medium text-muted"
-              >{t('settings.species.activeSpecies.stats.updated')}</span
-            >
+            <span class="text-xs font-medium text-muted">
+              {t('settings.species.activeSpecies.stats.updated')}
+            </span>
           </div>
-          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
-            >{formatRelativeTime(activeSpeciesState.data.lastUpdated)}</span
-          >
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">
+            {formatRelativeTime(activeSpeciesState.data.lastUpdated)}
+          </span>
         </div>
       </div>
     {/if}
@@ -1776,8 +1776,9 @@
                 />
                 <span
                   class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
-                  >{t('settings.species.tracking.units.days')}</span
                 >
+                  {t('settings.species.tracking.units.days')}
+                </span>
               </div>
               <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.newSpeciesWindowDays.helpText')}
@@ -1809,8 +1810,9 @@
                 />
                 <span
                   class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
-                  >{t('settings.species.tracking.units.min')}</span
                 >
+                  {t('settings.species.tracking.units.min')}
+                </span>
               </div>
               <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.syncIntervalMinutes.helpText')}
@@ -1842,8 +1844,9 @@
                 />
                 <span
                   class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
-                  >{t('settings.species.tracking.units.hours')}</span
                 >
+                  {t('settings.species.tracking.units.hours')}
+                </span>
               </div>
               <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.notificationSuppressionHours.helpText')}
@@ -1950,8 +1953,9 @@
                   />
                   <span
                     class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
-                    >{t('settings.species.tracking.units.days')}</span
                   >
+                    {t('settings.species.tracking.units.days')}
+                  </span>
                 </div>
                 <p class="text-xs text-muted mt-1">
                   {t('settings.species.tracking.yearly.windowDays.helpText')}
@@ -2005,8 +2009,9 @@
                 />
                 <span
                   class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
-                  >{t('settings.species.tracking.units.days')}</span
                 >
+                  {t('settings.species.tracking.units.days')}
+                </span>
               </div>
               <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.seasonal.windowDays.helpText')}
@@ -2132,8 +2137,9 @@
                   />
                   <span
                     class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
-                    >{t('settings.species.tracking.units.days')}</span
                   >
+                    {t('settings.species.tracking.units.days')}
+                  </span>
                 </div>
                 <p class="text-xs text-muted mt-1">
                   {t('settings.species.tracking.infrequent.absenceDays.helpText')}

@@ -212,8 +212,9 @@ Shows up to 12 species, ordered by novelty category then detection count.
               class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[var(--color-base-content)]/60"
             >
               <AudioLines class="size-3.5 shrink-0" />
-              <span>{t('dashboard.newSpeciesHighlights.detections', { count: species.count })}</span
-              >
+              <span>
+                {t('dashboard.newSpeciesHighlights.detections', { count: species.count })}
+              </span>
               {#if isToday && species.days_since_last_seen !== undefined && species.days_since_last_seen > 0}
                 <span aria-hidden="true">·</span>
                 <span class="truncate">

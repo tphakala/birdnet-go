@@ -190,9 +190,9 @@
           </span>
           <time datetime={group.latestTimestamp}>{timeRange}</time>
           {#if group.unreadCount > 0}
-            <span class="text-[var(--text-primary)] font-medium"
-              >{t('notifications.groups.unread', { count: group.unreadCount })}</span
-            >
+            <span class="text-[var(--text-primary)] font-medium">
+              {t('notifications.groups.unread', { count: group.unreadCount })}
+            </span>
           {/if}
         </div>
       </div>

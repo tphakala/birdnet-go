@@ -720,8 +720,10 @@
             onclick={previousPage}
             disabled={currentPage === 1}
             class="join-item btn btn-sm"
-            aria-label={t('dataDisplay.pagination.goToPreviousPage')}>«</button
+            aria-label={t('dataDisplay.pagination.goToPreviousPage')}
           >
+            «
+          </button>
           <button
             class="join-item btn btn-sm btn-primary"
             aria-label={t('dataDisplay.pagination.page', {
@@ -736,8 +738,10 @@
             onclick={nextPage}
             disabled={currentPage === totalPages}
             class="join-item btn btn-sm"
-            aria-label={t('dataDisplay.pagination.goToNextPage')}>»</button
+            aria-label={t('dataDisplay.pagination.goToNextPage')}
           >
+            »
+          </button>
         </div>
       </div>
     {/if}

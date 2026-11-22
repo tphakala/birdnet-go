@@ -115,42 +115,42 @@
 
     <div class="rounded-lg bg-[var(--color-base-200)] p-4 font-mono text-sm space-y-1">
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.version')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.version')}:
+        </span>
         <span class="ml-2">{systemInfo.version || '...'}</span>
       </div>
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.buildDate')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.buildDate')}:
+        </span>
         <span class="ml-2">{systemInfo.buildDate || '...'}</span>
       </div>
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.os')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.os')}:
+        </span>
         <span class="ml-2">{systemInfo.os || '...'}</span>
       </div>
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.architecture')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.architecture')}:
+        </span>
         <span class="ml-2">{systemInfo.architecture || '...'}</span>
       </div>
       {#if systemInfo.hardware}
         <div>
-          <span class="text-[var(--color-base-content)] opacity-60"
-            >{t('reportBug.systemInfo.hardware')}:</span
-          >
+          <span class="text-[var(--color-base-content)] opacity-60">
+            {t('reportBug.systemInfo.hardware')}:
+          </span>
           <span class="ml-2">{systemInfo.hardware}</span>
         </div>
       {/if}
       {#if systemInfo.environment}
         <div>
-          <span class="text-[var(--color-base-content)] opacity-60"
-            >{t('reportBug.systemInfo.environment')}:</span
-          >
+          <span class="text-[var(--color-base-content)] opacity-60">
+            {t('reportBug.systemInfo.environment')}:
+          </span>
           <span class="ml-2">{systemInfo.environment}</span>
         </div>
       {/if}

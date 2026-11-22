@@ -213,12 +213,12 @@
           <span class="dd-reviews-false" style:width="{falsePositiveShare * PERCENT}%"></span>
         </div>
         <p class="dd-reviews-legend">
-          <span class="dd-reviews-key dd-reviews-key-correct"
-            >{t('detections.detail.stats.reviewsCorrect', { count: reviews.correct })}</span
-          >
-          <span class="dd-reviews-key dd-reviews-key-false"
-            >{t('detections.detail.stats.reviewsFalse', { count: reviews.falsePositive })}</span
-          >
+          <span class="dd-reviews-key dd-reviews-key-correct">
+            {t('detections.detail.stats.reviewsCorrect', { count: reviews.correct })}
+          </span>
+          <span class="dd-reviews-key dd-reviews-key-false">
+            {t('detections.detail.stats.reviewsFalse', { count: reviews.falsePositive })}
+          </span>
         </p>
         {#if oftenRejected}
           <p class="dd-reviews-warning">

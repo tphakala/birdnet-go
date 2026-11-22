@@ -81,9 +81,9 @@
         <!-- Description -->
         <p class="text-sm text-[var(--color-base-content)]/70">
           {t('system.database.legacy.cleanup.description')}
-          <span class="font-medium text-[var(--color-base-content)] ml-1"
-            >{t('system.database.legacy.cleanup.recommendation')}</span
-          >
+          <span class="font-medium text-[var(--color-base-content)] ml-1">
+            {t('system.database.legacy.cleanup.recommendation')}
+          </span>
         </p>
 
         <!-- Database info -->
@@ -104,9 +104,9 @@
             <span class="text-[var(--color-base-content)]/70">
               {t('system.database.legacy.cleanup.size')}
             </span>
-            <span class="font-medium text-[var(--color-base-content)]"
-              >{formatBytes(status.size_bytes)}</span
-            >
+            <span class="font-medium text-[var(--color-base-content)]">
+              {formatBytes(status.size_bytes)}
+            </span>
           </div>
 
           {#if status.total_records > 0}
@@ -126,9 +126,9 @@
               <span class="text-[var(--color-base-content)]/70">
                 {t('system.database.legacy.cleanup.lastModified')}
               </span>
-              <span class="font-medium text-[var(--color-base-content)]"
-                >{formatDate(status.last_modified)}</span
-              >
+              <span class="font-medium text-[var(--color-base-content)]">
+                {formatDate(status.last_modified)}
+              </span>
             </div>
           {/if}
         </div>
