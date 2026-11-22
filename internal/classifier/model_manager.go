@@ -43,7 +43,10 @@ const (
 	StatusLoading     = "loading"
 	StatusComplete    = "complete"
 	StatusFailed      = "failed"
-	StatusRemoved     = "removed"
+	// StatusCancelled marks a download the user cancelled. It is terminal and, unlike
+	// StatusFailed, carries no error: the previous state of the model is unchanged.
+	StatusCancelled = "cancelled"
+	StatusRemoved   = "removed"
 )
 
 // failedStateRetention is how long a failed download state is kept in the
@@ -156,11 +159,11 @@ type DownloadState struct {
 }
 
 // IsActive reports whether this download state means the model is genuinely
-// mid-acquisition (downloading, verifying, or loading). A FAILED state is retained
-// for failedStateRetention so SSE pollers can still observe the failure, but during
-// that window the model is NOT analyzing, so callers deciding whether to suppress a
-// "not analyzing" alarm must treat failed (and the terminal complete/removed) as
-// inactive rather than as an in-progress download.
+// mid-acquisition (downloading, verifying, or loading). A FAILED or CANCELLED state
+// is retained for failedStateRetention so SSE pollers can still observe the outcome,
+// but during that window the model is NOT analyzing, so callers deciding whether to
+// suppress a "not analyzing" alarm must treat failed and cancelled (and the terminal
+// complete/removed) as inactive rather than as an in-progress download.
 func (s *DownloadState) IsActive() bool {
 	if s == nil {
 		return false
@@ -1045,7 +1048,9 @@ func (mm *ModelManager) reloadRangeFilter() error {
 	return mm.orchestrator.ReloadRangeFilter()
 }
 
-// Uninstall removes a downloaded model from disk and the installed map.
+// Uninstall removes a downloaded model from disk and the installed map. It is
+// refused while a download or variant switch for the entry is active; a retained
+// failed or cancelled download state does not block it.
 // It refuses to uninstall the permanent built-in model (BirdNET v2.4), and returns a
 // *DependentsError, changing nothing, while another installed or actively downloading
 // model depends on the entry (see CatalogEntry.DependsOn). Label files are retained on
@@ -1112,7 +1117,7 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	// concurrent replaceVariant swaps mm.installed and writes files after its own
 	// unlock; uninstalling in that window would delete the old files and clear
 	// config only for the switch to resurrect the entry as a zombie install.
-	if _, downloading := mm.downloading[catalogID]; downloading {
+	if mm.downloading[catalogID].IsActive() {
 		return errors.Newf("model %s is being downloaded; cannot uninstall", catalogID).
 			Component("classifier.model_manager").
 			Category(errors.CategoryValidation).
@@ -1255,13 +1260,17 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 // HuggingFace URL constructed from the entry's repo. Progress is reported via the
 // channel if non-nil. It holds the operation slot for the whole install and
 // returns an *OperationInProgressError, changing nothing, while another model
-// operation runs.
+// operation runs. The install runs under a context CancelOperation can cancel once
+// its download is registered, until activation starts; a cancelled install returns
+// an error that Is ErrOperationCancelled and leaves nothing behind.
 func (mm *ModelManager) Install(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
 	lease, err := mm.BeginOperation(OperationInstall, entry.ID)
 	if err != nil {
 		return err
 	}
 	defer lease.Release()
+	ctx, cancel := lease.cancellableContext(ctx)
+	defer cancel(nil)
 	return mm.install(ctx, entry, variantID, baseURL, progress)
 }
 
@@ -1288,7 +1297,7 @@ func (mm *ModelManager) install(ctx context.Context, entry *CatalogEntry, varian
 			Context("catalog_id", entry.ID).
 			Build()
 	}
-	if _, downloading := mm.downloading[entry.ID]; downloading {
+	if mm.downloading[entry.ID].IsActive() {
 		mm.mu.Unlock()
 		return errors.Newf("model %s is already being downloaded", entry.ID).
 			Component("classifier.model_manager").
@@ -1303,12 +1312,11 @@ func (mm *ModelManager) install(ctx context.Context, entry *CatalogEntry, varian
 		Status:    StatusDownloading,
 	}
 	mm.mu.Unlock()
+	mm.markCancellable(entry.ID)
 
 	if err := mm.downloadModelFiles(ctx, entry, variantID, baseURL, progress, true); err != nil {
-		// Keep failed state briefly for SSE pollers, then clean up.
-		time.AfterFunc(failedStateRetention, func() {
-			mm.removeDownloading(entry.ID)
-		})
+		// Keep the failed or cancelled state briefly for SSE pollers, then clean up.
+		mm.retainTerminalState(entry.ID)
 		return err
 	}
 
@@ -1343,7 +1351,7 @@ func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, base
 			Context("catalog_id", entry.ID).
 			Build()
 	}
-	if _, downloading := mm.downloading[entry.ID]; downloading {
+	if mm.downloading[entry.ID].IsActive() {
 		mm.mu.Unlock()
 		return errors.Newf("model %s is already being downloaded", entry.ID).
 			Component("classifier.model_manager").
@@ -1405,9 +1413,7 @@ func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, base
 
 	if err := mm.downloadModelFiles(ctx, entry, reinstallVariantID, baseURL, progress, false); err != nil {
 		// Keep failed state briefly for SSE pollers, then clean up.
-		time.AfterFunc(failedStateRetention, func() {
-			mm.removeDownloading(entry.ID)
-		})
+		mm.retainTerminalState(entry.ID)
 		return err
 	}
 
@@ -1424,13 +1430,17 @@ func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, base
 // The baseURL parameter overrides the HuggingFace URL for testing. It holds the
 // operation slot for the whole call, the same-variant no-op included, and returns
 // an *OperationInProgressError, changing nothing, while another model operation
-// runs.
+// runs. Like Install it is cancellable (CancelOperation) from the registration of
+// its download until activation starts; a cancelled swap leaves the previous variant
+// installed and loaded.
 func (mm *ModelManager) InstallOrReplace(ctx context.Context, entry *CatalogEntry, variantID, baseURL string, progress chan<- DownloadState) error {
 	lease, err := mm.BeginOperation(OperationInstall, entry.ID)
 	if err != nil {
 		return err
 	}
 	defer lease.Release()
+	ctx, cancel := lease.cancellableContext(ctx)
+	defer cancel(nil)
 	return mm.installOrReplace(ctx, entry, variantID, baseURL, progress)
 }
 
@@ -1456,7 +1466,7 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 	}
 
 	mm.mu.Lock()
-	if _, downloading := mm.downloading[entry.ID]; downloading {
+	if mm.downloading[entry.ID].IsActive() {
 		mm.mu.Unlock()
 		return errors.Newf("model %s is already being downloaded", entry.ID).
 			Component("classifier.model_manager").
@@ -1487,6 +1497,7 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 			Status:    StatusDownloading,
 		}
 		mm.mu.Unlock()
+		mm.markCancellable(entry.ID)
 		return mm.replaceVariant(ctx, entry, &current, target, baseURL, progress)
 	}
 
@@ -1510,6 +1521,7 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 		Status:    StatusDownloading,
 	}
 	mm.mu.Unlock()
+	mm.markCancellable(entry.ID)
 
 	return mm.replaceVariant(ctx, entry, &current, target, baseURL, progress)
 }
@@ -1526,7 +1538,9 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 // caller must have registered entry.ID in mm.downloading; replaceVariant keeps it
 // registered until the superseded files are gone (so a concurrent ScanInstalled
 // treats the switch as in-flight) and clears it (or schedules cleanup on failure)
-// before returning.
+// before returning. A user cancel (ErrOperationCancelled as the context's cause)
+// ends the call before the swap, with the state cancelled and the old variant
+// untouched.
 func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry, old *InstalledModel, newVariantID, baseURL string, progress chan<- DownloadState) error {
 	log := GetLogger()
 
@@ -1544,16 +1558,22 @@ func (mm *ModelManager) replaceVariant(ctx context.Context, entry *CatalogEntry,
 	if effective, _ := EffectiveFiles(entry, newVariantID); len(effective) > 0 {
 		_, mp, lp, ep, err := mm.downloadVariantFiles(ctx, entry, newVariantID, baseURL, progress, true)
 		if err != nil {
-			// downloadVariantFiles already marked the state failed; retain it briefly
-			// for SSE pollers, then clear. The old variant is untouched and loaded.
-			time.AfterFunc(failedStateRetention, func() {
-				mm.removeDownloading(entry.ID)
-			})
+			// downloadVariantFiles already marked the state failed or cancelled; retain
+			// it briefly for SSE pollers, then clear. The old variant is untouched and
+			// loaded.
+			mm.retainTerminalState(entry.ID)
 			return err
 		}
 		if !targetIsBuiltIn {
 			modelPath, labelsPath, embeddingsPath = mp, lp, ep
 		}
+	} else if err := mm.enterActivation(ctx, entry.ID); err != nil {
+		// No files to download (the BuiltIn baseline), so activation starts here. The
+		// record is untouched; end the operation cancelled instead of leaving the
+		// still-active state for releaseLocked to report as ended unexpectedly.
+		mm.markCancelled(entry.ID, progress)
+		mm.retainTerminalState(entry.ID)
+		return err
 	}
 
 	// 2. Swap the install record to the new variant. entry.ID stays in mm.downloading
@@ -1724,9 +1744,7 @@ func (mm *ModelManager) rollbackVariant(log logger.Logger, entry *CatalogEntry, 
 	}
 	switchErr := eb.Build()
 	mm.markFailed(entry.ID, switchErr, progress)
-	time.AfterFunc(failedStateRetention, func() {
-		mm.removeDownloading(entry.ID)
-	})
+	mm.retainTerminalState(entry.ID)
 	return switchErr
 }
 
@@ -1941,7 +1959,11 @@ func (mm *ModelManager) removeFailedDownloadFiles(log logger.Logger, entry *Cata
 // so both the install path (downloadModelFiles) and the variant-replace path
 // (replaceVariant) can share the download while differing in how they activate
 // the result. The caller must have registered the entry in mm.downloading and must
-// not hold mm.mu. On failure it calls markFailed, and when cleanupOnFailure is true
+// not hold mm.mu. On failure it marks the state failed, or cancelled when the user
+// cancelled the operation (ErrOperationCancelled as the context's cause, in which case
+// it returns an error wrapping that cause). When every file is on disk it calls
+// enterActivation, the last point at which a cancel can still end the operation, and
+// marks the state loading. When cleanupOnFailure is true
 // it removes the files it downloaded this call (Install, variant swap) through
 // removeFailedDownloadFiles, which keeps a shared file another installed or actively
 // downloading entry, or the entry's own current install, still reaches; when false,
@@ -1954,6 +1976,22 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 	// rejected by the caller; treat it as a failure here too, as a backstop, rather
 	// than silently installing the default variant's files.
 	files, okVariant := EffectiveFiles(entry, variantID)
+
+	// Track files we downloaded so we can clean up on failure.
+	var downloadedFiles []downloadedFile
+
+	cleanup := func() { mm.removeFailedDownloadFiles(log, entry, downloadedFiles) }
+
+	// fail ends the attempt: it removes what this call wrote (when asked to), then
+	// settles the state, cancelled when the user cancelled and failed otherwise.
+	// Cleanup comes first so a reader that sees the terminal state sees no leftovers.
+	fail := func(failure error) error {
+		if cleanupOnFailure {
+			cleanup()
+		}
+		return mm.settleDownloadFailure(ctx, entry.ID, failure, progress)
+	}
+
 	if !okVariant {
 		vErr := errors.Newf("unknown variant %q for model %s", variantID, entry.ID).
 			Component("classifier.model_manager").
@@ -1961,8 +1999,7 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 			Context("catalog_id", entry.ID).
 			Context("variant_id", variantID).
 			Build()
-		mm.markFailed(entry.ID, vErr, progress)
-		return nil, "", "", "", vErr
+		return nil, "", "", "", fail(vErr)
 	}
 
 	// Create model subdirectory only if the entry has non-shared files.
@@ -1976,15 +2013,9 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 				Context("catalog_id", entry.ID).
 				Context("directory", subdir).
 				Build()
-			mm.markFailed(entry.ID, mkdirErr, progress)
-			return nil, "", "", "", mkdirErr
+			return nil, "", "", "", fail(mkdirErr)
 		}
 	}
-
-	// Track files we downloaded so we can clean up on failure.
-	var downloadedFiles []downloadedFile
-
-	cleanup := func() { mm.removeFailedDownloadFiles(log, entry, downloadedFiles) }
 
 	// fileDestPath returns the local destination for a catalog file.
 	// Shared files (embeddings, geomodel, taxonomy) are stored in a common directory.
@@ -2021,8 +2052,7 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 	// downloaded yet (the subdirectory may already exist), so no cleanup is needed
 	// on the reject path.
 	if pfErr := mm.preflightDiskSpace(entry, filesToDownload, totalAllBytes); pfErr != nil {
-		mm.markFailed(entry.ID, pfErr, progress)
-		return nil, "", "", "", pfErr
+		return nil, "", "", "", fail(pfErr)
 	}
 
 	// Resolve the endpoint override once per install, for logging and for the
@@ -2092,16 +2122,18 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 			dlErr = mm.downloadModelFile(ctx, entry.ID, repo, f.RemotePath, destPath, f.SHA256, completedBytes, configured)
 		}
 		if dlErr != nil {
-			log.Error("Failed to download file",
-				logger.String("catalog_id", entry.ID),
-				logger.String("repo", repo),
-				logger.String("remote_path", f.RemotePath),
-				logger.Error(dlErr))
-			mm.markFailed(entry.ID, dlErr, progress)
-			if cleanupOnFailure {
-				cleanup()
+			if errors.Is(context.Cause(ctx), ErrOperationCancelled) {
+				log.Info("Model download cancelled",
+					logger.String("catalog_id", entry.ID),
+					logger.String("remote_path", f.RemotePath))
+			} else {
+				log.Error("Failed to download file",
+					logger.String("catalog_id", entry.ID),
+					logger.String("repo", repo),
+					logger.String("remote_path", f.RemotePath),
+					logger.Error(dlErr))
 			}
-			return nil, "", "", "", dlErr
+			return nil, "", "", "", fail(dlErr)
 		}
 
 		completedBytes += f.SizeBytes
@@ -2113,6 +2145,13 @@ func (mm *ModelManager) downloadVariantFiles(ctx context.Context, entry *Catalog
 		if f.Role == RoleLabels {
 			labelsPath = destPath
 		}
+	}
+
+	// Every file is on disk: activation starts here, the point of no return of a
+	// cancel. A cancel that arrived before it ends the operation cancelled and
+	// removes what this call wrote.
+	if actErr := mm.enterActivation(ctx, entry.ID); actErr != nil {
+		return nil, "", "", "", fail(actErr)
 	}
 
 	// For shared-only entries (e.g. geomodels), derive paths from shared files.
@@ -2275,6 +2314,69 @@ func (mm *ModelManager) markFailed(catalogID string, err error, progress chan<- 
 		}:
 		default:
 		}
+	}
+}
+
+// markCancelled sets the download state to StatusCancelled, the terminal state of
+// a user cancel, so SSE pollers can observe it. It carries no error: a cancel is
+// not a failure.
+func (mm *ModelManager) markCancelled(catalogID string, progress chan<- DownloadState) {
+	mm.mu.Lock()
+	if state, ok := mm.downloading[catalogID]; ok {
+		state.Status = StatusCancelled
+		state.Error = ""
+	}
+	mm.mu.Unlock()
+
+	if progress != nil {
+		select {
+		case progress <- DownloadState{CatalogID: catalogID, Status: StatusCancelled}:
+		default:
+		}
+	}
+}
+
+// settleDownloadFailure ends a download attempt that returned err: it marks the
+// entry's state cancelled and returns the cancellation error when the user
+// cancelled the operation (whatever the failure looked like, a cancel racing
+// another failure still reads as a cancel), else marks it failed and returns err.
+func (mm *ModelManager) settleDownloadFailure(ctx context.Context, catalogID string, err error, progress chan<- DownloadState) error {
+	if errors.Is(context.Cause(ctx), ErrOperationCancelled) {
+		mm.markCancelled(catalogID, progress)
+		return newCancelledError(catalogID)
+	}
+	mm.markFailed(catalogID, err, progress)
+	return err
+}
+
+// retainTerminalState keeps the entry's terminal (failed or cancelled) download
+// state in the map for failedStateRetention so SSE pollers can observe it, then
+// removes it. The removal only runs if the map still holds that same state, so it
+// never deletes the state of an operation started in the meantime.
+func (mm *ModelManager) retainTerminalState(catalogID string) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	mm.retainTerminalStateLocked(catalogID)
+}
+
+// retainTerminalStateLocked is retainTerminalState for a caller holding mm.mu.
+func (mm *ModelManager) retainTerminalStateLocked(catalogID string) {
+	state := mm.downloading[catalogID]
+	if state == nil {
+		return
+	}
+	time.AfterFunc(failedStateRetention, func() {
+		mm.expireDownloadState(catalogID, state)
+	})
+}
+
+// expireDownloadState removes the download state of catalogID when it is still
+// state, and leaves a newer state alone.
+func (mm *ModelManager) expireDownloadState(catalogID string, state *DownloadState) {
+	mm.mu.Lock()
+	defer mm.mu.Unlock()
+	if mm.downloading[catalogID] == state {
+		delete(mm.downloading, catalogID)
 	}
 }
 
@@ -2677,7 +2779,8 @@ func shouldFailover(err error) bool {
 //
 // The endpoint chain is resolved per file, not once per install, so a file that
 // established the mirror as sticky lets every subsequent file start there
-// instead of re-paying the blocked host's connect timeout.
+// instead of re-paying the blocked host's connect timeout. A done context (a user
+// cancel or shutdown) never fails over, whatever the error looked like.
 func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, remotePath, destPath, expectedSHA256 string, completedBytes int64, configured string) error {
 	endpoints := mm.orderedDownloadEndpoints(configured)
 	for i, endpoint := range endpoints {
@@ -2689,7 +2792,9 @@ func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, 
 		}
 		// Surface the error (no failover) on the last endpoint or when the
 		// failure is not a reachability problem another host could avoid.
-		if i == len(endpoints)-1 || !shouldFailover(err) {
+		// A done context (a user cancel, shutdown) never fails over, even when the
+		// error looks retryable (a 503 or a dropped connection racing the cancel).
+		if i == len(endpoints)-1 || !shouldFailover(err) || ctx.Err() != nil {
 			return err
 		}
 		GetLogger().Warn("HuggingFace host unreachable, trying next endpoint",
@@ -2706,12 +2811,40 @@ func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, 
 		Build()
 }
 
+// downloadInterrupted reports whether err came from the download's own context
+// ending (a user cancel or shutdown) rather than from the host.
+func downloadInterrupted(ctx context.Context, err error) bool {
+	return ctx.Err() != nil || errors.Is(err, context.Canceled)
+}
+
+// newDownloadInterruptedError builds the error for a download whose context ended.
+// It wraps the context's cause (a %w chain, so errors.Is still finds the cancel)
+// and carries CategorySystem, so telemetry suppresses it as an expected
+// interruption: every EnhancedError is reported when built, and a network-category
+// error would reach Sentry. It names no network failure, so the frontend shows no
+// mirror hint.
+func newDownloadInterruptedError(ctx context.Context, err error, url string) error {
+	cause := context.Cause(ctx)
+	if cause == nil {
+		cause = err
+	}
+	return errors.Newf("download of %s interrupted: %w", url, cause).
+		Component("classifier.model_manager").
+		Category(errors.CategorySystem).
+		Context("operation", "model_download_interrupted").
+		Context("url", url).
+		Build()
+}
+
 // getHuggingFace issues a GET for url and returns the response when the host
 // answers 200; the caller closes the body. A transport failure and a non-200
 // status come back as an endpointAttemptError that records whether another
 // endpoint might serve the file, so downloadFile and the document fetch fail
 // over the same way. The "HTTP request failed for" and "HTTP <status> for"
-// texts are matched by the frontend and must not change.
+// texts are matched by the frontend and must not change. When ctx ended (a user
+// cancel or shutdown) the error is a non-retryable system-category interruption that
+// wraps the context's cause instead, so it is neither retried on a mirror nor
+// reported to telemetry.
 func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
@@ -2724,6 +2857,9 @@ func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		if downloadInterrupted(ctx, err) {
+			return nil, &endpointAttemptError{err: newDownloadInterruptedError(ctx, err, url)}
+		}
 		// A transport failure (unreachable host, reset, timeout) is retryable on
 		// the next endpoint; a cancelled context is not (IsUnreachable handles the
 		// distinction).
@@ -2760,7 +2896,8 @@ func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http
 // checksum. The catalogID is used to update shared download state for SSE
 // polling. completedBytes is the cumulative size of previously downloaded
 // files, used so progress reflects total download, not just the current file.
-// On failure, any temporary file is cleaned up.
+// On failure, any temporary file is cleaned up. A read interrupted by ctx ending
+// returns the same non-retryable interruption error as getHuggingFace.
 func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPath, expectedSHA256 string, completedBytes int64) error {
 	// Ensure parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
@@ -2840,6 +2977,9 @@ func (mm *ModelManager) downloadFile(ctx context.Context, catalogID, url, destPa
 			break
 		}
 		if readErr != nil {
+			if downloadInterrupted(ctx, readErr) {
+				return &endpointAttemptError{err: newDownloadInterruptedError(ctx, readErr, url)}
+			}
 			// A connection dropped mid-stream (a common Great-Firewall symptom) is
 			// retryable on the next endpoint.
 			return &endpointAttemptError{

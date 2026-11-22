@@ -90,6 +90,10 @@
     progress?: DownloadProgress | null;
     /** Installed mode: a better variant exists for this host. */
     optimizeAvailable?: boolean;
+    /** Cancels this card's running download. The Cancel button shows only while the download runs and this is set; not offered for a reinstall. */
+    onCancel?: () => void;
+    /** True after Cancel was used, until the operation ends: the button reads "Cancelling..." and ignores clicks. */
+    cancelling?: boolean;
     /** Called with the action and the entry when an action button is used. */
     // eslint-disable-next-line no-unused-vars -- the param names document the callback contract
     onAction: (action: ModelCardAction, entry: CatalogEntry) => void;
@@ -104,6 +108,8 @@
     pausedReasonId,
     progress = null,
     optimizeAvailable = false,
+    onCancel,
+    cancelling = false,
     onAction,
   }: Props = $props();
 
@@ -157,6 +163,8 @@
         return t('analysis.gallery.progress.complete');
       case 'failed':
         return t('analysis.gallery.progress.failed');
+      case 'cancelled':
+        return t('analysis.gallery.progress.cancelled');
       default:
         return '';
     }
@@ -476,10 +484,27 @@
             <div
               class="flex flex-wrap items-center justify-between gap-x-2 text-xs text-[var(--color-base-content)]/80"
             >
-              <span>
-                {statusLabel(progress.status)}
-                {#if progress.status === 'downloading' && progress.totalFiles > 1}
-                  ({progress.currentFile}/{progress.totalFiles})
+              <span class="flex items-center gap-2">
+                <span>
+                  {statusLabel(progress.status)}
+                  {#if progress.status === 'downloading' && progress.totalFiles > 1}
+                    ({progress.currentFile}/{progress.totalFiles})
+                  {/if}
+                </span>
+                {#if progress.status === 'downloading' && onCancel}
+                  <Button
+                    size="xs"
+                    aria-disabled={cancelling ? 'true' : undefined}
+                    aria-label="{cancelling
+                      ? t('analysis.gallery.cancelling')
+                      : t('common.cancel')} {entry.name}"
+                    onclick={() => {
+                      if (cancelling) return;
+                      onCancel();
+                    }}
+                  >
+                    {cancelling ? t('analysis.gallery.cancelling') : t('common.cancel')}
+                  </Button>
                 {/if}
               </span>
               {#if progress.status === 'downloading' && progress.totalBytes > 0}

@@ -325,6 +325,55 @@ describe('ModelCard', () => {
     });
   });
 
+  describe('cancel', () => {
+    it('shows Cancel while downloading with onCancel set, and calls it', async () => {
+      const onCancel = vi.fn();
+      renderCard({
+        entry: entry(),
+        mode: 'available',
+        busy: 'install',
+        progress: progress(),
+        onCancel,
+      });
+
+      await fireEvent.click(button('Cancel'));
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['the download is past its files (loading)', progress({ status: 'loading' }), vi.fn()],
+      ['onCancel is not set (a reinstall)', progress(), undefined],
+    ])('shows no Cancel when %s', (_name, downloadState, onCancel) => {
+      renderCard({
+        entry: entry(),
+        mode: 'available',
+        busy: 'install',
+        progress: downloadState,
+        onCancel,
+      });
+
+      expect(screen.queryByRole('button', { name: /^Cancel / })).not.toBeInTheDocument();
+    });
+
+    it('reads Cancelling and ignores clicks while the cancel is pending', async () => {
+      const onCancel = vi.fn();
+      renderCard({
+        entry: entry(),
+        mode: 'available',
+        busy: 'install',
+        progress: progress(),
+        onCancel,
+        cancelling: true,
+      });
+
+      const cancelling = button('analysis.gallery.cancelling');
+      expect(cancelling).toHaveAttribute('aria-disabled', 'true');
+      await fireEvent.click(cancelling);
+      expect(onCancel).not.toHaveBeenCalled();
+    });
+  });
+
   describe('preview', () => {
     it.each(['available', 'installed'] as const)(
       'shows the pill and build label on a %s card',

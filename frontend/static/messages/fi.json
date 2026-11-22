@@ -5963,6 +5963,8 @@
       },
       "actionInProgress": "Odota, että nykyisen mallin asennus, uudelleenasennus tai poisto valmistuu",
       "installSuccess": "{name} asennettu",
+      "cancelling": "Perutaan...",
+      "cancelled": "Mallin {name} lataus peruttiin.",
       "installedEnableOnSources": "{name} on asennettu. Ota se käyttöön lähteillesi kohdassa Asetukset > Ääni, niin voit käyttää sitä.",
       "removeSuccess": "Removed {name}",
       "reasons": {
@@ -6010,7 +6012,8 @@
         "verifying": "Tarkistetaan...",
         "loading": "Ladataan...",
         "complete": "Asennettu onnistuneesti",
-        "failed": "Epäonnistui"
+        "failed": "Epäonnistui",
+        "cancelled": "Peruttu"
       },
       "license": {
         "title": "Lisenssisopimus",
@@ -6038,6 +6041,7 @@
         "removeFailed": "Mallin poistaminen epäonnistui",
         "removeHasDependents": "Seuraavat mallit tarvitsevat mallia {name}: {models}. Poista ne ensin.",
         "operationInProgress": "Mallin asennus, uudelleenasennus tai poisto on jo käynnissä ({name}). Yritä uudelleen, kun se on valmis.",
+        "cancelUnavailable": "Mallin {name} latausta ei voi enää perua.",
         "actionFailed": "Kohteen {name} kanssa ilmeni ongelma",
         "downloadSourceHint": "Jos huggingface.co on estetty tai hidas verkossasi, aseta peilipalvelin alla olevaan Latauslähde-osioon.",
         "goToDownloadSource": "Siirry Latauslähteeseen",

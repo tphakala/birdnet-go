@@ -5963,6 +5963,8 @@
       },
       "actionInProgress": "Warten Sie, bis die aktuelle Modellinstallation, Neuinstallation oder Entfernung abgeschlossen ist",
       "installSuccess": "{name} installiert",
+      "cancelling": "Wird abgebrochen...",
+      "cancelled": "Download von {name} abgebrochen.",
       "installedEnableOnSources": "{name} ist installiert. Um es zu nutzen, schalten Sie es unter Einstellungen > Audio für Ihre Quellen ein.",
       "removeSuccess": "Removed {name}",
       "reasons": {
@@ -6010,7 +6012,8 @@
         "verifying": "Wird überprüft...",
         "loading": "Wird geladen...",
         "complete": "Erfolgreich installiert",
-        "failed": "Fehlgeschlagen"
+        "failed": "Fehlgeschlagen",
+        "cancelled": "Abgebrochen"
       },
       "license": {
         "title": "Lizenzvereinbarung",
@@ -6038,6 +6041,7 @@
         "removeFailed": "Modell konnte nicht entfernt werden",
         "removeHasDependents": "{name} wird von {models} benötigt. Entfernen Sie zuerst diese Modelle.",
         "operationInProgress": "Eine Modellinstallation, Neuinstallation oder Entfernung läuft bereits ({name}). Versuchen Sie es erneut, wenn sie abgeschlossen ist.",
+        "cancelUnavailable": "Der Download von {name} kann nicht mehr abgebrochen werden.",
         "actionFailed": "Es gab ein Problem mit {name}",
         "downloadSourceHint": "Wenn huggingface.co in Ihrem Netzwerk blockiert oder langsam ist, richten Sie im Abschnitt Download-Quelle unten einen Spiegelserver ein.",
         "goToDownloadSource": "Zur Download-Quelle",

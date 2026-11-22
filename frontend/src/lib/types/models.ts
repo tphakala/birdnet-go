@@ -149,7 +149,7 @@ export interface InstalledModel {
 /** Progress state for an ongoing model download, sent via SSE. */
 export interface DownloadProgress {
   catalogId: string;
-  status: 'downloading' | 'verifying' | 'loading' | 'complete' | 'failed';
+  status: 'downloading' | 'verifying' | 'loading' | 'complete' | 'failed' | 'cancelled';
   downloadedBytes: number;
   totalBytes: number;
   currentFile: number;

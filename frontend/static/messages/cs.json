@@ -5963,6 +5963,8 @@
       },
       "actionInProgress": "Počkejte na dokončení probíhající instalace, přeinstalace nebo odstranění modelu",
       "installSuccess": "Model {name} byl nainstalován",
+      "cancelling": "Rušení...",
+      "cancelled": "Stahování modelu {name} bylo zrušeno.",
       "installedEnableOnSources": "Model {name} je nainstalován. Chcete-li ho používat, zapněte ho pro své zdroje v Nastavení > Zvuk.",
       "removeSuccess": "Removed {name}",
       "reasons": {
@@ -6010,7 +6012,8 @@
         "verifying": "Ověřování…",
         "loading": "Načítání…",
         "complete": "Úspěšně nainstalováno",
-        "failed": "Selhalo"
+        "failed": "Selhalo",
+        "cancelled": "Zrušeno"
       },
       "license": {
         "title": "Licenční smlouva",
@@ -6038,6 +6041,7 @@
         "removeFailed": "Nepodařilo se odstranit model",
         "removeHasDependents": "{name} je vyžadován modely {models}. Nejprve tyto modely odeberte.",
         "operationInProgress": "Již probíhá instalace, přeinstalace nebo odstranění modelu ({name}). Zkuste to znovu po jejím dokončení.",
+        "cancelUnavailable": "Stahování modelu {name} už nelze zrušit.",
         "actionFailed": "Došlo k problému s {name}",
         "downloadSourceHint": "Pokud je huggingface.co ve vaší síti blokováno nebo pomalé, nastavte zrcadlový server v sekci Zdroj stahování níže.",
         "goToDownloadSource": "Přejít na Zdroj stahování",

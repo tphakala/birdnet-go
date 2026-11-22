@@ -4388,6 +4388,8 @@ export type TranslationKey =
   | 'analysis.gallery.variants.precisionHelp'
   | 'analysis.gallery.actionInProgress'
   | 'analysis.gallery.installSuccess' // params: name
+  | 'analysis.gallery.cancelling'
+  | 'analysis.gallery.cancelled' // params: name
   | 'analysis.gallery.installedEnableOnSources' // params: name
   | 'analysis.gallery.removeSuccess' // params: name
   | 'analysis.gallery.reasons.backendRecommended' // params: backend
@@ -4427,6 +4429,7 @@ export type TranslationKey =
   | 'analysis.gallery.progress.loading'
   | 'analysis.gallery.progress.complete'
   | 'analysis.gallery.progress.failed'
+  | 'analysis.gallery.progress.cancelled'
   | 'analysis.gallery.license.title'
   | 'analysis.gallery.license.model'
   | 'analysis.gallery.license.author'
@@ -4448,6 +4451,7 @@ export type TranslationKey =
   | 'analysis.gallery.errors.removeFailed'
   | 'analysis.gallery.errors.removeHasDependents' // params: name, models
   | 'analysis.gallery.errors.operationInProgress' // params: name
+  | 'analysis.gallery.errors.cancelUnavailable' // params: name
   | 'analysis.gallery.errors.actionFailed' // params: name
   | 'analysis.gallery.errors.downloadSourceHint'
   | 'analysis.gallery.errors.goToDownloadSource'
@@ -5381,6 +5385,7 @@ export type TranslationParams = {
   'analysis.gallery.variants.regionContext': { region: string | number };
   'analysis.gallery.variants.filterNoMatch': { query: string | number };
   'analysis.gallery.installSuccess': { name: string | number };
+  'analysis.gallery.cancelled': { name: string | number };
   'analysis.gallery.installedEnableOnSources': { name: string | number };
   'analysis.gallery.removeSuccess': { name: string | number };
   'analysis.gallery.reasons.backendRecommended': { backend: string | number };
@@ -5394,6 +5399,7 @@ export type TranslationParams = {
   'analysis.gallery.removeDialog.title': { name: string | number };
   'analysis.gallery.errors.removeHasDependents': { name: string | number; models: string | number };
   'analysis.gallery.errors.operationInProgress': { name: string | number };
+  'analysis.gallery.errors.cancelUnavailable': { name: string | number };
   'analysis.gallery.errors.actionFailed': { name: string | number };
   'analysis.gallery.errors.agreementRequired': { name: string | number };
   'analysis.gallery.preview.buildLabel': { version: string | number; build: string | number };

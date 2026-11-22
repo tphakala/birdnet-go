@@ -40,12 +40,14 @@
   import {
     fetchCatalog,
     fetchModelRegions,
+    cancelInstall,
     installModel,
     reinstallModel,
     uninstallModel,
     subscribeInstallProgress,
     isNetworkDownloadError,
     MODEL_AGREEMENT_REQUIRED_KEY,
+    MODEL_CANCEL_UNAVAILABLE_KEY,
     MODEL_OPERATION_IN_PROGRESS_KEY,
   } from '$lib/utils/modelsApi';
   import {
@@ -244,6 +246,8 @@
   let installingId = $state<string | null>(null);
   let deletingId = $state<string | null>(null);
   let reinstallingId = $state<string | null>(null);
+  // The entry whose Cancel was requested and whose operation has not ended yet.
+  let cancellingId = $state<string | null>(null);
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -2063,6 +2067,7 @@
     if (galleryActionInFlight) return;
     installError = null;
     installingId = modelId;
+    cancellingId = null;
     downloadProgress = null;
     // A failed install keeps its next steps, so Retry still offers them. A request the
     // server refused also keeps its agreements for Retry; once the server accepted
@@ -2098,6 +2103,7 @@
             totalFiles: 0,
           };
           progressCleanup = null;
+          cancellingId = null;
           const settingsRefreshed = refreshSettingsAfterGalleryChange();
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
@@ -2118,9 +2124,11 @@
         (err: string) => {
           installError = installFailed(err);
           installingId = null;
+          cancellingId = null;
           downloadProgress = null;
           progressCleanup = null;
-        }
+        },
+        () => handleInstallCancelled(modelId, modelName)
       );
     } catch (e) {
       // Cleared before the agreement dialog opens, in the same synchronous step: the
@@ -2143,6 +2151,44 @@
         retryableAgreements(e, accepted)
       );
     }
+  }
+
+  // Ask the server to cancel the running install or update. A refusal (the download can
+  // no longer be cancelled, or the request failed) clears the "Cancelling..." state and
+  // leaves the operation running: the progress stream reports how it ends.
+  async function handleCancelInstall(entry: CatalogEntry) {
+    if (installingId !== entry.id || cancellingId !== null) return;
+    cancellingId = entry.id;
+    try {
+      await cancelInstall(entry.id);
+    } catch (e) {
+      cancellingId = null;
+      const unavailable = e instanceof ApiError && e.errorKey === MODEL_CANCEL_UNAVAILABLE_KEY;
+      toastActions.warning(
+        unavailable
+          ? t('analysis.gallery.errors.cancelUnavailable', { name: entry.name })
+          : e instanceof Error
+            ? e.message
+            : t('analysis.gallery.errors.cancelUnavailable', { name: entry.name })
+      );
+    }
+  }
+
+  // The install ended because the user cancelled it: no error banner. The old variant of
+  // an update keeps running, so the card just returns to its previous state. Cancelling
+  // an optimize swap stops the whole apply-all queue and settles the item neither
+  // applied nor failed; the queue and the applying id are cleared before installingId,
+  // since the completion effect would otherwise mark the cancelled swap applied.
+  function handleInstallCancelled(modelId: string, modelName: string) {
+    if (optimizeApplyingId === modelId) {
+      applyAllQueue = [];
+      optimizeApplyingId = null;
+    }
+    installingId = null;
+    downloadProgress = null;
+    cancellingId = null;
+    progressCleanup = null;
+    toastActions.info(t('analysis.gallery.cancelled', { name: modelName }));
   }
 
   // True when the server refused an install or reinstall because another model
@@ -3450,6 +3496,8 @@
     pausedReasonId={GALLERY_ACTION_STATUS_ID}
     optimizeEntryIds={optimizeIds}
     onAction={handleCardAction}
+    onCancel={handleCancelInstall}
+    {cancellingId}
   />
 {/snippet}
 

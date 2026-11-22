@@ -5963,6 +5963,8 @@
       },
       "actionInProgress": "Vent på, at den aktuelle installation, geninstallation eller fjernelse af modellen fuldføres",
       "installSuccess": "{name} er installeret",
+      "cancelling": "Annullerer...",
+      "cancelled": "Download af {name} er annulleret.",
       "installedEnableOnSources": "{name} er installeret. Slå den til for dine kilder under Indstillinger > Lyd for at bruge den.",
       "removeSuccess": "Removed {name}",
       "reasons": {
@@ -6010,7 +6012,8 @@
         "verifying": "Verificerer...",
         "loading": "Indlæser...",
         "complete": "Installeret succesfuldt",
-        "failed": "Fejlet"
+        "failed": "Fejlet",
+        "cancelled": "Annulleret"
       },
       "license": {
         "title": "Licensaftale",
@@ -6038,6 +6041,7 @@
         "removeFailed": "Kunne ikke fjerne model",
         "removeHasDependents": "{name} bruges af {models}. Fjern disse modeller først.",
         "operationInProgress": "En installation, geninstallation eller fjernelse af en model er allerede i gang ({name}). Prøv igen, når den er færdig.",
+        "cancelUnavailable": "Download af {name} kan ikke længere annulleres.",
         "actionFailed": "Der opstod et problem med {name}",
         "downloadSourceHint": "Hvis huggingface.co er blokeret eller langsomt på dit netværk, kan du indstille en spejlserver i sektionen Downloadkilde nedenfor.",
         "goToDownloadSource": "Gå til Downloadkilde",

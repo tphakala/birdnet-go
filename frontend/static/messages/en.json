@@ -5963,6 +5963,8 @@
       },
       "actionInProgress": "Wait for the current model install, reinstall, or remove to finish",
       "installSuccess": "Installed {name}",
+      "cancelling": "Cancelling...",
+      "cancelled": "Download of {name} cancelled.",
       "installedEnableOnSources": "{name} is installed. To use it, turn it on for your sources in Settings > Audio.",
       "removeSuccess": "Removed {name}",
       "reasons": {
@@ -6010,7 +6012,8 @@
         "verifying": "Verifying...",
         "loading": "Loading...",
         "complete": "Installed successfully",
-        "failed": "Failed"
+        "failed": "Failed",
+        "cancelled": "Cancelled"
       },
       "license": {
         "title": "License Agreement",
@@ -6038,6 +6041,7 @@
         "removeFailed": "Failed to remove model",
         "removeHasDependents": "{name} is needed by {models}. Remove those models first.",
         "operationInProgress": "A model install, reinstall, or remove is already in progress ({name}). Try again when it finishes.",
+        "cancelUnavailable": "The download of {name} can no longer be cancelled.",
         "actionFailed": "There was a problem with {name}",
         "downloadSourceHint": "If huggingface.co is blocked or slow on your network, set a mirror in the Download Source section below.",
         "goToDownloadSource": "Go to Download Source",

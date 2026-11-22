@@ -226,6 +226,7 @@ func TestOperationGuard_ContextCancelReleasesSlot(t *testing.T) {
 	state := h.mm.GetDownloadState(depIDA)
 	require.NotNil(t, state)
 	assert.False(t, state.IsActive(), "the cancelled install leaves no active state")
+	assert.Equal(t, StatusFailed, state.Status, "a plain context cancel (shutdown) is a failure, not a user cancel")
 }
 
 func TestOperationGuard_ReleaseAfterPanicFreesSlotAndFailsActiveState(t *testing.T) {

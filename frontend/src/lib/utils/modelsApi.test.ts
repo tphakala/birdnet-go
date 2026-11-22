@@ -34,6 +34,38 @@ describe('install and reinstall request bodies', () => {
   });
 });
 
+describe('subscribeInstallProgress', () => {
+  it('calls onCancelled, never onError, for a cancelled event', async () => {
+    const listeners = new Map<string, (event: Event) => void>();
+    const close = vi.fn();
+    vi.doMock('$lib/utils/ReconnectingEventSource', () => ({
+      ReconnectingEventSource: class {
+        onerror: (() => void) | null = null;
+        addEventListener(type: string, listener: (event: Event) => void) {
+          listeners.set(type, listener);
+        }
+        close = close;
+      },
+    }));
+    vi.resetModules();
+    const { subscribeInstallProgress } = await import('./modelsApi');
+    const [onProgress, onComplete, onError, onCancelled] = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
+
+    subscribeInstallProgress('m', onProgress, onComplete, onError, onCancelled);
+    listeners.get('progress')?.(
+      new MessageEvent('progress', {
+        data: JSON.stringify({ catalogId: 'm', status: 'cancelled' }),
+      })
+    );
+
+    expect(onCancelled).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+    vi.doUnmock('$lib/utils/ReconnectingEventSource');
+  });
+});
+
 describe('isNetworkDownloadError', () => {
   // The three CategoryNetwork download-failure formats the backend emits
   // (internal/classifier/model_manager.go), which a mirror endpoint could remedy.

@@ -5963,6 +5963,8 @@
       },
       "actionInProgress": "Pagaidiet, līdz beidzas pašreizējā modeļa instalēšana, pārinstalēšana vai noņemšana",
       "installSuccess": "{name} instalēts",
+      "cancelling": "Atceļ...",
+      "cancelled": "{name} lejupielāde atcelta.",
       "installedEnableOnSources": "{name} ir instalēts. Lai to izmantotu, ieslēdziet to saviem avotiem sadaļā Iestatījumi > Audio.",
       "removeSuccess": "Removed {name}",
       "reasons": {
@@ -6010,7 +6012,8 @@
         "verifying": "Pārbauda...",
         "loading": "Ielādē...",
         "complete": "Veiksmīgi instalēts",
-        "failed": "Neizdevās"
+        "failed": "Neizdevās",
+        "cancelled": "Atcelts"
       },
       "license": {
         "title": "Licences līgums",
@@ -6038,6 +6041,7 @@
         "removeFailed": "Neizdevās noņemt modeli",
         "removeHasDependents": "{name} ir nepieciešams modeļiem {models}. Vispirms noņemiet šos modeļus.",
         "operationInProgress": "Jau notiek modeļa instalēšana, pārinstalēšana vai noņemšana ({name}). Mēģiniet vēlreiz, kad tā būs pabeigta.",
+        "cancelUnavailable": "{name} lejupielādi vairs nevar atcelt.",
         "actionFailed": "Radās problēma ar {name}",
         "downloadSourceHint": "Ja jūsu tīklā huggingface.co ir bloķēts vai lēns, iestatiet spoguļvietni zemāk esošajā sadaļā Lejupielādes avots.",
         "goToDownloadSource": "Doties uz Lejupielādes avots",
