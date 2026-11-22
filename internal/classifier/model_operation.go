@@ -94,8 +94,9 @@ type OperationLease struct {
 
 	// cancel ends the operation's context with ErrOperationCancelled as the cause.
 	// It is set by cancellableContext. cancellable is true only between the
-	// operation registering its download state and the start of activation.
-	// Both are guarded by mm.opMu.
+	// operation registering its download state and the first of: the start of
+	// activation, or the download failing (settleDownloadFailure). Both are
+	// guarded by mm.opMu.
 	cancel      context.CancelCauseFunc
 	cancellable bool
 }
@@ -263,9 +264,10 @@ func (mm *ModelManager) markCancellable(catalogID string) {
 // returns an *OperationNotCancellableError, changing nothing, when no install
 // runs for the entry, when the operation is not an install (a reinstall unloads
 // the model first and is not cancellable), or when it has not registered its
-// download yet or has started activation. A nil return means the operation will
-// end cancelled; its final state is reported through the download state. Like
-// BeginOperation it takes only mm.opMu, so it answers at once.
+// download yet, its download has failed or it has started activation. A nil
+// return means the operation will end cancelled; its final state is reported
+// through the download state. Like BeginOperation it takes only mm.opMu, so it
+// answers at once.
 func (mm *ModelManager) CancelOperation(catalogID string) error {
 	mm.opMu.Lock()
 	defer mm.opMu.Unlock()
