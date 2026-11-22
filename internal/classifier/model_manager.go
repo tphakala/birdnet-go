@@ -2850,7 +2850,8 @@ func newDownloadInterruptedError(ctx context.Context, err error, url string) err
 // endpoint might serve the file, so downloadFile and the document fetch fail
 // over the same way. The "HTTP request failed for" and "HTTP <status> for"
 // texts are matched by the frontend and must not change. When ctx was cancelled (a user
-// cancel or shutdown) the error is a non-retryable system-category interruption that
+// cancel or shutdown), whether the failure is a transport error or a status that arrived
+// with the cancel, the error is a non-retryable system-category interruption that
 // wraps the context's cause instead, so it is neither retried on a mirror nor
 // reported to telemetry.
 func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http.Response, error) {
@@ -2883,6 +2884,11 @@ func getHuggingFace(ctx context.Context, client *http.Client, url string) (*http
 	}
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
+		// A status that arrives with a cancel is part of the interruption: building
+		// the network error below would report it, and a gateway status would fail over.
+		if contextCancelled(ctx) {
+			return nil, &endpointAttemptError{err: newDownloadInterruptedError(ctx, nil, url)}
+		}
 		// A gateway status (502/503/504) means the origin is down and a mirror
 		// may still serve the file, so it is retryable; any other status (404,
 		// 403, 500, ...) means the host answered and failover would mask it.

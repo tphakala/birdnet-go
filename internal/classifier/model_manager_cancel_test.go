@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -358,4 +359,26 @@ func TestDownloadVariantFiles_ActivationBoundary(t *testing.T) {
 		require.NotNil(t, state)
 		assert.Equal(t, StatusLoading, state.Status, "activation starts once every file is on disk")
 	})
+}
+
+// TestGetHuggingFace_StatusRacingCancelIsSuppressible pins that an HTTP status error
+// built while the context is cancelled is the suppressible interruption error, not
+// a network-category error: every EnhancedError is reported when built.
+func TestGetHuggingFace_StatusRacingCancelIsSuppressible(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	var attempts atomic.Int64
+	client := &http.Client{Transport: cancelThenGatewayTransport{cancel: cancel, calls: &attempts}}
+
+	resp, err := getHuggingFace(ctx, client, "http://primary.invalid/model.onnx")
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	require.Error(t, err)
+	ee, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "want an EnhancedError in the chain of %v", err)
+	assert.True(t, errors.IsSuppressibleOperationalError(ee), "a status racing a user cancel must not reach telemetry: %v", err)
+	require.ErrorIs(t, err, ErrOperationCancelled)
+	assert.False(t, shouldFailover(err))
 }
