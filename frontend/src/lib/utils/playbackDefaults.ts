@@ -48,6 +48,15 @@ export function clampPlaybackGain(db: unknown): number {
   return clampToRange(stepped, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB) || 0;
 }
 
+/**
+ * A gain as text: signed when positive, no trailing ".0", a space before the
+ * unit ("+7.5 dB", "0 dB", "-6.5 dB"). Negative zero reads as "0".
+ */
+export function formatPlaybackGain(db: number, unit: string): string {
+  const value = db || 0;
+  return `${value > 0 ? '+' : ''}${value} ${unit}`;
+}
+
 /** Stored default to the cutoff a player starts with; anything below the floor is the floor. */
 export function highPassFromStored(hz: unknown): number {
   if (typeof hz !== 'number' || !Number.isFinite(hz)) return PLAYBACK_HIGH_PASS_MIN_HZ;

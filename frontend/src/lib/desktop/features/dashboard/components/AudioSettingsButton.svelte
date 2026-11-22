@@ -29,6 +29,7 @@
     PLAYBACK_HIGH_PASS_MAX_HZ,
     PLAYBACK_HIGH_PASS_MIN_HZ,
     PLAYBACK_HIGH_PASS_STEP_HZ,
+    formatPlaybackGain,
   } from '$lib/utils/playbackDefaults';
 
   interface Props {
@@ -247,7 +248,7 @@
             oninput={e => onGainChange(Number((e.target as HTMLInputElement).value))}
             class="slider"
           />
-          <span class="slider-value">{gainValue > 0 ? '+' : ''}{gainValue} dB</span>
+          <span class="slider-value">{formatPlaybackGain(gainValue, 'dB')}</span>
         </div>
       </div>
 

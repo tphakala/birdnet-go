@@ -10,6 +10,7 @@ const TAB_LABEL = 'settings.userInterface.tabs.audioPlayback';
 const GAIN_LABEL = 'settings.userInterface.audioPlayback.defaultGain';
 const HIGH_PASS_LABEL = 'settings.userInterface.audioPlayback.highPassLabel';
 const HIGH_PASS_OFF = 'settings.userInterface.audioPlayback.highPassOff';
+const GAIN_UNIT = 'settings.userInterface.audioPlayback.defaultGainUnit';
 const TAB_CHANGED = 'settings.tabs.hasChanges';
 const CARD_CHANGED = 'settings.card.changed';
 
@@ -81,6 +82,29 @@ describe('UserInterfaceSettingsPage playback defaults sliders', () => {
     const gain = await screen.findByLabelText<HTMLInputElement>(GAIN_LABEL);
 
     expect([gain.min, gain.max, gain.step]).toEqual(['-12', '24', '0.5']);
+  });
+
+  it.each([
+    { name: 'a positive value', stored: 7.5, text: `+7.5 ${GAIN_UNIT}` },
+    { name: 'zero', stored: 0, text: `0 ${GAIN_UNIT}` },
+    { name: 'a negative value', stored: -6.5, text: `-6.5 ${GAIN_UNIT}` },
+  ])('shows $name with a sign, no trailing zero and a spaced unit', async ({ stored, text }) => {
+    await renderTab({ defaultAudioGain: stored });
+    const gain = await screen.findByLabelText<HTMLInputElement>(GAIN_LABEL);
+
+    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(gain).toHaveAttribute('aria-valuetext', text);
+  });
+
+  it('shows an off-grid stored gain at its stepped value and leaves the form clean', async () => {
+    await renderTab({ defaultAudioGain: -6.3 });
+    const gain = await screen.findByLabelText<HTMLInputElement>(GAIN_LABEL);
+
+    expect(gain.value).toBe('-6.5');
+    expect(screen.getByText(`-6.5 ${GAIN_UNIT}`)).toBeInTheDocument();
+    expect(dashboard('formData').defaultAudioGain).toBe(-6.3);
+    expect(dashboard('originalData').defaultAudioGain).toBe(-6.3);
+    expect(screen.queryByText(CARD_CHANGED)).toBeNull();
   });
 
   it('shows a stored off filter as the floor and labels it Off', async () => {

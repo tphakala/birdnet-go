@@ -47,6 +47,8 @@
     PLAYBACK_HIGH_PASS_MAX_HZ,
     PLAYBACK_HIGH_PASS_MIN_HZ,
     PLAYBACK_HIGH_PASS_STEP_HZ,
+    clampPlaybackGain,
+    formatPlaybackGain,
     highPassFromStored,
     highPassToStored,
   } from '$lib/utils/playbackDefaults';
@@ -295,6 +297,11 @@
     });
   }
 
+  // Signed, with the unit after a space; also the slider's accessible value text.
+  function formatGain(db: number): string {
+    return formatPlaybackGain(db, t('settings.userInterface.audioPlayback.defaultGainUnit'));
+  }
+
   // The slider's floor is the "off" position.
   function formatHighPass(hz: number): string {
     return hz <= PLAYBACK_HIGH_PASS_MIN_HZ
@@ -476,12 +483,12 @@
         <InlineSlider
           label={t('settings.userInterface.audioPlayback.defaultGain')}
           helpText={t('settings.userInterface.audioPlayback.defaultGainHelpText')}
-          value={settings.dashboard.defaultAudioGain ?? 0}
+          value={clampPlaybackGain(settings.dashboard.defaultAudioGain)}
           onUpdate={value => updateDashboardSetting('defaultAudioGain', value)}
+          formatValue={formatGain}
           min={PLAYBACK_GAIN_MIN_DB}
           max={PLAYBACK_GAIN_MAX_DB}
           step={PLAYBACK_GAIN_STEP_DB}
-          unit={t('settings.userInterface.audioPlayback.defaultGainUnit')}
           disabled={store.isLoading || store.isSaving}
         />
         <InlineSlider

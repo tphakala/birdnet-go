@@ -4,6 +4,7 @@ import { appState } from '$lib/stores/appState.svelte';
 import { settingsStore } from '$lib/stores/settings';
 import {
   clampPlaybackGain,
+  formatPlaybackGain,
   getPlaybackDefaults,
   highPassFromStored,
   highPassToStored,
@@ -28,6 +29,23 @@ describe('clampPlaybackGain', () => {
   it('returns a plain zero, never negative zero, for a small negative gain', () => {
     expect(Object.is(clampPlaybackGain(-0.1), 0)).toBe(true);
     expect(Object.is(clampPlaybackGain(-0.2), 0)).toBe(true);
+  });
+});
+
+describe('formatPlaybackGain', () => {
+  it.each([
+    { name: 'zero', db: 0, want: '0 dB' },
+    { name: 'a positive whole value', db: 6, want: '+6 dB' },
+    { name: 'a positive half step', db: 7.5, want: '+7.5 dB' },
+    { name: 'a negative half step', db: -6.5, want: '-6.5 dB' },
+    { name: 'the minimum', db: -12, want: '-12 dB' },
+    { name: 'negative zero', db: -0, want: '0 dB' },
+  ])('formats $name', ({ db, want }) => {
+    expect(formatPlaybackGain(db, 'dB')).toBe(want);
+  });
+
+  it('puts the given unit after a space', () => {
+    expect(formatPlaybackGain(3, 'desibeliä')).toBe('+3 desibeliä');
   });
 });
 
