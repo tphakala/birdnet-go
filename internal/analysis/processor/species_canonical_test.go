@@ -121,10 +121,11 @@ func TestCanonicalizeSpecies_NonAliasedUnchanged(t *testing.T) {
 }
 
 // TestCanonicalizeSpecies_AliasCode pins which eBird code an aliased detection
-// carries. The raw name wins when the taxonomy holds it (a legacy name present in
-// the eBird snapshot); the canonical name's code is used only when the raw name is
-// absent (a newer model label) and the canonical name is present; when neither is
-// present the incoming placeholder is kept.
+// carries. The raw name wins when the taxonomy holds it; the canonical name's code
+// is used only when the raw name is absent and the canonical name is present (the
+// real index lists alias names under their partner's code, so in production this is
+// a letter-case variant of a label); when neither is present the incoming
+// placeholder is kept.
 func TestCanonicalizeSpecies_AliasCode(t *testing.T) {
 	t.Parallel()
 
@@ -144,8 +145,8 @@ func TestCanonicalizeSpecies_AliasCode(t *testing.T) {
 			incoming: "laudov1", want: "laudov1",
 		},
 		{
-			name: "new model label takes canonical code",
-			raw:  "Nannus troglodytes", canonical: "Troglodytes troglodytes",
+			name: "raw name missing from taxonomy takes canonical code",
+			raw:  "nannus troglodytes", canonical: "Troglodytes troglodytes",
 			known:    map[string]string{"Troglodytes troglodytes": "winwre4"},
 			incoming: placeholder, want: "winwre4",
 		},
