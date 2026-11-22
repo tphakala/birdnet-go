@@ -2767,7 +2767,7 @@ func shouldFailover(err error) bool {
 //
 // The endpoint chain is resolved per file, not once per install, so a file that
 // established the mirror as sticky lets every subsequent file start there
-// instead of re-paying the blocked host's connect timeout. A done context (a user
+// instead of re-paying the blocked host's connect timeout. A cancelled context (a user
 // cancel or shutdown) never fails over, whatever the error looked like.
 func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, remotePath, destPath, expectedSHA256 string, completedBytes int64, configured string) error {
 	endpoints := mm.orderedDownloadEndpoints(configured)
@@ -2780,9 +2780,9 @@ func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, 
 		}
 		// Surface the error (no failover) on the last endpoint or when the
 		// failure is not a reachability problem another host could avoid.
-		// A done context (a user cancel, shutdown) never fails over, even when the
+		// A cancelled context (a user cancel, shutdown) never fails over, even when the
 		// error looks retryable (a 503 or a dropped connection racing the cancel).
-		if i == len(endpoints)-1 || !shouldFailover(err) || ctx.Err() != nil {
+		if i == len(endpoints)-1 || !shouldFailover(err) || contextCancelled(ctx) {
 			return err
 		}
 		GetLogger().Warn("HuggingFace host unreachable, trying next endpoint",
@@ -2802,7 +2802,15 @@ func (mm *ModelManager) downloadModelFile(ctx context.Context, catalogID, repo, 
 // downloadInterrupted reports whether err came from the download's own context
 // ending (a user cancel or shutdown) rather than from the host.
 func downloadInterrupted(ctx context.Context, err error) bool {
-	return ctx.Err() != nil || errors.Is(err, context.Canceled)
+	return contextCancelled(ctx) || errors.Is(err, context.Canceled)
+}
+
+// contextCancelled reports whether ctx ended by cancellation (a user cancel or
+// shutdown). A deadline that ended it, such as the per-attempt timeout of a
+// document fetch, is not a cancellation: the host stalled, so another endpoint
+// may still serve the file.
+func contextCancelled(ctx context.Context) bool {
+	return errors.Is(ctx.Err(), context.Canceled)
 }
 
 // newDownloadInterruptedError builds the error for a download whose context ended.
@@ -2829,7 +2837,7 @@ func newDownloadInterruptedError(ctx context.Context, err error, url string) err
 // status come back as an endpointAttemptError that records whether another
 // endpoint might serve the file, so downloadFile and the document fetch fail
 // over the same way. The "HTTP request failed for" and "HTTP <status> for"
-// texts are matched by the frontend and must not change. When ctx ended (a user
+// texts are matched by the frontend and must not change. When ctx was cancelled (a user
 // cancel or shutdown) the error is a non-retryable system-category interruption that
 // wraps the context's cause instead, so it is neither retried on a mirror nor
 // reported to telemetry.

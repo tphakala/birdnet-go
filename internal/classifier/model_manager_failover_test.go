@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -262,4 +263,59 @@ func TestDownloadModelFile_DoesNotFailOverOnUserCancel(t *testing.T) {
 	require.ErrorIs(t, err, ErrOperationCancelled)
 	assert.Equal(t, int64(0), mirrorHits.Load(), "a user cancel must not fail over to the mirror")
 	assert.NoFileExists(t, dest)
+}
+
+// cancelThenGatewayTransport cancels the request's operation, as a user cancel
+// racing the response would, then answers 503, a status that is otherwise retryable.
+type cancelThenGatewayTransport struct {
+	cancel context.CancelCauseFunc
+}
+
+func (c cancelThenGatewayTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.cancel(ErrOperationCancelled)
+	return &http.Response{
+		StatusCode: http.StatusServiceUnavailable,
+		Body:       http.NoBody,
+		Request:    req,
+	}, nil
+}
+
+// TestDownloadModelFile_DoesNotFailOverOnGatewayStatusRacingCancel pins the
+// cancelled-context guard of the failover loop: a 503 that arrives with the
+// cancel is retryable on its own, and must still not reach the mirror.
+func TestDownloadModelFile_DoesNotFailOverOnGatewayStatusRacingCancel(t *testing.T) {
+	primaryURL, _ := countingServer(t, http.StatusOK, nil)
+	mirrorURL, mirrorHits := countingServer(t, http.StatusOK, []byte("mirror-bytes"))
+	mm, _ := newFailoverManager(t, []string{primaryURL, mirrorURL})
+	dest := filepath.Join(t.TempDir(), "model.onnx")
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+
+	orig := downloadHTTPClient
+	downloadHTTPClient = &http.Client{Transport: cancelThenGatewayTransport{cancel: cancel}}
+	t.Cleanup(func() { downloadHTTPClient = orig })
+
+	err := mm.downloadModelFile(ctx, "m", "owner/repo", "model.onnx", dest, "", 0, "")
+
+	require.Error(t, err)
+	assert.Equal(t, int64(0), mirrorHits.Load(), "a gateway status racing a user cancel must not reach the mirror")
+}
+
+// TestGetHuggingFace_AttemptDeadlineFailsOver pins that a stalled host ended by a
+// per-attempt deadline (the document fetch) is retryable on another endpoint, while
+// a cancellation is not: only a cancelled context is an interruption.
+func TestGetHuggingFace_AttemptDeadlineFailsOver(t *testing.T) {
+	t.Parallel()
+	stall := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	t.Cleanup(stall.Close)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	resp, err := getHuggingFace(ctx, downloadHTTPClient, stall.URL)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	require.Error(t, err)
+	assert.True(t, shouldFailover(err), "a host that stalls past the attempt deadline is worth a mirror")
 }
