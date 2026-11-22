@@ -31,6 +31,7 @@
     withCacheBuster,
   } from '$lib/utils/playbackDenoise';
   import { t } from '$lib/i18n';
+  import { PLAYBACK_HIGH_PASS_MIN_HZ } from '$lib/utils/playbackDefaults';
   import {
     applyPlaybackRate,
     dbToGain,
@@ -84,7 +85,7 @@
     onFreezeStart,
     onFreezeEnd,
     gainValue = 0,
-    filterFreq = 20,
+    filterFreq = PLAYBACK_HIGH_PASS_MIN_HZ,
     playbackSpeed = 1.0,
     onAudioContextAvailable,
     audibleBatsSrc = null,

@@ -3766,6 +3766,10 @@ export type TranslationKey =
   | 'settings.userInterface.audioPlayback.denoiseExportPrecedence'
   | 'settings.userInterface.audioPlayback.denoiseRedenoiseNote'
   | 'settings.userInterface.audioPlayback.denoiseLossyNote' // params: minBitrate
+  | 'settings.userInterface.audioPlayback.highPassLabel'
+  | 'settings.userInterface.audioPlayback.highPassHelpText'
+  | 'settings.userInterface.audioPlayback.highPassUnit'
+  | 'settings.userInterface.audioPlayback.highPassOff'
   | 'settings.restartRequired'
   | 'auth.login'
   | 'auth.logout'

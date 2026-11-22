@@ -7,20 +7,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { writable } from 'svelte/store';
 import { createComponentTestFactory, screen, fireEvent } from '../../../../test/render-helpers';
 import { useAudioPlayback } from '$lib/utils/useAudioPlayback.svelte';
 import SpectrogramPlayer from './SpectrogramPlayer.svelte';
 
 // --- Mock state that tests can mutate before each render ---
 
-const mockDashboardSettings = writable<{ defaultAudioGain?: number }>({ defaultAudioGain: 0 });
+let mockPlaybackDefaults = { gainDb: 0, denoise: '', highPassHz: 20 };
 
-vi.mock('$lib/stores/settings', () => ({
-  dashboardSettings: {
-    subscribe: (fn: (val: { defaultAudioGain?: number }) => void) =>
-      mockDashboardSettings.subscribe(fn),
-  },
+vi.mock('$lib/utils/playbackDefaults', () => ({
+  getPlaybackDefaults: () => ({ ...mockPlaybackDefaults }),
 }));
 
 let mockAudioState = {
@@ -161,8 +157,8 @@ describe('SpectrogramPlayer', () => {
       cleanup: vi.fn(),
     };
 
-    // Reset settings mock state
-    mockDashboardSettings.set({ defaultAudioGain: 0 });
+    // Reset playback defaults mock state
+    mockPlaybackDefaults = { gainDb: 0, denoise: '', highPassHz: 20 };
   });
 
   afterEach(() => {
@@ -418,10 +414,13 @@ describe('SpectrogramPlayer', () => {
   });
 
   // ---------------------------------------------------------------
-  // 8. Initializes useAudioPlayback with defaultGainDb from dashboardSettings
+  // 8. Initializes useAudioPlayback with the playback defaults
   // ---------------------------------------------------------------
-  it('passes defaultGainDb from dashboardSettings to useAudioPlayback', () => {
-    mockDashboardSettings.set({ defaultAudioGain: 12 });
+  it.each([
+    { name: 'a boost and a filter', gainDb: 12, highPassHz: 300 },
+    { name: 'a negative gain and no filter', gainDb: -6.5, highPassHz: 20 },
+  ])('passes the default gain and high-pass cutoff to useAudioPlayback: $name', defaults => {
+    mockPlaybackDefaults = { ...mockPlaybackDefaults, ...defaults };
 
     spectrogramTest.render({
       audioUrl: '/api/v2/audio/test-123',
@@ -432,24 +431,8 @@ describe('SpectrogramPlayer', () => {
       expect.objectContaining({
         audioUrl: '/api/v2/audio/test-123',
         detectionId: 'test-123',
-        defaultGainDb: 12,
-      })
-    );
-  });
-
-  it('falls back to 0 dB when defaultAudioGain is not configured in dashboardSettings', () => {
-    mockDashboardSettings.set({});
-
-    spectrogramTest.render({
-      audioUrl: '/api/v2/audio/test-123',
-      detectionId: 'test-123',
-    });
-
-    expect(useAudioPlayback).toHaveBeenCalledWith(
-      expect.objectContaining({
-        audioUrl: '/api/v2/audio/test-123',
-        detectionId: 'test-123',
-        defaultGainDb: 0,
+        defaultGainDb: defaults.gainDb,
+        defaultFilterFreq: defaults.highPassHz,
       })
     );
   });

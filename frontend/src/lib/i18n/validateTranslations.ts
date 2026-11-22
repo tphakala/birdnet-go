@@ -120,6 +120,7 @@ const SKIP_UNTRANSLATED_KEYWORDS = [
   'cpus',
   'hpa',
   'khz',
+  'hz',
   'inferno',
   'viridis',
   // Units and physical abbreviations

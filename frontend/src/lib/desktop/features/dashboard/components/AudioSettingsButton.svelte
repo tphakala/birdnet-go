@@ -22,6 +22,14 @@
   import { useCloseSignal } from '$lib/utils/useCloseSignal.svelte';
   import { t } from '$lib/i18n';
   import { SPEED_OPTIONS, DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
+  import {
+    PLAYBACK_GAIN_MAX_DB,
+    PLAYBACK_GAIN_MIN_DB,
+    PLAYBACK_GAIN_STEP_DB,
+    PLAYBACK_HIGH_PASS_MAX_HZ,
+    PLAYBACK_HIGH_PASS_MIN_HZ,
+    PLAYBACK_HIGH_PASS_STEP_HZ,
+  } from '$lib/utils/playbackDefaults';
 
   interface Props {
     gainValue: number;
@@ -31,6 +39,8 @@
     onFilterChange: (_value: number) => void;
     onSpeedChange: (_value: number) => void;
     defaultGainValue?: number;
+    /** High-pass cutoff in Hz that Reset returns to and the "modified" dot compares with */
+    defaultFilterFreq?: number;
     disabled?: boolean;
     closeSignal?: number;
     onMenuOpen?: () => void;
@@ -45,6 +55,7 @@
     onFilterChange,
     onSpeedChange,
     defaultGainValue = 0,
+    defaultFilterFreq = PLAYBACK_HIGH_PASS_MIN_HZ,
     disabled = false,
     closeSignal = 0,
     onMenuOpen,
@@ -52,10 +63,6 @@
   }: Props = $props();
 
   // Constants
-  const GAIN_MAX_DB = 24;
-  const GAIN_MIN_DB = -20;
-  const FILTER_HP_MIN_FREQ = 20;
-  const FILTER_HP_MAX_FREQ = 5000;
   // Gap in px between the trigger button and the settings menu.
   const MENU_OFFSET = 8;
 
@@ -74,7 +81,7 @@
   // Check if settings have been modified from defaults
   const hasModifiedSettings = $derived(
     gainValue !== defaultGainValue ||
-      filterFreq > FILTER_HP_MIN_FREQ ||
+      filterFreq !== defaultFilterFreq ||
       playbackSpeed !== DEFAULT_PLAYBACK_SPEED
   );
 
@@ -135,7 +142,7 @@
 
   function handleReset() {
     onGainChange(defaultGainValue);
-    onFilterChange(FILTER_HP_MIN_FREQ);
+    onFilterChange(defaultFilterFreq);
     onSpeedChange(DEFAULT_PLAYBACK_SPEED);
   }
 
@@ -233,9 +240,9 @@
             bind:this={gainSliderElement}
             id={gainSliderId}
             type="range"
-            min={GAIN_MIN_DB}
-            max={GAIN_MAX_DB}
-            step="1"
+            min={PLAYBACK_GAIN_MIN_DB}
+            max={PLAYBACK_GAIN_MAX_DB}
+            step={PLAYBACK_GAIN_STEP_DB}
             value={gainValue}
             oninput={e => onGainChange(Number((e.target as HTMLInputElement).value))}
             class="slider"
@@ -253,9 +260,9 @@
           <input
             id={filterSliderId}
             type="range"
-            min={FILTER_HP_MIN_FREQ}
-            max={FILTER_HP_MAX_FREQ}
-            step="10"
+            min={PLAYBACK_HIGH_PASS_MIN_HZ}
+            max={PLAYBACK_HIGH_PASS_MAX_HZ}
+            step={PLAYBACK_HIGH_PASS_STEP_HZ}
             value={filterFreq}
             oninput={e => onFilterChange(Number((e.target as HTMLInputElement).value))}
             class="slider"

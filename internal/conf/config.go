@@ -187,9 +187,17 @@ type Dashboard struct {
 	CustomColors     *CustomColors        `yaml:"customcolors,omitempty" json:"customColors,omitempty"` // custom scheme colors (used when colorScheme is "custom")
 	LogoStyle        string               `yaml:"logostyle,omitempty" json:"logoStyle,omitempty"`       // logo display style: "gradient" or "solid"
 	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
-	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
+	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (-12 to 24)
 	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
 	PlaybackDenoise  DenoiseSettings      `yaml:"playbackdenoise" json:"playbackDenoise"`               // denoise clips when they are played or downloaded; stored clips stay unchanged
+	Playback         PlaybackDefaults     `yaml:"playback" json:"playback"`                             // further playback defaults
+}
+
+// PlaybackDefaults holds the values a clip player starts with. The two older
+// defaults, Dashboard.DefaultAudioGain and Dashboard.PlaybackDenoise, stay
+// where they are; new playback defaults are added here.
+type PlaybackDefaults struct {
+	HighPassHz int `yaml:"highpasshz" json:"highPassHz"` // high-pass cutoff in Hz applied in the browser while a clip plays; 0 is off
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.

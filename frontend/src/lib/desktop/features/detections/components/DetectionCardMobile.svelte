@@ -16,13 +16,12 @@
   import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
-  import { get } from 'svelte/store';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { getPlaybackDefaults } from '$lib/utils/playbackDefaults';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { t } from '$lib/i18n';
 
-  const getDefaultAudioGain = () => get(dashboardSettings)?.defaultAudioGain ?? 0;
-  const DEFAULT_AUDIO_FILTER_FREQ = 20;
+  const getDefaultAudioGain = () => getPlaybackDefaults().gainDb;
+  const getDefaultAudioFilterFreq = () => getPlaybackDefaults().highPassHz;
 
   // Presentational card: the parent (DetectionsList) owns the action handlers
   // and the ConfirmModal via the shared useDetectionActions composable, and
@@ -65,7 +64,7 @@
   let closeAudioSettingsSignal = $state(0);
 
   let audioGainValue = $state(getDefaultAudioGain());
-  let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
+  let audioFilterFreq = $state(getDefaultAudioFilterFreq());
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
   let audioContextAvailable = $state(true);
 
@@ -285,6 +284,7 @@
         filterFreq={audioFilterFreq}
         playbackSpeed={audioPlaybackSpeed}
         defaultGainValue={getDefaultAudioGain()}
+        defaultFilterFreq={getDefaultAudioFilterFreq()}
         onGainChange={handleGainChange}
         onFilterChange={handleFilterChange}
         onSpeedChange={handleSpeedChange}

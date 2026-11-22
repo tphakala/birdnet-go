@@ -256,10 +256,11 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.dashboard.customcolors.accent` | string | accent hex color, e.g. "#0284c7" |
 | `realtime.dashboard.logostyle` | string | logo display style: "gradient" or "solid" |
 | `realtime.dashboard.layout.elements` | dashboard-element[] |  |
-| `realtime.dashboard.defaultaudiogain` | number | Default playback gain in dB (0-24) |
+| `realtime.dashboard.defaultaudiogain` | number | Default playback gain in dB (-12 to 24) |
 | `realtime.dashboard.livespectrogram` | boolean | auto-start live spectrogram on dashboard |
 | `realtime.dashboard.playbackdenoise.enabled` | boolean | true to apply the denoise |
 | `realtime.dashboard.playbackdenoise.strength` | string | preset name, see the DenoisePreset constants |
+| `realtime.dashboard.playback.highpasshz` | integer | high-pass cutoff in Hz applied in the browser while a clip plays; 0 is off |
 | `realtime.dynamicthreshold.enabled` | boolean | true to enable dynamic threshold |
 | `realtime.dynamicthreshold.debug` | boolean | true to enable debug mode |
 | `realtime.dynamicthreshold.trigger` | number | trigger threshold for dynamic threshold |

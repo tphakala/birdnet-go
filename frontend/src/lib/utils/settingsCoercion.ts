@@ -38,6 +38,11 @@ import type {
 } from '$lib/stores/settings';
 import { DEFAULT_DENOISE_PRESET, isDenoisePresetId } from '$lib/utils/denoisePresets';
 import { AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB } from '$lib/stores/settings';
+import {
+  PLAYBACK_GAIN_MAX_DB,
+  PLAYBACK_GAIN_MIN_DB,
+  highPassToStored,
+} from '$lib/utils/playbackDefaults';
 
 // Type for partial/unknown settings data
 type UnknownSettings = Record<string, unknown>;
@@ -903,12 +908,32 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
         );
       }
 
-      // Backfill the playback denoise object for a response from an older server,
-      // so an Off state is a real value and the strength is always a valid preset.
+      // Backfill the playback defaults for a response from an older server: the
+      // denoise object so an Off state is a real value and the strength is always
+      // a valid preset, and the high-pass object with the cutoff in the stored
+      // form (a cutoff below the floor is off, stored as 0), so the Settings form
+      // never reads a server-normalized value as a change. The gain is held to
+      // the default's range.
       if (isPlainObject(data.dashboard)) {
+        const dashboard = data.dashboard;
+        const gain = dashboard.defaultAudioGain;
         coercedRealtime.dashboard = {
-          ...data.dashboard,
-          playbackDenoise: coerceDenoiseSettings(data.dashboard.playbackDenoise),
+          ...dashboard,
+          ...(typeof gain === 'number' && Number.isFinite(gain)
+            ? {
+                defaultAudioGain: Math.min(
+                  Math.max(gain, PLAYBACK_GAIN_MIN_DB),
+                  PLAYBACK_GAIN_MAX_DB
+                ),
+              }
+            : {}),
+          playbackDenoise: coerceDenoiseSettings(dashboard.playbackDenoise),
+          playback: {
+            ...(isPlainObject(dashboard.playback) ? dashboard.playback : {}),
+            highPassHz: highPassToStored(
+              isPlainObject(dashboard.playback) ? dashboard.playback.highPassHz : undefined
+            ),
+          },
         };
       }
 

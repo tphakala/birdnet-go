@@ -57,12 +57,22 @@ type AppConfigResponse struct {
 	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
 	AudioExportEnabled bool                  `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
 	PlaybackDenoise    string                `json:"playbackDenoise"`           // denoise preset applied to playback and downloads by default, "" when none applies (off, or export-stage denoise is on)
+	PlaybackDefaults   PlaybackDefaultsDTO   `json:"playbackDefaults"`          // default gain and high-pass cutoff for clip players, which guests cannot read from the settings
 	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
 	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
 	NewVersion         bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
 	PreviousVersion    string                `json:"previousVersion,omitempty"` // last version the user acknowledged
 	Sentry             *SentryFrontendConfig `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
 	ProjectLinks       ProjectLinksConfig    `json:"projectLinks"`              // project identity/links served to the frontend
+}
+
+// PlaybackDefaultsDTO carries the playback defaults the browser applies itself,
+// so visitors who cannot read the settings start every clip the same way.
+// The denoise default stays in AppConfigResponse.PlaybackDenoise because the
+// server applies it.
+type PlaybackDefaultsDTO struct {
+	GainDb     float64 `json:"gainDb"`     // default playback gain in dB
+	HighPassHz int     `json:"highPassHz"` // default high-pass cutoff in Hz, 0 when off
 }
 
 // SentryFrontendConfig exposes telemetry configuration to the frontend.
@@ -224,9 +234,13 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		LiveSpectrogram:    settings.Realtime.Dashboard.LiveSpectrogram,
 		AudioExportEnabled: settings.Realtime.Audio.Export.Enabled,
 		PlaybackDenoise:    settings.EffectivePlaybackDenoise(),
-		FreshInstall:       freshInstall,
-		NewVersion:         newVersion,
-		PreviousVersion:    previousVersion,
+		PlaybackDefaults: PlaybackDefaultsDTO{
+			GainDb:     settings.Realtime.Dashboard.DefaultAudioGain,
+			HighPassHz: settings.Realtime.Dashboard.Playback.HighPassHz,
+		},
+		FreshInstall:    freshInstall,
+		NewVersion:      newVersion,
+		PreviousVersion: previousVersion,
 		// Project identity/links are always served (independent of telemetry) so
 		// in-app links follow the configured branding instead of hardcoded URLs.
 		ProjectLinks: ProjectLinksConfig{

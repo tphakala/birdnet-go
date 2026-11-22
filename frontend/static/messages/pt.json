@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Ative acima a redução de ruído na reprodução para escolher uma intensidade.",
         "denoiseExportPrecedence": "Não é aplicada enquanto «Redução de ruído dos clipes guardados» estiver ativa (Definições de áudio, separador Processamento). Esses clipes já estão sem ruído.",
         "denoiseRedenoiseNote": "Os clipes guardados enquanto «Redução de ruído dos clipes guardados» estava ativa são limpos de ruído de novo ao reproduzir. Escolha Desativado nas definições de áudio de um clipe para o ouvir tal como foi guardado.",
-        "denoiseLossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado."
+        "denoiseLossyNote": "A redução de ruído funciona melhor com clipes FLAC ou WAV. Abaixo de {minBitrate} kbps, os artefactos do codec limitam a limpeza do resultado.",
+        "highPassLabel": "Filtro passa-alta padrão",
+        "highPassHelpText": "Remove o som abaixo desta frequência enquanto um clipe é reproduzido, como o ruído grave do vento e do trânsito. É aplicado no navegador, por isso os clipes armazenados, transferidos e exportados não são filtrados.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Desligado"
       }
     },
     "restartRequired": "Algumas alterações requerem um reinício do servidor para terem efeito. Por favor, reinicie o BirdNET-Go."

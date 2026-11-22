@@ -703,8 +703,15 @@ export interface Dashboard {
   customColors?: { primary: string; accent: string }; // Custom scheme hex colors
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
-  defaultAudioGain?: number; // Default playback gain in dB (0-24)
+  defaultAudioGain?: number; // Default playback gain in dB (-12 to 24)
   playbackDenoise?: DenoiseSettings; // Denoise clips when they are played or downloaded
+  playback?: PlaybackDefaults; // Further playback defaults
+}
+
+/** Playback defaults beyond defaultAudioGain and playbackDenoise. */
+export interface PlaybackDefaults {
+  /** High-pass cutoff in Hz a player starts with; 0 is off. */
+  highPassHz: number;
 }
 
 // Dashboard layout configuration
@@ -1189,6 +1196,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
           enabled: false, // Off by default
           strength: DEFAULT_DENOISE_PRESET,
         },
+        playback: { highPassHz: 0 }, // Default high-pass filter off
       },
     },
     webServer: {},

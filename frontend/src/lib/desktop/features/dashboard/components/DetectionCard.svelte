@@ -33,14 +33,13 @@
   import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
-  import { get } from 'svelte/store';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { getPlaybackDefaults } from '$lib/utils/playbackDefaults';
   import { t } from '$lib/i18n';
 
-  // Configuration constants - use helper to read current default gain at call time
+  // Read the defaults at call time, not once at module load
   // (cards are recycled via keyed {#each}, so a one-time const would go stale)
-  const getDefaultAudioGain = () => get(dashboardSettings)?.defaultAudioGain ?? 0;
-  const DEFAULT_AUDIO_FILTER_FREQ = 20;
+  const getDefaultAudioGain = () => getPlaybackDefaults().gainDb;
+  const getDefaultAudioFilterFreq = () => getPlaybackDefaults().highPassHz;
 
   interface Props {
     detection: Detection;
@@ -87,7 +86,7 @@
 
   // Audio settings state (per-card, not shared)
   let audioGainValue = $state(getDefaultAudioGain());
-  let audioFilterFreq = $state(DEFAULT_AUDIO_FILTER_FREQ);
+  let audioFilterFreq = $state(getDefaultAudioFilterFreq());
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
   let audioContextAvailable = $state(true);
 
@@ -319,6 +318,7 @@
         filterFreq={audioFilterFreq}
         playbackSpeed={audioPlaybackSpeed}
         defaultGainValue={getDefaultAudioGain()}
+        defaultFilterFreq={getDefaultAudioFilterFreq()}
         onGainChange={handleGainChange}
         onFilterChange={handleFilterChange}
         onSpeedChange={handleSpeedChange}
