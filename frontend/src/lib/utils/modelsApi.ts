@@ -153,7 +153,7 @@ export function subscribeInstallProgress(
   onProgress: (state: DownloadProgress) => void,
   onComplete: () => void,
   onError: (err: string) => void,
-  onCancelled?: () => void
+  onCancelled: () => void
 ): () => void {
   const url = buildAppUrl(`${BASE}/install/${encodeURIComponent(id)}/progress`);
   const source = new ReconnectingEventSource(url, {
@@ -187,13 +187,11 @@ export function subscribeInstallProgress(
       onError(data.error ?? 'Unknown error');
       source.close();
     } else if (data.status === 'cancelled') {
-      // A user cancel is not a download failure, so with an onCancelled handler it never
-      // reaches onError and the mirror hint (isNetworkDownloadError) is never consulted.
-      // A subscriber without one (a reinstall can be sent a retained cancelled state of
-      // an earlier install) must still see its operation end, so it gets onError.
+      // A user cancel is not an error: it never reaches onError, so the mirror hint
+      // (isNetworkDownloadError) is never consulted. The handler is required so that
+      // every subscriber sees its operation end.
       terminalReceived = true;
-      if (onCancelled) onCancelled();
-      else onError(data.error ?? 'Cancelled');
+      onCancelled();
       source.close();
     }
   });
