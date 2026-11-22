@@ -26,16 +26,12 @@ const HISTORY_URL = '/api/v2/system/metrics/history';
 /** The history request of a host with no models; held by its full URL, query included. */
 const HISTORY_REQUEST = `${HISTORY_URL}?points=60&metrics=cpu.total,memory.used_percent,cpu.temperature`;
 
-// jsdom has no EventSource; count what the view opens and closes
-const stream = vi.hoisted(() => {
-  const urls: string[] = [];
-  return { opened: 0, closed: 0, urls };
-});
+// jsdom has no EventSource; record the URL of each stream the view opens and count closes
+const stream = vi.hoisted(() => ({ closed: 0, urls: new Array<string>() }));
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class {
     constructor(url: string) {
-      stream.opened++;
       stream.urls.push(url);
     }
     addEventListener() {}
@@ -160,7 +156,6 @@ describe('System view', () => {
     requests = [];
     held = new Map();
     failures = new Map();
-    stream.opened = 0;
     stream.closed = 0;
     stream.urls.length = 0;
     navigation.navigate(OVERVIEW_PATH);
@@ -555,14 +550,14 @@ describe('System view', () => {
   it('a CSRF token change does not reload the page or reconnect the metrics stream', async () => {
     await mountAt(OVERVIEW_PATH);
     expect(count(INFO_URL)).toBe(1);
-    expect(stream.opened).toBe(1);
+    expect(stream.urls).toHaveLength(1);
 
     setCsrfToken('token-2');
     flushSync();
     await flush();
 
     expect(count(INFO_URL)).toBe(1);
-    expect(stream.opened).toBe(1);
+    expect(stream.urls).toHaveLength(1);
     expect(stream.closed).toBe(0);
   });
 });

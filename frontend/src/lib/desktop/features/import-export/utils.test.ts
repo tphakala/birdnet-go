@@ -11,14 +11,11 @@ import {
 } from './utils';
 import type { ImportProgress, ImportSourcesResponse, SourceCandidate } from './types';
 
-const { streamUrls } = vi.hoisted(() => {
-  const urls: string[] = [];
-  return { streamUrls: urls };
-});
+// The URL of each stream opened; the mock constructor reads it only after the module loaded.
+const streamUrls: string[] = [];
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class {
-    onreconnectfailed: ((attempts: number) => void) | null = null;
     addEventListener = vi.fn();
     close = vi.fn();
     constructor(url: string) {

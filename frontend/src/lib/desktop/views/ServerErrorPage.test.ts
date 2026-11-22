@@ -10,6 +10,10 @@ function loginLink(): string | null {
   return screen.getByRole('link', { name: 'common.loginToViewDetails' }).getAttribute('href');
 }
 
+function dashboardLink(): string | null {
+  return screen.getByRole('link', { name: 'common.goToDashboard' }).getAttribute('href');
+}
+
 describe('ServerErrorPage login link', () => {
   afterEach(() => {
     resetBasePath();
@@ -36,10 +40,6 @@ describe('ServerErrorPage dashboard link', () => {
   afterEach(() => {
     resetBasePath();
   });
-
-  function dashboardLink(): string | null {
-    return screen.getByRole('link', { name: 'common.goToDashboard' }).getAttribute('href');
-  }
 
   it('links to the dashboard', () => {
     render(ServerErrorPage, { props: { security: NO_ACCESS } });

@@ -4,7 +4,7 @@
   import { t } from '$lib/i18n';
   import { appState } from '$lib/stores/appState.svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { buildLoginUrl, DEFAULT_LOGIN_TARGET as DASHBOARD_PATH } from '$lib/utils/loginRedirect';
+  import { buildLoginUrl, DASHBOARD_PATH } from '$lib/utils/loginRedirect';
 
   interface SecuritySettings {
     enabled: boolean;

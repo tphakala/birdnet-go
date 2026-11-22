@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { DEFAULT_LOGIN_TARGET as DASHBOARD_PATH } from '$lib/utils/loginRedirect';
+  import { DASHBOARD_PATH } from '$lib/utils/loginRedirect';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
 

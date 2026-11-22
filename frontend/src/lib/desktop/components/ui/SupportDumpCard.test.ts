@@ -35,6 +35,17 @@ describe('SupportDumpCard unsaved-changes guard', () => {
     vi.restoreAllMocks();
   });
 
+  /** Records the href and download attribute of every anchor the card clicks. */
+  function captureAnchorClicks(): Array<{ href: string | null; download: boolean }> {
+    const clicked: Array<{ href: string | null; download: boolean }> = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      clicked.push({ href: this.getAttribute('href'), download: this.hasAttribute('download') });
+    });
+    return clicked;
+  }
+
   async function typeMessage(text: string) {
     render(SupportDumpCard);
     await fireEvent.input(await screen.findByLabelText(MESSAGE_LABEL), { target: { value: text } });
@@ -79,12 +90,7 @@ describe('SupportDumpCard unsaved-changes guard', () => {
 
   it('downloads a local dump through an anchor and does not navigate the page', async () => {
     const hrefBefore = window.location.href;
-    const clicked: Array<{ href: string | null; download: boolean }> = [];
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-      this: HTMLAnchorElement
-    ) {
-      clicked.push({ href: this.getAttribute('href'), download: this.hasAttribute('download') });
-    });
+    const clicked = captureAnchorClicks();
     await typeMessage('');
 
     await generateLocalDownload();
@@ -97,17 +103,12 @@ describe('SupportDumpCard unsaved-changes guard', () => {
   it('downloads a local dump under the reverse proxy prefix', async () => {
     // The server returns an unprefixed download_url; a proxy at /birdnet does not rewrite it.
     setBasePath('/birdnet');
-    const clicked: Array<string | null> = [];
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-      this: HTMLAnchorElement
-    ) {
-      clicked.push(this.getAttribute('href'));
-    });
+    const clicked = captureAnchorClicks();
     await typeMessage('');
 
     await generateLocalDownload();
     await vi.advanceTimersByTimeAsync(DOWNLOAD_DELAY_MS);
 
-    expect(clicked).toEqual([`/birdnet${DOWNLOAD_URL}`]);
+    expect(clicked).toEqual([{ href: `/birdnet${DOWNLOAD_URL}`, download: true }]);
   });
 });
