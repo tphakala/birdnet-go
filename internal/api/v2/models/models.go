@@ -1546,7 +1546,10 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 			flusher.Flush()
 
 		default:
-			state := c.ModelManager.GetDownloadState(catalogID)
+			// State and slot are read together: a state that was retained from an
+			// earlier attempt cannot then be paired with a slot the next attempt has
+			// already released.
+			state, running := c.ModelManager.DownloadStateAndRunning(catalogID)
 			if state == nil {
 				// No active download. Check if the model is already installed,
 				// which means the download completed before we connected.
@@ -1593,7 +1596,7 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 			// slot for the entry, wait: an immediate retry's stream must not replay
 			// the previous attempt's outcome, and a client that sees the end must be
 			// able to start the next operation without a 409.
-			if isTerminalStatus(state.Status) && c.ModelManager.OperationRunningFor(catalogID) {
+			if isTerminalStatus(state.Status) && running {
 				time.Sleep(apicore.SSEEventLoopSleep)
 				continue
 			}

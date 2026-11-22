@@ -327,3 +327,22 @@ func newCancelledError(catalogID string) error {
 		Context("catalog_id", catalogID).
 		Build()
 }
+
+// DownloadStateAndRunning returns a copy of the entry's download state (nil when
+// there is none) and whether an operation holds the operation slot for the entry,
+// read as one snapshot. Slot release and state replacement both need mm.mu, which
+// the snapshot holds while it reads, so a retained terminal state of an earlier
+// attempt cannot be paired with a slot that the next attempt has already released:
+// a progress reader uses it to send a terminal state only when it is the outcome of
+// the operation that just ended. mm.opMu is taken after mm.mu, the usual order.
+func (mm *ModelManager) DownloadStateAndRunning(catalogID string) (state *DownloadState, running bool) {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+	if st, ok := mm.downloading[catalogID]; ok {
+		cp := *st
+		state = &cp
+	}
+	mm.opMu.Lock()
+	defer mm.opMu.Unlock()
+	return state, mm.activeOp != nil && mm.activeOp.catalogID == catalogID
+}

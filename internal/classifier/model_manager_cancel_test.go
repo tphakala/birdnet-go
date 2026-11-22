@@ -424,3 +424,28 @@ func TestNewAttemptDropsRetainedState(t *testing.T) {
 		requireSlotFree(t, h.mm, "the early failure frees the slot")
 	})
 }
+
+// TestDownloadStateAndRunning pins the snapshot the progress stream relies on: the
+// entry's state and whether an operation holds its slot, read together, so a
+// retained terminal state is told apart from the outcome of the operation running now.
+func TestDownloadStateAndRunning(t *testing.T) {
+	h := newDepHarnessWithCatalog(t, cancelCatalog())
+	h.setDownloading(cancelEntryID, StatusCancelled)
+
+	state, running := h.mm.DownloadStateAndRunning(cancelEntryID)
+	require.NotNil(t, state)
+	assert.Equal(t, StatusCancelled, state.Status)
+	assert.False(t, running, "no operation holds the slot")
+
+	lease, err := h.mm.BeginOperation(OperationInstall, cancelEntryID)
+	require.NoError(t, err)
+	_, running = h.mm.DownloadStateAndRunning(cancelEntryID)
+	assert.True(t, running, "a held lease for the entry is running")
+	_, running = h.mm.DownloadStateAndRunning(cancelPermID)
+	assert.False(t, running, "another entry's operation does not count")
+	lease.Release()
+
+	state, running = h.mm.DownloadStateAndRunning("no-such-entry")
+	assert.Nil(t, state)
+	assert.False(t, running)
+}
