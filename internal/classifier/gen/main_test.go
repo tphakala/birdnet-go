@@ -145,13 +145,14 @@ func TestCheckRegionCounts(t *testing.T) {
 		{"a region whose builds are all superseded", single, nil, append(tiles(regions-1, single, ""), entry("r2", "fp32", "", true)), "region r2 has live builds []"},
 		{"a missing region", single, nil, tiles(regions-1, single, ""), "2 distinct regions, want 3"},
 		{"an extra region", single, nil, tiles(regions+1, single, ""), "4 distinct regions, want 3"},
-		{"multi-release family accepts a live current release", single, []string{"1.0", "1.1"}, append(tiles(regions, single, "1.1"), entry("r0", "fp32", "1.0", true)), ""},
+		{"multi-release family accepts a live current release", single, []string{"1.0", "1.1"}, append(tiles(regions, single, "1.1"), entry("r0", "fp32", "1.0", true), entry("r1", "fp32", "1.0", true), entry("r2", "fp32", "1.0", true)), ""},
 		{"a live build of an older release", single, []string{"1.0", "1.1"}, append(tiles(regions-1, single, "1.1"), entry("r2", "fp32", "1.0", false)), "region r2: live entry fp32@r2 is of release 1.0"},
+		{"a region losing its older release", single, []string{"1.0", "1.1"}, append(tiles(regions, single, "1.1"), entry("r0", "fp32", "1.0", true), entry("r1", "fp32", "1.0", true)), "release 1.0 is carried by 2 regions, want 3"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			fam := &family{key: "x", expectedRegions: regions, liveVariants: tt.live, releases: tt.release}
+			fam := &family{key: "x", expectedRegions: regions, olderReleaseRegions: regions, liveVariants: tt.live, releases: tt.release}
 			err := fam.checkRegionCounts(tt.entries)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)

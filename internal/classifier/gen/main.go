@@ -140,8 +140,9 @@ var families = []family{
 			return fmt.Sprintf("birdnet_plus_v%s_%s_labels%s.txt", release, slug, buildSuffix(build))
 		},
 		liveVariants: []string{"fp32"},
-		// 43 tiles plus central-india.
-		expectedRegions: 44,
+		// 43 tiles plus central-india, which has no 3.0 build.
+		expectedRegions:     44,
+		olderReleaseRegions: 43,
 		// 3.0 is hosted here from a frozen copy because the upstream manifest
 		// lists 3.0.1 only; every 3.0 build stays a Legacy variant of its 3.0.1
 		// successor so an installed 3.0 is still recognised and repairable.
@@ -213,10 +214,16 @@ type family struct {
 	// counted, their number varies per tile.
 	liveVariants []string
 	// releases lists every upstream release the family hosts, oldest first, empty
-	// for a one-release family. Hand-maintained like expectedRegions: the build
-	// fails unless every region has its builds of each listed release and of no
-	// other, so an older release dropping out of the inputs cannot pass unnoticed.
+	// for a one-release family. Entries of a release outside the list are refused
+	// (checkReleases), and the number of regions that carry each older release is
+	// pinned by olderReleaseRegions.
 	releases []string
+	// olderReleaseRegions is the number of regions that carry builds of each older
+	// release in releases (0 for a one-release family). Hand-maintained like
+	// expectedRegions: a newer tile may lack the older release (BirdNET+ central-india
+	// has no 3.0 build), so the count is not expectedRegions, and an older release
+	// dropping out of the frozen inputs for a region cannot pass unnoticed.
+	olderReleaseRegions int
 	// frozenManifests are vendored, verbatim copies of older releases' manifests
 	// that the upstream manifest no longer lists. Their regional entries are
 	// appended and chained to the current manifest by mergeFrozenReleases.
@@ -332,16 +339,25 @@ func (f *family) checkReleases(regional []manifestModel, currentVersion string) 
 // entries: the distinct regions must number exactly the family's expectedRegions,
 // and each region must ship exactly one live (not superseded) build of every
 // token in liveVariants and of no other token. For a multi-release family every
-// live entry must also be of the current release. Superseded builds are not
+// live entry must also be of the current release, and each older release must be
+// carried by exactly olderReleaseRegions regions, so a region losing its older
+// builds cannot strand an installed one. Superseded builds are otherwise not
 // counted (their number varies per tile), so a dropped, duplicated or extra live
 // tile cannot pass unnoticed even when the totals still match, and every region
 // keeps a build a new install can use.
 func (f *family) checkRegionCounts(regional []manifestModel) error {
 	live := make(map[string][]string, f.expectedRegions) // region -> live variant tokens
+	olderRegions := make(map[string]map[string]bool, 1)  // older release -> regions carrying it
 	for i := range regional {
 		e := &regional[i]
 		if _, ok := live[e.Region]; !ok {
 			live[e.Region] = nil
+		}
+		if len(f.releases) > 0 && e.UpstreamVersion != f.currentRelease() {
+			if olderRegions[e.UpstreamVersion] == nil {
+				olderRegions[e.UpstreamVersion] = map[string]bool{}
+			}
+			olderRegions[e.UpstreamVersion][e.Region] = true
 		}
 		if e.SupersededBy != nil {
 			continue
@@ -353,6 +369,13 @@ func (f *family) checkRegionCounts(regional []manifestModel) error {
 	}
 	if len(live) != f.expectedRegions {
 		return fmt.Errorf("regional entries cover %d distinct regions, want %d (a region is missing or duplicated)", len(live), f.expectedRegions)
+	}
+	if len(f.releases) > 1 {
+		for _, release := range f.releases[:len(f.releases)-1] {
+			if got := len(olderRegions[release]); got != f.olderReleaseRegions {
+				return fmt.Errorf("release %s is carried by %d regions, want %d (an older release must keep its builds in every region that had it)", release, got, f.olderReleaseRegions)
+			}
+		}
 	}
 	want := slices.Sorted(slices.Values(f.liveVariants))
 	for region, tokens := range live {
