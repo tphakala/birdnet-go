@@ -141,12 +141,7 @@ interface PlaybackDefaultItemBase {
   helpKey: TranslationKey;
 }
 
-/**
- * One row of the playback defaults dialog. The dialog renders one control per
- * `kind`, so a new default is a new entry here (plus its field in
- * PlaybackDefaultValues, its line in readPlaybackDefaults, changedPlaybackDefaults
- * and playbackDefaultsPatch, and its stored key), not a layout change.
- */
+/** One row of the playback defaults dialog: a slider or a select, with its label and help text. */
 export type PlaybackDefaultItem =
   | (PlaybackDefaultItemBase & {
       kind: 'slider';
@@ -163,7 +158,7 @@ export type PlaybackDefaultItem =
       options: readonly DenoiseOption[];
     });
 
-/** The playback defaults, in the order the dialog shows them. */
+/** The playback defaults dialog renders one control per entry, in this order. */
 export const PLAYBACK_DEFAULT_ITEMS: readonly PlaybackDefaultItem[] = [
   {
     kind: 'slider',
@@ -226,7 +221,7 @@ export function changedPlaybackDefaults(
 /**
  * The dashboard PATCH body for the changed keys only. Turning denoise off keeps
  * the saved strength, so the Settings page still shows it. `playback` is sent
- * whole, because the store merges a section patch one level deep.
+ * whole: the saved fields plus the changed one.
  */
 export function playbackDefaultsPatch(
   changed: Partial<PlaybackDefaultValues>,
