@@ -105,7 +105,9 @@ export function connectImportProgressStream(
   jobId: string,
   handlers: ImportProgressStreamHandlers
 ): ReconnectingEventSource {
-  const es = new ReconnectingEventSource(buildAppUrl(`/api/v2/import/jobs/${jobId}/progress`));
+  const es = new ReconnectingEventSource(
+    buildAppUrl(`/api/v2/import/jobs/${encodeURIComponent(jobId)}/progress`)
+  );
 
   es.onreconnectfailed = attempts => {
     if (handlers.onStalled && shouldReconcileStalledStream(attempts)) handlers.onStalled();

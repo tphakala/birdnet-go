@@ -162,6 +162,16 @@ describe('reverse proxy prefix', () => {
     expect(streamUrls).toEqual(['/birdnet/api/v2/import/jobs/job-1/progress']);
   });
 
+  it('encodes the job id in the import progress stream URL', () => {
+    connectImportProgressStream('job/1?x#y', {
+      onProgress: vi.fn(),
+      onComplete: vi.fn(),
+      onCancelled: vi.fn(),
+      onError: vi.fn(),
+    });
+    expect(streamUrls).toEqual(['/api/v2/import/jobs/job%2F1%3Fx%23y/progress']);
+  });
+
   it('keeps unprefixed URLs when no proxy prefix is set', () => {
     setBasePath('');
     expect(buildDetectionsFilterUrl()).toBe('/ui/detections?source=birdnet-pi');
