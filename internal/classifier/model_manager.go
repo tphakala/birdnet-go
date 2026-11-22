@@ -2328,8 +2328,20 @@ func (mm *ModelManager) markCancelled(catalogID string, progress chan<- Download
 // entry's state cancelled and returns the cancellation error when the user
 // cancelled the operation (whatever the failure looked like, a cancel racing
 // another failure still reads as a cancel), else marks it failed and returns err.
+// It also closes the lease's cancel window, so a cancel arriving once the outcome is
+// failed is refused.
 func (mm *ModelManager) settleDownloadFailure(ctx context.Context, catalogID string, err error, progress chan<- DownloadState) error {
-	if errors.Is(context.Cause(ctx), ErrOperationCancelled) {
+	// Decide and close the cancel window in one step under opMu: a cancel accepted
+	// before this point ends the operation cancelled, and one that arrives after it
+	// is refused instead of being answered 202 for an operation that ends failed.
+	mm.opMu.Lock()
+	cancelled := errors.Is(context.Cause(ctx), ErrOperationCancelled)
+	if l := mm.activeOp; !cancelled && l != nil && l.catalogID == catalogID {
+		l.cancellable = false
+	}
+	mm.opMu.Unlock()
+
+	if cancelled {
 		mm.markCancelled(catalogID, progress)
 		return newCancelledError(catalogID)
 	}

@@ -297,3 +297,29 @@ func TestCancelledDownloadErrorsAreSuppressible(t *testing.T) {
 		requireSuppressible(t, awaitResult(t, done))
 	})
 }
+
+// TestCancelOperation_RefusedAfterFailure pins that the failure path closes the
+// cancel window: a cancel that arrives after the download already failed is refused
+// (409) instead of being accepted for an operation that ends failed.
+func TestCancelOperation_RefusedAfterFailure(t *testing.T) {
+	h := newDepHarnessWithCatalog(t, cancelCatalog())
+	lease, err := h.mm.BeginOperation(OperationInstall, cancelEntryID)
+	require.NoError(t, err)
+	t.Cleanup(lease.Release)
+	ctx, cancel := lease.cancellableContext(t.Context())
+	t.Cleanup(func() { cancel(nil) })
+	h.setDownloading(cancelEntryID, StatusDownloading)
+	h.mm.markCancellable(cancelEntryID)
+
+	settled := h.mm.settleDownloadFailure(ctx, cancelEntryID, errors.NewStd("disk full"), nil)
+
+	require.Error(t, settled)
+	require.NotErrorIs(t, settled, ErrOperationCancelled, "an ordinary failure is not a cancel")
+	state := h.mm.GetDownloadState(cancelEntryID)
+	require.NotNil(t, state)
+	assert.Equal(t, StatusFailed, state.Status)
+	cancelErr := h.mm.CancelOperation(cancelEntryID)
+	_, refused := errors.AsType[*OperationNotCancellableError](cancelErr)
+	assert.True(t, refused, "a cancel after the failure is refused, got %v", cancelErr)
+	require.NoError(t, ctx.Err(), "the refused cancel leaves the context alone")
+}

@@ -40,7 +40,7 @@ func (e *OperationNotCancellableError) Error() string {
 const (
 	cancelRefusedNotRunning     = "no operation is running for it"
 	cancelRefusedNotCancellable = "the running operation cannot be cancelled"
-	cancelRefusedNotStarted     = "the download has not started or activation has begun"
+	cancelRefusedNotStarted     = "the download has not started, has ended or activation has begun"
 )
 
 // ModelOperation names a model gallery operation that holds the ModelManager's
