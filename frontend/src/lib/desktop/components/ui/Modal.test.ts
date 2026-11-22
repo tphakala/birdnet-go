@@ -565,6 +565,41 @@ describe('Modal', () => {
     });
   });
 
+  describe('paint order', () => {
+    // The toasts' layer: every open Modal must stay under it
+    const TOAST_LAYER = 2000;
+    const layerOf = (name: string) => Number(screen.getByRole('dialog', { name }).style.zIndex);
+    const press = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+
+    it('paints the Modal opened last above the one opened first, whatever their DOM order', async () => {
+      renderTyped(ModalToggleHost, {});
+      // The Modal later in the DOM opens first, so the one opened last sits earlier in the DOM
+      await press('Toggle upper');
+      await press('Toggle lower');
+
+      expect(layerOf('Lower modal')).toBeGreaterThan(layerOf('Upper modal'));
+    });
+
+    it('keeps stacked Modals under the toasts', async () => {
+      renderTyped(ModalToggleHost, {});
+      await press('Toggle lower');
+      await press('Toggle upper');
+
+      expect(layerOf('Upper modal')).toBeLessThan(TOAST_LAYER);
+      expect(layerOf('Lower modal')).toBeLessThan(layerOf('Upper modal'));
+    });
+
+    it('paints a Modal reopened over another above it', async () => {
+      renderTyped(ModalToggleHost, {});
+      await press('Toggle lower');
+      await press('Toggle upper');
+      await press('Toggle lower');
+      await press('Toggle lower');
+
+      expect(layerOf('Lower modal')).toBeGreaterThan(layerOf('Upper modal'));
+    });
+  });
+
   describe('labelling', () => {
     const stackTest = createComponentTestFactory(ModalStackHost);
 

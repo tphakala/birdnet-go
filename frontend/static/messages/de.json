@@ -5422,6 +5422,18 @@
         "generationFailedStatus": "Erzeugung fehlgeschlagen mit Status {status}",
         "spectrogramFailed": "Spektrogramm konnte nicht erzeugt werden"
       },
+      "defaults": {
+        "open": "Wiedergabe-Standardwerte",
+        "title": "Wiedergabe-Standardwerte",
+        "description": "Jeder Clip startet mit diesen Werten. Sie werden an dieser Station gespeichert und gelten für alle, die sie nutzen.",
+        "useCurrent": "Aktuelle Werte übernehmen",
+        "useCurrentHelp": "Kopiert die Verstärkung, das Entrauschen und den Hochpassfilter, auf die dieser Player eingestellt ist, in die Felder unten. Gespeichert wird erst, wenn Sie Änderungen speichern wählen.",
+        "useCurrentHelpNoDenoise": "Kopiert die Verstärkung und den Hochpassfilter, auf die dieser Player eingestellt ist, in die Felder unten. Gespeichert wird erst, wenn Sie Änderungen speichern wählen.",
+        "copied": "Aktuelle Werte übernommen. Wählen Sie Änderungen speichern, um sie zu behalten.",
+        "saved": "Wiedergabe-Standardwerte gespeichert",
+        "saveFailed": "Die Wiedergabe-Standardwerte wurden nicht gespeichert. Es wurde nichts geändert.",
+        "unavailable": "Die Einstellungen konnten nicht geladen werden, daher lassen sich die Standardwerte hier nicht ändern."
+      },
       "clipExtraction": {
         "selectRange": "Klicken und ziehen, um einen Bereich auszuwählen",
         "playSelection": "Ausgewählten Bereich abspielen",

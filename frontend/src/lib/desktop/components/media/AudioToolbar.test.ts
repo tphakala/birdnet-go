@@ -706,3 +706,29 @@ describe('AudioToolbar play shortcut hint', () => {
     expect(plain).not.toHaveAttribute('title');
   });
 });
+
+describe('AudioToolbar playback defaults button', () => {
+  const toolbarTest = createComponentTestFactory(AudioToolbar);
+  const DEFAULTS_NAME = 'components.audioPlayer.defaults.open';
+
+  it('is not shown without a handler', () => {
+    toolbarTest.render({ props: audioToolbarProps() });
+
+    expect(screen.queryByRole('button', { name: DEFAULTS_NAME })).toBeNull();
+  });
+
+  it('is the last tabbable control of the bar and opens the dialog', async () => {
+    const onOpenDefaults = vi.fn();
+    const { container } = toolbarTest.render({ props: audioToolbarProps({ onOpenDefaults }) });
+
+    const button = screen.getByRole('button', { name: DEFAULTS_NAME });
+    const tabbable = Array.from(
+      container.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]')
+    );
+    expect(tabbable.at(-1)).toBe(button);
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+
+    await fireEvent.click(button);
+    expect(onOpenDefaults).toHaveBeenCalledTimes(1);
+  });
+});

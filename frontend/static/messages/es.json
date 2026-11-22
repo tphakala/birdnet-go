@@ -5422,6 +5422,18 @@
         "generationFailedStatus": "Generación fallida con estado {status}",
         "spectrogramFailed": "Error al generar el espectrograma"
       },
+      "defaults": {
+        "open": "Valores predeterminados de reproducción",
+        "title": "Valores predeterminados de reproducción",
+        "description": "Todos los clips empiezan con estos valores. Se guardan en esta estación y se aplican a todas las personas que la usan.",
+        "useCurrent": "Usar los valores actuales",
+        "useCurrentHelp": "Copia en los campos de abajo la ganancia, la reducción de ruido y el filtro paso alto que tiene este reproductor. No se guarda nada hasta que elija Guardar cambios.",
+        "useCurrentHelpNoDenoise": "Copia en los campos de abajo la ganancia y el filtro paso alto que tiene este reproductor. No se guarda nada hasta que elija Guardar cambios.",
+        "copied": "Valores actuales copiados. Elija Guardar cambios para conservarlos.",
+        "saved": "Valores predeterminados de reproducción guardados",
+        "saveFailed": "Los valores predeterminados de reproducción no se guardaron. No se ha cambiado nada.",
+        "unavailable": "No se pudo cargar la configuración, así que aquí no se pueden cambiar los valores predeterminados."
+      },
       "clipExtraction": {
         "selectRange": "Haz clic y arrastra para seleccionar un rango",
         "playSelection": "Reproducir rango seleccionado",

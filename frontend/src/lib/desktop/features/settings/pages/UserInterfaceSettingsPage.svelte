@@ -48,7 +48,8 @@
     PLAYBACK_HIGH_PASS_MIN_HZ,
     PLAYBACK_HIGH_PASS_STEP_HZ,
     clampPlaybackGain,
-    formatPlaybackGain,
+    formatPlaybackGainLabel,
+    formatPlaybackHighPass,
     highPassFromStored,
     highPassToStored,
   } from '$lib/utils/playbackDefaults';
@@ -297,18 +298,6 @@
     });
   }
 
-  // Signed, with the unit after a space; also the slider's accessible value text.
-  function formatGain(db: number): string {
-    return formatPlaybackGain(db, t('settings.userInterface.audioPlayback.defaultGainUnit'));
-  }
-
-  // The slider's floor is the "off" position.
-  function formatHighPass(hz: number): string {
-    return hz <= PLAYBACK_HIGH_PASS_MIN_HZ
-      ? t('settings.userInterface.audioPlayback.highPassOff')
-      : `${hz} ${t('settings.userInterface.audioPlayback.highPassUnit')}`;
-  }
-
   function updateThumbnailSetting(key: string, value: string | boolean) {
     settingsActions.updateSection('realtime', {
       dashboard: {
@@ -485,7 +474,7 @@
           helpText={t('settings.userInterface.audioPlayback.defaultGainHelpText')}
           value={clampPlaybackGain(settings.dashboard.defaultAudioGain)}
           onUpdate={value => updateDashboardSetting('defaultAudioGain', value)}
-          formatValue={formatGain}
+          formatValue={formatPlaybackGainLabel}
           min={PLAYBACK_GAIN_MIN_DB}
           max={PLAYBACK_GAIN_MAX_DB}
           step={PLAYBACK_GAIN_STEP_DB}
@@ -499,7 +488,7 @@
           min={PLAYBACK_HIGH_PASS_MIN_HZ}
           max={PLAYBACK_HIGH_PASS_MAX_HZ}
           step={PLAYBACK_HIGH_PASS_STEP_HZ}
-          formatValue={formatHighPass}
+          formatValue={formatPlaybackHighPass}
           disabled={store.isLoading || store.isSaving}
         />
       </div>

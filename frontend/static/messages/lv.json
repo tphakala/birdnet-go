@@ -5422,6 +5422,18 @@
         "generationFailedStatus": "Ģenerēšana neizdevās ar statusu {status}",
         "spectrogramFailed": "Neizdevās ģenerēt spektrogrammu"
       },
+      "defaults": {
+        "open": "Atskaņošanas noklusējumi",
+        "title": "Atskaņošanas noklusējumi",
+        "description": "Katrs klips sākas ar šīm vērtībām. Tās tiek saglabātas šajā stacijā un attiecas uz visiem, kas to izmanto.",
+        "useCurrent": "Izmantot pašreizējās vērtības",
+        "useCurrentHelp": "Iekopē zemāk esošajos laukos šī atskaņotāja pašreizējo pastiprinājumu, trokšņu samazināšanu un augstfrekvences filtru. Nekas netiek saglabāts, kamēr neizvēlaties Saglabāt izmaiņas.",
+        "useCurrentHelpNoDenoise": "Iekopē zemāk esošajos laukos šī atskaņotāja pašreizējo pastiprinājumu un augstfrekvences filtru. Nekas netiek saglabāts, kamēr neizvēlaties Saglabāt izmaiņas.",
+        "copied": "Pašreizējās vērtības nokopētas. Izvēlieties Saglabāt izmaiņas, lai tās paturētu.",
+        "saved": "Atskaņošanas noklusējumi saglabāti",
+        "saveFailed": "Atskaņošanas noklusējumi netika saglabāti. Nekas netika mainīts.",
+        "unavailable": "Iestatījumus neizdevās ielādēt, tāpēc noklusējumus šeit nevar mainīt."
+      },
       "clipExtraction": {
         "selectRange": "Noklikšķiniet un velciet, lai atlasītu diapazonu",
         "playSelection": "Atskaņot atlasīto diapazonu",

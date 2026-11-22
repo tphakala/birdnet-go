@@ -37,6 +37,9 @@ export const Z_INDEX = {
   // Modals and popovers
   MODAL_BACKDROP: 900,
   MODAL: 950,
+  // The bottom layer of the shared Modal dialog; a Modal opened over another paints one
+  // step higher. Under the toasts, which stay above every dialog.
+  MODAL_DIALOG: 1900,
 
   // Portal elements (render to document.body)
   PORTAL_DROPDOWN: 1000, // SpeciesInput dropdown

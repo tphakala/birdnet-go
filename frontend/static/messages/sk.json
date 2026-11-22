@@ -5422,6 +5422,18 @@
         "generationFailedStatus": "Generovanie zlyhalo so stavom {status}",
         "spectrogramFailed": "Nepodarilo sa vygenerovať spektrogram"
       },
+      "defaults": {
+        "open": "Predvolené nastavenia prehrávania",
+        "title": "Predvolené nastavenia prehrávania",
+        "description": "Každý klip začína s týmito hodnotami. Ukladajú sa na tejto stanici a platia pre každého, kto ju používa.",
+        "useCurrent": "Použiť aktuálne hodnoty",
+        "useCurrentHelp": "Skopíruje do polí nižšie zosilnenie, odšumenie a hornopriepustný filter, na ktoré je tento prehrávač nastavený. Nič sa neuloží, kým nezvolíte Uložiť zmeny.",
+        "useCurrentHelpNoDenoise": "Skopíruje do polí nižšie zosilnenie a hornopriepustný filter, na ktoré je tento prehrávač nastavený. Nič sa neuloží, kým nezvolíte Uložiť zmeny.",
+        "copied": "Aktuálne hodnoty skopírované. Ak ich chcete ponechať, zvoľte Uložiť zmeny.",
+        "saved": "Predvolené nastavenia prehrávania uložené",
+        "saveFailed": "Predvolené nastavenia prehrávania sa neuložili. Nič sa nezmenilo.",
+        "unavailable": "Nastavenia sa nepodarilo načítať, preto tu nemožno zmeniť predvolené hodnoty."
+      },
       "clipExtraction": {
         "selectRange": "Kliknite a ťahajte pre výber rozsahu",
         "playSelection": "Prehrať vybraný rozsah",

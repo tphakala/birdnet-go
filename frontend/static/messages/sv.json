@@ -5422,6 +5422,18 @@
         "generationFailedStatus": "Generering misslyckades med status {status}",
         "spectrogramFailed": "Kunde inte generera spektrogram"
       },
+      "defaults": {
+        "open": "Standardvärden för uppspelning",
+        "title": "Standardvärden för uppspelning",
+        "description": "Varje klipp startar med dessa värden. De sparas på denna station och gäller för alla som använder den.",
+        "useCurrent": "Använd aktuella värden",
+        "useCurrentHelp": "Kopierar förstärkningen, brusreduceringen och högpassfiltret som den här spelaren är inställd på till fälten nedan. Inget sparas förrän du väljer Spara ändringar.",
+        "useCurrentHelpNoDenoise": "Kopierar förstärkningen och högpassfiltret som den här spelaren är inställd på till fälten nedan. Inget sparas förrän du väljer Spara ändringar.",
+        "copied": "Aktuella värden kopierade. Välj Spara ändringar för att behålla dem.",
+        "saved": "Standardvärden för uppspelning sparade",
+        "saveFailed": "Standardvärdena för uppspelning sparades inte. Inget ändrades.",
+        "unavailable": "Inställningarna kunde inte läsas in, så standardvärdena kan inte ändras här."
+      },
       "clipExtraction": {
         "selectRange": "Klicka och dra för att markera ett intervall",
         "playSelection": "Spela markerat intervall",

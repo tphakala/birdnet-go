@@ -5422,6 +5422,18 @@
         "generationFailedStatus": "Generering mislyktes med status {status}",
         "spectrogramFailed": "Generering av spektrogram mislyktes"
       },
+      "defaults": {
+        "open": "Standardverdier for avspilling",
+        "title": "Standardverdier for avspilling",
+        "description": "Alle klipp starter med disse verdiene. De lagres på denne stasjonen og gjelder for alle som bruker den.",
+        "useCurrent": "Bruk nåværende verdier",
+        "useCurrentHelp": "Kopierer forsterkningen, støyreduksjonen og høypassfilteret denne spilleren er satt til, inn i feltene nedenfor. Ingenting lagres før du velger Lagre endringer.",
+        "useCurrentHelpNoDenoise": "Kopierer forsterkningen og høypassfilteret denne spilleren er satt til, inn i feltene nedenfor. Ingenting lagres før du velger Lagre endringer.",
+        "copied": "Nåværende verdier kopiert. Velg Lagre endringer for å beholde dem.",
+        "saved": "Standardverdier for avspilling lagret",
+        "saveFailed": "Standardverdiene for avspilling ble ikke lagret. Ingenting ble endret.",
+        "unavailable": "Innstillingene kunne ikke lastes inn, så standardverdiene kan ikke endres her."
+      },
       "clipExtraction": {
         "selectRange": "Klikk og dra for å velge et område",
         "playSelection": "Spill av valgt område",
