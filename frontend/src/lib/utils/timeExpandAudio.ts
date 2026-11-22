@@ -230,7 +230,8 @@ export function rewriteWavSampleRate(buffer: ArrayBuffer, expansion: number): Bl
   let fmtPayloadOffset = -1;
   let targetSampleRate = 0;
   let targetByteRate = 0;
-  let sawDataChunk = false;
+  let dataSizeOffset = -1;
+  let resolvedDataSize = 0;
 
   while (offset + CHUNK_HEADER_SIZE <= bytes.byteLength) {
     const chunkId = readAscii4(bytes, offset);
@@ -244,7 +245,10 @@ export function rewriteWavSampleRate(buffer: ArrayBuffer, expansion: number): Bl
       if (hasZeroPayload) {
         throw new TimeExpandAudioError('empty_audio', 'WAV file contains zero audio bytes');
       }
-      sawDataChunk = true;
+      dataSizeOffset = offset + 4;
+      const actualRemaining = bytes.byteLength - payloadOffset;
+      resolvedDataSize =
+        chunkSize === 0 || chunkSize > actualRemaining ? actualRemaining : chunkSize;
       if (fmtPayloadOffset !== -1) {
         break;
       }
@@ -299,7 +303,7 @@ export function rewriteWavSampleRate(buffer: ArrayBuffer, expansion: number): Bl
       fmtPayloadOffset = payloadOffset;
     }
 
-    if (fmtPayloadOffset !== -1 && sawDataChunk) {
+    if (fmtPayloadOffset !== -1 && dataSizeOffset !== -1) {
       break;
     }
 
@@ -310,10 +314,19 @@ export function rewriteWavSampleRate(buffer: ArrayBuffer, expansion: number): Bl
     offset = payloadOffset + paddedSize;
   }
 
-  if (fmtPayloadOffset === -1 || !sawDataChunk) {
+  if (fmtPayloadOffset === -1 || dataSizeOffset === -1) {
     throw new TimeExpandAudioError('invalid_wav', 'WAV file is missing a valid fmt or data chunk');
   }
 
+  // Finalize zero/truncated/streaming RIFF and data chunk sizes so browsers such as Firefox report non-zero duration.
+  const declaredRiffSize = view.getUint32(4, true);
+  const maxRiffSize = bytes.byteLength - 8;
+  if (declaredRiffSize === 0 || declaredRiffSize > maxRiffSize) {
+    view.setUint32(4, maxRiffSize, true);
+  }
+  if (view.getUint32(dataSizeOffset, true) !== resolvedDataSize) {
+    view.setUint32(dataSizeOffset, resolvedDataSize, true);
+  }
   view.setUint32(fmtPayloadOffset + 4, targetSampleRate, true);
   view.setUint32(fmtPayloadOffset + 8, targetByteRate, true);
   return new Blob([buffer], { type: 'audio/wav' });

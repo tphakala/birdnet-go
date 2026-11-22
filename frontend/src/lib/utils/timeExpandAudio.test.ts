@@ -236,7 +236,7 @@ describe('timeExpandAudio', () => {
     expect(() => rewriteWavSampleRate(withTrailingList, 10)).toThrow('zero audio bytes');
   });
 
-  it('rewrites truncated and 0xFFFFFFFF unknown-size WAV data chunks', async () => {
+  it('rewrites and finalizes truncated, 0xFFFFFFFF, and zero-size streaming WAV data chunks', async () => {
     // Declared dataSize exceeds actual file byte length (truncated capture).
     const fullWav = buildTestWav({
       sampleRate: 256000,
@@ -250,15 +250,21 @@ describe('timeExpandAudio', () => {
       sampleRate: 25600,
       byteRate: 25600 * 2,
     });
+    expect(new DataView(truncOut).getUint32(4, true)).toBe(truncOut.byteLength - 8);
+    expect(new DataView(truncOut).getUint32(40, true)).toBe(8);
 
-    // Streaming writer 0xFFFFFFFF data chunk size placeholder with PCM payload.
+    // Streaming writer 0xFFFFFFFF RIFF + data chunk size placeholders with PCM payload.
     const streaming = fullWav.slice(0);
-    new DataView(streaming).setUint32(40, 0xffffffff, true);
+    const streamInView = new DataView(streaming);
+    streamInView.setUint32(4, 0xffffffff, true);
+    streamInView.setUint32(40, 0xffffffff, true);
     const streamOut = await rewriteWavSampleRate(streaming, 16).arrayBuffer();
     expect(readWavHeaderSampleRate(streamOut)).toEqual({
       sampleRate: 16000,
       byteRate: 16000 * 2,
     });
+    expect(new DataView(streamOut).getUint32(4, true)).toBe(streamOut.byteLength - 8);
+    expect(new DataView(streamOut).getUint32(40, true)).toBe(32);
 
     // Unfinalized streaming writer with zeroed RIFF + data sizes followed by PCM payload.
     const unfinalized = fullWav.slice(0);
@@ -270,6 +276,8 @@ describe('timeExpandAudio', () => {
       sampleRate: 25600,
       byteRate: 25600 * 2,
     });
+    expect(new DataView(unfinOut).getUint32(4, true)).toBe(unfinOut.byteLength - 8);
+    expect(new DataView(unfinOut).getUint32(40, true)).toBe(32);
   });
 
   it('reads FLAC STREAMINFO metadata including rate, channels, bitDepth, and totalSamples', () => {
