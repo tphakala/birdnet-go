@@ -15,6 +15,7 @@
   @component
 -->
 <script lang="ts">
+  /* global ResizeObserver */
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -181,12 +182,22 @@
       window.addEventListener('resize', handleResize);
       window.addEventListener('scroll', handleResize, true);
 
+      // The menu is sized by its content, which can change while it is open (a verified
+      // badge appears, the lock label swaps, items come and go). Re-anchor on each size
+      // change so the menu stays aligned to its trigger and inside the viewport.
+      let resizeObserver: ResizeObserver | undefined;
+      if (menuElement) {
+        resizeObserver = new ResizeObserver(() => updateMenuPosition());
+        resizeObserver.observe(menuElement);
+      }
+
       return () => {
         // Automatic cleanup when effect re-runs or component unmounts
         document.removeEventListener('click', handleClickOutside);
         document.removeEventListener('keydown', handleKeydown);
         window.removeEventListener('resize', handleResize);
         window.removeEventListener('scroll', handleResize, true);
+        resizeObserver?.disconnect();
       };
     }
   });
