@@ -66,7 +66,7 @@ type optimizeNotice struct {
 // be absent from the catalog (a dropped build); the offer still stands so the user
 // can move off it. An entry superseded by a visible entry (visibleSuccessor)
 // qualifies for no offer, and neither does one whose installed variant is an
-// older release with an update (installedUpdate): one model gets one notice.
+// older release or build with an update (installedUpdate): one model gets one notice.
 // Offers keep catalog order.
 func optimizeOffers(entries []classifier.CatalogEntry, installed map[string]string, byVariant map[string]map[string]recommend.Recommendation, recommended map[string]string) []optimizeOffer {
 	var offers []optimizeOffer
@@ -85,7 +85,7 @@ func optimizeOffers(entries []classifier.CatalogEntry, installed map[string]stri
 		if !isInstalled || installedID == "" || recommendedID == "" || installedID == recommendedID {
 			continue
 		}
-		// An installed older release is told to update (the update notice), so it
+		// An installed older release or build is told to update (the update notice), so it
 		// gets no prompt to switch to the host-recommended build as well.
 		if _, hasUpdate := installedUpdate(entries, entry, installedID); hasUpdate {
 			continue
