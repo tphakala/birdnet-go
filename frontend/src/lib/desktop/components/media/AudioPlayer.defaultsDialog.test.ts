@@ -19,6 +19,7 @@ import { auth } from '$lib/stores/auth';
 import { settingsStore } from '$lib/stores/settings';
 import { seedSavedRealtime } from '../../../../test/settings-store-helpers';
 import { deferred } from '../../../../test/async-helpers';
+import { mockAudioProbe } from '../../../../test/audioProbeMock';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { openDialogCount } from '$lib/desktop/components/ui/Modal.svelte';
 import AudioPlayer from './AudioPlayer.svelte';
@@ -42,6 +43,7 @@ const DIALOG_NAME = 'components.audioPlayer.defaults.title';
 const SAVE = 'settings.actions.save';
 const USE_CURRENT = 'components.audioPlayer.defaults.useCurrent';
 const TOOLBAR_GAIN_LABEL = 'components.audioPlayer.processing.gain';
+const DIALOG_GAIN_LABEL = 'settings.userInterface.audioPlayback.defaultGain';
 const DIALOG_HIGH_PASS_LABEL = 'settings.userInterface.audioPlayback.highPassLabel';
 const DIALOG_DENOISE_LABEL = 'settings.userInterface.audioPlayback.denoiseLabel';
 const SETTINGS_BUTTON = 'media.audio.settings';
@@ -112,6 +114,13 @@ describe('AudioPlayer playback defaults dialog', () => {
     await fireEvent.click(within(dialog()).getByRole('combobox', { name: DIALOG_DENOISE_LABEL }));
     await fireEvent.click(screen.getByRole('option', { name: text }));
     await settle();
+  }
+
+  function overlayGain(container: HTMLElement): HTMLInputElement {
+    const [gain] = Array.from(
+      container.querySelectorAll<HTMLInputElement>('.settings-menu input[type="range"]')
+    );
+    return gain;
   }
 
   function overlayFilter(container: HTMLElement): HTMLInputElement {
@@ -205,6 +214,49 @@ describe('AudioPlayer playback defaults dialog', () => {
     expect(overlayFilter(container).value).toBe('300');
   });
 
+  it('adopts a saved gain default as the toolbar gain and the overlay Reset target', async () => {
+    const { container } = mount();
+    await settle();
+
+    await openDialog();
+    await fireEvent.input(within(dialog()).getByLabelText(DIALOG_GAIN_LABEL), {
+      target: { value: '9' },
+    });
+    await saveDialog();
+
+    expect(screen.getByLabelText<HTMLInputElement>(TOOLBAR_GAIN_LABEL).value).toBe('9');
+    await fireEvent.click(screen.getByRole('button', { name: SETTINGS_BUTTON }));
+    await fireEvent.input(overlayGain(container), { target: { value: '15' } });
+    await fireEvent.click(screen.getByRole('button', { name: RESET_BUTTON }));
+    expect(overlayGain(container).value).toBe('9');
+  });
+
+  it('plays a newly saved denoise default after the previous default clip failed', async () => {
+    const SERVER_ERROR_STATUS = 500;
+    seedSavedRealtime({ dashboard: { playbackDenoise: { enabled: true, strength: 'light' } } });
+    const restoreFetch = mockAudioProbe({ status: SERVER_ERROR_STATUS });
+    try {
+      mount();
+      ctl.completeLoad();
+      await fireEvent.click(screen.getByLabelText(PLAY_LABEL));
+      await settle();
+      expect(elementPath()).toBe(`${STORED_URL}?denoise=light`);
+      ctl.failLoad();
+      await settle();
+      expect(elementPath()).toBe(STORED_URL);
+
+      await openDialog();
+      await chooseDialogDenoise(DENOISE_HEAVY_TEXT);
+      await saveDialog();
+      await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
+      await settle();
+
+      expect(elementPath()).toBe(`${STORED_URL}?denoise=heavy`);
+    } finally {
+      restoreFetch();
+    }
+  });
+
   it('does not reprocess when the saved denoise is what the player already plays', async () => {
     mount();
     ctl.completeLoad();
@@ -269,6 +321,30 @@ describe('AudioPlayer playback defaults dialog', () => {
     await vi.advanceTimersByTimeAsync(PROCESSING_DEBOUNCE_MS);
     await settle();
     expect(ctl.element.src).not.toBe(PROCESSED_BLOB_URL);
+  });
+
+  it('keeps the dialog closed when the toolbar goes away and comes back', async () => {
+    const view = mount();
+    await settle();
+    await openDialog();
+
+    await view.rerender({ enableClipExtraction: false });
+    await settle();
+    await view.rerender({ enableClipExtraction: true });
+    await settle();
+
+    expect(openDialogCount()).toBe(0);
+  });
+
+  it('closes the dialog when the user is signed out', async () => {
+    mount();
+    await settle();
+    await openDialog();
+
+    auth.setSecurity(true, false);
+    await settle();
+
+    expect(openDialogCount()).toBe(0);
   });
 
   it('closes the dialog when the player moves to another clip', async () => {
