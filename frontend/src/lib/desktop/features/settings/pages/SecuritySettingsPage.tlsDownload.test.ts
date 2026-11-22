@@ -46,6 +46,7 @@ describe('SecuritySettingsPage TLS certificate download', () => {
   afterEach(() => {
     Object.assign(settingsAPI, { tls: originalTls });
     settingsStore.set(initialState);
+    navigation.redirect('/ui/dashboard');
     resetBasePath();
   });
 
