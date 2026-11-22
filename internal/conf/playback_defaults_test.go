@@ -23,13 +23,15 @@ func TestValidateDashboardSettings_PlaybackGain(t *testing.T) {
 	}{
 		{"in range", 6.5, 6.5},
 		{"negative in range", -6.5, -6.5},
-		{"minimum kept", MinPlaybackGain, MinPlaybackGain},
-		{"maximum kept", MaxPlaybackGain, MaxPlaybackGain},
-		{"below minimum clamped", -20, MinPlaybackGain},
-		{"above maximum clamped", 40, MaxPlaybackGain},
-		{"NaN uses default", math.NaN(), DefaultPlaybackGain},
-		{"positive infinity uses default", math.Inf(1), DefaultPlaybackGain},
-		{"negative infinity uses default", math.Inf(-1), DefaultPlaybackGain},
+		{"minimum kept", -12, -12},
+		{"maximum kept", 24, 24},
+		{"just below minimum clamped", -12.5, -12},
+		{"below minimum clamped", -20, -12},
+		{"just above maximum clamped", 24.5, 24},
+		{"above maximum clamped", 40, 24},
+		{"NaN uses default", math.NaN(), 0},
+		{"positive infinity uses default", math.Inf(1), 0},
+		{"negative infinity uses default", math.Inf(-1), 0},
 	}
 
 	for _, tc := range cases {
@@ -56,15 +58,15 @@ func TestValidateDashboardSettings_PlaybackHighPass(t *testing.T) {
 		in   int
 		want int
 	}{
-		{"zero is off", 0, PlaybackHighPassOffHz},
-		{"negative is off", -5, PlaybackHighPassOffHz},
-		{"1 Hz is off", 1, PlaybackHighPassOffHz},
-		{"just below the lowest active cutoff is off", MinPlaybackHighPassHz - 1, PlaybackHighPassOffHz},
-		{"lowest active cutoff kept", MinPlaybackHighPassHz, MinPlaybackHighPassHz},
+		{"zero is off", 0, 0},
+		{"negative is off", -5, 0},
+		{"1 Hz is off", 1, 0},
+		{"19 Hz is off", 19, 0},
+		{"lowest active cutoff kept", 20, 20},
 		{"in range", 300, 300},
-		{"maximum kept", MaxPlaybackHighPassHz, MaxPlaybackHighPassHz},
-		{"above maximum clamped", MaxPlaybackHighPassHz + 1, MaxPlaybackHighPassHz},
-		{"far above maximum clamped", 100000, MaxPlaybackHighPassHz},
+		{"maximum kept", 5000, 5000},
+		{"above maximum clamped", 5001, 5000},
+		{"far above maximum clamped", 100000, 5000},
 	}
 
 	for _, tc := range cases {
@@ -85,5 +87,5 @@ func TestPlaybackHighPassViperDefault(t *testing.T) {
 	viper.Reset()
 	setDefaultConfig()
 	require.True(t, viper.IsSet("realtime.dashboard.playback.highpasshz"), "the default must be registered")
-	assert.Equal(t, PlaybackHighPassOffHz, viper.GetInt("realtime.dashboard.playback.highpasshz"))
+	assert.Equal(t, 0, viper.GetInt("realtime.dashboard.playback.highpasshz"))
 }

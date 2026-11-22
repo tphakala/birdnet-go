@@ -424,11 +424,11 @@ func TestPatchDashboardPlaybackDefaults(t *testing.T) {
 		wantHighPassHz int
 	}{
 		{"negative gain kept", map[string]any{"defaultAudioGain": -6.5}, -6.5, 300},
-		{"gain below the minimum clamped", map[string]any{"defaultAudioGain": -20}, conf.MinPlaybackGain, 300},
-		{"gain above the maximum clamped", map[string]any{"defaultAudioGain": 30}, conf.MaxPlaybackGain, 300},
+		{"gain below the minimum clamped", map[string]any{"defaultAudioGain": -20}, -12, 300},
+		{"gain above the maximum clamped", map[string]any{"defaultAudioGain": 30}, 24, 300},
 		{"nested cutoff merged, gain untouched", map[string]any{"playback": map[string]any{"highPassHz": 500}}, 3, 500},
-		{"cutoff above the maximum clamped", map[string]any{"playback": map[string]any{"highPassHz": 9000}}, 3, conf.MaxPlaybackHighPassHz},
-		{"cutoff below the lowest active one is off", map[string]any{"playback": map[string]any{"highPassHz": 15}}, 3, conf.PlaybackHighPassOffHz},
+		{"cutoff above the maximum clamped", map[string]any{"playback": map[string]any{"highPassHz": 9000}}, 3, 5000},
+		{"cutoff below the lowest active one is off", map[string]any{"playback": map[string]any{"highPassHz": 15}}, 3, 0},
 	}
 
 	for _, tt := range tests {
