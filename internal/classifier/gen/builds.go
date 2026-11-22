@@ -45,7 +45,8 @@ func (f *family) buildsFuncName() string {
 
 // buildRecords returns the release-notes records of the family's current
 // manifest, sorted by release and build. A record with neither a reason nor
-// notes is skipped: it carries only the maintainer-facing changes text, which
+// notes (a blank reason counts as none, and a reason is emitted trimmed) is
+// skipped: it carries only the maintainer-facing changes text, which
 // the gallery never shows. Every other record must name a build of 1 or more of
 // a release the family hosts (its listed releases, or for a one-release family a
 // release one of its regional entries carries), a calendar date and no empty
@@ -70,7 +71,8 @@ func (f *family) buildRecords(m *manifest) ([]buildRecord, error) {
 	// Walk the tags in sorted order so the error for a duplicate is deterministic.
 	for _, tag := range slices.Sorted(maps.Keys(m.Builds)) {
 		b := m.Builds[tag]
-		if b.Reason == "" && len(b.Notes) == 0 {
+		reason := strings.TrimSpace(b.Reason)
+		if reason == "" && len(b.Notes) == 0 {
 			continue
 		}
 		if b.Build == nil || *b.Build < 1 {
@@ -92,7 +94,7 @@ func (f *family) buildRecords(m *manifest) ([]buildRecord, error) {
 			return nil, fmt.Errorf("build record %s: duplicate release %s build %d (also %s)", tag, k.version, k.build, prev)
 		}
 		seen[k] = tag
-		out = append(out, buildRecord{version: b.UpstreamVersion, build: *b.Build, date: b.Date, reason: b.Reason, notes: b.Notes})
+		out = append(out, buildRecord{version: b.UpstreamVersion, build: *b.Build, date: b.Date, reason: reason, notes: b.Notes})
 	}
 	slices.SortFunc(out, func(a, b buildRecord) int {
 		if c := strings.Compare(a.version, b.version); c != 0 {

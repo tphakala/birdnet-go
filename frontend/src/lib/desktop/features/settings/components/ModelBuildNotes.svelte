@@ -17,15 +17,19 @@
   }
 
   let { record, className = '' }: Props = $props();
+
+  // Blank text shows nothing: no empty lead paragraph, no empty bullet.
+  const reason = $derived(record.reason?.trim() ?? '');
+  const notes = $derived((record.notes ?? []).filter(note => note.trim() !== ''));
 </script>
 
 <div lang="en" class={cn('space-y-2 text-[var(--color-base-content)]', className)}>
-  {#if record.reason}
-    <p class="font-medium">{record.reason}</p>
+  {#if reason}
+    <p class="font-medium">{reason}</p>
   {/if}
-  {#if record.notes && record.notes.length > 0}
+  {#if notes.length > 0}
     <ul class="list-disc space-y-1 pl-5">
-      {#each record.notes as note, i (i)}
+      {#each notes as note, i (i)}
         <li>{note}</li>
       {/each}
     </ul>

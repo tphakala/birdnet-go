@@ -864,6 +864,12 @@ func TestBuildRecords(t *testing.T) {
 			builds: map[string]manifestBuild{"y-b2": rec("2", new(2), "r", "n")},
 			want:   []buildRecord{{version: "2", build: 2, date: "2026-11-21", reason: "r", notes: []string{"n"}}},
 		},
+		{
+			name:   "a blank reason without notes is skipped, a padded reason is trimmed",
+			fam:    multi,
+			builds: map[string]manifestBuild{"x-b2": rec("1.1", new(2), "  "), "x-b3": rec("1.1", new(3), " r ")},
+			want:   []buildRecord{{version: "1.1", build: 3, date: "2026-11-21", reason: "r"}},
+		},
 		{name: "missing build", fam: multi, builds: map[string]manifestBuild{"k": rec("1.1", nil, "r")}, wantErr: "build"},
 		{name: "build below 1", fam: multi, builds: map[string]manifestBuild{"k": rec("1.1", new(0), "r")}, wantErr: "build"},
 		{name: "release the family does not host", fam: multi, builds: map[string]manifestBuild{"k": rec("2.0", new(2), "r")}, wantErr: `release "2.0"`},

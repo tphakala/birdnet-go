@@ -305,14 +305,20 @@ function variantBuildKey(entry: CatalogEntry, variant: CatalogVariant): [string,
   return [variant.version ?? entry.version, variant.build ?? DEFAULT_BUILD];
 }
 
+/** Whether a release-notes record has any text to show: a non-blank reason or note. */
+function hasNotesText(record: CatalogBuild): boolean {
+  return Boolean(record.reason?.trim()) || (record.notes ?? []).some(n => n.trim() !== '');
+}
+
 /**
  * The release notes of a variant's build: the entry's `builds` record with the
- * variant's release and build, or null when that build has none (a build without
- * notes shows nothing).
+ * variant's release and build, or null when that build has none or its record has
+ * no text (a build without notes shows nothing).
  */
 export function buildRecordFor(entry: CatalogEntry, variant: CatalogVariant): CatalogBuild | null {
   const [version, build] = variantBuildKey(entry, variant);
-  return entry.builds?.find(b => b.version === version && b.build === build) ?? null;
+  const record = entry.builds?.find(b => b.version === version && b.build === build);
+  return record && hasNotesText(record) ? record : null;
 }
 
 /**

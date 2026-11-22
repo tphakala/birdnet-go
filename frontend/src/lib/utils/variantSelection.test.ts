@@ -613,6 +613,18 @@ describe('buildRecordFor', () => {
     expect(buildRecordFor(notes, variant({ id: 'a', build: 2 }))).toBe(build2);
   });
 
+  it('treats a record without any text as no record', () => {
+    const blank = entry({
+      version: '2',
+      builds: [
+        { version: '2', build: 2, date: '2026-11-21', reason: ' ' },
+        { version: '2', build: 3, date: '2026-11-21', notes: ['', ' '] },
+      ],
+    });
+    expect(buildRecordFor(blank, variant({ id: 'a', build: 2 }))).toBeNull();
+    expect(buildRecordFor(blank, variant({ id: 'a', build: 3 }))).toBeNull();
+  });
+
   it('finds no record for another release or a build without one', () => {
     expect(buildRecordFor(notes, variant({ id: 'a', version: '1', build: 2 }))).toBeNull();
     expect(buildRecordFor(notes, variant({ id: 'a', version: '2', build: 3 }))).toBeNull();
