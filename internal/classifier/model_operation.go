@@ -248,8 +248,10 @@ func (mm *ModelManager) OperationRunningFor(catalogID string) bool {
 }
 
 // markCancellable makes the running install for catalogID cancellable. Operations
-// call it right after registering their download state, so no early exit (a
-// validation refusal, an already-installed no-op) can follow an accepted cancel.
+// call it in the critical section that registers their download state (holding
+// mm.mu; opMu is taken after it, as releaseLocked does), so no reader sees the state
+// before a cancel is accepted, and no early exit (a validation refusal, an
+// already-installed no-op) can follow an accepted cancel.
 // It does nothing for another entry, another operation or a lease without a
 // cancel function.
 func (mm *ModelManager) markCancellable(catalogID string) {

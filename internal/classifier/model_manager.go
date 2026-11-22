@@ -1311,8 +1311,8 @@ func (mm *ModelManager) install(ctx context.Context, entry *CatalogEntry, varian
 		CatalogID: entry.ID,
 		Status:    StatusDownloading,
 	}
+	mm.markCancellable(entry.ID) // opMu is taken after mu, the order releaseLocked uses
 	mm.mu.Unlock()
-	mm.markCancellable(entry.ID)
 
 	if err := mm.downloadModelFiles(ctx, entry, variantID, baseURL, progress, true); err != nil {
 		mm.retainTerminalState(entry.ID)
@@ -1494,8 +1494,8 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 			CatalogID: entry.ID,
 			Status:    StatusDownloading,
 		}
+		mm.markCancellable(entry.ID) // opMu is taken after mu, the order releaseLocked uses
 		mm.mu.Unlock()
-		mm.markCancellable(entry.ID)
 		return mm.replaceVariant(ctx, entry, &current, target, baseURL, progress)
 	}
 
@@ -1518,8 +1518,8 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 		CatalogID: entry.ID,
 		Status:    StatusDownloading,
 	}
+	mm.markCancellable(entry.ID) // opMu is taken after mu, the order releaseLocked uses
 	mm.mu.Unlock()
-	mm.markCancellable(entry.ID)
 
 	return mm.replaceVariant(ctx, entry, &current, target, baseURL, progress)
 }
