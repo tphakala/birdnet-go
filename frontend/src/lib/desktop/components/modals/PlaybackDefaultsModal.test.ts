@@ -306,6 +306,67 @@ describe('PlaybackDefaultsModal', () => {
   });
 });
 
+describe('PlaybackDefaultsModal Retry', () => {
+  const originalLoad = vi.mocked(settingsAPI.load).getMockImplementation();
+
+  beforeEach(() => {
+    settingsStore.set(initialStore);
+    seedSettings({}, false, false);
+  });
+
+  afterEach(() => {
+    vi.mocked(settingsAPI.load).mockReset();
+    if (originalLoad) vi.mocked(settingsAPI.load).mockImplementation(originalLoad);
+    settingsStore.set(initialStore);
+  });
+
+  it('keeps the unavailable state and Retry when the load fails again', async () => {
+    vi.mocked(settingsAPI.load).mockRejectedValue(new Error('offline'));
+    renderDialog();
+
+    await fireEvent.click(within(dialog()).getByRole('button', { name: RETRY }));
+
+    await waitFor(() =>
+      expect(within(dialog()).getByRole('status')).toHaveTextContent(UNAVAILABLE)
+    );
+    expect(within(dialog()).getByRole('button', { name: RETRY })).toBeInTheDocument();
+    expect(within(dialog()).queryByLabelText(GAIN_LABEL)).toBeNull();
+  });
+
+  it('leaves focus where the user moved it while Retry loads', async () => {
+    const pending = deferred<Awaited<ReturnType<typeof settingsAPI.load>>>();
+    vi.mocked(settingsAPI.load).mockImplementation(() => pending.promise);
+    renderDialog();
+    const retry = within(dialog()).getByRole('button', { name: RETRY });
+    retry.focus();
+    await fireEvent.click(retry);
+
+    const cancel = within(dialog()).getByRole('button', { name: CANCEL });
+    cancel.focus();
+    const payload: Awaited<ReturnType<typeof settingsAPI.load>> = JSON.parse(
+      JSON.stringify(initialStore.originalData)
+    );
+    pending.resolve(payload);
+
+    await waitFor(() => expect(within(dialog()).getByLabelText(GAIN_LABEL)).toBeInTheDocument());
+    // The focus move, when there is one, follows a tick after the fields render
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(cancel).toHaveFocus();
+  });
+
+  it('moves focus to the first field when it went with the Retry button', async () => {
+    renderDialog();
+    const retry = within(dialog()).getByRole('button', { name: RETRY });
+    retry.focus();
+
+    await fireEvent.click(retry);
+
+    await waitFor(() =>
+      expect(within(dialog()).getByRole('button', { name: USE_CURRENT })).toHaveFocus()
+    );
+  });
+});
+
 describe('PlaybackDefaultsModal Accessibility', () => {
   beforeEach(() => {
     settingsStore.set(initialStore);

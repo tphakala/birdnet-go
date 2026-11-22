@@ -73,7 +73,6 @@
 
   let loaded = $derived($settingsDataLoaded);
   let loading = $derived($settingsStore.isLoading);
-  let retryArea = $state<HTMLElement>();
   let useCurrentArea = $state<HTMLElement>();
   // Export-stage denoise wins over the playback default: the server does not
   // denoise clips that were denoised when saved
@@ -159,7 +158,6 @@
   // Reads settings again (a GET only); the fields appear once they load
   async function retryLoad() {
     if (loading) return;
-    const hadFocus = retryArea?.contains(document.activeElement) === true;
     void announce(t('common.ui.loadingSettings'));
     try {
       await settingsActions.loadSettings();
@@ -168,13 +166,16 @@
         component: 'PlaybackDefaultsModal',
         error: error instanceof Error ? error.message : String(error),
       });
-      if (!destroyed) void announce(t('components.audioPlayer.defaults.unavailable'));
+      if (isOpen && !destroyed) void announce(t('components.audioPlayer.defaults.unavailable'));
       return;
     }
     clearAnnouncement();
-    // The Retry button is gone now: keep focus in the dialog, on its first field
+    // The Retry button is gone now. Focus that went with it falls to the page: put it
+    // on the first field. Focus the user moved elsewhere, or a closed dialog, is left alone.
     await tick();
-    if (hadFocus) useCurrentArea?.querySelector<HTMLElement>('button')?.focus();
+    if (isOpen && document.activeElement === document.body) {
+      useCurrentArea?.querySelector<HTMLElement>('button')?.focus();
+    }
   }
 
   async function save() {
@@ -229,7 +230,7 @@
         </p>
 
         {#if !loaded}
-          <div class="space-y-3" bind:this={retryArea}>
+          <div class="space-y-3">
             <p
               id={unavailableId}
               class={loading
