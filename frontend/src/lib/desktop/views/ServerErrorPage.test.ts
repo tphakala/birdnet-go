@@ -31,3 +31,26 @@ describe('ServerErrorPage login link', () => {
     expect(loginLink()).toBe('/proxy/ui/login?redirect=%2Fui%2Fdetections%3Fspecies%3DRobin');
   });
 });
+
+describe('ServerErrorPage dashboard link', () => {
+  afterEach(() => {
+    resetBasePath();
+  });
+
+  function dashboardLink(): string | null {
+    return screen.getByRole('link', { name: 'common.goToDashboard' }).getAttribute('href');
+  }
+
+  it('links to the dashboard', () => {
+    render(ServerErrorPage, { props: { security: NO_ACCESS } });
+
+    expect(dashboardLink()).toBe('/ui/dashboard');
+  });
+
+  it('keeps the reverse-proxy prefix', () => {
+    setBasePath('/proxy');
+    render(ServerErrorPage, { props: { security: NO_ACCESS } });
+
+    expect(dashboardLink()).toBe('/proxy/ui/dashboard');
+  });
+});

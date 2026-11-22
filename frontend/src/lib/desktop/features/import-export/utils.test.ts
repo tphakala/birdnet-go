@@ -11,7 +11,10 @@ import {
 } from './utils';
 import type { ImportProgress, ImportSourcesResponse, SourceCandidate } from './types';
 
-const { streamUrls } = vi.hoisted(() => ({ streamUrls: [] as string[] }));
+const { streamUrls } = vi.hoisted(() => {
+  const urls: string[] = [];
+  return { streamUrls: urls };
+});
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class {

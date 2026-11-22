@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { DEFAULT_LOGIN_TARGET as DASHBOARD_PATH } from '$lib/utils/loginRedirect';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
 
@@ -477,7 +478,7 @@
 
     <!-- Link Button -->
     <a
-      href={buildAppUrl('/ui/dashboard')}
+      href={buildAppUrl(DASHBOARD_PATH)}
       class="btn btn-primary normal-case text-base font-semibold transition duration-300"
     >
       {t('common.goToDashboard')}

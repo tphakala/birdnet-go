@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import SupportDumpCard from './SupportDumpCard.svelte';
 import { api } from '$lib/utils/api';
 import { unsavedChanges, type NavigationTarget } from '$lib/stores/unsavedChanges.svelte';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 
 vi.mock('$lib/utils/api', async importOriginal => ({
   ...(await importOriginal<typeof import('$lib/utils/api')>()),
@@ -29,6 +30,7 @@ describe('SupportDumpCard unsaved-changes guard', () => {
   afterEach(() => {
     cleanup();
     unsavedChanges.resetForTesting();
+    resetBasePath();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -90,5 +92,22 @@ describe('SupportDumpCard unsaved-changes guard', () => {
 
     expect(clicked).toEqual([{ href: DOWNLOAD_URL, download: true }]);
     expect(window.location.href).toBe(hrefBefore);
+  });
+
+  it('downloads a local dump under the reverse proxy prefix', async () => {
+    // The server returns an unprefixed download_url; a proxy at /birdnet does not rewrite it.
+    setBasePath('/birdnet');
+    const clicked: Array<string | null> = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      clicked.push(this.getAttribute('href'));
+    });
+    await typeMessage('');
+
+    await generateLocalDownload();
+    await vi.advanceTimersByTimeAsync(DOWNLOAD_DELAY_MS);
+
+    expect(clicked).toEqual([`/birdnet${DOWNLOAD_URL}`]);
   });
 });
