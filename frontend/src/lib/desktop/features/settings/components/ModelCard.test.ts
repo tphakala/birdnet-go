@@ -435,7 +435,13 @@ describe('ModelCard', () => {
   });
 
   describe('update', () => {
-    const UPDATE = { variantId: 'v2', fromVersion: '3.0', toVersion: '3.0.1' };
+    const UPDATE = {
+      variantId: 'v2',
+      fromVersion: '3.0',
+      toVersion: '3.0.1',
+      fromBuild: 1,
+      toBuild: 1,
+    };
 
     it('shows the note with both versions and an Update button that emits update', async () => {
       const model = entry({ installed: true, update: UPDATE });
@@ -448,6 +454,23 @@ describe('ModelCard', () => {
       });
       await fireEvent.click(button('analysis.gallery.update.action'));
       expect(onAction).toHaveBeenCalledExactlyOnceWith('update', model);
+    });
+
+    it('shows the build note when only the build differs', () => {
+      renderCard({
+        entry: entry({
+          installed: true,
+          update: { ...UPDATE, fromVersion: '2', toVersion: '2', fromBuild: 1, toBuild: 2 },
+        }),
+        mode: 'installed',
+      });
+
+      expect(screen.getByRole('note')).toHaveTextContent('analysis.gallery.update.cardNoticeBuild');
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.update.cardNoticeBuild', {
+        version: '2',
+        from: 1,
+        to: 2,
+      });
     });
 
     it('shows neither the note nor Update on an available card', () => {

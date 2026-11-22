@@ -741,7 +741,13 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
         installed: true,
         installedVariantId: 'fp32',
         recommendedVariantId: 'fp32-3.0.1@nordic',
-        update: { variantId: 'fp32-3.0.1', fromVersion: '3.0', toVersion: '3.0.1' },
+        update: {
+          variantId: 'fp32-3.0.1',
+          fromVersion: '3.0',
+          toVersion: '3.0.1',
+          fromBuild: 1,
+          toBuild: 1,
+        },
         variants: [
           variant('fp32', true, false),
           variant('fp32-3.0.1', false, false),

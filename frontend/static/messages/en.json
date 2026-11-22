@@ -6070,6 +6070,7 @@
       },
       "update": {
         "cardNotice": "A newer build ({to}) replaces the installed {from} build.",
+        "cardNoticeBuild": "Build {to} of version {version} replaces the installed build {from}.",
         "action": "Update",
         "applying": "Updating..."
       },

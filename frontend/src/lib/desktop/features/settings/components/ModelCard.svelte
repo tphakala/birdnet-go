@@ -207,16 +207,23 @@
       ? t('analysis.gallery.superseded.cardNotice', { name: entry.supersededBy.name })
       : null
   );
-  // An installed older release that a newer release replaces: a note with both versions, and the Update action
+  // An installed build that a newer release or a newer build of the same release replaces: a note with
+  // both versions (or both build numbers when the release is the same), and the Update action
   const update = $derived(mode === 'installed' ? entry.update : undefined);
-  const updateNoticeText = $derived(
-    update
-      ? t('analysis.gallery.update.cardNotice', {
-          from: update.fromVersion,
-          to: update.toVersion,
-        })
-      : null
-  );
+  const updateNoticeText = $derived.by(() => {
+    if (!update) return null;
+    if (update.fromVersion === update.toVersion) {
+      return t('analysis.gallery.update.cardNoticeBuild', {
+        version: update.toVersion,
+        from: update.fromBuild,
+        to: update.toBuild,
+      });
+    }
+    return t('analysis.gallery.update.cardNotice', {
+      from: update.fromVersion,
+      to: update.toVersion,
+    });
+  });
   const hasNotices = $derived(
     channelNoticeText !== null ||
       supersededNoticeText !== null ||

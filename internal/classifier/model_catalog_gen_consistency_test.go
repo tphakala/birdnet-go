@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -75,14 +76,12 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 			}
 
 			regionalEntries := regionalManifestEntries(loadFamilyManifests(t, tc.manifestFile))
-			regional := len(regionalEntries)
 			for _, e := range regionalEntries {
 				v, found := byModelPath[e.Path]
 				require.Truef(t, found, "no generated variant carries model path %q", e.Path)
 				assertRegionalVariantMatchesManifest(t, &entry, v, e)
 			}
-			assert.Equalf(t, regionalTilesFor(tc.entryID), regional, "manifest %s must describe %d regional tiles", tc.manifestFile, regionalTilesFor(tc.entryID))
-			assert.Lenf(t, byModelPath, regionalTilesFor(tc.entryID), "%s must expose exactly %d regional model paths", tc.entryID, regionalTilesFor(tc.entryID))
+			assert.Lenf(t, byModelPath, len(regionalEntries), "%s must expose exactly one regional variant per manifest entry", tc.entryID)
 		})
 	}
 }
@@ -121,19 +120,30 @@ func assertRegionalVariantMatchesManifest(t *testing.T, entry *CatalogEntry, v *
 
 	// The generated variant ID is the manifest variant token joined to
 	// the region slug, restated independently of the generator: bare for
-	// Perch, BirdNET v3.0 and the BirdNET+ 3.0 release, and carrying
-	// "-<upstream_version>" for every later BirdNET+ release.
-	wantID := e.Variant + "@" + e.Region
+	// Perch, BirdNET v3.0 and the BirdNET+ 3.0 release, carrying
+	// "-<upstream_version>" for every later BirdNET+ release, and "-b<N>" for a
+	// build above 1 (so build 1 keeps the id existing installs are recognised by).
+	buildIDPart, buildFilePart := "", ""
+	if e.Build > 1 {
+		buildIDPart, buildFilePart = fmt.Sprintf("-b%d", e.Build), fmt.Sprintf("_b%d", e.Build)
+	}
+	wantID := e.Variant + buildIDPart + "@" + e.Region
 	if entry.ID == "birdnet-plus-v3.0" && e.UpstreamVersion != "3.0" {
-		wantID = e.Variant + "-" + e.UpstreamVersion + "@" + e.Region
+		wantID = e.Variant + "-" + e.UpstreamVersion + buildIDPart + "@" + e.Region
 	}
 	assert.Equalf(t, wantID, v.ID, "variant ID for %q", e.Path)
+	assert.Equalf(t, max(e.Build, 1), VariantBuild(entry, v.ID), "build of variant %q", v.ID)
 
-	// A BirdNET+ file name carries the entry's own release, so no build can
-	// sit under another release's name, and the variant reports that release.
-	if entry.ID == "birdnet-plus-v3.0" {
-		assert.Equalf(t, "birdnet_plus_v"+e.UpstreamVersion+"_"+e.Region+"_"+e.Variant+".onnx", model.LocalName, "model LocalName for %q", e.Path)
+	// A BirdNET+ file name carries the entry's own release and build, so no
+	// build can sit under another release's or build's name, and the variant
+	// reports that release. A Perch file name carries the build the same way.
+	switch entry.ID {
+	case "birdnet-plus-v3.0":
+		assert.Equalf(t, "birdnet_plus_v"+e.UpstreamVersion+"_"+e.Region+"_"+e.Variant+buildFilePart+".onnx", model.LocalName, "model LocalName for %q", e.Path)
 		assert.Equalf(t, e.UpstreamVersion, variantVersion(entry, v.ID), "release of variant %q", v.ID)
+	case "perch-v2":
+		infix := map[string]string{"no-dft-fp32": "no_dft", "int8-arm": "int8_arm"}[e.Variant]
+		assert.Equalf(t, "perch_v2_"+e.Region+"_"+infix+buildFilePart+".onnx", model.LocalName, "model LocalName for %q", e.Path)
 	}
 
 	// Precision, normalized the same way the generator does.
@@ -299,6 +309,7 @@ type testManifestModel struct {
 	Precision       string `json:"precision"`
 	Region          string `json:"region"`
 	UpstreamVersion string `json:"upstream_version"`
+	Build           int    `json:"build"`
 	Classes         *int   `json:"classes"`
 	SHA256          string `json:"sha256"`
 	SizeBytes       int64  `json:"size_bytes"`

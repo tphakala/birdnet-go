@@ -141,6 +141,13 @@ type CatalogVariant struct {
 	// every other variant byte-identical, so adding this field does not shift
 	// catalogChecksum for entries that do not use it (the same reasoning as BuiltIn).
 	Version string `json:"version,omitempty"`
+	// Build is the build of this variant's files within its release, 0 meaning
+	// build 1 (a hand-written variant, and a catalog written before builds were
+	// tracked). A later build of the same release replaces an earlier one (see
+	// VariantUpdate). omitempty keeps the on-disk JSON of every build 1 variant
+	// byte-identical, so adding this field does not shift catalogChecksum for
+	// entries that do not use it (the same reasoning as Version).
+	Build int `json:"build,omitempty"`
 	// BuiltIn marks the embedded baseline variant of a permanent model (the
 	// BirdNET v2.4 classifier shipped inside the binary). A BuiltIn variant carries
 	// no files (nothing to download), is always reported installed by ScanInstalled,
@@ -1122,14 +1129,31 @@ func VariantVersion(entry *CatalogEntry, variantID string) string {
 	return variantVersion(entry, variantID)
 }
 
-// VariantUpdate reports whether the given variant is an older release that a
-// newer one replaces, and returns the replacing variant. It is ok when the
-// variant resolves, is Legacy, its SupersededBy names a live (non-Legacy)
-// variant of the same entry, and the two variants are of different releases. The
-// release test keeps a withdrawn build of the same release (a Perch int8-arm
-// build and its successor) out: that is a better build, not a newer one. An empty
-// variantId, a dangling SupersededBy and a successor that is itself Legacy are
-// not updates. The returned variant points into entry.
+// variantBuild is the build of a variant the caller already holds: its Build, or
+// 1 when it carries none.
+func variantBuild(v *CatalogVariant) int {
+	return max(v.Build, 1)
+}
+
+// VariantBuild returns the build of the given variant's files within its
+// release: 1 for a variant without a Build and for an unknown variant id. entry
+// must not be nil.
+func VariantBuild(entry *CatalogEntry, variantID string) int {
+	if v := resolveVariant(entry, variantID); v != nil {
+		return variantBuild(v)
+	}
+	return 1
+}
+
+// VariantUpdate reports whether the given variant is superseded by a newer
+// release or a newer build of the same release, and returns the replacing
+// variant. It is ok when the variant resolves, is Legacy, its SupersededBy names
+// a live (non-Legacy) variant of the same entry, and the successor is of a
+// different release or of a higher build. A withdrawn build replaced by another
+// build of the same number (the global Perch int8-arm and its successor) is not
+// an update: that is a better build, not a newer one. An empty variantId, a
+// dangling SupersededBy and a successor that is itself Legacy are not updates.
+// The returned variant points into entry.
 func VariantUpdate(entry *CatalogEntry, variantID string) (successor *CatalogVariant, ok bool) {
 	if entry == nil || variantID == "" {
 		return nil, false
@@ -1139,7 +1163,10 @@ func VariantUpdate(entry *CatalogEntry, variantID string) (successor *CatalogVar
 		return nil, false
 	}
 	next := resolveVariant(entry, v.SupersededBy)
-	if next == nil || next.Legacy || variantRelease(entry, next) == variantRelease(entry, v) {
+	if next == nil || next.Legacy {
+		return nil, false
+	}
+	if variantRelease(entry, next) == variantRelease(entry, v) && variantBuild(next) <= variantBuild(v) {
 		return nil, false
 	}
 	return next, true

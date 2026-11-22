@@ -5,10 +5,16 @@
 // (gen/manifests/labels-checksums.json), then emits one Go file with one
 // function per family (birdnetV30RegionalVariants, perchV2RegionalVariants and
 // birdnetPlusV30RegionalVariants), each returning the region-sliced
-// CatalogVariant literals for its family (expectedRegions slugs, the family's
-// variantsPerRegion precision builds each; a build the manifest supersedes
-// stays in the list as a Legacy variant, so an existing install is still
-// recognised, and sorts after its region's live builds). A family that hosts
+// CatalogVariant literals for its family (the family's expectedRegions slugs,
+// each with one live build of every token in family.liveVariants; a build the
+// manifest supersedes stays in the list as a Legacy variant, so an existing
+// install is still recognised, and sorts after its region's live builds). The
+// manifest's build number is part of a variant's identity: build 1 keeps the
+// "<variant>@<region>" id and the pre-build file names, every later build adds
+// "-b<N>" to the id and "_b<N>" before the file extension, so a build never
+// shares a file name with another build and an update can download next to the
+// running model. A superseded build is chained to the live build of its tile.
+// A family that hosts
 // several upstream releases (family.releases) lists every release's builds: the
 // first release keeps the bare "<variant>@<region>" id and its file names, each
 // later release carries "-<release>" in its id and "v<release>" in its file
@@ -32,9 +38,9 @@
 //
 // Determinism matters: the output is committed and guarded by a CI drift gate,
 // so the generator must produce byte-identical output for a given input. Entries
-// are sorted by (region slug, live before superseded, variant token, release),
-// backend map keys are emitted sorted, the field order is fixed, and the whole file is run through
-// go/format.Source before writing.
+// are sorted by (region slug, live before superseded, variant token, release,
+// build), backend map keys are emitted sorted, the field order is fixed, and the
+// whole file is run through go/format.Source before writing.
 //
 // Bootstrap safety: this program is package main and does NOT import
 // internal/classifier, so a broken generated file never blocks regenerating it.
@@ -74,9 +80,11 @@ import (
 // names its vendored manifest, its embedded region table, and how it maps a
 // manifest variant token to a stable on-disk LocalName. LocalNames must stay
 // stable across catalog updates: ScanInstalled keys installs on LocalName, so a
-// rename would strand an existing install. For a family with several releases the
-// LocalName is a pure function of the entry's own release, so one release's file
-// can never sit under another release's name.
+// rename would strand an existing install. A LocalName is a pure function of the
+// entry's own release and build: build 1 keeps the names that shipped before
+// builds were tracked (so every existing install is recognised), a later build
+// adds "_b<N>" before the extension, so one build's file can never sit under
+// another build's or release's name.
 var families = []family{
 	{
 		key:          "birdnet-v3.0",
@@ -86,13 +94,14 @@ var families = []family{
 		regionsFile:  "region/data/BirdNET-v3.0-Models.regions.json",
 		// birdnet_v3.0_<slug>_<token>.onnx for the model, one shared
 		// birdnet_v3.0_<slug>_labels.txt per region (both precisions share it).
-		modelLocalName: func(slug, token, _ string) string {
-			return fmt.Sprintf("birdnet_v3.0_%s_%s.onnx", slug, token)
+		modelLocalName: func(slug, token, _ string, build int) string {
+			return fmt.Sprintf("birdnet_v3.0_%s_%s%s.onnx", slug, token, buildSuffix(build))
 		},
-		labelsLocalName: func(slug, _ string) string {
-			return fmt.Sprintf("birdnet_v3.0_%s_labels.txt", slug)
+		labelsLocalName: func(slug, _ string, build int) string {
+			return fmt.Sprintf("birdnet_v3.0_%s_labels%s.txt", slug, buildSuffix(build))
 		},
-		variantsPerRegion: 2,
+		liveVariants:    []string{"fp16", "fp32"},
+		expectedRegions: 43,
 	},
 	{
 		key:          "perch-v2",
@@ -104,13 +113,15 @@ var families = []family{
 		requireScoreCalibration: true,
 		// perch_v2_<slug>_<infix>.onnx, matching the global naming
 		// (perch_v2_no_dft.onnx, perch_v2_int8_arm.onnx).
-		modelLocalName: func(slug, token, _ string) string {
-			return fmt.Sprintf("perch_v2_%s_%s.onnx", slug, perchInfix(token))
+		modelLocalName: func(slug, token, _ string, build int) string {
+			return fmt.Sprintf("perch_v2_%s_%s%s.onnx", slug, perchInfix(token), buildSuffix(build))
 		},
-		labelsLocalName: func(slug, _ string) string {
-			return fmt.Sprintf("perch_v2_%s_labels.txt", slug)
+		labelsLocalName: func(slug, _ string, build int) string {
+			return fmt.Sprintf("perch_v2_%s_labels%s.txt", slug, buildSuffix(build))
 		},
-		variantsPerRegion: 2,
+		liveVariants: []string{"no-dft-fp32"},
+		// 43 tiles plus central-india.
+		expectedRegions: 44,
 	},
 	{
 		key:          "birdnet-plus-v3.0",
@@ -119,21 +130,50 @@ var families = []family{
 		manifestFile: "gen/manifests/BirdNET-Plus-V3.0.models.json",
 		regionsFile:  "region/data/BirdNET-Plus-V3.0.regions.json",
 		// birdnet_plus_v<release>_<slug>_<token>.onnx for the model, one
-		// birdnet_plus_v<release>_<slug>_labels.txt per region and release. Only
-		// fp32 ships. The 3.0 names are the ones installed builds already carry.
-		modelLocalName: func(slug, token, release string) string {
-			return fmt.Sprintf("birdnet_plus_v%s_%s_%s.onnx", release, slug, token)
+		// birdnet_plus_v<release>_<slug>_labels.txt per region, release and build.
+		// Only fp32 ships. The 3.0 names and the 3.0.1 build 1 names are the ones
+		// installed builds already carry.
+		modelLocalName: func(slug, token, release string, build int) string {
+			return fmt.Sprintf("birdnet_plus_v%s_%s_%s%s.onnx", release, slug, token, buildSuffix(build))
 		},
-		labelsLocalName: func(slug, release string) string {
-			return fmt.Sprintf("birdnet_plus_v%s_%s_labels.txt", release, slug)
+		labelsLocalName: func(slug, release string, build int) string {
+			return fmt.Sprintf("birdnet_plus_v%s_%s_labels%s.txt", release, slug, buildSuffix(build))
 		},
-		variantsPerRegion: 1,
+		liveVariants: []string{"fp32"},
+		// 43 tiles plus central-india.
+		expectedRegions: 44,
 		// 3.0 is hosted here from a frozen copy because the upstream manifest
 		// lists 3.0.1 only; every 3.0 build stays a Legacy variant of its 3.0.1
 		// successor so an installed 3.0 is still recognised and repairable.
 		releases:        []string{"3.0", "3.0.1"},
 		frozenManifests: []string{"gen/manifests/releases/BirdNET-Plus-V3.0.release-3.0.models.json"},
 	},
+}
+
+// buildSuffix is the file name suffix of a build: none for build 1, whose names
+// predate build tracking, "_b<N>" for a later build.
+func buildSuffix(build int) string { return buildTag("_", build) }
+
+// idBuildSuffix is the variant id suffix of a build: none for build 1, "-b<N>"
+// for a later build.
+func idBuildSuffix(build int) string { return buildTag("-", build) }
+
+// buildTag is "<sep>b<N>" for a build above 1 and "" for build 1.
+func buildTag(sep string, build int) string {
+	if build <= 1 {
+		return ""
+	}
+	return fmt.Sprintf("%sb%d", sep, build)
+}
+
+// entryBuild is the entry's build number within its release, 1 when the manifest
+// does not say (build() refuses a regional entry without one before any id is
+// derived, so only hand-built test entries take the default).
+func entryBuild(e *manifestModel) int {
+	if e.Build == nil {
+		return 1
+	}
+	return *e.Build
 }
 
 // perchInfix maps a Perch manifest variant token to its LocalName infix, matching
@@ -159,9 +199,19 @@ type family struct {
 	// (Perch v2 softmax). A family with per-class sigmoid scores (BirdNET v3.0)
 	// must not carry the field.
 	requireScoreCalibration bool
-	// variantsPerRegion is the number of precision builds the family ships for
-	// each region and release (2 for fp32 plus fp16, 1 for fp32 only).
-	variantsPerRegion int
+	// expectedRegions is the number of region tiles the family ships. It is
+	// hand-maintained on purpose: an upstream tile addition or removal must be
+	// acknowledged here at generate time, together with the golden tier snapshot
+	// in the region package. Do not derive it from the region table, which would
+	// make the count check vacuous. Families may differ: a family can lag the
+	// shared tile set (BirdNET v3.0, the superseded preview, has no central-india
+	// tile).
+	expectedRegions int
+	// liveVariants are the variant tokens every region must ship exactly one live
+	// (not superseded) build of, and no other token: fp16 plus fp32 for BirdNET
+	// v3.0, no-dft-fp32 for Perch, fp32 for BirdNET+. Superseded builds are not
+	// counted, their number varies per tile.
+	liveVariants []string
 	// releases lists every upstream release the family hosts, oldest first, empty
 	// for a one-release family. Hand-maintained like expectedRegions: the build
 	// fails unless every region has its builds of each listed release and of no
@@ -171,8 +221,8 @@ type family struct {
 	// that the upstream manifest no longer lists. Their regional entries are
 	// appended and chained to the current manifest by mergeFrozenReleases.
 	frozenManifests []string
-	modelLocalName  func(slug, token, release string) string
-	labelsLocalName func(slug, release string) string
+	modelLocalName  func(slug, token, release string, build int) string
+	labelsLocalName func(slug, release string, build int) string
 }
 
 // versionPattern is the shape of an upstream release string: it lands in a file
@@ -189,12 +239,15 @@ func (f *family) currentRelease() string {
 
 // variantID is the catalog id of the entry's variant: "<variant>@<region>" for a
 // one-release family and for the first release of a multi-release one, so an id
-// never changes meaning, else "<variant>-<release>@<region>".
+// never changes meaning, else "<variant>-<release>@<region>"; a build above 1
+// adds "-b<N>" to the variant part ("fp32-3.0.1-b2@nordic"), so build 1 keeps
+// the id every existing install is recognised by.
 func (f *family) variantID(e *manifestModel) string {
-	if len(f.releases) == 0 || e.UpstreamVersion == f.releases[0] {
-		return e.Variant + "@" + e.Region
+	token := e.Variant
+	if len(f.releases) != 0 && e.UpstreamVersion != f.releases[0] {
+		token += "-" + e.UpstreamVersion
 	}
-	return e.Variant + "-" + e.UpstreamVersion + "@" + e.Region
+	return token + idBuildSuffix(entryBuild(e)) + "@" + e.Region
 }
 
 // manifestFiles lists every manifest the family's regional entries come from.
@@ -203,19 +256,27 @@ func (f *family) manifestFiles() []string {
 }
 
 // mergeFrozenReleases appends the frozen manifests' regional entries to current
-// and chains each to the current-release entry of the same region and variant
-// (its superseded_by), the way an upstream manifest hosting both releases would.
-// A frozen entry that already names a successor, belongs to the current release,
-// reuses a listed path, or has no current-release entry to chain to is refused.
+// and chains each to the live current-release entry of the same region and
+// variant (its superseded_by), the way an upstream manifest hosting both releases
+// would. Superseded builds of the current release are never a chain target, so
+// the frozen entry points at the build a new install uses. A frozen entry that
+// already names a successor, belongs to the current release, reuses a listed
+// path, or has no live current-release entry to chain to is refused, and so is a
+// second live current-release entry for one region and variant.
 func (f *family) mergeFrozenReleases(current, frozen []manifestModel) ([]manifestModel, error) {
 	type key struct{ region, variant string }
 	successor := make(map[key]*manifestModel, len(current))
 	listed := make(map[string]bool, len(current)+len(frozen))
 	for i := range current {
 		listed[current[i].Path] = true
-		if current[i].UpstreamVersion == f.currentRelease() {
-			successor[key{current[i].Region, current[i].Variant}] = &current[i]
+		if current[i].UpstreamVersion != f.currentRelease() || current[i].SupersededBy != nil {
+			continue
 		}
+		k := key{current[i].Region, current[i].Variant}
+		if successor[k] != nil {
+			return nil, fmt.Errorf("two live current-release entries for %s@%s", k.variant, k.region)
+		}
+		successor[k] = &current[i]
 	}
 	out := slices.Clone(current)
 	for i := range frozen {
@@ -267,44 +328,40 @@ func (f *family) checkReleases(regional []manifestModel, currentVersion string) 
 	return nil
 }
 
-// checkRegionCounts fails unless perRegion names exactly expectedRegions
-// regions and each one ships exactly the family's variantsPerRegion builds (of
-// each listed release, for a multi-release family, and of no other), so
-// a dropped, duplicated or extra tile cannot pass unnoticed, even when the
-// total still matches. A withdrawn (superseded) build still counts as shipped,
-// but every region must keep at least one build a new install can use.
-func (f *family) checkRegionCounts(perRegion map[string]regionTally) error {
-	if len(perRegion) != expectedRegions {
-		return fmt.Errorf("regional entries cover %d distinct regions, want %d (a region is missing or duplicated)", len(perRegion), expectedRegions)
-	}
-	for region, n := range perRegion {
-		if len(f.releases) == 0 {
-			if n.total != f.variantsPerRegion {
-				return fmt.Errorf("region %s has %d variants, want %d", region, n.total, f.variantsPerRegion)
-			}
-		} else {
-			for _, release := range f.releases {
-				if got := n.releases[release]; got != f.variantsPerRegion {
-					return fmt.Errorf("region %s has %d builds of release %s, want %d", region, got, release, f.variantsPerRegion)
-				}
-			}
-			if n.total != f.variantsPerRegion*len(f.releases) {
-				return fmt.Errorf("region %s has builds of a release outside %v", region, f.releases)
-			}
+// checkRegionCounts enforces the live-token rule on the merged regional
+// entries: the distinct regions must number exactly the family's expectedRegions,
+// and each region must ship exactly one live (not superseded) build of every
+// token in liveVariants and of no other token. For a multi-release family every
+// live entry must also be of the current release. Superseded builds are not
+// counted (their number varies per tile), so a dropped, duplicated or extra live
+// tile cannot pass unnoticed even when the totals still match, and every region
+// keeps a build a new install can use.
+func (f *family) checkRegionCounts(regional []manifestModel) error {
+	live := make(map[string][]string, f.expectedRegions) // region -> live variant tokens
+	for i := range regional {
+		e := &regional[i]
+		if _, ok := live[e.Region]; !ok {
+			live[e.Region] = nil
 		}
-		if n.live == 0 {
-			return fmt.Errorf("region %s has no variant a new install can use (every build is superseded)", region)
+		if e.SupersededBy != nil {
+			continue
+		}
+		if len(f.releases) > 0 && e.UpstreamVersion != f.currentRelease() {
+			return fmt.Errorf("region %s: live entry %s is of release %s, want the current release %s", e.Region, f.variantID(e), e.UpstreamVersion, f.currentRelease())
+		}
+		live[e.Region] = append(live[e.Region], e.Variant)
+	}
+	if len(live) != f.expectedRegions {
+		return fmt.Errorf("regional entries cover %d distinct regions, want %d (a region is missing or duplicated)", len(live), f.expectedRegions)
+	}
+	want := slices.Sorted(slices.Values(f.liveVariants))
+	for region, tokens := range live {
+		slices.Sort(tokens)
+		if !slices.Equal(tokens, want) {
+			return fmt.Errorf("region %s has live builds %v, want exactly one each of %v", region, tokens, want)
 		}
 	}
 	return nil
-}
-
-// regionTally counts a region's manifest entries and how many of them are not
-// superseded. releases counts the entries per upstream release; it is filled only
-// for a family that lists its releases.
-type regionTally struct {
-	total, live int
-	releases    map[string]int
 }
 
 // manifest and its nested types mirror only the acoustic-models schema-2 fields
@@ -329,9 +386,12 @@ type manifestModel struct {
 	SHA256     string                     `json:"sha256"`
 	SizeBytes  int64                      `json:"size_bytes"`
 	// UpstreamVersion is the upstream release the entry's files belong to.
-	UpstreamVersion string                `json:"upstream_version"`
-	SupersededBy    *string               `json:"superseded_by"`
-	Requirements    *manifestRequirements `json:"requirements"`
+	UpstreamVersion string `json:"upstream_version"`
+	// Build is the build number of the entry's files within its release; a
+	// pointer so a missing value is told apart from zero. See entryBuild.
+	Build        *int                  `json:"build"`
+	SupersededBy *string               `json:"superseded_by"`
+	Requirements *manifestRequirements `json:"requirements"`
 	// LabelsSHA256 is the checksum of the entry's labels file; when set it must
 	// equal the sidecar checksum, and a family that requires a score calibration
 	// needs it set.
@@ -389,11 +449,6 @@ const (
 
 	labelsSidecar = "gen/manifests/labels-checksums.json"
 	outputFile    = "model_catalog_regional_gen.go"
-	// expectedRegions is hand-maintained on purpose: an upstream tile addition
-	// or removal must be acknowledged here at generate time, together with the
-	// golden tier snapshot in the region package. Do not derive it from the
-	// region table, which would make the count check vacuous.
-	expectedRegions = 43
 )
 
 func main() {
@@ -489,35 +544,25 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 			return nil, err
 		}
 	}
+	for i := range regional {
+		if b := regional[i].Build; b == nil || *b < 1 {
+			return nil, fmt.Errorf("variant %s: missing build", f.variantID(&regional[i]))
+		}
+	}
 	if err := f.checkReleases(regional, m.FamilyMeta.CurrentVersion); err != nil {
 		return nil, err
 	}
-	if len(table.Regions) != expectedRegions {
-		return nil, fmt.Errorf("region table has %d slugs, want %d", len(table.Regions), expectedRegions)
+	if len(table.Regions) != f.expectedRegions {
+		return nil, fmt.Errorf("region table has %d slugs, want %d", len(table.Regions), f.expectedRegions)
 	}
-	perRegion := make(map[string]regionTally, expectedRegions)
-	for i := range regional {
-		n := perRegion[regional[i].Region]
-		n.total++
-		if regional[i].SupersededBy == nil {
-			n.live++
-		}
-		if len(f.releases) > 0 {
-			if n.releases == nil {
-				n.releases = make(map[string]int, len(f.releases))
-			}
-			n.releases[regional[i].UpstreamVersion]++
-		}
-		perRegion[regional[i].Region] = n
-	}
-	if err := f.checkRegionCounts(perRegion); err != nil {
+	if err := f.checkRegionCounts(regional); err != nil {
 		return nil, err
 	}
 
 	// Deterministic order: region slug, then live before superseded, then variant
-	// token, then release (the key that makes the order total). The runtime walks
-	// over a catalog entry's variants order live builds first themselves; this
-	// order keeps the generated file stable and readable.
+	// token, then release, then build (the keys that make the order total). The
+	// runtime walks over a catalog entry's variants order live builds first
+	// themselves; this order keeps the generated file stable and readable.
 	sort.Slice(regional, func(i, j int) bool {
 		if regional[i].Region != regional[j].Region {
 			return regional[i].Region < regional[j].Region
@@ -528,7 +573,10 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 		if regional[i].Variant != regional[j].Variant {
 			return regional[i].Variant < regional[j].Variant
 		}
-		return regional[i].UpstreamVersion < regional[j].UpstreamVersion
+		if regional[i].UpstreamVersion != regional[j].UpstreamVersion {
+			return regional[i].UpstreamVersion < regional[j].UpstreamVersion
+		}
+		return entryBuild(&regional[i]) < entryBuild(&regional[j])
 	})
 
 	// Index after the sort: the pointers must address the final slice positions.
@@ -539,6 +587,7 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 
 	seenID := make(map[string]bool, len(regional))
 	seenLocalName := make(map[string]bool, len(regional))
+	seenLabels := make(map[string]labelsUse, len(regional))
 	out := make([]string, 0, len(regional))
 	for i := range regional {
 		e := &regional[i]
@@ -557,11 +606,27 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 		if seenLocalName[v.modelLocalName] {
 			return nil, fmt.Errorf("duplicate model LocalName %q", v.modelLocalName)
 		}
+		// The precisions of one build share a labels file, so a repeat is fine
+		// when release, build and checksum all match; two builds must never share
+		// a labels file name (invariant: different builds never share a LocalName).
+		use := labelsUse{release: e.UpstreamVersion, build: entryBuild(e), sha256: v.labelsSHA256}
+		if prev, dup := seenLabels[v.labelsLocal]; dup && prev != use {
+			return nil, fmt.Errorf("variant %s: labels LocalName %q is shared with another release, build or labels file", v.id, v.labelsLocal)
+		}
+		seenLabels[v.labelsLocal] = use
 		seenID[v.id] = true
 		seenLocalName[v.modelLocalName] = true
 		out = append(out, render(&v))
 	}
 	return out, nil
+}
+
+// labelsUse identifies the labels file behind a labels LocalName: the release and
+// build of the entry that uses it and the file's checksum.
+type labelsUse struct {
+	release string
+	build   int
+	sha256  string
 }
 
 // genVariant is the resolved, validated data for one regional variant, ready to
@@ -579,7 +644,9 @@ type genVariant struct {
 	legacy       bool
 	supersededBy string
 	// version is the entry's release when it is not the family's newest, else "".
-	version        string
+	version string
+	// build is the entry's build number, 1 or more; rendered only above 1.
+	build          int
 	modelRemote    string
 	modelLocalName string
 	modelSHA256    string
@@ -614,9 +681,16 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 	// Species count: manifest classes for v3.0, region-table classes for Perch
 	// (whose manifest omits the field). When both exist they must agree, or the
 	// manifest and the embedded region table have drifted.
+	// The region table describes the live build, so a superseded entry takes its
+	// own manifest classes and is not compared with the table.
 	tableClasses := table.Regions[e.Region].Classes
 	species := 0
 	switch {
+	case e.SupersededBy != nil:
+		if e.Classes == nil {
+			return genVariant{}, fmt.Errorf("variant %s: superseded entry must list classes", id)
+		}
+		species = *e.Classes
 	case e.Classes != nil:
 		species = *e.Classes
 		if tableClasses != nil && *tableClasses != species {
@@ -652,6 +726,7 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		return genVariant{}, err
 	}
 
+	build := entryBuild(e)
 	var arch []string
 	if e.Variant == "int8-arm" {
 		arch = []string{"aarch64"}
@@ -688,16 +763,17 @@ func (f *family) variant(e *manifestModel, table *regionTable, labels map[string
 		// would wrongly bury every regional tile.
 		legacy:         e.SupersededBy != nil,
 		modelRemote:    e.Path,
-		modelLocalName: f.modelLocalName(e.Region, e.Variant, e.UpstreamVersion),
+		modelLocalName: f.modelLocalName(e.Region, e.Variant, e.UpstreamVersion, build),
 		modelSHA256:    e.SHA256,
 		modelSize:      e.SizeBytes,
 		labelsRemote:   e.Labels,
-		labelsLocal:    f.labelsLocalName(e.Region, e.UpstreamVersion),
+		labelsLocal:    f.labelsLocalName(e.Region, e.UpstreamVersion, build),
 		labelsSHA256:   lc.SHA256,
 		labelsSize:     lc.SizeBytes,
 		restLogit:      restLogit,
 		hasCalibration: hasCalibration,
 		version:        f.olderRelease(e),
+		build:          build,
 	}, nil
 }
 
@@ -766,8 +842,8 @@ func normalizePrecision(p string) string {
 }
 
 // render emits the Go source for one CatalogVariant literal, including its
-// ScoreCalibration when the variant has one and its Version when it belongs to
-// an older release than the family's newest. gofmt fixes the indentation
+// ScoreCalibration when the variant has one, its Version when it belongs to
+// an older release than the family's newest and its Build when it is above 1. gofmt fixes the indentation
 // afterwards, so this only needs valid syntax.
 func render(v *genVariant) string {
 	var b strings.Builder
@@ -825,6 +901,9 @@ func render(v *genVariant) string {
 	}
 	if v.version != "" {
 		fmt.Fprintf(&b, "Version: %q,\n", v.version)
+	}
+	if v.build > 1 {
+		fmt.Fprintf(&b, "Build: %d,\n", v.build)
 	}
 
 	if v.hasCalibration {

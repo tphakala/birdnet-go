@@ -12,8 +12,10 @@ Do not hand-edit these files. They are generated upstream in the
 `acoustic-models` repository by `scripts/perch-slice/make_regions_json.py`
 (schema documented there), from the authoritative geometry in
 `scripts/perch-slice/regions.py`. Every family is generated from the same
-geometry, so their tile sets and tiers stay in step by construction; only the
-per-tile `classes` count differs between families.
+geometry: the geometry of a slug that two families both ship is identical, and
+only the per-tile `classes` count differs. A family may ship a subset of the
+tiles (the omissions are listed in `golden_tier_test.go` as `familyOmits`), and a
+tile added upstream reaches a family only when that family is rebuilt.
 
 ## Coverage maps (`maps/`)
 
@@ -21,7 +23,7 @@ per-tile `classes` count differs between families.
 served by `GET /api/v2/models/regions/:slug/map`. They are generated upstream by
 `scripts/perch-slice/make_coverage_maps.py` in `acoustic-models`. The geometry is
 model-family-agnostic, so a tile's map is byte-identical across families; we keep
-one slug-keyed set here. Do not hand-edit them. The same
+one slug-keyed set here, taken from whichever family trees ship the slug. Do not hand-edit them. The same
 `task sync-region-snapshots` refreshes them and fails loudly if a slug's map ever
 differs between families (which would break the one-set-keyed-by-slug assumption).
 

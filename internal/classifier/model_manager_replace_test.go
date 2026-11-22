@@ -279,7 +279,7 @@ func TestOrchestrator_ResolveInstalledPaths_PrefersLiveOverLegacyVariant(t *test
 
 	modelsDir := t.TempDir()
 	writeVariantModelFile(t, modelsDir, &entry, "fp32") // Legacy 3.0 global
-	livePath := writeVariantModelFile(t, modelsDir, &entry, "fp32-3.0.1@nordic")
+	livePath := writeVariantModelFile(t, modelsDir, &entry, "fp32-3.0.1-b2@nordic")
 
 	o := &Orchestrator{}
 	o.SetModelsDir(modelsDir)

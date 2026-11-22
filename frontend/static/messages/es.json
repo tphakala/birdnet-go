@@ -6070,6 +6070,7 @@
       },
       "update": {
         "cardNotice": "Una versión más reciente ({to}) sustituye a la versión instalada {from}.",
+        "cardNoticeBuild": "La compilación {to} de la versión {version} sustituye a la compilación instalada {from}.",
         "action": "Actualizar",
         "applying": "Actualizando..."
       },

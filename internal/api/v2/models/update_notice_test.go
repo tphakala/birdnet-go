@@ -60,14 +60,26 @@ func TestUpdateOffers(t *testing.T) {
 	replaced := updateTestEntry()
 	replaced.ID, replaced.Name = "replaced", "Replaced"
 	replaced.SupersededBy = "successor"
+	newerBuild := updateTestEntry()
+	newerBuild.ID, newerBuild.Name = "newer-build", "Newer build"
+	newerBuild.Variants[0].Build = 2
+	newerBuild.Variants[1].Version = "" // same release, build 1 -> build 2
 	entries := []classifier.CatalogEntry{
 		updateTestEntry(), withdrawn, dangling, replaced,
 		{ID: "successor", Name: "Successor", Version: "1.0"},
+		newerBuild,
 	}
 	want := updateOffer{
 		CatalogID: updateEntryID, ModelName: updateModelName,
 		ToVariantID: updateNewID,
 		FromVersion: updateOldRel, ToVersion: updateNewRel,
+		FromBuild: 1, ToBuild: 1,
+	}
+	wantBuild := updateOffer{
+		CatalogID: "newer-build", ModelName: "Newer build",
+		ToVariantID: updateNewID,
+		FromVersion: updateNewRel, ToVersion: updateNewRel,
+		FromBuild: 1, ToBuild: 2,
 	}
 
 	tests := []struct {
@@ -76,6 +88,7 @@ func TestUpdateOffers(t *testing.T) {
 		want      []updateOffer
 	}{
 		{name: "installed older release gets an offer with both versions", installed: map[string]string{updateEntryID: updateOldID}, want: []updateOffer{want}},
+		{name: "installed older build of the same release gets an offer with both builds", installed: map[string]string{"newer-build": updateOldID}, want: []updateOffer{wantBuild}},
 		{name: "installed current build gets none", installed: map[string]string{updateEntryID: updateNewID}},
 		{name: "withdrawn build of the same release gets none", installed: map[string]string{"withdrawn": updateOldID}},
 		{name: "entry with a visible entry-level successor gets none", installed: map[string]string{"replaced": updateOldID}},
@@ -126,6 +139,10 @@ func TestNewUpdateNotification(t *testing.T) {
 
 	one := newUpdateNotification([]updateOffer{{CatalogID: "a", ModelName: "Model A", FromVersion: "3.0", ToVersion: "3.0.1"}})
 	assert.Equal(t, updateTitleOne, one.Title)
+
+	// A same-release update reads with the build on both sides, never "2 → 2".
+	build := newUpdateNotification([]updateOffer{{CatalogID: "p", ModelName: "Perch v2", FromVersion: "2", ToVersion: "2", FromBuild: 1, ToBuild: 2}})
+	assert.Equal(t, "Perch v2 (2-b1 → 2-b2)", build.MessageParams["models"])
 }
 
 // TestUpdateNoticeFallbacksMatchEnglishLocale pins that the English fallback texts
@@ -283,7 +300,7 @@ func TestGetModelCatalog_ReportsUpdate(t *testing.T) {
 	entry := findEntry(catalogRequest(t, h), updateEntryID)
 	require.NotNil(t, entry)
 	require.NotNil(t, entry.Update, "an installed older release reports its update")
-	assert.Equal(t, CatalogUpdateResponse{VariantID: updateNewID, FromVersion: updateOldRel, ToVersion: updateNewRel}, *entry.Update)
+	assert.Equal(t, CatalogUpdateResponse{VariantID: updateNewID, FromVersion: updateOldRel, ToVersion: updateNewRel, FromBuild: 1, ToBuild: 1}, *entry.Update)
 
 	f.setBuild(t, "m_v2")
 	entry = findEntry(catalogRequest(t, h), updateEntryID)

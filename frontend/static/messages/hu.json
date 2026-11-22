@@ -6070,6 +6070,7 @@
       },
       "update": {
         "cardNotice": "Újabb változat ({to}) váltja le a telepített {from} változatot.",
+        "cardNoticeBuild": "A(z) {version} verzió {to}. buildje leváltja a telepített {from}. buildet.",
         "action": "Frissítés",
         "applying": "Frissítés..."
       },

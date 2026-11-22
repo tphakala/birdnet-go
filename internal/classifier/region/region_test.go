@@ -21,41 +21,47 @@ func TestTablesLoad(t *testing.T) {
 		require.True(t, ok, "table for %s must be embedded", repo)
 		assert.Equal(t, snapshotSchema, tbl.Schema, "schema version")
 		assert.Equal(t, repo, tbl.Repo, "self-describing repo id")
-		assert.Len(t, tbl.Regions, len(goldenTiers), "tile count for %s matches the golden tier snapshot", repo)
+		assert.Len(t, tbl.Regions, len(goldenTiers)-len(familyOmits[repo]), "tile count for %s matches the golden tier snapshot minus its acknowledged omissions", repo)
 	}
 }
 
-// TestCrossFamilyGeometryIdentity documents the invariant the D8 shared setting
-// relies on today: every family publishes identical geometry, tiers, and slug
-// sets, differing only in per-tile class counts. The resolver never assumes this
-// (it resolves per family), but a future divergence should be a conscious change
-// that trips this test.
-func TestCrossFamilyGeometryIdentity(t *testing.T) {
+// TestCrossFamilyGeometryIdentity_SharedSlugs checks that a slug two families
+// both ship has identical geometry, tier, display fields and countries in both.
+// The gallery dropdown dedupes a shared slug by taking one family's display
+// fields, so a divergence would make the label depend on family order. The tile
+// sets themselves may differ (familyOmits). The resolver never assumes identity
+// (it resolves per family), but a divergence should be a conscious change that
+// trips this test.
+func TestCrossFamilyGeometryIdentity_SharedSlugs(t *testing.T) {
 	t.Parallel()
-	perch, ok := TableForRepo(perchRepo)
-	require.True(t, ok)
+	repos := []string{perchRepo, birdnetRepo, birdnetPlusRepo}
+	for i, repoA := range repos {
+		for _, repoB := range repos[i+1:] {
+			t.Run(repoA+" vs "+repoB, func(t *testing.T) {
+				t.Parallel()
+				a, ok := TableForRepo(repoA)
+				require.True(t, ok)
+				b, ok := TableForRepo(repoB)
+				require.True(t, ok)
 
-	for _, repo := range []string{birdnetRepo, birdnetPlusRepo} {
-		t.Run(repo, func(t *testing.T) {
-			t.Parallel()
-			other, ok := TableForRepo(repo)
-			require.True(t, ok)
-
-			require.Len(t, other.Regions, len(perch.Regions), "same tile count")
-			for slug, pr := range perch.Regions {
-				or, ok := other.Regions[slug]
-				require.True(t, ok, "slug %s present in both families", slug)
-				assert.Equal(t, pr.Tier, or.Tier, "tier for %s", slug)
-				assert.Equal(t, pr.BBoxes, or.BBoxes, "bboxes for %s", slug)
-				assert.Equal(t, pr.Centroid, or.Centroid, "centroid for %s", slug)
-				// Display fields must match too: the gallery dropdown dedupes a shared
-				// slug by taking one family's Name/Group/GroupDisplay, so a divergence
-				// here would make the dropdown label depend on family order.
-				assert.Equal(t, pr.Name, or.Name, "name for %s", slug)
-				assert.Equal(t, pr.Group, or.Group, "group for %s", slug)
-				assert.Equal(t, pr.GroupDisplay, or.GroupDisplay, "group display for %s", slug)
-			}
-		})
+				shared := 0
+				for slug, ra := range a.Regions {
+					rb, ok := b.Regions[slug]
+					if !ok {
+						continue
+					}
+					shared++
+					assert.Equal(t, ra.Tier, rb.Tier, "tier for %s", slug)
+					assert.Equal(t, ra.BBoxes, rb.BBoxes, "bboxes for %s", slug)
+					assert.Equal(t, ra.Centroid, rb.Centroid, "centroid for %s", slug)
+					assert.Equal(t, ra.Name, rb.Name, "name for %s", slug)
+					assert.Equal(t, ra.Group, rb.Group, "group for %s", slug)
+					assert.Equal(t, ra.GroupDisplay, rb.GroupDisplay, "group display for %s", slug)
+					assert.Equal(t, ra.Countries, rb.Countries, "countries for %s", slug)
+				}
+				assert.NotZero(t, shared, "two families must share tiles")
+			})
+		}
 	}
 }
 

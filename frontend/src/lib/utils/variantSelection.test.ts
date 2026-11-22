@@ -434,7 +434,13 @@ describe('optimizeOffers', () => {
     // The update notice and the card Update action cover this entry, so it gets
     // no Optimize offer on top of them (one model, one notice and one card action).
     const e = v24Entry({
-      update: { variantId: 'fp32-dfttrunc', fromVersion: '3.0', toVersion: '3.0.1' },
+      update: {
+        variantId: 'fp32-dfttrunc',
+        fromVersion: '3.0',
+        toVersion: '3.0.1',
+        fromBuild: 1,
+        toBuild: 1,
+      },
     });
     expect(optimizeOffers([e])).toHaveLength(0);
   });

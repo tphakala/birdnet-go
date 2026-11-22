@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -58,11 +59,16 @@ func TestGetModelRegions_AutoResolves(t *testing.T) {
 	assert.True(t, resp.LocationConfigured)
 	assert.Equal(t, "andes", resp.Resolved.Slug, "Bogota resolves to andes")
 	assert.Equal(t, string(region.SourceAuto), resp.Resolved.Source)
-	// Families share one slug set, so the dropdown union carries exactly the
-	// tiles of any one family's embedded table.
-	perchTable, ok := region.TableForRepo("tphakala/Perch-v2-Models")
-	require.True(t, ok, "perch region table must be embedded")
-	assert.Len(t, resp.Regions, len(perchTable.Regions), "dropdown union covers every tile")
+	// The dropdown carries the union of every family's tile set.
+	tables, err := region.Tables()
+	require.NoError(t, err)
+	union := map[string]bool{}
+	for _, tbl := range tables {
+		for slug := range tbl.Regions {
+			union[slug] = true
+		}
+	}
+	assert.Len(t, resp.Regions, len(union), "dropdown union covers every tile of every family")
 
 	// The options are sorted and each carries display metadata.
 	for _, o := range resp.Regions {
@@ -170,7 +176,8 @@ func TestResolveRecommendRegion(t *testing.T) {
 	resolve := func(t *testing.T, mutate func(*conf.Settings)) string {
 		t.Helper()
 		core := apitest.NewCore(t, apitest.WithSettingsFunc(mutate))
-		return New(core, nil).resolveRecommendRegion()
+		fallback, _ := New(core, nil).resolveRecommendRegions(classifier.VisibleCatalog())
+		return fallback
 	}
 
 	t.Run("auto with configured coordinates resolves a region", func(t *testing.T) {
@@ -210,6 +217,59 @@ func TestResolveRecommendRegion(t *testing.T) {
 		})
 		assert.Equal(t, validSlug, got, "an explicit region pin does not require coordinates")
 	})
+}
+
+// TestRecommendRegions covers the per-entry recommender regions over synthetic
+// tables: family A ships slug "x" (its tile contains the test point), family B
+// ships "y" only (its tile also contains the point) and lacks "x". Catches an
+// entry getting a slug its own family does not ship, and the unconfigured cases
+// regressing.
+func TestRecommendRegions(t *testing.T) {
+	t.Parallel()
+	const (
+		lat, lon = 10.0, 10.0
+		repoA    = "o/A"
+		repoB    = "o/B"
+	)
+	tile := func(slug string) region.Region {
+		return region.Region{
+			Name: slug, Tier: region.TierRegional,
+			BBoxes:   []region.BBox{{LatMin: 0, LatMax: 20, LonMin: 0, LonMax: 20}},
+			Centroid: []float64{lat, lon},
+		}
+	}
+	tables := map[string]*region.Table{
+		repoA: {Repo: repoA, Regions: map[string]region.Region{"x": tile("x"), "y": tile("y")}},
+		repoB: {Repo: repoB, Regions: map[string]region.Region{"y": tile("y")}},
+	}
+	entries := []classifier.CatalogEntry{
+		{ID: "a", HuggingFaceRepo: repoA},
+		{ID: "b", HuggingFaceRepo: repoB},
+		{ID: "flat", HuggingFaceRepo: "o/none"},
+	}
+
+	tests := []struct {
+		name        string
+		modelRegion string
+		configured  bool
+		wantFall    string
+		wantByID    map[string]string
+	}{
+		{"auto resolves in each family's own table", region.ModeAuto, true, "x", map[string]string{"a": "x", "b": "y"}},
+		{"pinned slug present in one family", "x", true, "x", map[string]string{"a": "x", "b": "y"}},
+		{"pinned slug honoured without a location", "y", false, "y", map[string]string{"a": "y", "b": "y"}},
+		{"pinned slug absent from a family stays out of its table when unconfigured", "x", false, "x", map[string]string{"a": "x", "b": ""}},
+		{"auto without a location stays global", region.ModeAuto, false, "", map[string]string{"a": "", "b": ""}},
+		{"global mode stays global", region.ModeGlobal, true, "", map[string]string{"a": "", "b": ""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fallback, byEntry := recommendRegions(tables, entries, tt.modelRegion, tt.configured, lat, lon)
+			assert.Equal(t, tt.wantFall, fallback)
+			assert.Equal(t, tt.wantByID, byEntry, "an entry without a table is absent so it uses the fallback")
+		})
+	}
 }
 
 // TestGetModelRegions_OptionsCarryCountries confirms the dropdown options carry

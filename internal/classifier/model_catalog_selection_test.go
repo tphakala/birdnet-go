@@ -81,8 +81,8 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 			// regional tile must win.
 			lowRAM := 400 * mib
 			gotPerch := recommendedVariantID(&perch, []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}, lowRAM, slug)
-			assert.Equalf(t, "no-dft-fp32@"+slug, gotPerch, "low-RAM aarch64 host in %q must get the regional no-dft-fp32 slice", slug)
-			assert.Equalf(t, "regional/"+slug+"/perch_v2_"+slug+"_no_dft_fp32.onnx", modelRemotePath(t, &perch, gotPerch),
+			assert.Equalf(t, "no-dft-fp32-b2@"+slug, gotPerch, "low-RAM aarch64 host in %q must get the regional no-dft-fp32 slice", slug)
+			assert.Equalf(t, "regional/"+slug+"/perch-v2-"+slug+"-no-dft-fp32-b2.onnx", modelRemotePath(t, &perch, gotPerch),
 				"recommended perch variant must own the manifest low-ram selection path")
 
 			// BirdNET v3.0: a plain CPU host in a region prefers the region's fp32
@@ -104,7 +104,7 @@ func TestRecommend_RegionalTiles(t *testing.T) {
 		caps := []string{hwprofile.CapAArch64, hwprofile.CapONNXRuntimeCPU, hwprofile.CapLowRAM}
 
 		assert.Empty(t, recommendedVariantID(&perch, caps, 300*mib, "amazonia"), "own slice blocked at 300 MiB: nothing, not another region's slice")
-		assert.Equal(t, "no-dft-fp32@amazonia", recommendedVariantID(&perch, caps, 400*mib, "amazonia"), "own slice fits at 400 MiB")
+		assert.Equal(t, "no-dft-fp32-b2@amazonia", recommendedVariantID(&perch, caps, 400*mib, "amazonia"), "own slice fits at 400 MiB")
 	})
 
 	// The same rule holds for every family shape: below the global floors, with
@@ -170,7 +170,7 @@ func TestRecommend_BirdNETPlusOffersTheCurrentRelease(t *testing.T) {
 	high := 8 * 1024 * mib
 
 	for _, tc := range []struct{ name, region, want string }{
-		{"region resolved to nordic", "nordic", "fp32-3.0.1@nordic"},
+		{"region resolved to nordic", "nordic", "fp32-3.0.1-b2@nordic"},
 		{"no region", "", "fp32-3.0.1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

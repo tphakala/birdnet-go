@@ -666,6 +666,23 @@ func TestCatalogChecksum_OmitemptyKeepsOldFilesPristine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(named), `"superseded_by":"new"`)
 
+	// Only a variant above build 1 carries the key; every build 1 variant omits it.
+	// The embedded catalog holds later builds, so only the build 1 variants are
+	// marshalled for the absence check.
+	buildOne := make([]CatalogEntry, 0, len(EmbeddedCatalog))
+	for i := range EmbeddedCatalog {
+		e := EmbeddedCatalog[i]
+		e.Variants = slices.DeleteFunc(slices.Clone(e.Variants), func(v CatalogVariant) bool { return v.Build > 1 })
+		buildOne = append(buildOne, e)
+	}
+	buildOneJSON, err := json.Marshal(buildOne)
+	require.NoError(t, err)
+	assert.NotContains(t, string(buildOneJSON), `"build"`)
+
+	later, err := json.Marshal(CatalogVariant{ID: "v", Build: 2})
+	require.NoError(t, err)
+	assert.Contains(t, string(later), `"build":2`)
+
 	var round []CatalogEntry
 	require.NoError(t, json.Unmarshal(plain, &round))
 	again, err := json.Marshal(round)

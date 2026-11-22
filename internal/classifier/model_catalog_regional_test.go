@@ -1,6 +1,8 @@
 package classifier
 
 import (
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,33 +13,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 )
 
-// regionalBuildsPerTile is how many builds the generator emits for each region
-// slug, per catalog entry: family.variantsPerRegion times the number of
-// releases it hosts (gen/main.go; BirdNET+ lists its 3.0.1 tile and its Legacy
-// 3.0 tile).
-var regionalBuildsPerTile = map[string]int{
-	"birdnet-v3.0":      2,
-	"perch-v2":          2,
-	"birdnet-plus-v3.0": 2,
-}
-
-// regionalTilesFor is how many region-sliced variants the generator emits for an
-// entry: every slug in the embedded region table, once per build. All
-// families share one slug set (TestCrossFamilyGeometryIdentity), so the BirdNET
-// v3.0 table stands for all of them. The tile set itself is pinned by the golden
-// tier snapshot in the region package, not by a count here.
-func regionalTilesFor(entryID string) int {
-	return regionalBuildsPerTile[entryID] * regionTileCount()
-}
-
-// regionTileCount returns the number of slugs in the embedded BirdNET v3.0
-// region table, or 0 when the table is missing so every count assertion fails.
-func regionTileCount() int {
-	tbl, ok := region.TableForRepo("tphakala/BirdNET-v3.0-Models")
-	if !ok {
-		return 0
-	}
-	return len(tbl.Regions)
+// liveRegionalTokens are the variant tokens each region must ship exactly one
+// live build of, per catalog entry (family.liveVariants in gen/main.go). The
+// token is the variant id up to its release or build suffix.
+var liveRegionalTokens = map[string][]string{
+	"birdnet-v3.0":      {"fp16", "fp32"},
+	"perch-v2":          {"no-dft-fp32"},
+	"birdnet-plus-v3.0": {"fp32"},
 }
 
 // allowedRegionalPrecisions is the set of normalized precisions a regional
@@ -46,18 +28,21 @@ func regionTileCount() int {
 var allowedRegionalPrecisions = map[string]bool{"fp32": true, "fp16": true, "int8": true}
 
 // TestEmbeddedCatalog_RegionalVariants guards the generated regional catalog data
-// against the failure modes that would silently break region-aware recommendation:
-// a Region set to a display name instead of a slug (region.matched never fires), a
-// tile marked Default (wrong preselection), a Legacy marking outside the withdrawn
-// Perch int8-arm builds and the BirdNET+ 3.0 builds (hidden tile), a missing checksum, or a species count that
-// has drifted from the region table.
+// against the failure modes that would silently break region-aware recommendation
+// and updates: a Region set to a display name instead of a slug (region.matched
+// never fires), a tile marked Default (wrong preselection), a region without its
+// live builds (one per live token), a Legacy marking that does not match
+// SupersededBy, a successor that is not a live build of the same region, a
+// Legacy build that is not an update, a missing checksum, or a species count of a
+// live build that has drifted from the region table. Each entry is checked
+// against its own family's table, since families may ship different tile sets.
 func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 	t.Parallel()
 
 	tables, err := region.Tables()
 	require.NoError(t, err, "load embedded region tables")
 
-	for _, entryID := range []string{"birdnet-v3.0", "perch-v2", "birdnet-plus-v3.0"} {
+	for entryID, tokens := range liveRegionalTokens {
 		t.Run(entryID, func(t *testing.T) {
 			t.Parallel()
 
@@ -73,11 +58,10 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 				displayNames[r.Name] = true
 			}
 
-			regional := 0
-			regionHasLive := make(map[string]bool)
+			liveIDs := make(map[string]string)              // live variant id -> region
+			liveTokensByRegion := make(map[string][]string) // region -> live tokens
 			regionSawLegacy := make(map[string]bool)
-			liveIDs := make(map[string]bool)
-			successors := make(map[string]string) // Legacy variant id -> SupersededBy
+			var legacy []*CatalogVariant
 			seenID := make(map[string]bool, len(entry.Variants))
 			seenModelLocal := make(map[string]bool, len(entry.Variants))
 			for i := range entry.Variants {
@@ -85,7 +69,6 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 				if v.Region == "" {
 					continue // global variant, covered by TestEmbeddedCatalog_GlobalVariantResolution
 				}
-				regional++
 
 				// The join guardrail: Region MUST be a region-table slug, never a
 				// display name. If it is a display name the recommender's +100
@@ -107,32 +90,27 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 				require.NotNilf(t, labels, "variant %q must carry a labels file", v.ID)
 
 				assert.Falsef(t, v.Default, "regional variant %q must not be Default", v.ID)
-				// Legacy builds are the withdrawn Perch int8-arm builds and the BirdNET+
-				// 3.0 builds, which the 3.0.1 build of the same tile replaces.
-				kind := regionalLegacyKind(entryID, v, model)
-				assert.Equalf(t, kind != legacyNone, v.Legacy, "regional variant %q is Legacy exactly when it is a Perch int8-arm build or a BirdNET+ 3.0 build", v.ID)
-				wantVersion := ""
-				if kind == legacyOlderRelease {
-					wantVersion = "3.0"
-				}
-				assert.Equalf(t, wantVersion, v.Version, "regional variant %q release", v.ID)
+				// A variant is Legacy exactly when it names its successor.
+				assert.Equalf(t, v.SupersededBy != "", v.Legacy, "regional variant %q is Legacy exactly when it names a SupersededBy", v.ID)
 				if v.Legacy {
 					regionSawLegacy[v.Region] = true
-					successors[v.ID] = v.SupersededBy
-					assert.Equalf(t, wantRegionalSuccessor(kind, v.Region), v.SupersededBy, "Legacy variant %q must name its region's replacement", v.ID)
-					if kind == legacyWithdrawn {
+					legacy = append(legacy, v)
+					// A withdrawn int8 build recommends no backend, so it is never
+					// picked for a fresh install.
+					if v.Precision == "int8" {
 						assert.Falsef(t, backendRecommended(v), "withdrawn variant %q must recommend no backend", v.ID)
 					}
 				} else {
-					regionHasLive[v.Region] = true
-					liveIDs[v.ID] = true
-					assert.Emptyf(t, v.SupersededBy, "live variant %q must not name a successor", v.ID)
+					liveIDs[v.ID] = v.Region
+					liveTokensByRegion[v.Region] = append(liveTokensByRegion[v.Region], variantToken(v.ID))
 					// A region lists its live builds before its Legacy ones, as the
 					// generator sorts them.
 					assert.Falsef(t, regionSawLegacy[v.Region], "live variant %q must precede its region's Legacy variants", v.ID)
+					// The region table describes the live build.
+					assert.Equalf(t, reg.Classes, v.SpeciesCount, "live variant %q species count must match the region table", v.ID)
 				}
+				assert.Positivef(t, v.SpeciesCount, "variant %q species count", v.ID)
 				assert.Truef(t, allowedRegionalPrecisions[v.Precision], "variant %q precision %q unexpected", v.ID, v.Precision)
-				assert.Equalf(t, reg.Classes, v.SpeciesCount, "variant %q species count must match the region table", v.ID)
 				assert.Positivef(t, v.Requirements.MinRAMMB, "variant %q must carry a RAM floor", v.ID)
 
 				assert.Falsef(t, seenID[v.ID], "duplicate variant id %q", v.ID)
@@ -153,47 +131,54 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 					assert.Equalf(t, []string{hwprofile.CapAArch64}, v.Requirements.Arch, "int8-arm variant %q must require aarch64", v.ID)
 				}
 			}
-			for id, successor := range successors {
-				assert.Truef(t, liveIDs[successor], "withdrawn variant %q must be superseded by a live variant of the same entry, got %q", id, successor)
-			}
+
+			// Every table slug ships exactly one live build of each live token, and
+			// the entry ships nothing outside its own table.
+			want := slices.Sorted(slices.Values(tokens))
 			for slug := range tbl.Regions {
-				assert.Truef(t, regionHasLive[slug], "%s region %q must keep a non-Legacy variant", entryID, slug)
+				got := slices.Sorted(slices.Values(liveTokensByRegion[slug]))
+				assert.Equalf(t, want, got, "%s region %q must ship exactly one live build of each live token", entryID, slug)
 			}
-			assert.Equalf(t, regionalTilesFor(entryID), regional, "%s must expose %d regional tiles", entryID, regionalTilesFor(entryID))
+			assert.Lenf(t, liveTokensByRegion, len(tbl.Regions), "%s ships live builds for exactly its own tile set", entryID)
+
+			assertLegacyVariantsUpdate(t, &entry, legacy, liveIDs)
 		})
 	}
 }
 
-// legacyKind says why a regional variant is expected to be Legacy.
-type legacyKind int
+// assertLegacyVariantsUpdate checks each Legacy variant is an update to the live
+// build of its own region, and that build is newer: another release or a higher
+// build.
+func assertLegacyVariantsUpdate(t *testing.T, entry *CatalogEntry, legacy []*CatalogVariant, liveIDs map[string]string) {
+	t.Helper()
+	for _, v := range legacy {
+		succ := resolveVariant(entry, v.SupersededBy)
+		if assert.NotNilf(t, succ, "Legacy variant %q names a variant of the entry", v.ID) {
+			assert.Equalf(t, liveIDs[v.SupersededBy], v.Region, "Legacy variant %q must be superseded by a live variant of its own region", v.ID)
+			assert.Falsef(t, succ.Legacy, "successor %q of %q must be live", succ.ID, v.ID)
+		}
+		got, ok := VariantUpdate(entry, v.ID)
+		if assert.Truef(t, ok, "VariantUpdate of Legacy variant %q must offer an update", v.ID) {
+			assert.Equalf(t, v.SupersededBy, got.ID, "update target of %q", v.ID)
+			assert.Truef(t,
+				VariantVersion(entry, v.ID) != VariantVersion(entry, got.ID) || VariantBuild(entry, v.ID) < VariantBuild(entry, got.ID),
+				"%q must be an older release or a lower build than %q", v.ID, got.ID)
+		}
+	}
+}
 
-const (
-	legacyNone         legacyKind = iota // a live build
-	legacyWithdrawn                      // a withdrawn Perch int8-arm build
-	legacyOlderRelease                   // a BirdNET+ 3.0 build, replaced by 3.0.1
+// variantToken is the variant token of a regional variant id: the part before
+// "@", without a release ("-3.0.1") or build ("-b2") suffix.
+func variantToken(id string) string {
+	token, _, _ := strings.Cut(id, "@")
+	token = buildIDSuffix.ReplaceAllString(token, "")
+	return releaseIDSuffix.ReplaceAllString(token, "")
+}
+
+var (
+	buildIDSuffix   = regexp.MustCompile(`-b\d+$`)
+	releaseIDSuffix = regexp.MustCompile(`-\d+(\.\d+)*$`)
 )
-
-// regionalLegacyKind classifies a regional variant of the given entry by its id
-// and, for BirdNET+, by the release its model file name carries.
-func regionalLegacyKind(entryID string, v *CatalogVariant, model *CatalogFile) legacyKind {
-	switch {
-	case entryID == "perch-v2" && strings.HasPrefix(v.ID, "int8-arm@"):
-		return legacyWithdrawn
-	case entryID == "birdnet-plus-v3.0" && strings.HasPrefix(model.LocalName, "birdnet_plus_v3.0_"):
-		return legacyOlderRelease
-	default:
-		return legacyNone
-	}
-}
-
-// wantRegionalSuccessor is the SupersededBy a Legacy variant of the given kind
-// in the region slug must carry.
-func wantRegionalSuccessor(kind legacyKind, slug string) string {
-	if kind == legacyOlderRelease {
-		return "fp32-3.0.1@" + slug
-	}
-	return "no-dft-fp32@" + slug
-}
 
 // backendRecommended reports whether any backend row of v is Recommended.
 func backendRecommended(v *CatalogVariant) bool {

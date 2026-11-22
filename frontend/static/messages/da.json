@@ -6070,6 +6070,7 @@
       },
       "update": {
         "cardNotice": "En nyere version ({to}) erstatter den installerede version {from}.",
+        "cardNoticeBuild": "Build {to} af version {version} erstatter det installerede build {from}.",
         "action": "Opdater",
         "applying": "Opdaterer..."
       },
