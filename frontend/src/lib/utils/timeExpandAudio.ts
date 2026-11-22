@@ -90,6 +90,12 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
+function yieldToEventLoop(): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, 0);
+  });
+}
+
 function readAscii4(bytes: Uint8Array, offset: number): string {
   return String.fromCharCode(
     bytes.at(offset) ?? 0,
@@ -209,6 +215,16 @@ export function rewriteWavSampleRate(buffer: ArrayBuffer, expansion: number): Bl
     const chunkSize = view.getUint32(offset + 4, true);
     const payloadOffset = offset + CHUNK_HEADER_SIZE;
 
+    if (chunkId === 'data') {
+      if (payloadOffset >= bytes.byteLength) {
+        throw new TimeExpandAudioError('empty_audio', 'WAV file contains zero audio bytes');
+      }
+      sawDataChunk = true;
+      if (fmtPayloadOffset !== -1) {
+        break;
+      }
+    }
+
     if (payloadOffset + chunkSize > bytes.byteLength) {
       break;
     }
@@ -256,11 +272,6 @@ export function rewriteWavSampleRate(buffer: ArrayBuffer, expansion: number): Bl
         );
       }
       fmtPayloadOffset = payloadOffset;
-    } else if (chunkId === 'data') {
-      if (chunkSize === 0) {
-        throw new TimeExpandAudioError('empty_audio', 'WAV file contains zero audio bytes');
-      }
-      sawDataChunk = true;
     }
 
     if (fmtPayloadOffset !== -1 && sawDataChunk) {
@@ -488,6 +499,10 @@ async function expandFlacAudio(
     throwIfAborted(signal);
 
     for (let off = 0; off < bytes.byteLength; off += FLAC_STREAM_CHUNK_BYTES) {
+      if (off > 0) {
+        // Yield a macrotask between synchronous WASM decode chunks so queued UI input/cancel handlers can run.
+        await yieldToEventLoop();
+      }
       throwIfAborted(signal);
       const chunk = bytes.subarray(off, Math.min(bytes.byteLength, off + FLAC_STREAM_CHUNK_BYTES));
       const decoded = await decoder.decode(chunk);
@@ -502,6 +517,9 @@ async function expandFlacAudio(
       );
     }
 
+    if (bytes.byteLength > FLAC_STREAM_CHUNK_BYTES) {
+      await yieldToEventLoop();
+    }
     throwIfAborted(signal);
     const flushed = await decoder.flush();
     if (flushed.sampleRate > 0) detectedSampleRate = flushed.sampleRate;

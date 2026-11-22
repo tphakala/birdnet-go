@@ -219,6 +219,34 @@ describe('timeExpandAudio', () => {
 
     const rf64Wav = buildTestWav({ sampleRate: 256000, rootTag: 'RF64' });
     expect(() => rewriteWavSampleRate(rf64Wav, 10)).toThrow('RF64 WAV containers');
+
+    const zeroPayloadWav = buildTestWav({ sampleRate: 256000, sampleCount: 0 });
+    expect(() => rewriteWavSampleRate(zeroPayloadWav, 10)).toThrow('zero audio bytes');
+  });
+
+  it('rewrites truncated and 0xFFFFFFFF unknown-size WAV data chunks', async () => {
+    // Declared dataSize exceeds actual file byte length (truncated capture).
+    const fullWav = buildTestWav({
+      sampleRate: 256000,
+      channels: 1,
+      bitsPerSample: 16,
+      sampleCount: 16,
+    });
+    const truncated = fullWav.slice(0, 44 + 8);
+    const truncOut = await rewriteWavSampleRate(truncated, 10).arrayBuffer();
+    expect(readWavHeaderSampleRate(truncOut)).toEqual({
+      sampleRate: 25600,
+      byteRate: 25600 * 2,
+    });
+
+    // Streaming writer 0xFFFFFFFF data chunk size placeholder with PCM payload.
+    const streaming = fullWav.slice(0);
+    new DataView(streaming).setUint32(40, 0xffffffff, true);
+    const streamOut = await rewriteWavSampleRate(streaming, 16).arrayBuffer();
+    expect(readWavHeaderSampleRate(streamOut)).toEqual({
+      sampleRate: 16000,
+      byteRate: 16000 * 2,
+    });
   });
 
   it('reads FLAC STREAMINFO metadata including rate, channels, bitDepth, and totalSamples', () => {
@@ -414,6 +442,43 @@ describe('timeExpandAudio', () => {
     await expect(expandMidAbort(src, 10, midController.signal)).rejects.toMatchObject({
       name: 'AbortError',
     });
+    expect(freeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('yields a macrotask between multi-chunk FLAC decodes so queued aborts cancel cleanly', async () => {
+    vi.resetModules();
+    const header = new Uint8Array(base64ToArrayBuffer(VALID_FLAC_256KHZ_B64));
+    // Construct >256 KiB payload preserving valid STREAMINFO (totalSamples = 128).
+    const multiChunk = new Uint8Array(300 * 1024);
+    multiChunk.set(header, 0);
+
+    const controller = new AbortController();
+    const decodeSpy = vi.fn(async () => {
+      // Schedule abort on a timer task (not microtask): it can only fire if a macrotask yield occurs before chunk 2.
+      setTimeout(() => controller.abort(), 0);
+      return {
+        channelData: [new Float32Array([0.1, -0.1])],
+        samplesDecoded: 2,
+        sampleRate: 256000,
+        bitDepth: 16,
+        errors: [],
+      };
+    });
+    const freeSpy = vi.fn();
+    vi.doMock('@wasm-audio-decoders/flac', () => ({
+      FLACDecoder: class {
+        ready = Promise.resolve();
+        decode = decodeSpy;
+        flush = vi.fn();
+        free = freeSpy;
+      },
+    }));
+
+    const { timeExpandAudio: expandYielded } = await import('./timeExpandAudio');
+    await expect(expandYielded(multiChunk.buffer, 10, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(decodeSpy).toHaveBeenCalledTimes(1);
     expect(freeSpy).toHaveBeenCalledTimes(1);
   });
 });
