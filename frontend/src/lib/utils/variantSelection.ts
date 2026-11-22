@@ -51,8 +51,9 @@ export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = '
 /**
  * The region slug an entry's variant picker is scoped to. Model families ship
  * different tile sets, so the page-wide slug (the detected or pinned region) may
- * name a tile this entry's family lacks; the server then resolves the same
- * coordinates to the family's own nearest tile. Returns the active slug when the
+ * name a tile this entry's family lacks; the server then resolves the station
+ * coordinates to the family's own nearest tile (RegionFamily.resolved, computed
+ * from the saved location, so an unsaved region change is not reflected). Returns the active slug when the
  * entry ships a variant for it, else the family's own resolution from `families`
  * ('' when that is the global model), and the active slug when the entry has no
  * family record. '' (no region) stays '' so a global scope is never narrowed.
