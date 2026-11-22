@@ -269,9 +269,11 @@ func TestDownloadModelFile_DoesNotFailOverOnUserCancel(t *testing.T) {
 // racing the response would, then answers 503, a status that is otherwise retryable.
 type cancelThenGatewayTransport struct {
 	cancel context.CancelCauseFunc
+	calls  *atomic.Int64
 }
 
 func (c cancelThenGatewayTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.calls.Add(1)
 	c.cancel(ErrOperationCancelled)
 	return &http.Response{
 		StatusCode: http.StatusServiceUnavailable,
@@ -292,13 +294,15 @@ func TestDownloadModelFile_DoesNotFailOverOnGatewayStatusRacingCancel(t *testing
 	defer cancel(nil)
 
 	orig := downloadHTTPClient
-	downloadHTTPClient = &http.Client{Transport: cancelThenGatewayTransport{cancel: cancel}}
+	var attempts atomic.Int64
+	downloadHTTPClient = &http.Client{Transport: cancelThenGatewayTransport{cancel: cancel, calls: &attempts}}
 	t.Cleanup(func() { downloadHTTPClient = orig })
 
 	err := mm.downloadModelFile(ctx, "m", "owner/repo", "model.onnx", dest, "", 0, "")
 
 	require.Error(t, err)
-	assert.Equal(t, int64(0), mirrorHits.Load(), "a gateway status racing a user cancel must not reach the mirror")
+	assert.Equal(t, int64(1), attempts.Load(), "a gateway status racing a user cancel must not be retried on the mirror")
+	assert.Equal(t, int64(0), mirrorHits.Load())
 }
 
 // TestGetHuggingFace_AttemptDeadlineFailsOver pins that a stalled host ended by a
