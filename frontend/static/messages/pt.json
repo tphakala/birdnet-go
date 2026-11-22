@@ -5422,6 +5422,17 @@
         "generationFailedStatus": "Falha na geração com status {status}",
         "spectrogramFailed": "Falha ao gerar o espectrograma"
       },
+      "defaults": {
+        "open": "Valores de reprodução predefinidos",
+        "title": "Valores de reprodução predefinidos",
+        "description": "Todos os clipes começam com estes valores. São guardados nesta estação e aplicam-se a todas as pessoas que a utilizam.",
+        "useCurrent": "Usar os valores atuais",
+        "useCurrentHelp": "Copia para os campos abaixo o ganho, a remoção de ruído e o filtro passa-alta definidos neste leitor. Nada é guardado até escolher Salvar alterações.",
+        "copied": "Valores atuais copiados. Escolha Salvar alterações para os manter.",
+        "saved": "Valores de reprodução predefinidos guardados",
+        "saveFailed": "Os valores de reprodução predefinidos não foram guardados. Nada foi alterado.",
+        "unavailable": "Não foi possível carregar as definições, pelo que os valores predefinidos não podem ser alterados aqui."
+      },
       "clipExtraction": {
         "selectRange": "Clique e arraste para selecionar um intervalo",
         "playSelection": "Reproduzir intervalo selecionado",

@@ -5422,6 +5422,17 @@
         "generationFailedStatus": "A generálás sikertelen, állapot: {status}",
         "spectrogramFailed": "A spektrogram generálása sikertelen"
       },
+      "defaults": {
+        "open": "Lejátszási alapértékek",
+        "title": "Lejátszási alapértékek",
+        "description": "Minden minta ezekkel az értékekkel indul. Ezen az állomáson tárolódnak, és mindenkire érvényesek, aki használja.",
+        "useCurrent": "Jelenlegi értékek használata",
+        "useCurrentHelp": "Az alábbi mezőkbe másolja a lejátszó jelenlegi erősítését, zajcsökkentését és felül átengedő szűrőjét. Semmi sem mentődik, amíg a Módosítások mentése gombot nem választja.",
+        "copied": "Jelenlegi értékek átmásolva. A megtartásukhoz válassza a Módosítások mentése gombot.",
+        "saved": "Lejátszási alapértékek mentve",
+        "saveFailed": "A lejátszási alapértékek nem lettek mentve. Semmi sem változott.",
+        "unavailable": "A beállításokat nem sikerült betölteni, ezért az alapértékek itt nem módosíthatók."
+      },
       "clipExtraction": {
         "selectRange": "Kattintson és húzza a tartomány kijelöléséhez",
         "playSelection": "Kijelölt tartomány lejátszása",

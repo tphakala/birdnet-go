@@ -5422,6 +5422,17 @@
         "generationFailedStatus": "Échec de la génération avec le statut {status}",
         "spectrogramFailed": "Échec de la génération du spectrogramme"
       },
+      "defaults": {
+        "open": "Valeurs de lecture par défaut",
+        "title": "Valeurs de lecture par défaut",
+        "description": "Chaque clip démarre avec ces valeurs. Elles sont enregistrées sur cette station et s'appliquent à toutes les personnes qui l'utilisent.",
+        "useCurrent": "Utiliser les valeurs actuelles",
+        "useCurrentHelp": "Copie dans les champs ci-dessous le gain, la réduction du bruit et le filtre passe-haut de ce lecteur. Rien n'est enregistré tant que vous n'avez pas choisi Enregistrer les modifications.",
+        "copied": "Valeurs actuelles copiées. Choisissez Enregistrer les modifications pour les conserver.",
+        "saved": "Valeurs de lecture par défaut enregistrées",
+        "saveFailed": "Les valeurs de lecture par défaut n'ont pas été enregistrées. Rien n'a été modifié.",
+        "unavailable": "Les paramètres n'ont pas pu être chargés, les valeurs par défaut ne peuvent donc pas être modifiées ici."
+      },
       "clipExtraction": {
         "selectRange": "Cliquez et faites glisser pour sélectionner une plage",
         "playSelection": "Lire la plage sélectionnée",

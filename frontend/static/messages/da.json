@@ -5422,6 +5422,17 @@
         "generationFailedStatus": "Generering mislykkedes med status {status}",
         "spectrogramFailed": "Kunne ikke generere spektrogram"
       },
+      "defaults": {
+        "open": "Standarder for afspilning",
+        "title": "Standarder for afspilning",
+        "description": "Alle klip starter med disse værdier. De gemmes på denne station og gælder for alle, der bruger den.",
+        "useCurrent": "Brug aktuelle værdier",
+        "useCurrentHelp": "Kopierer den forstærkning, støjreduktion og det højpasfilter, som denne afspiller er indstillet til, ind i felterne nedenfor. Intet gemmes, før du vælger Gem ændringer.",
+        "copied": "Aktuelle værdier kopieret. Vælg Gem ændringer for at beholde dem.",
+        "saved": "Standarder for afspilning gemt",
+        "saveFailed": "Standarderne for afspilning blev ikke gemt. Intet blev ændret.",
+        "unavailable": "Indstillingerne kunne ikke indlæses, så standarderne kan ikke ændres her."
+      },
       "clipExtraction": {
         "selectRange": "Klik og træk for at vælge et interval",
         "playSelection": "Afspil valgt interval",

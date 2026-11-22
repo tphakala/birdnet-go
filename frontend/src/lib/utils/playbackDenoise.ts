@@ -27,13 +27,34 @@ interface PlaybackDenoiseSources {
  * form edits, so it agrees with what the server applies.
  */
 export function getPlaybackDenoiseDefault(): string {
-  if (get(settingsDataLoaded)) {
-    const realtime: PlaybackDenoiseSources | undefined = get(settingsStore).originalData.realtime;
-    if (realtime?.audio?.export?.denoise?.enabled) return '';
-    const playback = realtime?.dashboard?.playbackDenoise;
-    return playback?.enabled && isDenoisePresetId(playback.strength) ? playback.strength : '';
-  }
-  return appState.playbackDenoise || '';
+  return playbackDenoiseDefaultOf(
+    get(settingsDataLoaded),
+    get(settingsStore).originalData.realtime,
+    appState.playbackDenoise
+  );
+}
+
+/**
+ * The stored playback denoise choice: a preset id, or '' when it is off or not a
+ * known preset. Export-stage precedence is not applied.
+ */
+export function storedPlaybackDenoise(playback: DenoiseSettings | undefined): string {
+  return playback?.enabled && isDenoisePresetId(playback.strength) ? playback.strength : '';
+}
+
+/**
+ * getPlaybackDenoiseDefault from explicit inputs, for a component that reads
+ * the stores reactively: the saved settings once they are loaded, else the
+ * value /app/config gave a guest.
+ */
+export function playbackDenoiseDefaultOf(
+  loaded: boolean,
+  realtime: PlaybackDenoiseSources | undefined,
+  guestPreset: string
+): string {
+  if (!loaded) return guestPreset;
+  if (realtime?.audio?.export?.denoise?.enabled) return '';
+  return storedPlaybackDenoise(realtime?.dashboard?.playbackDenoise);
 }
 
 /**

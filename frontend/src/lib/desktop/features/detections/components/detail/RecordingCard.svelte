@@ -17,7 +17,9 @@
   import type { PlaybackControls } from '$lib/utils/audio';
   import { isAuthenticated } from '$lib/utils/auth';
   import type { ShortcutHint } from '$lib/utils/keyboard';
-  import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
+  import { audioUrlFor, playbackDenoiseDefaultOf } from '$lib/utils/playbackDenoise';
+  import { appState } from '$lib/stores/appState.svelte';
+  import { settingsDataLoaded, settingsStore } from '$lib/stores/settings';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import DetailCard from './DetailCard.svelte';
   import { formatDecimal } from './detailFormat';
@@ -39,6 +41,19 @@
 
   // Signed-in users can save a range of the clip; the hint tells them how.
   let clipExtractionEnabled = $derived($isAuthenticated);
+
+  // The download carries the playback denoise default, read reactively so a
+  // default saved on this page (the player's playback defaults dialog) updates it.
+  let downloadUrl = $derived(
+    audioUrlFor(
+      detection.id,
+      playbackDenoiseDefaultOf(
+        $settingsDataLoaded,
+        $settingsStore.originalData.realtime,
+        appState.playbackDenoise
+      )
+    )
+  );
 
   let captureWindow = $derived.by(() => {
     // On the detection's own offset, like every other clock on the page.
@@ -125,11 +140,7 @@
       </div>
 
       {#if detection.clipName}
-        <a
-          href={audioUrlFor(detection.id, getPlaybackDenoiseDefault())}
-          download
-          class="dd-rec-download focus-ring"
-        >
+        <a href={downloadUrl} download class="dd-rec-download focus-ring">
           <Download class="size-4" />
           <span>{t('media.audio.download')}<span class="sr-only">, {speciesName}</span></span>
         </a>

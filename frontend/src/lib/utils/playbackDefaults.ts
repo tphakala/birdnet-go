@@ -8,9 +8,22 @@
  */
 
 import { get } from 'svelte/store';
+import { t, type TranslationKey } from '$lib/i18n';
 import { appState } from '$lib/stores/appState.svelte';
-import { settingsDataLoaded, settingsStore } from '$lib/stores/settings';
-import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
+import {
+  settingsDataLoaded,
+  settingsStore,
+  type Dashboard,
+  type DenoiseSettings,
+  type RealtimeSettings,
+} from '$lib/stores/settings';
+import {
+  DEFAULT_DENOISE_PRESET,
+  DENOISE_OPTIONS,
+  isDenoisePresetId,
+  type DenoiseOption,
+} from '$lib/utils/denoisePresets';
+import { getPlaybackDenoiseDefault, storedPlaybackDenoise } from '$lib/utils/playbackDenoise';
 
 /** Lowest default gain in dB (the player toolbar's lower bound, `conf.MinPlaybackGain`). */
 export const PLAYBACK_GAIN_MIN_DB = -12;
@@ -97,16 +110,139 @@ export function highPassToStored(hz: unknown): number {
  * playback default, export-stage denoise precedence included.
  */
 export function getPlaybackDefaults(): PlaybackDefaultValues {
-  const dashboard = get(settingsDataLoaded)
-    ? get(settingsStore).originalData.realtime?.dashboard
-    : undefined;
-  const gainDb = dashboard ? dashboard.defaultAudioGain : appState.playbackDefaults.gainDb;
-  const highPassHz = dashboard
-    ? dashboard.playback?.highPassHz
-    : appState.playbackDefaults.highPassHz;
+  const denoise = getPlaybackDenoiseDefault();
+  if (get(settingsDataLoaded)) {
+    return { ...readPlaybackDefaults(get(settingsStore).originalData.realtime), denoise };
+  }
   return {
-    gainDb: clampPlaybackGain(gainDb),
-    denoise: getPlaybackDenoiseDefault(),
-    highPassHz: highPassFromStored(highPassHz),
+    gainDb: clampPlaybackGain(appState.playbackDefaults.gainDb),
+    denoise,
+    highPassHz: highPassFromStored(appState.playbackDefaults.highPassHz),
   };
+}
+
+/** A default gain as text in the UI's unit ("+6 dB", "-6.5 dB"). */
+export function formatPlaybackGainLabel(db: number): string {
+  return formatPlaybackGain(db, t('settings.userInterface.audioPlayback.defaultGainUnit'));
+}
+
+/** A cutoff as text: the floor reads "Off", any other value carries the unit ("300 Hz"). */
+export function formatPlaybackHighPass(hz: number): string {
+  return hz <= PLAYBACK_HIGH_PASS_MIN_HZ
+    ? t('settings.userInterface.audioPlayback.highPassOff')
+    : `${hz} ${t('settings.userInterface.audioPlayback.highPassUnit')}`;
+}
+
+interface PlaybackDefaultItemBase {
+  labelKey: TranslationKey;
+  helpKey: TranslationKey;
+}
+
+/**
+ * One row of the playback defaults dialog. The dialog renders one control per
+ * `kind`, so a new default is a new entry here (plus its field in
+ * PlaybackDefaultValues, its line in readPlaybackDefaults, changedPlaybackDefaults
+ * and playbackDefaultsPatch, and its stored key), not a layout change.
+ */
+export type PlaybackDefaultItem =
+  | (PlaybackDefaultItemBase & {
+      kind: 'slider';
+      key: 'gainDb' | 'highPassHz';
+      min: number;
+      max: number;
+      step: number;
+      /** The value as the slider shows and announces it. */
+      format: (value: number) => string;
+    })
+  | (PlaybackDefaultItemBase & {
+      kind: 'select';
+      key: 'denoise';
+      options: readonly DenoiseOption[];
+    });
+
+/** The playback defaults, in the order the dialog shows them. */
+export const PLAYBACK_DEFAULT_ITEMS: readonly PlaybackDefaultItem[] = [
+  {
+    kind: 'slider',
+    key: 'gainDb',
+    labelKey: 'settings.userInterface.audioPlayback.defaultGain',
+    helpKey: 'settings.userInterface.audioPlayback.defaultGainHelpText',
+    min: PLAYBACK_GAIN_MIN_DB,
+    max: PLAYBACK_GAIN_MAX_DB,
+    step: PLAYBACK_GAIN_STEP_DB,
+    format: formatPlaybackGainLabel,
+  },
+  {
+    kind: 'select',
+    key: 'denoise',
+    labelKey: 'settings.userInterface.audioPlayback.denoiseLabel',
+    helpKey: 'settings.userInterface.audioPlayback.denoiseHelpText',
+    options: DENOISE_OPTIONS,
+  },
+  {
+    kind: 'slider',
+    key: 'highPassHz',
+    labelKey: 'settings.userInterface.audioPlayback.highPassLabel',
+    helpKey: 'settings.userInterface.audioPlayback.highPassHelpText',
+    min: PLAYBACK_HIGH_PASS_MIN_HZ,
+    max: PLAYBACK_HIGH_PASS_MAX_HZ,
+    step: PLAYBACK_HIGH_PASS_STEP_HZ,
+    format: formatPlaybackHighPass,
+  },
+];
+
+/**
+ * The saved defaults as the values the dialog edits, snapped to the sliders.
+ * The denoise value is the stored choice: export-stage denoise precedence is not
+ * applied here, because the dialog shows what is stored and explains the
+ * precedence beside it.
+ */
+export function readPlaybackDefaults(
+  realtime: RealtimeSettings | undefined
+): PlaybackDefaultValues {
+  const dashboard = realtime?.dashboard;
+  return {
+    gainDb: clampPlaybackGain(dashboard?.defaultAudioGain),
+    denoise: storedPlaybackDenoise(dashboard?.playbackDenoise),
+    highPassHz: highPassFromStored(dashboard?.playback?.highPassHz),
+  };
+}
+
+/** The keys of `draft` whose value differs from `saved`, with the draft's values. */
+export function changedPlaybackDefaults(
+  draft: PlaybackDefaultValues,
+  saved: PlaybackDefaultValues
+): Partial<PlaybackDefaultValues> {
+  const changed: Partial<PlaybackDefaultValues> = {};
+  if (draft.gainDb !== saved.gainDb) changed.gainDb = draft.gainDb;
+  if (draft.denoise !== saved.denoise) changed.denoise = draft.denoise;
+  if (draft.highPassHz !== saved.highPassHz) changed.highPassHz = draft.highPassHz;
+  return changed;
+}
+
+/**
+ * The dashboard PATCH body for the changed keys only. Turning denoise off keeps
+ * the saved strength, so the Settings page still shows it. `playback` is sent
+ * whole, because the store merges a section patch one level deep.
+ */
+export function playbackDefaultsPatch(
+  changed: Partial<PlaybackDefaultValues>,
+  saved: Partial<Dashboard> | undefined
+): Partial<Dashboard> {
+  const patch: Partial<Dashboard> = {};
+  if (changed.gainDb !== undefined) {
+    patch.defaultAudioGain = clampPlaybackGain(changed.gainDb);
+  }
+  if (changed.denoise !== undefined) {
+    const savedStrength = saved?.playbackDenoise?.strength;
+    const keptStrength = isDenoisePresetId(savedStrength) ? savedStrength : DEFAULT_DENOISE_PRESET;
+    const denoise: DenoiseSettings = isDenoisePresetId(changed.denoise)
+      ? { enabled: true, strength: changed.denoise }
+      : { enabled: false, strength: keptStrength };
+    patch.playbackDenoise = denoise;
+  }
+  if (changed.highPassHz !== undefined) {
+    patch.playback = { ...saved?.playback, highPassHz: highPassToStored(changed.highPassHz) };
+  }
+  return patch;
 }

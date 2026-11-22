@@ -5,7 +5,7 @@
   and export functionality. Inspired by iZotope RX toolbar layout.
 
   The bar wraps on its own content: a transport row (play, skip, loop, time, seek) and a
-  processing row (selection, gain, denoise, normalize, export) share one line when there
+  processing row (selection, gain, denoise, normalize, export, defaults) share one line when there
   is room and stack otherwise, and each row wraps again inside a narrow host.
 -->
 <script lang="ts">
@@ -20,6 +20,7 @@
     AudioWaveform,
     Loader2,
     ChevronDown,
+    Settings,
   } from '@lucide/svelte';
   import type { Action } from 'svelte/action';
   import { dropdown } from '$lib/utils/transitions';
@@ -83,6 +84,9 @@
 
     /** Key hint for the play button: sets aria-keyshortcuts and names the key in the title */
     playShortcut?: ShortcutHint | null;
+
+    /** Opens the playback defaults dialog; without it the defaults button is not shown */
+    onOpenDefaults?: () => void;
   }
 
   let {
@@ -114,6 +118,7 @@
     onNormalizeToggle,
     onExport,
     playShortcut = null,
+    onOpenDefaults,
   }: Props = $props();
 
   let progressBarEl: HTMLDivElement;
@@ -466,44 +471,59 @@
       {/if}
     </button>
 
-    <div class="export-dropdown">
-      <button
-        class="toolbar-btn export-btn"
-        class:error={extractionError !== null}
-        disabled={isExtracting}
-        onclick={() => (showExportMenu = !showExportMenu)}
-        aria-label={t('components.audioPlayer.processing.export')}
-        title={extractionError ?? ''}
-        aria-expanded={showExportMenu}
-        aria-haspopup="true"
-      >
-        {#if isExtracting}
-          <Loader2 size={14} class="animate-spin" />
-        {:else}
-          <Download size={14} />
-        {/if}
-        <span>{t('components.audioPlayer.processing.export')}</span>
-        <ChevronDown size={12} />
-      </button>
-      {#if extractionError}
-        <span class="export-error" role="alert">{extractionError}</span>
-      {/if}
-      {#if showExportMenu}
-        <div
-          class="export-menu"
-          use:anchorMenu={'end'}
-          in:dropdown={{ y: -4, duration: 120 }}
-          out:dropdown={{ y: -4, duration: 80 }}
+    <!-- Export and the defaults button wrap as one item, so the button never sits alone on a line -->
+    <div class="toolbar-tail">
+      <div class="export-dropdown">
+        <button
+          class="toolbar-btn export-btn"
+          class:error={extractionError !== null}
+          disabled={isExtracting}
+          onclick={() => (showExportMenu = !showExportMenu)}
+          aria-label={t('components.audioPlayer.processing.export')}
+          title={extractionError ?? ''}
+          aria-expanded={showExportMenu}
+          aria-haspopup="true"
         >
-          <button class="export-option" onclick={() => handleExport('original')}>
-            {t('components.audioPlayer.processing.exportOriginal')}
-          </button>
-          {#each exportFormats as fmt (fmt.id)}
-            <button class="export-option" onclick={() => handleExport(fmt.id)}>
-              {fmt.label}
+          {#if isExtracting}
+            <Loader2 size={14} class="animate-spin" />
+          {:else}
+            <Download size={14} />
+          {/if}
+          <span>{t('components.audioPlayer.processing.export')}</span>
+          <ChevronDown size={12} />
+        </button>
+        {#if extractionError}
+          <span class="export-error" role="alert">{extractionError}</span>
+        {/if}
+        {#if showExportMenu}
+          <div
+            class="export-menu"
+            use:anchorMenu={'end'}
+            in:dropdown={{ y: -4, duration: 120 }}
+            out:dropdown={{ y: -4, duration: 80 }}
+          >
+            <button class="export-option" onclick={() => handleExport('original')}>
+              {t('components.audioPlayer.processing.exportOriginal')}
             </button>
-          {/each}
-        </div>
+            {#each exportFormats as fmt (fmt.id)}
+              <button class="export-option" onclick={() => handleExport(fmt.id)}>
+                {fmt.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+      {#if onOpenDefaults}
+        <button
+          type="button"
+          class="toolbar-btn"
+          onclick={onOpenDefaults}
+          aria-label={t('components.audioPlayer.defaults.open')}
+          title={t('components.audioPlayer.defaults.open')}
+          aria-haspopup="dialog"
+        >
+          <Settings size={14} />
+        </button>
       {/if}
     </div>
   </div>
@@ -668,6 +688,18 @@
   .control-value {
     font-variant-numeric: tabular-nums;
     min-width: 3rem;
+  }
+
+  /* Export and the defaults button wrap as one item. Not .toolbar-group: its nowrap would
+     stop the export error text from wrapping, and flex-start keeps the button level with
+     Export when that text shows. The gap is the row gap, so the pair does not read as a
+     split button. */
+  .toolbar-tail {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: flex-start;
+    gap: 0.5rem;
+    min-width: 0;
   }
 
   .denoise-dropdown,

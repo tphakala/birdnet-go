@@ -2,12 +2,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { get } from 'svelte/store';
 import { appState } from '$lib/stores/appState.svelte';
 import { settingsStore } from '$lib/stores/settings';
+import type { Dashboard, RealtimeSettings } from '$lib/stores/settings';
 import {
+  PLAYBACK_DEFAULT_ITEMS,
+  changedPlaybackDefaults,
   clampPlaybackGain,
   formatPlaybackGain,
+  formatPlaybackHighPass,
   getPlaybackDefaults,
   highPassFromStored,
   highPassToStored,
+  playbackDefaultsPatch,
+  readPlaybackDefaults,
+  type PlaybackDefaultValues,
 } from './playbackDefaults';
 
 describe('clampPlaybackGain', () => {
@@ -161,5 +168,131 @@ describe('getPlaybackDefaults', () => {
     loadSettings({ defaultAudioGain: 0, playback: { highPassHz: 0 } });
 
     expect(getPlaybackDefaults().highPassHz).toBe(20);
+  });
+});
+
+describe('formatPlaybackHighPass', () => {
+  it.each([
+    { name: 'the floor', hz: 20, want: 'settings.userInterface.audioPlayback.highPassOff' },
+    { name: 'below the floor', hz: 0, want: 'settings.userInterface.audioPlayback.highPassOff' },
+    {
+      name: 'an active cutoff',
+      hz: 300,
+      want: '300 settings.userInterface.audioPlayback.highPassUnit',
+    },
+  ])('formats $name', ({ hz, want }) => {
+    expect(formatPlaybackHighPass(hz)).toBe(want);
+  });
+});
+
+describe('PLAYBACK_DEFAULT_ITEMS', () => {
+  it('lists gain, denoise and high-pass, each slider with its own format', () => {
+    expect(PLAYBACK_DEFAULT_ITEMS.map(item => item.key)).toEqual([
+      'gainDb',
+      'denoise',
+      'highPassHz',
+    ]);
+    const formatted = PLAYBACK_DEFAULT_ITEMS.flatMap(item =>
+      item.kind === 'slider' ? [item.format(item.key === 'gainDb' ? -6.5 : 20)] : []
+    );
+    expect(formatted).toEqual([
+      '-6.5 settings.userInterface.audioPlayback.defaultGainUnit',
+      'settings.userInterface.audioPlayback.highPassOff',
+    ]);
+  });
+});
+
+describe('readPlaybackDefaults', () => {
+  // Only the dashboard section is read; the rest of the realtime settings is not needed here.
+  const realtime = (dashboard: Partial<Dashboard>) =>
+    ({ dashboard }) as unknown as RealtimeSettings;
+
+  it('starts from zero gain, off and the floor when nothing is stored', () => {
+    expect(readPlaybackDefaults(undefined)).toEqual({ gainDb: 0, denoise: '', highPassHz: 20 });
+    expect(readPlaybackDefaults(realtime({}))).toEqual({ gainDb: 0, denoise: '', highPassHz: 20 });
+  });
+
+  it('reads the stored values, snapped to the sliders', () => {
+    expect(
+      readPlaybackDefaults(
+        realtime({
+          defaultAudioGain: -6.5,
+          playbackDenoise: { enabled: true, strength: 'heavy' },
+          playback: { highPassHz: 333 },
+        })
+      )
+    ).toEqual({ gainDb: -6.5, denoise: 'heavy', highPassHz: 330 });
+  });
+
+  it('reads a disabled or unknown denoise strength as off', () => {
+    expect(
+      readPlaybackDefaults(realtime({ playbackDenoise: { enabled: false, strength: 'heavy' } }))
+        .denoise
+    ).toBe('');
+    expect(
+      readPlaybackDefaults(realtime({ playbackDenoise: { enabled: true, strength: 'loud' } }))
+        .denoise
+    ).toBe('');
+  });
+
+  it('shows the stored choice even while export denoise is on', () => {
+    const settings = {
+      dashboard: { playbackDenoise: { enabled: true, strength: 'light' } },
+      audio: { export: { denoise: { enabled: true } } },
+    } as unknown as RealtimeSettings;
+    expect(readPlaybackDefaults(settings).denoise).toBe('light');
+  });
+});
+
+describe('changedPlaybackDefaults', () => {
+  const saved: PlaybackDefaultValues = { gainDb: 0, denoise: '', highPassHz: 20 };
+
+  it('is empty when nothing differs', () => {
+    expect(changedPlaybackDefaults({ ...saved }, saved)).toEqual({});
+  });
+
+  it('lists only the keys that differ', () => {
+    expect(changedPlaybackDefaults({ ...saved, denoise: 'light', highPassHz: 300 }, saved)).toEqual(
+      { denoise: 'light', highPassHz: 300 }
+    );
+  });
+});
+
+describe('playbackDefaultsPatch', () => {
+  const saved: Partial<Dashboard> = {
+    defaultAudioGain: 6,
+    playbackDenoise: { enabled: true, strength: 'heavy' },
+    playback: { highPassHz: 300 },
+  };
+
+  it('sends only the changed keys', () => {
+    expect(playbackDefaultsPatch({ gainDb: -6.5 }, saved)).toEqual({ defaultAudioGain: -6.5 });
+  });
+
+  it('keeps the saved strength when denoise is turned off', () => {
+    expect(playbackDefaultsPatch({ denoise: '' }, saved)).toEqual({
+      playbackDenoise: { enabled: false, strength: 'heavy' },
+    });
+  });
+
+  it('falls back to the default strength when none is saved', () => {
+    expect(playbackDefaultsPatch({ denoise: '' }, undefined)).toEqual({
+      playbackDenoise: { enabled: false, strength: 'light-medium' },
+    });
+  });
+
+  it('turns denoise on with the chosen strength', () => {
+    expect(playbackDefaultsPatch({ denoise: 'light' }, saved)).toEqual({
+      playbackDenoise: { enabled: true, strength: 'light' },
+    });
+  });
+
+  it('sends the playback object whole and stores the floor as off', () => {
+    expect(playbackDefaultsPatch({ highPassHz: 20 }, saved)).toEqual({
+      playback: { highPassHz: 0 },
+    });
+    expect(playbackDefaultsPatch({ highPassHz: 500 }, undefined)).toEqual({
+      playback: { highPassHz: 500 },
+    });
   });
 });

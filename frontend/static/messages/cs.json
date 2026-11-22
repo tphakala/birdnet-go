@@ -5422,6 +5422,17 @@
         "generationFailedStatus": "Generování selhalo se stavem {status}",
         "spectrogramFailed": "Spektrogram se nepodařilo vygenerovat"
       },
+      "defaults": {
+        "open": "Výchozí nastavení přehrávání",
+        "title": "Výchozí nastavení přehrávání",
+        "description": "Každý klip začíná s těmito hodnotami. Ukládají se na této stanici a platí pro každého, kdo ji používá.",
+        "useCurrent": "Použít aktuální hodnoty",
+        "useCurrentHelp": "Zkopíruje zesílení, odšumění a horní propust, na které je tento přehrávač nastaven, do polí níže. Nic se neuloží, dokud nezvolíte Uložit změny.",
+        "copied": "Aktuální hodnoty zkopírovány. Pro jejich uchování zvolte Uložit změny.",
+        "saved": "Výchozí nastavení přehrávání uloženo",
+        "saveFailed": "Výchozí nastavení přehrávání nebylo uloženo. Nic se nezměnilo.",
+        "unavailable": "Nastavení se nepodařilo načíst, proto zde nelze výchozí hodnoty změnit."
+      },
       "clipExtraction": {
         "selectRange": "Klikněte a tažením vyberte rozsah",
         "playSelection": "Přehrát vybraný rozsah",

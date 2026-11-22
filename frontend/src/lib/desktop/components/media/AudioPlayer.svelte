@@ -37,6 +37,8 @@
   import AudibleBatsButton from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
   import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import AudioToolbar from './AudioToolbar.svelte';
+  import PlaybackDefaultsModal from '$lib/desktop/components/modals/PlaybackDefaultsModal.svelte';
+  import { isAuthenticated } from '$lib/utils/auth';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -100,12 +102,9 @@
     PLAYBACK_HIGH_PASS_MIN_HZ,
     clampToRange,
     getPlaybackDefaults,
+    type PlaybackDefaultValues,
   } from '$lib/utils/playbackDefaults';
-  import {
-    audioUrlFor,
-    getPlaybackDenoiseDefault,
-    swapSourceKeepingPosition,
-  } from '$lib/utils/playbackDenoise';
+  import { audioUrlFor, swapSourceKeepingPosition } from '$lib/utils/playbackDenoise';
 
   const logger = loggers.audio;
 
@@ -313,12 +312,13 @@
 
   // Control state
   // Read the persistent defaults once (not reactive: changing a setting while a
-  // player is mounted should not cause gain or the filter to jump)
+  // player is mounted should not cause gain or the filter to jump). A save from
+  // this player's playback defaults dialog updates them (applySavedDefaults).
   const playbackDefaults = getPlaybackDefaults();
-  const defaultGainDb = playbackDefaults.gainDb;
-  const defaultFilterFreq = playbackDefaults.highPassHz;
-  let gainValue = $state(defaultGainDb); // dB
-  let filterFreq = $state(defaultFilterFreq); // Hz
+  let defaultGainDb = $state(playbackDefaults.gainDb);
+  let defaultFilterFreq = $state(playbackDefaults.highPassHz);
+  let gainValue = $state(playbackDefaults.gainDb); // dB
+  let filterFreq = $state(playbackDefaults.highPassHz); // Hz
   let playbackSpeed = $state(1.0); // Playback rate multiplier
   let showControls = $state(true); // Will be set based on width
   let isMobile = $state(false);
@@ -344,9 +344,10 @@
 
   // Processing state
   // The playback denoise default, read once when the player mounts like the default
-  // gain. The toolbar starts on it, and it is what the first play loads.
-  const defaultDenoise = getPlaybackDenoiseDefault();
-  let processingDenoise = $state(defaultDenoise);
+  // gain (and updated by a save from this player's defaults dialog). The toolbar
+  // starts on it, and it is what the first play loads.
+  let defaultDenoise = $state(playbackDefaults.denoise);
+  let processingDenoise = $state(playbackDefaults.denoise);
   let processingNormalize = $state(false);
   let isProcessing = $state(false);
   let processedAudioUrl = $state<string | null>(null);
@@ -967,10 +968,21 @@
     // first so its stale copy never sits beside the new source. A copy that is still
     // being generated carries the old toolbar state too, so its request is aborted.
     if (audibleBats.active || audibleBats.generating) audibleBats.disable();
+    // A request still in flight carries the old state: end it now, not after the
+    // debounce, so the latest change wins and an older result never lands beside it.
+    abortProcessing();
     if (processDebounceTimer) clearTimeout(processDebounceTimer);
     processDebounceTimer = setTimeout(() => {
       processAudio();
     }, PROCESS_DEBOUNCE_MS);
+  }
+
+  // Ends the processing request in flight, if any, and its busy state.
+  function abortProcessing() {
+    if (!processAbortController) return;
+    processAbortController.abort();
+    processAbortController = null;
+    isProcessing = false;
   }
 
   // Loads a processing result into the element at the same position. An active
@@ -1618,6 +1630,54 @@
       audioNodes.highPass.frequency.value = filterFreq;
     }
   };
+
+  // Playback defaults dialog: mounted on its first open and kept, so Modal sees the
+  // pressed gear as its opener and returns focus there on close
+  let defaultsMounted = $state(false);
+  let defaultsOpen = $state(false);
+  // The clip the dialog was opened for
+  let defaultsClipUrl = $state('');
+
+  function openDefaults() {
+    defaultsMounted = true;
+    defaultsClipUrl = audioUrl;
+    defaultsOpen = true;
+  }
+
+  // The dialog belongs to this clip and its toolbar: close it when the player moves
+  // to another clip (the Search player is reused) or the toolbar or its gear goes
+  // away, so it does not open again by itself when they come back
+  $effect(() => {
+    if (
+      defaultsOpen &&
+      (audioUrl !== defaultsClipUrl || !enableClipExtraction || !$isAuthenticated)
+    ) {
+      defaultsOpen = false;
+    }
+  });
+
+  // After a save the saved items become this player's defaults (the overlay's Reset
+  // and modified dot, the denoise default's GET URL) and the player takes them
+  // through the same handlers the toolbar controls call; items that did not change
+  // keep their session value
+  function applySavedDefaults(changed: Partial<PlaybackDefaultValues>) {
+    if (changed.gainDb !== undefined) {
+      defaultGainDb = changed.gainDb;
+      updateGain(changed.gainDb);
+    }
+    if (changed.highPassHz !== undefined) {
+      defaultFilterFreq = changed.highPassHz;
+      updateFilter(changed.highPassHz);
+    }
+    if (changed.denoise !== undefined) {
+      defaultDenoise = changed.denoise;
+      denoiseFailed = false;
+      spectrogramFellBackId = null;
+      // Already playing that preset (Use current values, then Save): reprocessing
+      // the same preset would only pause playback
+      if (processingDenoise !== changed.denoise) handleDenoiseChange(changed.denoise);
+    }
+  }
 
   // Speed control
   const handleSpeedChange = (newSpeed: number) => {
@@ -2284,15 +2344,12 @@
           clearTimeout(processDebounceTimer);
           processDebounceTimer = null;
         }
-        if (processAbortController) {
-          processAbortController.abort();
-          processAbortController = null;
-        }
+        abortProcessing();
         if (processedAudioUrl) {
           URL.revokeObjectURL(processedAudioUrl);
           processedAudioUrl = null;
         }
-        processingDenoise = defaultDenoise;
+        processingDenoise = untrack(() => defaultDenoise);
         processingNormalize = false;
         isProcessing = false;
         // The new detection starts from its stored clip: its first play switches to
@@ -3043,7 +3100,16 @@
     onNormalizeToggle={handleNormalizeToggle}
     onExport={handleToolbarExport}
     {playShortcut}
+    onOpenDefaults={$isAuthenticated ? openDefaults : undefined}
   />
+  {#if defaultsMounted}
+    <PlaybackDefaultsModal
+      isOpen={defaultsOpen}
+      current={{ gainDb: gainValue, denoise: processingDenoise, highPassHz: filterFreq }}
+      onClose={() => (defaultsOpen = false)}
+      onSaved={applySavedDefaults}
+    />
+  {/if}
 {/if}
 
 <style>
