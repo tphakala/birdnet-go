@@ -38,7 +38,7 @@ Source: BSD-3-Clause
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.24.1/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.24.4/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
@@ -128,7 +128,7 @@ Source: Apache-2.0
 
 ### github.com/go-sql-driver/mysql
 
-License: https://github.com/go-sql-driver/mysql/blob/v1.10.1/LICENSE
+License: https://github.com/go-sql-driver/mysql/blob/v1.10.2/LICENSE
 Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
@@ -213,7 +213,7 @@ Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.16.5/LICENSE
+License: https://github.com/labstack/echo/blob/v4.16.6/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
@@ -261,9 +261,14 @@ Source: MIT
 License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.24.0/pkg/color/LICENSE.md
 Source: MIT
 
+### github.com/pandatix/go-abnf
+
+License: https://github.com/pandatix/go-abnf/blob/v0.5.5/LICENSE
+Source: MIT
+
 ### github.com/pb33f/go-yaml
 
-License: https://github.com/pb33f/go-yaml/blob/v0.1.1/LICENSE
+License: https://github.com/pb33f/go-yaml/blob/v0.2.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/pb33f/ordered-map/v2
@@ -293,7 +298,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/common
 
-License: https://github.com/prometheus/common/blob/v0.72.1/LICENSE
+License: https://github.com/prometheus/common/blob/v0.74.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/prometheus/procfs
@@ -508,7 +513,7 @@ Source: MIT
 
 ### go.opentelemetry.io/auto/sdk
 
-License: https://github.com/open-telemetry/opentelemetry-go-instrumentation/blob/sdk/v1.2.1/sdk/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go-instrumentation/blob/sdk/v1.2.2/sdk/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
@@ -558,7 +563,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.62.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.63.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -593,12 +598,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.315.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.316.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/d1e00e9f33ab/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/c8830f628b3f/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
