@@ -270,10 +270,16 @@ func TestDownloadModelFile_DoesNotFailOverOnUserCancel(t *testing.T) {
 type cancelThenGatewayTransport struct {
 	cancel context.CancelCauseFunc
 	calls  *atomic.Int64
+	// mirrorHost, when set, is the host whose requests are also counted in mirrorCalls.
+	mirrorHost  string
+	mirrorCalls *atomic.Int64
 }
 
 func (c cancelThenGatewayTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	c.calls.Add(1)
+	if c.mirrorCalls != nil && req.URL.Host == c.mirrorHost {
+		c.mirrorCalls.Add(1)
+	}
 	c.cancel(ErrOperationCancelled)
 	return &http.Response{
 		StatusCode: http.StatusServiceUnavailable,
@@ -284,25 +290,28 @@ func (c cancelThenGatewayTransport) RoundTrip(req *http.Request) (*http.Response
 
 // TestDownloadModelFile_DoesNotFailOverOnGatewayStatusRacingCancel pins the
 // cancelled-context guard of the failover loop: a 503 that arrives with the
-// cancel is retryable on its own, and must still not reach the mirror.
+// cancel is retryable on its own, and must still not reach the mirror. It replaces
+// the package-global downloadHTTPClient, so it must stay serial (no t.Parallel) and
+// restores the client when it ends.
 func TestDownloadModelFile_DoesNotFailOverOnGatewayStatusRacingCancel(t *testing.T) {
-	primaryURL, _ := countingServer(t, http.StatusOK, nil)
-	mirrorURL, mirrorHits := countingServer(t, http.StatusOK, []byte("mirror-bytes"))
-	mm, _ := newFailoverManager(t, []string{primaryURL, mirrorURL})
+	const primary, mirror = "primary.invalid", "mirror.invalid"
+	mm, _ := newFailoverManager(t, []string{"http://" + primary, "http://" + mirror})
 	dest := filepath.Join(t.TempDir(), "model.onnx")
 	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(nil)
 
 	orig := downloadHTTPClient
-	var attempts atomic.Int64
-	downloadHTTPClient = &http.Client{Transport: cancelThenGatewayTransport{cancel: cancel, calls: &attempts}}
+	var attempts, mirrorAttempts atomic.Int64
+	downloadHTTPClient = &http.Client{Transport: cancelThenGatewayTransport{
+		cancel: cancel, calls: &attempts, mirrorHost: mirror, mirrorCalls: &mirrorAttempts,
+	}}
 	t.Cleanup(func() { downloadHTTPClient = orig })
 
 	err := mm.downloadModelFile(ctx, "m", "owner/repo", "model.onnx", dest, "", 0, "")
 
 	require.Error(t, err)
-	assert.Equal(t, int64(1), attempts.Load(), "a gateway status racing a user cancel must not be retried on the mirror")
-	assert.Equal(t, int64(0), mirrorHits.Load())
+	assert.Equal(t, int64(1), attempts.Load(), "a gateway status racing a user cancel must not be retried")
+	assert.Equal(t, int64(0), mirrorAttempts.Load(), "the mirror host must not be asked")
 }
 
 // TestGetHuggingFace_AttemptDeadlineFailsOver pins that a stalled host ended by a
