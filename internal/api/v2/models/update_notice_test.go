@@ -307,6 +307,20 @@ func TestGetModelCatalog_ReportsUpdate(t *testing.T) {
 	require.NotNil(t, entry)
 	assert.Nil(t, entry.Update, "the installed current build has no update")
 
+	// A newer build of the same release reports both build numbers, so a swapped
+	// or duplicated copy into the response would show.
+	sameRelease := updateTestEntry()
+	sameRelease.Variants[0].Build = 3
+	sameRelease.Variants[1].Version = ""
+	sameRelease.Variants[1].Build = 2
+	useCatalog(t, []classifier.CatalogEntry{sameRelease})
+	f.setBuild(t, "m_v1")
+	entry = findEntry(catalogRequest(t, h), updateEntryID)
+	require.NotNil(t, entry)
+	require.NotNil(t, entry.Update)
+	assert.Equal(t, CatalogUpdateResponse{VariantID: updateNewID, FromVersion: updateNewRel, ToVersion: updateNewRel, FromBuild: 2, ToBuild: 3}, *entry.Update)
+	useCatalog(t, []classifier.CatalogEntry{updateTestEntry()})
+
 	f.setBuild(t, "")
 	entry = findEntry(catalogRequest(t, h), updateEntryID)
 	require.NotNil(t, entry)
