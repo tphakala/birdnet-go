@@ -1315,7 +1315,6 @@ func (mm *ModelManager) install(ctx context.Context, entry *CatalogEntry, varian
 	mm.markCancellable(entry.ID)
 
 	if err := mm.downloadModelFiles(ctx, entry, variantID, baseURL, progress, true); err != nil {
-		// Keep the failed or cancelled state briefly for SSE pollers, then clean up.
 		mm.retainTerminalState(entry.ID)
 		return err
 	}
@@ -1412,7 +1411,6 @@ func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, base
 	}
 
 	if err := mm.downloadModelFiles(ctx, entry, reinstallVariantID, baseURL, progress, false); err != nil {
-		// Keep failed state briefly for SSE pollers, then clean up.
 		mm.retainTerminalState(entry.ID)
 		return err
 	}
@@ -2298,20 +2296,22 @@ func sendProgress(progress chan<- DownloadState, catalogID, status string) {
 // markFailed sets the download state to StatusFailed so SSE pollers can
 // observe the failure before the entry is cleaned up.
 func (mm *ModelManager) markFailed(catalogID string, err error, progress chan<- DownloadState) {
+	mm.markTerminal(catalogID, StatusFailed, err.Error(), progress)
+}
+
+// markTerminal sets the entry's download state to a terminal status with its
+// error text and sends the same state to progress without blocking.
+func (mm *ModelManager) markTerminal(catalogID, status, errText string, progress chan<- DownloadState) {
 	mm.mu.Lock()
 	if state, ok := mm.downloading[catalogID]; ok {
-		state.Status = StatusFailed
-		state.Error = err.Error()
+		state.Status = status
+		state.Error = errText
 	}
 	mm.mu.Unlock()
 
 	if progress != nil {
 		select {
-		case progress <- DownloadState{
-			CatalogID: catalogID,
-			Status:    StatusFailed,
-			Error:     err.Error(),
-		}:
+		case progress <- DownloadState{CatalogID: catalogID, Status: status, Error: errText}:
 		default:
 		}
 	}
@@ -2321,19 +2321,7 @@ func (mm *ModelManager) markFailed(catalogID string, err error, progress chan<- 
 // a user cancel, so SSE pollers can observe it. It carries no error: a cancel is
 // not a failure.
 func (mm *ModelManager) markCancelled(catalogID string, progress chan<- DownloadState) {
-	mm.mu.Lock()
-	if state, ok := mm.downloading[catalogID]; ok {
-		state.Status = StatusCancelled
-		state.Error = ""
-	}
-	mm.mu.Unlock()
-
-	if progress != nil {
-		select {
-		case progress <- DownloadState{CatalogID: catalogID, Status: StatusCancelled}:
-		default:
-		}
-	}
+	mm.markTerminal(catalogID, StatusCancelled, "", progress)
 }
 
 // settleDownloadFailure ends a download attempt that returned err: it marks the

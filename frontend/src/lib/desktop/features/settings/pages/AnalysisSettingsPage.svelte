@@ -2163,13 +2163,13 @@
       await cancelInstall(entry.id);
     } catch (e) {
       cancellingId = null;
-      const unavailable = e instanceof ApiError && e.errorKey === MODEL_CANCEL_UNAVAILABLE_KEY;
+      const showMessage =
+        e instanceof Error &&
+        !(e instanceof ApiError && e.errorKey === MODEL_CANCEL_UNAVAILABLE_KEY);
       toastActions.warning(
-        unavailable
-          ? t('analysis.gallery.errors.cancelUnavailable', { name: entry.name })
-          : e instanceof Error
-            ? e.message
-            : t('analysis.gallery.errors.cancelUnavailable', { name: entry.name })
+        showMessage
+          ? e.message
+          : t('analysis.gallery.errors.cancelUnavailable', { name: entry.name })
       );
     }
   }
