@@ -918,6 +918,7 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       if (isPlainObject(data.dashboard)) {
         const dashboard = data.dashboard;
         const gain = dashboard.defaultAudioGain;
+        const playback = isPlainObject(dashboard.playback) ? dashboard.playback : {};
         coercedRealtime.dashboard = {
           ...dashboard,
           ...(typeof gain === 'number' && Number.isFinite(gain)
@@ -926,12 +927,7 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
               }
             : {}),
           playbackDenoise: coerceDenoiseSettings(dashboard.playbackDenoise),
-          playback: {
-            ...(isPlainObject(dashboard.playback) ? dashboard.playback : {}),
-            highPassHz: highPassToStored(
-              isPlainObject(dashboard.playback) ? dashboard.playback.highPassHz : undefined
-            ),
-          },
+          playback: { ...playback, highPassHz: highPassToStored(playback.highPassHz) },
         };
       }
 
