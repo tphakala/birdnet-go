@@ -183,13 +183,14 @@
           disabled ? 'opacity-50' : ''
         )}
       >
-        <span class="tracking-widest text-[var(--color-base-content)]/40 select-none"
-          >{'●'.repeat(8)}</span
-        >
+        <span class="tracking-widest text-[var(--color-base-content)]/40 select-none">
+          {'●'.repeat(8)}
+        </span>
         <span
           class="ml-auto text-xs font-medium text-[var(--text-success)] whitespace-nowrap select-none"
-          >{t('forms.labels.secretSet')}</span
         >
+          {t('forms.labels.secretSet')}
+        </span>
       </div>
       {#if !disabled}
         <button

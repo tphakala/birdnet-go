@@ -272,9 +272,9 @@
         <li class="flex items-start justify-between gap-4 py-2 first:pt-0 last:pb-0">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span class="font-mono text-sm break-all text-[var(--color-base-content)]"
-                >{alias}</span
-              >
+              <span class="font-mono text-sm break-all text-[var(--color-base-content)]">
+                {alias}
+              </span>
               <span
                 class={cn(BADGE_CLASS, 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]')}
               >

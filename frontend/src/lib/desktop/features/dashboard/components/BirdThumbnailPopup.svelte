@@ -385,8 +385,10 @@
                     href={safeLicenseURL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="credit-license">{imageAttribution.licenseName}</a
+                    class="credit-license"
                   >
+                    {imageAttribution.licenseName}
+                  </a>
                 {:else}
                   <span class="credit-license">{imageAttribution.licenseName}</span>
                 {/if}

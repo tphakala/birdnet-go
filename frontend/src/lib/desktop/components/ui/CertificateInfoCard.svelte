@@ -35,16 +35,17 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
     {#if certInfo.subject}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.subject')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.subject')}
+        </span>
         <p class="font-mono text-xs">{certInfo.subject}</p>
       </div>
     {/if}
     {#if certInfo.issuer}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60">{t('components.tls.issuer')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.issuer')}
+        </span>
         <p class="font-mono text-xs">{certInfo.issuer}</p>
       </div>
     {/if}
@@ -56,17 +57,17 @@
     {/if}
     {#if certInfo.notAfter}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.validUntil')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.validUntil')}
+        </span>
         <p class="font-mono text-xs">{certInfo.notAfter}</p>
       </div>
     {/if}
     {#if certInfo.daysUntilExpiry !== undefined}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.daysRemaining')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.daysRemaining')}
+        </span>
         <p class="font-mono text-xs" class:text-[var(--text-error)]={certInfo.daysUntilExpiry < 30}>
           {certInfo.daysUntilExpiry}
           {#if certInfo.daysUntilExpiry < 30}
@@ -77,9 +78,9 @@
     {/if}
     {#if certInfo.fingerprint}
       <div class="sm:col-span-2">
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.fingerprint')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.fingerprint')}
+        </span>
         <p class="font-mono text-xs break-all">{certInfo.fingerprint}</p>
       </div>
     {/if}

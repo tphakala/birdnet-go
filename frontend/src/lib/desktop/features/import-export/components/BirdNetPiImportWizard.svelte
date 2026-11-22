@@ -508,13 +508,13 @@
           </div>
         {/each}
       </div>
-      <span class="sr-only" aria-live="polite"
-        >{t('system.importExport.stepAnnouncement', {
+      <span class="sr-only" aria-live="polite">
+        {t('system.importExport.stepAnnouncement', {
           current: String(currentStepIndex + 1),
           total: String(stepLabels.length),
           name: t(`system.importExport.steps.${currentStep}`),
-        })}</span
-      >
+        })}
+      </span>
     </div>
   {/snippet}
 
@@ -677,12 +677,14 @@
                   <li class="flex items-start gap-2">
                     <span
                       class="flex-shrink-0 text-xs font-medium text-[var(--color-base-content)]/60 mt-0.5"
-                      >{i + 1}.</span
                     >
+                      {i + 1}.
+                    </span>
                     <code
                       class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
-                      >{step}</code
                     >
+                      {step}
+                    </code>
                   </li>
                 {/each}
               </ol>
@@ -736,9 +738,9 @@
               class="mt-1"
             />
             <div>
-              <span class="font-medium text-[var(--color-base-content)]"
-                >{t('system.importExport.mode.dbOnly.label')}</span
-              >
+              <span class="font-medium text-[var(--color-base-content)]">
+                {t('system.importExport.mode.dbOnly.label')}
+              </span>
               <p class="text-sm text-[var(--color-base-content)]/70 mt-0.5">
                 {t('system.importExport.mode.dbOnly.description')}
               </p>
@@ -757,9 +759,9 @@
             />
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-medium text-[var(--color-base-content)]"
-                  >{t('system.importExport.mode.dbAudio.label')}</span
-                >
+                <span class="font-medium text-[var(--color-base-content)]">
+                  {t('system.importExport.mode.dbAudio.label')}
+                </span>
               </div>
               <p class="text-sm text-[var(--color-base-content)]/70 mt-0.5">
                 {t('system.importExport.mode.dbAudio.description')}
@@ -893,8 +895,9 @@
                       <li class="flex items-start gap-2">
                         <code
                           class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
-                          >{cmd}</code
                         >
+                          {cmd}
+                        </code>
                       </li>
                     {/each}
                   </ol>

@@ -1429,9 +1429,9 @@ Performance Optimizations:
               <!-- Map zoom level -->
               <div class="flex items-center gap-2 rounded-lg px-3 py-2">
                 <ZoomIn class="size-4 shrink-0 text-[var(--color-base-content)]/60" />
-                <label for="banner-map-zoom" class="text-sm text-[var(--color-base-content)]/60"
-                  >{t('dashboard.banner.mapZoom')}</label
-                >
+                <label for="banner-map-zoom" class="text-sm text-[var(--color-base-content)]/60">
+                  {t('dashboard.banner.mapZoom')}
+                </label>
                 <input
                   id="banner-map-zoom"
                   type="number"

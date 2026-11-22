@@ -24,9 +24,9 @@
     </div>
     <div class="flex items-center gap-3">
       <MapPin class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
-      <span class="text-sm font-mono truncate" title={stats?.location ?? ''}
-        >{stats?.location ?? '—'}</span
-      >
+      <span class="text-sm font-mono truncate" title={stats?.location ?? ''}>
+        {stats?.location ?? '—'}
+      </span>
     </div>
     <div class="flex items-center gap-3">
       <HardDrive class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
@@ -34,27 +34,27 @@
     </div>
     <div class="flex items-center gap-3">
       <FileText class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
-      <span class="text-sm tabular-nums"
-        >{stats
+      <span class="text-sm tabular-nums">
+        {stats
           ? t('system.database.migration.details.detections', {
               count: formatNumber(stats.total_detections),
             })
-          : '—'}</span
-      >
+          : '—'}
+      </span>
     </div>
     <div class="flex items-center gap-3">
       <Clock class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
-      <span class="text-sm"
-        >{lastBackupDate
+      <span class="text-sm">
+        {lastBackupDate
           ? t('system.database.migration.details.lastBackup', { date: lastBackupDate })
-          : t('system.database.migration.details.noBackups')}</span
-      >
+          : t('system.database.migration.details.noBackups')}
+      </span>
     </div>
     <div class="flex items-center gap-3">
       <Shield class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
-      <span class="text-sm"
-        >{t('system.database.migration.details.integrity', { status: integrityStatus })}</span
-      >
+      <span class="text-sm">
+        {t('system.database.migration.details.integrity', { status: integrityStatus })}
+      </span>
     </div>
   </div>
 </div>

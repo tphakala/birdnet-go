@@ -944,8 +944,9 @@ Responsive Breakpoints:
             <div class="species-label-col shrink-0 flex items-center">
               <span
                 class="text-xs text-[var(--color-base-content)]/60 font-normal whitespace-nowrap"
-                >{t('dashboard.dailySummary.daylight.label')}</span
               >
+                {t('dashboard.dailySummary.daylight.label')}
+              </span>
             </div>
             <!-- Hourly daylight (desktop) -->
             <div class="hourly-grid flex-1 grid">

@@ -274,43 +274,44 @@
       <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
         <div class="flex items-center gap-2 mb-2">
           <Database class="w-3.5 h-3.5 text-[var(--text-warning)]" />
-          <span class="text-xs font-medium"
-            >{t('system.database.migration.progress.sourceLegacy')}</span
-          >
+          <span class="text-xs font-medium">
+            {t('system.database.migration.progress.sourceLegacy')}
+          </span>
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.recordsLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatNumber(legacyStats?.total_detections ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatNumber(legacyStats?.total_detections ?? 0)}
+            </span>
           </div>
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatBytesCompact(legacyStats?.size_bytes ?? 0)}
+            </span>
           </div>
         </div>
       </div>
       <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
         <div class="flex items-center gap-2 mb-2">
           <Database class="w-3.5 h-3.5 text-[var(--text-success)]" />
-          <span class="text-xs font-medium">{t('system.database.migration.progress.targetV2')}</span
-          >
+          <span class="text-xs font-medium">
+            {t('system.database.migration.progress.targetV2')}
+          </span>
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.recordsLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatNumber(v2Stats?.total_detections ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatNumber(v2Stats?.total_detections ?? 0)}
+            </span>
           </div>
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatBytesCompact(v2Stats?.size_bytes ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatBytesCompact(v2Stats?.size_bytes ?? 0)}
+            </span>
           </div>
         </div>
       </div>
@@ -452,16 +453,16 @@
       <!-- Progress bar -->
       <div>
         <div class="flex items-center justify-between mb-1.5">
-          <span class="text-sm font-medium"
-            >{t('system.database.migration.progress.progressLabel')}</span
-          >
+          <span class="text-sm font-medium">
+            {t('system.database.migration.progress.progressLabel')}
+          </span>
           <div class="text-sm tabular-nums">
             <span class="font-semibold">{formatNumber(status?.migrated_records ?? 0)}</span>
             <span class="text-muted">
               {t('system.database.migration.progress.ofRecords', {
                 count: formatNumber(status?.total_records ?? 0),
-              })}</span
-            >
+              })}
+            </span>
           </div>
         </div>
         <div
@@ -480,11 +481,11 @@
           ></div>
         </div>
         <div class="grid grid-cols-3 mt-1.5 text-[10px] tabular-nums text-muted">
-          <span
-            >{t('system.database.migration.progress.percentComplete', {
+          <span>
+            {t('system.database.migration.progress.percentComplete', {
               percent: (status?.progress_percent ?? 0).toFixed(1),
-            })}</span
-          >
+            })}
+          </span>
           <span class="text-center">
             {isPaused
               ? '\u2014'
@@ -526,24 +527,24 @@
           <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
             <div class="flex items-center gap-2 mb-2">
               <Database class="w-3.5 h-3.5 text-[var(--text-warning)]" />
-              <span class="text-xs font-medium"
-                >{t('system.database.migration.progress.sourceLegacy')}</span
-              >
+              <span class="text-xs font-medium">
+                {t('system.database.migration.progress.sourceLegacy')}
+              </span>
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-muted"
-                  >{t('system.database.migration.progress.recordsLabel')}</span
-                >
-                <span class="tabular-nums font-medium"
-                  >{formatNumber(legacyStats?.total_detections ?? 0)}</span
-                >
+                <span class="text-muted">
+                  {t('system.database.migration.progress.recordsLabel')}
+                </span>
+                <span class="tabular-nums font-medium">
+                  {formatNumber(legacyStats?.total_detections ?? 0)}
+                </span>
               </div>
               <div class="flex justify-between text-xs">
                 <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-                <span class="tabular-nums font-medium"
-                  >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
-                >
+                <span class="tabular-nums font-medium">
+                  {formatBytesCompact(legacyStats?.size_bytes ?? 0)}
+                </span>
               </div>
             </div>
           </div>
@@ -551,29 +552,27 @@
           <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
             <div class="flex items-center gap-2 mb-2">
               <Database class="w-3.5 h-3.5 text-[var(--text-success)]" />
-              <span class="text-xs font-medium"
-                >{t('system.database.migration.progress.targetV2')}</span
-              >
+              <span class="text-xs font-medium">
+                {t('system.database.migration.progress.targetV2')}
+              </span>
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-muted"
-                  >{t('system.database.migration.progress.recordsLabel')}</span
-                >
-                <span class="tabular-nums font-medium"
-                  >{formatNumber(
-                    (v2Stats?.total_detections ?? 0) + (status?.migrated_records ?? 0)
-                  )}</span
-                >
+                <span class="text-muted">
+                  {t('system.database.migration.progress.recordsLabel')}
+                </span>
+                <span class="tabular-nums font-medium">
+                  {formatNumber((v2Stats?.total_detections ?? 0) + (status?.migrated_records ?? 0))}
+                </span>
               </div>
               <div class="flex justify-between text-xs">
                 <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-                <span class="tabular-nums font-medium"
-                  >{formatBytesCompact(
+                <span class="tabular-nums font-medium">
+                  {formatBytesCompact(
                     (v2Stats?.size_bytes ?? 0) +
                       (status?.migrated_records ?? 0) * ESTIMATED_V2_RECORD_SIZE_BYTES
-                  )}</span
-                >
+                  )}
+                </span>
               </div>
             </div>
           </div>

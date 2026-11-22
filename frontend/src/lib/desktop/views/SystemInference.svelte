@@ -606,9 +606,9 @@
             </dt>
             <dd class="flex items-center gap-3 min-w-0">
               {#if snapshot.hardware.board.model}
-                <span class="text-sm truncate min-w-0" title={snapshot.hardware.board.model}
-                  >{snapshot.hardware.board.model}</span
-                >
+                <span class="text-sm truncate min-w-0" title={snapshot.hardware.board.model}>
+                  {snapshot.hardware.board.model}
+                </span>
               {/if}
               {#if snapshot.hardware.board.soc}
                 <span class="text-xs text-muted font-mono shrink-0">
@@ -687,8 +687,9 @@
                   <span
                     class="text-sm truncate min-w-0"
                     title={accelerator.name ?? accelerator.vendor}
-                    >{accelerator.name ?? accelerator.vendor}</span
                   >
+                    {accelerator.name ?? accelerator.vendor}
+                  </span>
                   {#if accelerator.accessible}
                     <StatusPill
                       variant="success"
@@ -735,9 +736,9 @@
               >
                 {t('system.inference.capabilities')}
               </span>
-              <span id={HARDWARE_CAPABILITIES_HELP_ID} class="sr-only"
-                >{t('system.inference.capabilitiesHelp')}</span
-              >
+              <span id={HARDWARE_CAPABILITIES_HELP_ID} class="sr-only">
+                {t('system.inference.capabilitiesHelp')}
+              </span>
               <div class="flex flex-wrap items-center gap-2">
                 {#each snapshot.hardware.capabilities as capability}
                   <Badge variant="neutral" size="sm" text={capability} />
@@ -870,17 +871,17 @@
                   class="w-3 h-3 shrink-0 text-[var(--text-warning)]"
                   aria-hidden="true"
                 />
-                <span class="text-xs text-[var(--text-warning)]"
-                  >{t('system.inference.vad.unavailable')}</span
-                >
+                <span class="text-xs text-[var(--text-warning)]">
+                  {t('system.inference.vad.unavailable')}
+                </span>
               {:else if vad.loaded}
                 <Activity
                   class="w-3 h-3 shrink-0 text-[var(--text-success)] animate-pulse motion-reduce:animate-none"
                   aria-hidden="true"
                 />
-                <span class="text-xs text-[var(--text-success)]"
-                  >{t('system.inference.vad.active')}</span
-                >
+                <span class="text-xs text-[var(--text-success)]">
+                  {t('system.inference.vad.active')}
+                </span>
               {:else}
                 <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
                 <span class="text-xs text-muted">{t('system.inference.vad.idle')}</span>
@@ -907,9 +908,9 @@
             </span>
             <span class="text-muted">
               {t('system.inference.vad.threshold')}:
-              <span class="font-mono tabular-nums text-base-content"
-                >{vad.threshold.toFixed(2)}</span
-              >
+              <span class="font-mono tabular-nums text-base-content">
+                {vad.threshold.toFixed(2)}
+              </span>
             </span>
           </div>
 
@@ -918,9 +919,9 @@
           <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
             <span class="text-muted">
               {t('system.inference.invocations')}:
-              <span class="font-mono tabular-nums text-base-content"
-                >{formatNumber(vad.stats.invocations)}</span
-              >
+              <span class="font-mono tabular-nums text-base-content">
+                {formatNumber(vad.stats.invocations)}
+              </span>
             </span>
             <span class="text-muted">
               {t('system.inference.avgLatency')}:
@@ -940,9 +941,9 @@
             </span>
             <span class="text-muted">
               {t('system.inference.vad.speechHits')}:
-              <span class="font-mono tabular-nums text-base-content"
-                >{formatNumber(vad.stats.speechHits)}</span
-              >
+              <span class="font-mono tabular-nums text-base-content">
+                {formatNumber(vad.stats.speechHits)}
+              </span>
             </span>
           </div>
 
@@ -955,15 +956,15 @@
               <table class="w-full text-xs table-fixed">
                 <thead class="text-muted">
                   <tr>
-                    <th scope="col" class="text-left font-normal py-0.5 w-16 whitespace-nowrap"
-                      >{t('system.inference.vad.colWhen')}</th
-                    >
-                    <th scope="col" class="text-left font-normal py-0.5 w-20 whitespace-nowrap"
-                      >{t('system.inference.vad.colProbability')}</th
-                    >
-                    <th scope="col" class="text-left font-normal py-0.5"
-                      >{t('system.inference.vad.colSource')}</th
-                    >
+                    <th scope="col" class="text-left font-normal py-0.5 w-16 whitespace-nowrap">
+                      {t('system.inference.vad.colWhen')}
+                    </th>
+                    <th scope="col" class="text-left font-normal py-0.5 w-20 whitespace-nowrap">
+                      {t('system.inference.vad.colProbability')}
+                    </th>
+                    <th scope="col" class="text-left font-normal py-0.5">
+                      {t('system.inference.vad.colSource')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1084,9 +1085,9 @@
                     aria-describedby={`model-failing-help-${model.id}`}
                   >
                     <CircleX class="w-3 h-3 shrink-0 text-[var(--text-error)]" aria-hidden="true" />
-                    <span class="text-xs font-medium text-[var(--text-error)]"
-                      >{t('system.inference.modelFailing')}</span
-                    >
+                    <span class="text-xs font-medium text-[var(--text-error)]">
+                      {t('system.inference.modelFailing')}
+                    </span>
                   </span>
                 {:else if model.paused}
                   <!-- Schedule-gated model that is currently off-schedule: explain the
@@ -1100,8 +1101,10 @@
                     <Pause class="w-3 h-3 shrink-0 text-[var(--text-warning)]" aria-hidden="true" />
                     <span class="text-xs text-[var(--text-warning)]">
                       {t('system.inference.paused')}{#if model.scheduleLabel}<span
-                          class="text-muted">&nbsp;({model.scheduleLabel})</span
-                        >{/if}
+                          class="text-muted"
+                        >
+                          &nbsp;({model.scheduleLabel})
+                        </span>{/if}
                     </span>
                   </span>
                 {:else if allSourcesDown && !isActive}
@@ -1123,9 +1126,9 @@
                       class="w-3 h-3 shrink-0 text-[var(--text-error)]"
                       aria-hidden="true"
                     />
-                    <span class="text-xs font-medium text-[var(--text-error)]"
-                      >{t('system.inference.sourceNotRunning')}</span
-                    >
+                    <span class="text-xs font-medium text-[var(--text-error)]">
+                      {t('system.inference.sourceNotRunning')}
+                    </span>
                   </span>
                 {:else}
                   <span
@@ -1143,9 +1146,9 @@
                         class="w-3 h-3 shrink-0 text-[var(--text-success)] animate-pulse motion-reduce:animate-none"
                         aria-hidden="true"
                       />
-                      <span class="text-xs text-[var(--text-success)]"
-                        >{t('system.inference.active')}</span
-                      >
+                      <span class="text-xs text-[var(--text-success)]">
+                        {t('system.inference.active')}
+                      </span>
                     {:else}
                       <Minus class="w-3 h-3 shrink-0 text-base-content/30" aria-hidden="true" />
                       <span class="text-xs text-muted">{t('system.inference.activityIdle')}</span>
@@ -1214,8 +1217,10 @@
                   {t('system.inference.rtf')}:
                   <span
                     class="font-mono tabular-nums text-base-content"
-                    aria-describedby={`rtf-help-${model.id}`}>{rtfDisplay(model)}</span
+                    aria-describedby={`rtf-help-${model.id}`}
                   >
+                    {rtfDisplay(model)}
+                  </span>
                   <span id={`rtf-help-${model.id}`} class="sr-only">
                     {t('system.inference.rtfHelp')}
                   </span>
@@ -1439,9 +1444,9 @@
                         aria-describedby={source.notRunning ? notAnalyzingHelpId : undefined}
                       >
                         {source.name}{#if source.type}
-                          <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}
-                            >({source.type})</span
-                          >
+                          <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}>
+                            ({source.type})
+                          </span>
                         {/if}{#if source.fallback}
                           <span class={source.notRunning ? 'ml-1' : 'text-muted ml-1'}>
                             - {t('system.inference.primaryFallback')}

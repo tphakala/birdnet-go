@@ -35,9 +35,9 @@
       <HardDrive class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
       <div class="flex justify-between flex-1 text-sm">
         <span class="text-muted">{t('system.database.dashboard.details.pageSize')}</span>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatBytesCompact(details.page_size)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatBytesCompact(details.page_size)}
+        </span>
       </div>
     </div>
     <div class="flex items-center gap-3">
@@ -47,17 +47,19 @@
         <span
           class="font-medium {details.integrity_check === 'ok'
             ? 'text-[var(--text-success)]'
-            : 'text-[var(--text-error)]'}">{details.integrity_check.toUpperCase()}</span
+            : 'text-[var(--text-error)]'}"
         >
+          {details.integrity_check.toUpperCase()}
+        </span>
       </div>
     </div>
     <div class="flex items-center gap-3">
       <Clock class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
       <div class="flex justify-between flex-1 text-sm">
         <span class="text-muted">{t('system.database.dashboard.details.lastVacuum')}</span>
-        <span class="text-xs font-medium"
-          >{details.last_vacuum_at ? formatDateTime(details.last_vacuum_at) : '-'}</span
-        >
+        <span class="text-xs font-medium">
+          {details.last_vacuum_at ? formatDateTime(details.last_vacuum_at) : '-'}
+        </span>
       </div>
     </div>
   </div>

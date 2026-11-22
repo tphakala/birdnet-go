@@ -238,20 +238,24 @@
                 <span
                   class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] {dbTypeClasses(
                     backup.db_type
-                  )}">{backup.db_type}</span
+                  )}"
                 >
+                  {backup.db_type}
+                </span>
               </td>
               <td class="py-2 px-3">
-                <span class="font-mono tabular-nums text-xs font-medium"
-                  >{formatBytesCompact(backup.bytes_written)}</span
-                >
+                <span class="font-mono tabular-nums text-xs font-medium">
+                  {formatBytesCompact(backup.bytes_written)}
+                </span>
               </td>
               <td class="py-2 px-3">
                 <span
                   class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] {statusClasses(
                     backup.status
-                  )}">{statusLabel(backup.status)}</span
+                  )}"
                 >
+                  {statusLabel(backup.status)}
+                </span>
               </td>
               <td class="py-2 px-3">
                 <div class="flex justify-end">

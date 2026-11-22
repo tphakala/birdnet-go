@@ -79,11 +79,11 @@
     <g transform="translate({margin.left},{margin.top})">
       {#each chartData.bars as bar, i (i)}
         <rect x={bar.x} y={bar.y} width={bar.w} height={bar.h} fill={color} opacity="0.7" rx="1">
-          <title
-            >{t('system.database.dashboard.detectionRate.detectionsTooltip', {
+          <title>
+            {t('system.database.dashboard.detectionRate.detectionsTooltip', {
               count: bar.count,
-            })}</title
-          >
+            })}
+          </title>
         </rect>
         {#if showLabel(i)}
           <text

@@ -125,23 +125,23 @@
     <div class="space-y-2 text-sm">
       {#if stateData.from_state}
         <div class="flex gap-2">
-          <span class="text-[var(--color-base-content)]/50"
-            >{t('settings.audio.streams.timeline.from')}:</span
-          >
+          <span class="text-[var(--color-base-content)]/50">
+            {t('settings.audio.streams.timeline.from')}:
+          </span>
           <span class="text-[var(--color-base-content)]">{stateData.from_state}</span>
         </div>
       {/if}
       <div class="flex gap-2">
-        <span class="text-[var(--color-base-content)]/50"
-          >{t('settings.audio.streams.timeline.to')}:</span
-        >
+        <span class="text-[var(--color-base-content)]/50">
+          {t('settings.audio.streams.timeline.to')}:
+        </span>
         <span class="text-[var(--color-base-content)]">{stateData.to_state}</span>
       </div>
       {#if stateData.reason}
         <div class="mt-2 pt-2 border-t border-[var(--color-base-content)]/20">
-          <span class="text-[var(--color-base-content)]/50"
-            >{t('settings.audio.streams.timeline.reason')}:</span
-          >
+          <span class="text-[var(--color-base-content)]/50">
+            {t('settings.audio.streams.timeline.reason')}:
+          </span>
           <p class="text-[var(--color-base-content)]/70 mt-1">{stateData.reason}</p>
         </div>
       {/if}

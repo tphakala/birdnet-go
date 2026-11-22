@@ -163,9 +163,9 @@
               <span aria-hidden="true">·</span>
             {/if}
             {#if creditLicense && creditLicenseUrl}
-              <a href={creditLicenseUrl} target="_blank" rel="noopener noreferrer"
-                >{creditLicense}</a
-              >
+              <a href={creditLicenseUrl} target="_blank" rel="noopener noreferrer">
+                {creditLicense}
+              </a>
             {:else if creditLicense}
               <span>{creditLicense}</span>
             {/if}
@@ -207,9 +207,9 @@
                 confidence: toPercent(detection.confidence),
               })}
             </span>
-            <span class="dd-identity-confidence-label" aria-hidden="true"
-              >{t('common.labels.confidence')}</span
-            >
+            <span class="dd-identity-confidence-label" aria-hidden="true">
+              {t('common.labels.confidence')}
+            </span>
           </div>
         </div>
 
@@ -259,17 +259,17 @@
     <dl class="dd-identity-facts">
       <div class="dd-fact">
         <dt>
-          <Calendar class="size-3.5" /><span class="sr-only"
-            >{t('detections.detail.identity.date')}</span
-          >
+          <Calendar class="size-3.5" /><span class="sr-only">
+            {t('detections.detail.identity.date')}
+          </span>
         </dt>
         <dd>{formatCalendarDate(detection.date)}</dd>
       </div>
       <div class="dd-fact">
         <dt>
-          <Clock class="size-3.5" /><span class="sr-only"
-            >{t('detections.detail.identity.time')}</span
-          >
+          <Clock class="size-3.5" /><span class="sr-only">
+            {t('detections.detail.identity.time')}
+          </span>
         </dt>
         <dd class="dd-fact-time">{detection.time}</dd>
       </div>

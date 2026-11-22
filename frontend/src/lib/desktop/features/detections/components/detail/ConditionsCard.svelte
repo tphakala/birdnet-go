@@ -442,9 +442,9 @@
 
       <div class="dd-sky-axis" aria-hidden="true">
         {#each AXIS_HOURS as hour (hour)}
-          <span style:left="{(hour / HOURS_PER_DAY) * PERCENT}%"
-            >{String(hour).padStart(2, '0')}</span
-          >
+          <span style:left="{(hour / HOURS_PER_DAY) * PERCENT}%">
+            {String(hour).padStart(2, '0')}
+          </span>
         {/each}
       </div>
 
@@ -473,11 +473,9 @@
           <span class="dd-weather-temp"><Skeleton inline className="h-6 w-14" /></span>
           <span class="dd-weather-desc"><Skeleton inline className="h-3 w-32" /></span>
         {:else}
-          <span class="dd-weather-temp"
-            >{temperature !== undefined
-              ? formatTemperatureCompact(temperature, units)
-              : MISSING}</span
-          >
+          <span class="dd-weather-temp">
+            {temperature !== undefined ? formatTemperatureCompact(temperature, units) : MISSING}
+          </span>
           <span class="dd-weather-desc">
             {description
               ? translateWeatherCondition(description)
@@ -491,11 +489,11 @@
           <div class="dd-weather-moon-text">
             <span>{moonName}</span>
             {#if detection.weather?.moonIllumination !== undefined}
-              <span class="dd-weather-moon-lit"
-                >{t('detections.detail.conditions.moonLit', {
+              <span class="dd-weather-moon-lit">
+                {t('detections.detail.conditions.moonLit', {
                   percent: Math.round(detection.weather.moonIllumination),
-                })}</span
-              >
+                })}
+              </span>
             {/if}
           </div>
         </div>
@@ -520,8 +518,10 @@
               <Skeleton inline className="h-3 w-12" />
             {:else}
               <span class="dd-tile-number">{tile.value}</span>{#if tile.unit}<span
-                  class="dd-tile-unit">{tile.unit}</span
-                >{/if}{#if tile.suffix}<span class="dd-tile-suffix">{tile.suffix}</span>{/if}
+                  class="dd-tile-unit"
+                >
+                  {tile.unit}
+                </span>{/if}{#if tile.suffix}<span class="dd-tile-suffix">{tile.suffix}</span>{/if}
             {/if}
           </dd>
         </div>

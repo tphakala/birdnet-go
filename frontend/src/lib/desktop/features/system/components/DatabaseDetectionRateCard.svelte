@@ -35,18 +35,18 @@
         <DetectionRateChart {data} color="#f59e0b" />
       </div>
       <div class="grid grid-cols-3 text-[10px] font-mono tabular-nums text-muted">
-        <span
-          >{t('system.database.dashboard.detectionRate.min')}
-          {minCount}{t('system.database.dashboard.detectionRate.perHour')}</span
-        >
-        <span class="text-center"
-          >{t('system.database.dashboard.detectionRate.avg')}
-          {avgCount}{t('system.database.dashboard.detectionRate.perHour')}</span
-        >
-        <span class="text-right"
-          >{t('system.database.dashboard.detectionRate.max')}
-          {maxCount}{t('system.database.dashboard.detectionRate.perHour')}</span
-        >
+        <span>
+          {t('system.database.dashboard.detectionRate.min')}
+          {minCount}{t('system.database.dashboard.detectionRate.perHour')}
+        </span>
+        <span class="text-center">
+          {t('system.database.dashboard.detectionRate.avg')}
+          {avgCount}{t('system.database.dashboard.detectionRate.perHour')}
+        </span>
+        <span class="text-right">
+          {t('system.database.dashboard.detectionRate.max')}
+          {maxCount}{t('system.database.dashboard.detectionRate.perHour')}
+        </span>
       </div>
     </div>
 
@@ -68,9 +68,9 @@
           {#if mysqlHost}
             <div class="flex items-center gap-2 text-sm">
               <Database class="w-3.5 h-3.5 shrink-0 text-muted" />
-              <span class="text-muted"
-                >{t('system.database.dashboard.detectionRate.mysqlHost')}</span
-              >
+              <span class="text-muted">
+                {t('system.database.dashboard.detectionRate.mysqlHost')}
+              </span>
             </div>
             <div class="mt-1 min-w-0 font-mono text-xs font-medium wrap-anywhere">
               {#each locationSegments as segment, index (index)}{#if index > 0}<wbr

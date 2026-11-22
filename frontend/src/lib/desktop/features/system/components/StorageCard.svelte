@@ -168,10 +168,10 @@
           <span>{Math.round(memory.usedPercent)}% {t('system.storage.used')}</span>
           <span>{formatBytesCompact(memory.free)} {t('system.storage.free')}</span>
           <span>{formatBytesCompact(memory.available)} {t('system.metrics.available')}</span>
-          <span
-            >{formatBytesCompact(memory.buffers + memory.cached)}
-            {t('system.memoryUsage.labels.buffCache')}</span
-          >
+          <span>
+            {formatBytesCompact(memory.buffers + memory.cached)}
+            {t('system.memoryUsage.labels.buffCache')}
+          </span>
         </div>
       </div>
     {/if}

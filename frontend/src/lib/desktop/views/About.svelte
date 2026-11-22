@@ -164,9 +164,9 @@
     <p class="text-xl font-medium mt-6">{t('about.mainDeveloper')}</p>
     <p class="flex items-center gap-2 mt-2">
       <User class="size-5" />
-      <a href="https://github.com/tphakala" class="btn btn-ghost btn-sm justify-start normal-case"
-        >Tomi P. Hakala</a
-      >
+      <a href="https://github.com/tphakala" class="btn btn-ghost btn-sm justify-start normal-case">
+        Tomi P. Hakala
+      </a>
     </p>
 
     <p class="text-xl font-medium mt-6">{t('about.githubContributors')}</p>
@@ -174,53 +174,57 @@
       {t('about.contributorsNote')}
     </p>
     <div class="gap-2 mt-4 about-contributors-grid">
-      <a href="https://github.com/aav7fl" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@aav7fl</a
-      >
-      <a href="https://github.com/farski" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@farski</a
-      >
-      <a href="https://github.com/florisre" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@florisre</a
-      >
-      <a href="https://github.com/Fotguedes" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@Fotguedes</a
-      >
+      <a href="https://github.com/aav7fl" class="btn btn-ghost btn-sm justify-start normal-case">
+        @aav7fl
+      </a>
+      <a href="https://github.com/farski" class="btn btn-ghost btn-sm justify-start normal-case">
+        @farski
+      </a>
+      <a href="https://github.com/florisre" class="btn btn-ghost btn-sm justify-start normal-case">
+        @florisre
+      </a>
+      <a href="https://github.com/Fotguedes" class="btn btn-ghost btn-sm justify-start normal-case">
+        @Fotguedes
+      </a>
       <a
         href="https://github.com/geekworldtour"
-        class="btn btn-ghost btn-sm justify-start normal-case">@geekworldtour</a
+        class="btn btn-ghost btn-sm justify-start normal-case"
       >
-      <a href="https://github.com/isZumpo" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@isZumpo</a
-      >
-      <a href="https://github.com/janvrska" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@janvrska</a
-      >
-      <a href="https://github.com/jkrauska" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@jkrauska</a
-      >
-      <a href="https://github.com/LeoColman" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@LeoColman</a
-      >
+        @geekworldtour
+      </a>
+      <a href="https://github.com/isZumpo" class="btn btn-ghost btn-sm justify-start normal-case">
+        @isZumpo
+      </a>
+      <a href="https://github.com/janvrska" class="btn btn-ghost btn-sm justify-start normal-case">
+        @janvrska
+      </a>
+      <a href="https://github.com/jkrauska" class="btn btn-ghost btn-sm justify-start normal-case">
+        @jkrauska
+      </a>
+      <a href="https://github.com/LeoColman" class="btn btn-ghost btn-sm justify-start normal-case">
+        @LeoColman
+      </a>
       <a
         href="https://github.com/PeteLawrence"
-        class="btn btn-ghost btn-sm justify-start normal-case">@PeteLawrence</a
+        class="btn btn-ghost btn-sm justify-start normal-case"
       >
-      <a href="https://github.com/petterip" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@petterip</a
-      >
-      <a href="https://github.com/Phaeton" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@Phaeton</a
-      >
-      <a href="https://github.com/PovilasID" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@PovilasID</a
-      >
-      <a href="https://github.com/twt--" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@twt--</a
-      >
-      <a href="https://github.com/xconverge" class="btn btn-ghost btn-sm justify-start normal-case"
-        >@xconverge</a
-      >
+        @PeteLawrence
+      </a>
+      <a href="https://github.com/petterip" class="btn btn-ghost btn-sm justify-start normal-case">
+        @petterip
+      </a>
+      <a href="https://github.com/Phaeton" class="btn btn-ghost btn-sm justify-start normal-case">
+        @Phaeton
+      </a>
+      <a href="https://github.com/PovilasID" class="btn btn-ghost btn-sm justify-start normal-case">
+        @PovilasID
+      </a>
+      <a href="https://github.com/twt--" class="btn btn-ghost btn-sm justify-start normal-case">
+        @twt--
+      </a>
+      <a href="https://github.com/xconverge" class="btn btn-ghost btn-sm justify-start normal-case">
+        @xconverge
+      </a>
     </div>
 
     <div class="mt-6 bg-[var(--color-base-200)] rounded-lg p-4">
@@ -393,8 +397,10 @@
             href="https://creativecommons.org/licenses/by-nc-sa/4.0/"
             class="link link-primary"
             target="_blank"
-            rel="noopener noreferrer">{t('about.ccLicense')}</a
-          >.
+            rel="noopener noreferrer"
+          >
+            {t('about.ccLicense')}
+          </a>.
         </p>
         <div class="flex items-center gap-2">
           <FileText class="size-5" />
@@ -406,8 +412,10 @@
             href={buildAppUrl('/ui/assets/LICENSES.md')}
             class="link link-primary"
             target="_blank"
-            rel="noopener noreferrer">{t('about.dependencyLicenses')}</a
+            rel="noopener noreferrer"
           >
+            {t('about.dependencyLicenses')}
+          </a>
         </div>
       </div>
     </div>

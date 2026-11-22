@@ -218,9 +218,9 @@
     <div class="region-card-top">
       <span class="region-card-name">{region.name}</span>
       {#if selected}
-        <span class="badge badge-primary badge-sm"
-          >{t('analysis.gallery.region.selectedBadge')}</span
-        >
+        <span class="badge badge-primary badge-sm">
+          {t('analysis.gallery.region.selectedBadge')}
+        </span>
       {/if}
     </div>
     <div class="region-card-chips">
@@ -237,9 +237,9 @@
         {/each}
       {/if}
       {#if overflowCount > 0}
-        <span class="region-chip region-chip-more" title={overflowNames.join(', ')}
-          >{t('analysis.gallery.region.countriesOverflow', { count: overflowCount })}</span
-        >
+        <span class="region-chip region-chip-more" title={overflowNames.join(', ')}>
+          {t('analysis.gallery.region.countriesOverflow', { count: overflowCount })}
+        </span>
       {/if}
     </div>
   </div>

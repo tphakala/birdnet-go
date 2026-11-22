@@ -2969,39 +2969,41 @@
                 <table class="w-full text-sm">
                   <thead>
                     <tr class="border-b border-[var(--color-base-300)]">
-                      <th scope="col" class="text-left py-2 pr-4 font-medium text-muted"
-                        >{t('analysis.rangeFilter.status.classifier')}</th
-                      >
-                      <th scope="col" class="text-right py-2 px-4 font-medium text-muted"
-                        >{t('analysis.rangeFilter.status.totalSpecies')}</th
-                      >
+                      <th scope="col" class="text-left py-2 pr-4 font-medium text-muted">
+                        {t('analysis.rangeFilter.status.classifier')}
+                      </th>
+                      <th scope="col" class="text-right py-2 px-4 font-medium text-muted">
+                        {t('analysis.rangeFilter.status.totalSpecies')}
+                      </th>
                       <th
                         scope="col"
                         class="text-right py-2 px-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withRangeDataTooltip')}
-                        >{t('analysis.rangeFilter.status.withRangeData')}</th
                       >
+                        {t('analysis.rangeFilter.status.withRangeData')}
+                      </th>
                       <th
                         scope="col"
                         class="text-right py-2 pl-4 font-medium text-muted"
                         title={t('analysis.rangeFilter.status.withoutRangeDataTooltip')}
-                        >{t('analysis.rangeFilter.status.withoutRangeData')}</th
                       >
+                        {t('analysis.rangeFilter.status.withoutRangeData')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {#each rangeCoveredClassifiers as classifier (classifier.id)}
                       <tr class="border-b border-[var(--color-base-300)]/50 last:border-0">
                         <td class="py-2 pr-4 font-medium">{classifier.name}</td>
-                        <td class="py-2 px-4 text-right tabular-nums"
-                          >{formatNumber(classifier.totalSpecies)}</td
-                        >
-                        <td class="py-2 px-4 text-right tabular-nums"
-                          >{formatNumber(classifier.withRangeData)}</td
-                        >
-                        <td class="py-2 pl-4 text-right tabular-nums"
-                          >{formatNumber(classifier.withoutRangeData)}</td
-                        >
+                        <td class="py-2 px-4 text-right tabular-nums">
+                          {formatNumber(classifier.totalSpecies)}
+                        </td>
+                        <td class="py-2 px-4 text-right tabular-nums">
+                          {formatNumber(classifier.withRangeData)}
+                        </td>
+                        <td class="py-2 pl-4 text-right tabular-nums">
+                          {formatNumber(classifier.withoutRangeData)}
+                        </td>
                       </tr>
                     {/each}
                   </tbody>
@@ -3538,9 +3540,9 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <Loader2 class="size-6 animate-spin text-[var(--text-primary)]" />
-        <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
-          >{t('analysis.gallery.loading')}</span
-        >
+        <span class="ml-3 text-sm text-[var(--color-base-content)]/80">
+          {t('analysis.gallery.loading')}
+        </span>
       </div>
     {:else if catalogError}
       {@render catalogErrorBanner()}
@@ -3565,9 +3567,9 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <Loader2 class="size-6 animate-spin text-[var(--text-primary)]" />
-        <span class="ml-3 text-sm text-[var(--color-base-content)]/80"
-          >{t('analysis.gallery.loading')}</span
-        >
+        <span class="ml-3 text-sm text-[var(--color-base-content)]/80">
+          {t('analysis.gallery.loading')}
+        </span>
       </div>
     {:else if catalogError}
       {@render catalogErrorBanner()}
@@ -3668,39 +3670,44 @@
               <th
                 scope="row"
                 class="px-4 pt-4 pb-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.model')}</th
               >
+                {t('analysis.gallery.license.model')}
+              </th>
               <td
                 class="px-4 pt-4 pb-1 text-right align-top font-medium text-[var(--color-base-content)]"
-                >{licenseModel.name}</td
               >
+                {licenseModel.name}
+              </td>
             </tr>
             <tr>
               <th
                 scope="row"
                 class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.author')}</th
               >
-              <td class="px-4 py-1 text-right align-top text-[var(--color-base-content)]"
-                >{licenseModel.author}</td
-              >
+                {t('analysis.gallery.license.author')}
+              </th>
+              <td class="px-4 py-1 text-right align-top text-[var(--color-base-content)]">
+                {licenseModel.author}
+              </td>
             </tr>
             <tr>
               <th
                 scope="row"
                 class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.license')}</th
               >
-              <td class="px-4 py-1 text-right align-top text-[var(--color-base-content)]"
-                >{licenseModel.license}</td
-              >
+                {t('analysis.gallery.license.license')}
+              </th>
+              <td class="px-4 py-1 text-right align-top text-[var(--color-base-content)]">
+                {licenseModel.license}
+              </td>
             </tr>
             <tr>
               <th
                 scope="row"
                 class="px-4 py-1 text-left font-normal align-top text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.commercialUse')}</th
               >
+                {t('analysis.gallery.license.commercialUse')}
+              </th>
               <td class="px-4 py-1 text-right align-top">
                 {#if licenseModel.commercialUse}
                   <span class="inline-flex items-center gap-1 text-[var(--text-success)]">
@@ -3719,11 +3726,12 @@
               <th
                 scope="row"
                 class="px-4 pt-1 pb-4 text-left font-normal align-top text-[var(--color-base-content)]/80"
-                >{t('analysis.gallery.license.downloadSize')}</th
               >
-              <td class="px-4 pt-1 pb-4 text-right align-top text-[var(--color-base-content)]"
-                >{formatBytes(licenseDownloadSize)}</td
-              >
+                {t('analysis.gallery.license.downloadSize')}
+              </th>
+              <td class="px-4 pt-1 pb-4 text-right align-top text-[var(--color-base-content)]">
+                {formatBytes(licenseDownloadSize)}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -3994,27 +4002,27 @@
       <div class="mb-4 p-3 bg-[var(--color-base-200)]/50 rounded-lg">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.speciesCount')}</span
-            >
+            <span class="text-[var(--color-base-content)] opacity-60">
+              {t('settings.main.sections.rangeFilter.modal.speciesCount')}
+            </span>
             <span class="font-medium ml-1">{rangeFilterState.speciesCount}</span>
           </div>
           <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.threshold')}</span
-            >
+            <span class="text-[var(--color-base-content)] opacity-60">
+              {t('settings.main.sections.rangeFilter.modal.threshold')}
+            </span>
             <span class="font-medium ml-1">{birdnet?.rangeFilter?.threshold}</span>
           </div>
           <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.latitude')}</span
-            >
+            <span class="text-[var(--color-base-content)] opacity-60">
+              {t('settings.main.sections.rangeFilter.modal.latitude')}
+            </span>
             <span class="font-medium ml-1">{birdnet?.latitude}</span>
           </div>
           <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.modal.longitude')}</span
-            >
+            <span class="text-[var(--color-base-content)] opacity-60">
+              {t('settings.main.sections.rangeFilter.modal.longitude')}
+            </span>
             <span class="font-medium ml-1">{birdnet?.longitude}</span>
           </div>
         </div>

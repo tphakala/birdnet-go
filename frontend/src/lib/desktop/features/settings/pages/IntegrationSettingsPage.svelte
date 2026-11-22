@@ -1329,9 +1329,9 @@
                       <div
                         class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"
                       ></div>
-                      <span class="text-sm text-[var(--color-base-content)]/60"
-                        >{t('components.tls.loading')}</span
-                      >
+                      <span class="text-sm text-[var(--color-base-content)]/60">
+                        {t('components.tls.loading')}
+                      </span>
                     </div>
                   {:else if mqttCertError}
                     <ErrorAlert type="error">

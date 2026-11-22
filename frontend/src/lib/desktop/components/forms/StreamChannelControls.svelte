@@ -90,9 +90,9 @@
 <div class="space-y-2">
   <!-- Detected audio format -->
   <p class="text-xs text-[var(--color-base-content)]/70">
-    <span class="font-medium text-[var(--color-base-content)]"
-      >{t('settings.audio.streams.format.label')}:</span
-    >
+    <span class="font-medium text-[var(--color-base-content)]">
+      {t('settings.audio.streams.format.label')}:
+    </span>
     {channels < 1 ? t('settings.audio.streams.format.untested') : formatText}
   </p>
 
@@ -138,11 +138,11 @@
       <div class="space-y-1 text-xs">
         {#each analysisResult.energy as ch (ch.channel)}
           <div class="flex items-center gap-2">
-            <span class="w-20 text-[var(--color-base-content)]/70"
-              >{ch.channel === 0
+            <span class="w-20 text-[var(--color-base-content)]/70">
+              {ch.channel === 0
                 ? t('settings.audio.streams.channelMode.energyLeft')
-                : t('settings.audio.streams.channelMode.energyRight')}:</span
-            >
+                : t('settings.audio.streams.channelMode.energyRight')}:
+            </span>
             <div class="flex-1 h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full {(ch.channel === 0 ? 'left' : 'right') ===
@@ -158,9 +158,9 @@
                 )}%"
               ></div>
             </div>
-            <span class="font-mono w-16 text-right"
-              >{(ch.rmsDbfs ?? -DBFS_RANGE).toFixed(1)} dBFS</span
-            >
+            <span class="font-mono w-16 text-right">
+              {(ch.rmsDbfs ?? -DBFS_RANGE).toFixed(1)} dBFS
+            </span>
           </div>
         {/each}
         {#if analysisResult.recommended !== 'downmix'}

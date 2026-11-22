@@ -1603,9 +1603,9 @@
             {:else}
               <div>
                 <label class="block py-1" for="export-bitrate-disabled">
-                  <span class="text-sm text-[var(--color-base-content)]"
-                    >{t('settings.audio.fileSettings.bitrateLabel')}</span
-                  >
+                  <span class="text-sm text-[var(--color-base-content)]">
+                    {t('settings.audio.fileSettings.bitrateLabel')}
+                  </span>
                 </label>
                 <input
                   id="export-bitrate-disabled"

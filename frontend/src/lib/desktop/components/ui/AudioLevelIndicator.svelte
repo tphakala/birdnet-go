@@ -786,9 +786,9 @@
                       {/if}
                     </div>
                     {#if isInactive(source)}
-                      <span class="text-xs text-[var(--color-base-content)]/60"
-                        >{t('media.audio.silent')}</span
-                      >
+                      <span class="text-xs text-[var(--color-base-content)]/60">
+                        {t('media.audio.silent')}
+                      </span>
                     {/if}
                   </button>
 

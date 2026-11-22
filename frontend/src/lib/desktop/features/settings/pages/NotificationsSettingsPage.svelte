@@ -1571,8 +1571,9 @@
                       />
                       <span
                         class="inline-flex items-center justify-center px-3 text-sm bg-[var(--color-base-300)] border border-l-0 border-[var(--color-base-300)] rounded-r-lg"
-                        >%</span
                       >
+                        %
+                      </span>
                     </div>
                     <p class="text-xs text-[var(--color-base-content)]/60 mt-1">
                       {t('settings.notifications.push.filters.minConfidence.helpText')}
@@ -1606,8 +1607,9 @@
                       />
                       <span
                         class="inline-flex items-center justify-center px-3 text-sm bg-[var(--color-base-300)] border border-l-0 border-[var(--color-base-300)] rounded-r-lg"
-                        >{t('settings.notifications.push.filters.speciesCooldown.unit')}</span
                       >
+                        {t('settings.notifications.push.filters.speciesCooldown.unit')}
+                      </span>
                     </div>
                     <p class="text-xs text-[var(--color-base-content)]/60 mt-1">
                       {t('settings.notifications.push.filters.speciesCooldown.helpText')}
@@ -1741,25 +1743,21 @@
                           {t('settings.notifications.push.services.ntfy.testConnection')}
                         </button>
                         {#if serviceFormData.ntfyCheckStatus === 'https'}
-                          <span class="text-xs text-[var(--text-success)]"
-                            >{t(
-                              'settings.notifications.push.services.ntfy.connectionOk.https'
-                            )}</span
-                          >
+                          <span class="text-xs text-[var(--text-success)]">
+                            {t('settings.notifications.push.services.ntfy.connectionOk.https')}
+                          </span>
                         {:else if serviceFormData.ntfyCheckStatus === 'http'}
-                          <span class="text-xs text-[var(--text-warning)]"
-                            >{t(
-                              'settings.notifications.push.services.ntfy.connectionOk.http'
-                            )}</span
-                          >
+                          <span class="text-xs text-[var(--text-warning)]">
+                            {t('settings.notifications.push.services.ntfy.connectionOk.http')}
+                          </span>
                         {:else if serviceFormData.ntfyCheckStatus === 'unreachable'}
-                          <span class="text-xs text-[var(--text-error)]"
-                            >{t('settings.notifications.push.services.ntfy.connectionFailed')}</span
-                          >
+                          <span class="text-xs text-[var(--text-error)]">
+                            {t('settings.notifications.push.services.ntfy.connectionFailed')}
+                          </span>
                         {:else if serviceFormData.ntfyCheckStatus === 'checkError'}
-                          <span class="text-xs text-[var(--text-warning)]"
-                            >{t('settings.notifications.push.services.ntfy.checkError')}</span
-                          >
+                          <span class="text-xs text-[var(--text-warning)]">
+                            {t('settings.notifications.push.services.ntfy.checkError')}
+                          </span>
                         {/if}
                       </div>
 
@@ -2016,15 +2014,15 @@
                         class="mt-2 pl-2 space-y-1 font-mono text-[var(--color-base-content)]/70"
                       >
                         <p>
-                          <strong
-                            >{t('settings.notifications.push.form.urlFormats.discord')}:</strong
-                          >
+                          <strong>
+                            {t('settings.notifications.push.form.urlFormats.discord')}:
+                          </strong>
                           {t('settings.notifications.push.form.urlFormats.discordFormat')}
                         </p>
                         <p>
-                          <strong
-                            >{t('settings.notifications.push.form.urlFormats.telegram')}:</strong
-                          >
+                          <strong>
+                            {t('settings.notifications.push.form.urlFormats.telegram')}:
+                          </strong>
                           {t('settings.notifications.push.form.urlFormats.telegramFormat')}
                         </p>
                         <p>
@@ -2032,14 +2030,15 @@
                           {t('settings.notifications.push.form.urlFormats.slackFormat')}
                         </p>
                         <p>
-                          <strong
-                            >{t('settings.notifications.push.form.urlFormats.pushover')}:</strong
-                          >
+                          <strong>
+                            {t('settings.notifications.push.form.urlFormats.pushover')}:
+                          </strong>
                           {t('settings.notifications.push.form.urlFormats.pushoverFormat')}
                         </p>
                         <p>
-                          <strong>{t('settings.notifications.push.form.urlFormats.gotify')}:</strong
-                          >
+                          <strong>
+                            {t('settings.notifications.push.form.urlFormats.gotify')}:
+                          </strong>
                           {t('settings.notifications.push.form.urlFormats.gotifyFormat')}
                         </p>
                         <p>
@@ -2304,9 +2303,9 @@
               <div class="space-y-4">
                 <div>
                   <label for="template-title" class="block mb-1">
-                    <span class="text-sm font-semibold text-[var(--color-base-content)]"
-                      >{t('settings.notifications.templates.titleLabel')}</span
-                    >
+                    <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                      {t('settings.notifications.templates.titleLabel')}
+                    </span>
                   </label>
                   <input
                     id="template-title"
@@ -2319,9 +2318,9 @@
 
                 <div>
                   <label for="template-message" class="block mb-1">
-                    <span class="text-sm font-semibold text-[var(--color-base-content)]"
-                      >{t('settings.notifications.templates.messageLabel')}</span
-                    >
+                    <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                      {t('settings.notifications.templates.messageLabel')}
+                    </span>
                   </label>
                   <textarea
                     id="template-message"
@@ -2363,11 +2362,11 @@
                       ></span>
                       <span>{t('settings.notifications.templates.savingButton')}</span>
                     {:else}
-                      <span
-                        >{hasTemplateChanges
+                      <span>
+                        {hasTemplateChanges
                           ? t('settings.notifications.templates.saveButtonUnsaved')
-                          : t('settings.notifications.templates.saveButton')}</span
-                      >
+                          : t('settings.notifications.templates.saveButton')}
+                      </span>
                     {/if}
                   </button>
                   <button
@@ -2403,17 +2402,17 @@
               </h3>
               <p class="text-sm text-[var(--color-base-content)]/80 mb-3">
                 {t('settings.notifications.templates.variablesDescription')}
-                <code class="bg-[var(--color-base-300)] px-1 rounded-sm"
-                  >&#123;&#123;.VariableName&#125;&#125;</code
-                >
+                <code class="bg-[var(--color-base-300)] px-1 rounded-sm">
+                  &#123;&#123;.VariableName&#125;&#125;
+                </code>
               </p>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
                 {#each templateFields as field (field.name)}
                   <div class="flex items-baseline gap-2">
-                    <code class="font-mono text-[var(--text-primary)] shrink-0"
-                      >&#123;&#123;.{field.name}&#125;&#125;</code
-                    >
+                    <code class="font-mono text-[var(--text-primary)] shrink-0">
+                      &#123;&#123;.{field.name}&#125;&#125;
+                    </code>
                     <span class="text-[var(--color-base-content)]/70">{field.description}</span>
                   </div>
                 {/each}
@@ -2567,8 +2566,9 @@
           <!-- Content -->
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-sm font-medium" class:opacity-50={!rule.enabled}>{displayName}</span
-              >
+              <span class="text-sm font-medium" class:opacity-50={!rule.enabled}>
+                {displayName}
+              </span>
               {#if rule.built_in}
                 <span
                   class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-200)] text-[var(--color-base-content)]/70"

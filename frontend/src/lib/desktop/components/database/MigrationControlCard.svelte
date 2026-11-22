@@ -371,10 +371,10 @@
             <!-- Phase-specific progress bar within phase indicator -->
             <div class="mt-3">
               <div class="flex justify-between text-sm mb-1.5 text-[var(--color-base-content)]">
-                <span
-                  >{formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
-                  {t('system.database.migration.progress.records')}</span
-                >
+                <span>
+                  {formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
+                  {t('system.database.migration.progress.records')}
+                </span>
                 <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
               </div>
               <div class="w-full h-2.5 bg-[var(--color-base-200)] rounded-full overflow-hidden">
@@ -388,15 +388,15 @@
             <!-- Rate and ETA inside phase indicator -->
             {#if status.records_per_second && status.records_per_second > 0}
               <div class="flex justify-between text-sm mt-2 text-[var(--color-base-content)]/70">
-                <span
-                  >{t('system.database.migration.progress.rateValue', {
+                <span>
+                  {t('system.database.migration.progress.rateValue', {
                     rate: status.records_per_second.toFixed(1),
-                  })}</span
-                >
+                  })}
+                </span>
                 {#if status.estimated_remaining}
-                  <span
-                    >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
-                  >
+                  <span>
+                    {t('system.database.migration.progress.eta')}: {status.estimated_remaining}
+                  </span>
                 {/if}
               </div>
             {/if}
@@ -405,11 +405,9 @@
           <!-- Fallback progress for states without explicit phase info -->
           <div>
             <div class="flex justify-between text-sm mb-2 text-[var(--color-base-content)]">
-              <span
-                >{formatNumber(status.migrated_records)} / {formatNumber(
-                  status.total_records
-                )}</span
-              >
+              <span>
+                {formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
+              </span>
               <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
             </div>
             <div class="w-full h-2.5 bg-[var(--color-base-200)] rounded-full overflow-hidden">
@@ -421,15 +419,15 @@
             <!-- Rate and ETA for fallback -->
             {#if status.records_per_second && status.records_per_second > 0}
               <div class="flex justify-between text-sm mt-2 text-[var(--color-base-content)]/70">
-                <span
-                  >{t('system.database.migration.progress.rateValue', {
+                <span>
+                  {t('system.database.migration.progress.rateValue', {
                     rate: status.records_per_second.toFixed(1),
-                  })}</span
-                >
+                  })}
+                </span>
                 {#if status.estimated_remaining}
-                  <span
-                    >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
-                  >
+                  <span>
+                    {t('system.database.migration.progress.eta')}: {status.estimated_remaining}
+                  </span>
                 {/if}
               </div>
             {/if}

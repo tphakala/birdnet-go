@@ -83,23 +83,26 @@
           class="false-positive-badge"
           role="status"
           aria-label={t('dashboard.recentDetections.status.false')}
-          >{t('dashboard.recentDetections.status.false')}</span
         >
+          {t('dashboard.recentDetections.status.false')}
+        </span>
       {:else}
         <span
           class="unverified-badge"
           role="status"
           aria-label={t('dashboard.recentDetections.status.unverified')}
-          >{t('dashboard.recentDetections.status.unverified')}</span
         >
+          {t('dashboard.recentDetections.status.unverified')}
+        </span>
       {/if}
       {#if isUnlikely}
         <span
           class="unlikely-badge"
           role="status"
           aria-label={t('dashboard.recentDetections.status.unlikely')}
-          ><CircleHelp class="size-2.5" />{t('dashboard.recentDetections.status.unlikely')}</span
         >
+          <CircleHelp class="size-2.5" />{t('dashboard.recentDetections.status.unlikely')}
+        </span>
       {/if}
     </div>
 

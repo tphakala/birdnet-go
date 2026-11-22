@@ -106,14 +106,14 @@
         >
           {#if currentWidth === 'half'}
             <Square class="size-3.5 text-[var(--color-base-content)]/60" />
-            <span class="text-[var(--color-base-content)]/60"
-              >{t('dashboard.editMode.widthFull')}</span
-            >
+            <span class="text-[var(--color-base-content)]/60">
+              {t('dashboard.editMode.widthFull')}
+            </span>
           {:else}
             <Columns2 class="size-3.5 text-[var(--color-base-content)]/60" />
-            <span class="text-[var(--color-base-content)]/60"
-              >{t('dashboard.editMode.widthHalf')}</span
-            >
+            <span class="text-[var(--color-base-content)]/60">
+              {t('dashboard.editMode.widthHalf')}
+            </span>
           {/if}
         </button>
       {:else if isFullWidthOnly}

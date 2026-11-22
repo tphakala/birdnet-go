@@ -701,8 +701,9 @@
                   <td
                     colspan="5"
                     class="text-center py-4 text-[var(--color-base-content)] opacity-50"
-                    >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
+                    {t('analytics.recentDetections.noRecentDetections')}
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -752,9 +753,9 @@
                       {formatPercentage(detection.confidence)}
                     </span>
                     <SourceBadge {detection} variant="inline" />
-                    <span class="text-xs opacity-70"
-                      >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
-                    >
+                    <span class="text-xs opacity-70">
+                      {detection.timeOfDay || t('analytics.recentDetections.unknown')}
+                    </span>
                   </div>
                 </div>
               </div>

@@ -302,9 +302,9 @@
             <ul class="text-xs space-y-1 text-[var(--color-base-content)] opacity-70">
               <li class="flex items-center gap-2">
                 <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
-                <span
-                  >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
-                >
+                <span>
+                  {@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}
+                </span>
               </li>
               <li class="flex items-center gap-2">
                 <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
@@ -377,9 +377,9 @@
 
           <div class="mt-4">
             <label class="block py-1" for={userMessageInputId}>
-              <span class="text-sm text-[var(--color-base-content)]"
-                >{t('settings.support.supportReport.userMessage.labelOptional')}</span
-              >
+              <span class="text-sm text-[var(--color-base-content)]">
+                {t('settings.support.supportReport.userMessage.labelOptional')}
+              </span>
             </label>
             <textarea
               id={userMessageInputId}
@@ -471,11 +471,11 @@
             {#if !generating}
               <span class="flex items-center gap-2">
                 <Download class="size-4" />
-                <span
-                  >{supportDump.uploadToSentry
+                <span>
+                  {supportDump.uploadToSentry
                     ? t('settings.support.supportReport.generateButton.upload')
-                    : t('settings.support.supportReport.generateButton.download')}</span
-                >
+                    : t('settings.support.supportReport.generateButton.download')}
+                </span>
               </span>
             {:else}
               <span

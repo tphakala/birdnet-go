@@ -461,9 +461,9 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span id={errorId} class={cn('text-xs text-[var(--text-error)]', errorClassName)}
-        >{displayError}</span
-      >
+      <span id={errorId} class={cn('text-xs text-[var(--text-error)]', errorClassName)}>
+        {displayError}
+      </span>
     </div>
   {:else if helpText}
     <span id={helpTextId} class="help-text">{helpText}</span>
