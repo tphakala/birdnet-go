@@ -18,7 +18,14 @@
     restoreTo: HTMLElement | SVGElement | null;
     /** Moves focus to this dialog's first tabbable control, else its box */
     focusInto: () => void;
+    /** Paint layer: one above the Modal that was on top when this one opened, 1 on an empty stack */
+    layer: number;
   }
+
+  // A Modal opened over another paints one layer higher than the bottom one, so the Modal
+  // opened last is on top whatever its place in the DOM (a dialog portaled to the body comes
+  // after the app's own dialogs). Every layer stays under the toasts.
+  const MODAL_BASE_Z_INDEX = Z_INDEX.MODAL_DIALOG;
 
   // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
   const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
@@ -152,6 +159,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
+  import { Z_INDEX } from '$lib/utils/z-index';
 
   const logger = loggers.ui;
 
@@ -241,7 +249,11 @@
     opener: null,
     restoreTo: null,
     focusInto: () => setInitialFocus(),
+    layer: 1,
   };
+  // This instance's paint layer for the template; kept after closing, so the fade-out
+  // stays in place, and set again on the next open
+  let paintLayer = $state(1);
   // Ids are per instance and fixed for its life: the dialog is always mounted,
   // so a shared literal would repeat on every page that has two Modals
   const titleId = generateId('modal-title');
@@ -551,6 +563,9 @@
 
       const stopInitialFocus = scheduleInitialFocus();
 
+      // Untracked: the layer of the Modal below must not make this effect re-run
+      stackEntry.layer = untrack(() => (openModals.at(-1)?.layer ?? 0) + 1);
+      paintLayer = stackEntry.layer;
       openModals.push(stackEntry);
       document.addEventListener('keydown', handleKeydown);
 
@@ -574,12 +589,13 @@
 <div
   bind:this={dialogElement}
   class={cn(
-    'fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
+    'fixed inset-0 flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
     {
       'opacity-100 visible pointer-events-auto': isOpen,
       'pointer-events-none': !isOpen,
     }
   )}
+  style:z-index={MODAL_BASE_Z_INDEX + paintLayer - 1}
   role="dialog"
   aria-modal="true"
   aria-labelledby={title ? titleId : undefined}
