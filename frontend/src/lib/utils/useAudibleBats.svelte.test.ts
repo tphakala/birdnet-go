@@ -7,34 +7,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useAudibleBats } from './useAudibleBats.svelte';
+import { makeBatWavBuffer } from '../../test/audioFixtures';
 import type { AudibleBatsSettings } from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
 
 const SETTINGS: AudibleBatsSettings = {
   expansion: 10,
 };
-
-function makeBatWavBuffer(sampleRate = 256000): ArrayBuffer {
-  const numSamples = 4;
-  const buf = new ArrayBuffer(44 + numSamples * 2);
-  const view = new DataView(buf);
-  const writeStr = (off: number, text: string) => {
-    for (let i = 0; i < text.length; i++) view.setUint8(off + i, text.charCodeAt(i));
-  };
-  writeStr(0, 'RIFF');
-  view.setUint32(4, buf.byteLength - 8, true);
-  writeStr(8, 'WAVE');
-  writeStr(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, 'data');
-  view.setUint32(40, numSamples * 2, true);
-  return buf;
-}
 
 function okResponse(sampleRate = 256000) {
   return {
@@ -44,9 +22,9 @@ function okResponse(sampleRate = 256000) {
   };
 }
 
-function errorResponse(message: string) {
+function errorResponse(message: string, status = 422) {
   return new Response(JSON.stringify({ message }), {
-    status: 422,
+    status,
     headers: { 'Content-Type': 'application/json' },
   });
 }
@@ -80,7 +58,27 @@ describe('useAudibleBats', () => {
     expect(urls).toEqual(['/api/v2/audio/5?denoise=light-medium', '/api/v2/audio/5']);
   });
 
-  it('surfaces client-side validation error when source sample rate is too low', async () => {
+  it('falls back to the stored clip when the denoised clip returns 422, 500, or 503', async () => {
+    for (const status of [422, 500, 503]) {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(errorResponse('denoise failed', status))
+        .mockResolvedValueOnce(okResponse());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const bats = useAudibleBats({ getDetectionId: () => 9, getDenoise: () => 'light-medium' });
+      await bats.enable(SETTINGS);
+
+      expect(bats.active).toBe(true);
+      expect(bats.error).toBeNull();
+      expect(fetchMock.mock.calls.map(c => String(c[0]))).toEqual([
+        '/api/v2/audio/9?denoise=light-medium',
+        '/api/v2/audio/9',
+      ]);
+    }
+  });
+
+  it('surfaces localized UI error instead of raw technical details when expansion fails', async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse(48000));
     vi.stubGlobal('fetch', fetchMock);
     const onActivate = vi.fn();
@@ -90,7 +88,7 @@ describe('useAudibleBats', () => {
 
     expect(bats.active).toBe(false);
     expect(bats.url).toBeNull();
-    expect(bats.error).toContain('96000 Hz');
+    expect(bats.error).toBe('media.audio.audibleBats.error');
     expect(onActivate).not.toHaveBeenCalled();
   });
 
@@ -101,7 +99,7 @@ describe('useAudibleBats', () => {
       vi
         .fn()
         .mockImplementation(() =>
-          Promise.resolve(fail ? errorResponse('regen failed') : okResponse())
+          Promise.resolve(fail ? errorResponse('regen failed', 404) : okResponse())
         )
     );
     const onActivate = vi.fn();

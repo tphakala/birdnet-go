@@ -18,6 +18,7 @@ import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import { mockAudioProbe } from '../../../../test/audioProbeMock';
 import { AUDIO_RETRY_DELAY_MS, MAX_AUDIO_LOAD_RETRIES } from '$lib/utils/audio';
 import { DENOISE_BUTTON_NAME } from '../../../../test/audioPlayerQueries';
+import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -102,7 +103,7 @@ describe('AudioPlayer playback denoise default', () => {
   function postedUrls(): string[] {
     return fetchMock.mock.calls
       .map(call => String(call[0]))
-      .filter(url => url.includes('/process') || url.includes('/audible-bats'));
+      .filter(url => url.includes('/process'));
   }
 
   beforeEach(() => {
@@ -625,29 +626,6 @@ describe('AudioPlayer playback denoise default', () => {
   });
 
   describe('with audible bats active', () => {
-    function makeBatWavBuffer(sampleRate = 256000): ArrayBuffer {
-      const numSamples = 4;
-      const buf = new ArrayBuffer(44 + numSamples * 2);
-      const view = new DataView(buf);
-      const w = (off: number, txt: string) => {
-        for (let i = 0; i < txt.length; i++) view.setUint8(off + i, txt.charCodeAt(i));
-      };
-      w(0, 'RIFF');
-      view.setUint32(4, buf.byteLength - 8, true);
-      w(8, 'WAVE');
-      w(12, 'fmt ');
-      view.setUint32(16, 16, true);
-      view.setUint16(20, 1, true);
-      view.setUint16(22, 1, true);
-      view.setUint32(24, sampleRate, true);
-      view.setUint32(28, sampleRate * 2, true);
-      view.setUint16(32, 2, true);
-      view.setUint16(34, 16, true);
-      w(36, 'data');
-      view.setUint32(40, numSamples * 2, true);
-      return buf;
-    }
-
     beforeEach(() => {
       Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
         configurable: true,

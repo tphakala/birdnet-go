@@ -1,3 +1,4 @@
+import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 /**
  * Selection playback and the clip extraction listeners in AudioPlayer.
  */
@@ -310,27 +311,6 @@ describe('AudioPlayer selection play', () => {
     beforeEach(() => {
       URL.createObjectURL = vi.fn(() => 'blob:audible-bats-clip');
       URL.revokeObjectURL = vi.fn();
-      const makeBatWavBuffer = (sampleRate = 256000) => {
-        const buf = new ArrayBuffer(44 + 8);
-        const view = new DataView(buf);
-        const w = (off: number, txt: string) => {
-          for (let i = 0; i < txt.length; i++) view.setUint8(off + i, txt.charCodeAt(i));
-        };
-        w(0, 'RIFF');
-        view.setUint32(4, buf.byteLength - 8, true);
-        w(8, 'WAVE');
-        w(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, 1, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true);
-        view.setUint16(32, 2, true);
-        view.setUint16(34, 16, true);
-        w(36, 'data');
-        view.setUint32(40, 8, true);
-        return buf;
-      };
       globalThis.fetch = vi.fn().mockImplementation(async () => ({
         ok: true,
         status: 200,

@@ -3,8 +3,9 @@
  *
  * Composable that owns the "audible bats" derived-audio lifecycle for a single
  * detection: it fetches the detection's WAV or FLAC clip (optionally denoised
- * via the shared playback denoise endpoint), time-expands it client-side into a
- * playable WAV object URL, and tracks active/generating/error state.
+ * via the shared playback denoise endpoint, falling back to the stored clip
+ * on transient/denoise failures), time-expands it client-side into a playable
+ * WAV object URL, and tracks active/generating/error state.
  *
  * It deliberately does NOT touch any <audio> element. The consuming player owns
  * playback and reacts to the generated `url` (or the optional onActivate /
@@ -19,6 +20,20 @@ import { loggers } from '$lib/utils/logger';
 import type { AudibleBatsSettings } from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
 
 const logger = loggers.audio;
+
+const HTTP_UNPROCESSABLE_ENTITY = 422;
+const HTTP_INTERNAL_SERVER_ERROR = 500;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+
+class ServerResponseError extends Error {}
+
+function shouldFallbackFromDenoise(status: number): boolean {
+  return (
+    status === HTTP_UNPROCESSABLE_ENTITY ||
+    status === HTTP_INTERNAL_SERVER_ERROR ||
+    status === HTTP_SERVICE_UNAVAILABLE
+  );
+}
 
 interface UseAudibleBatsOptions {
   /** Returns the current detection ID (read lazily so it tracks card recycling). */
@@ -63,9 +78,17 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
     try {
       const detectionId = options.getDetectionId();
       const denoise = options.getDenoise?.() ?? '';
-      const response = await fetch(audioUrlFor(detectionId, denoise), {
+      let response = await fetch(audioUrlFor(detectionId, denoise), {
         signal: controller.signal,
       });
+
+      // If server-side denoise fails (e.g. stereo clip 422, busy queue 503), fall
+      // back to the stored clip so audible-bats playback still succeeds client-side.
+      if (!response.ok && denoise !== '' && shouldFallbackFromDenoise(response.status)) {
+        response = await fetch(audioUrlFor(detectionId, ''), {
+          signal: controller.signal,
+        });
+      }
 
       if (!response.ok) {
         let errorMsg = t('media.audio.audibleBats.error');
@@ -75,7 +98,7 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
         } catch {
           // Use default error message
         }
-        throw new Error(errorMsg);
+        throw new ServerResponseError(errorMsg);
       }
 
       const buffer = await response.arrayBuffer();
@@ -98,7 +121,9 @@ export function useAudibleBats(options: UseAudibleBatsOptions) {
       }
       if (abortController !== controller) return;
       active = false;
-      error = err instanceof Error ? err.message : t('media.audio.audibleBats.error');
+      // Only show server-provided API messages directly; client-side/WASM errors keep the
+      // localized UI message while technical details stay in logger.error.
+      error = err instanceof ServerResponseError ? err.message : t('media.audio.audibleBats.error');
       logger.error('Audible bats generation failed', err);
       // If there was an active derived URL, deactivate cleanly before revoking it
       // so the player can swap back to the original source before the blob is freed.
