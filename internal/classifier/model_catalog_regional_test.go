@@ -146,8 +146,10 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 	}
 }
 
-// assertLegacyVariantsUpdate checks each Legacy variant is an update to the live
-// build of its own region and shares no file name with it.
+// assertLegacyVariantsUpdate checks each Legacy variant is superseded by a live
+// variant of its own region, and that it is offered as an update exactly when the
+// successor is another release or a higher build; an update shares no file name
+// with the installed build.
 func assertLegacyVariantsUpdate(t *testing.T, entry *CatalogEntry, legacy []*CatalogVariant, liveIDs map[string]string) {
 	t.Helper()
 	for _, v := range legacy {
@@ -157,6 +159,10 @@ func assertLegacyVariantsUpdate(t *testing.T, entry *CatalogEntry, legacy []*Cat
 			assert.Falsef(t, succ.Legacy, "successor %q of %q must be live", succ.ID, v.ID)
 		}
 		got, ok := VariantUpdate(entry, v.ID)
+		if succ != nil && variantRelease(entry, succ) == variantRelease(entry, v) && variantBuild(succ) <= variantBuild(v) {
+			assert.Falsef(t, ok, "Legacy variant %q has a successor of the same release and build, which is no update", v.ID)
+			continue
+		}
 		if assert.Truef(t, ok, "VariantUpdate of Legacy variant %q must offer an update", v.ID) {
 			assert.Equalf(t, v.SupersededBy, got.ID, "update target of %q", v.ID)
 			// Different builds never share a file, so the update downloads next to

@@ -70,7 +70,9 @@ func TestRegionalVariants_MatchManifest(t *testing.T) {
 				}
 				for j := range v.Files {
 					if v.Files[j].Role == RoleModel {
-						byModelPath[v.Files[j].RemotePath] = v
+						modelPath := v.Files[j].RemotePath
+						require.NotContainsf(t, byModelPath, modelPath, "model path %q is carried by more than one variant", modelPath)
+						byModelPath[modelPath] = v
 					}
 				}
 			}
@@ -132,7 +134,8 @@ func assertRegionalVariantMatchesManifest(t *testing.T, entry *CatalogEntry, v *
 		wantID = e.Variant + "-" + e.UpstreamVersion + buildIDPart + "@" + e.Region
 	}
 	assert.Equalf(t, wantID, v.ID, "variant ID for %q", e.Path)
-	assert.Equalf(t, max(e.Build, 1), VariantBuild(entry, v.ID), "build of variant %q", v.ID)
+	require.GreaterOrEqualf(t, e.Build, 1, "manifest build of %q", e.Path)
+	assert.Equalf(t, e.Build, VariantBuild(entry, v.ID), "build of variant %q", v.ID)
 
 	// A BirdNET+ file name carries the entry's own release and build, so no
 	// build can sit under another release's or build's name, and the variant
