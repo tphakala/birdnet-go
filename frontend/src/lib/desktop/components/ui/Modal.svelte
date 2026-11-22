@@ -22,7 +22,7 @@
     layer: number;
   }
 
-  // A Modal opened over another paints one layer higher than the bottom one, so the Modal
+  // A Modal opened over others paints one layer above the Modal on top, so the Modal
   // opened last is on top whatever its place in the DOM (a dialog portaled to the body comes
   // after the app's own dialogs). Every layer stays under the toasts.
   const MODAL_BASE_Z_INDEX = Z_INDEX.MODAL_DIALOG;
