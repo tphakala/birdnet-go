@@ -6082,6 +6082,13 @@
         "action": "Atjaunināt",
         "applying": "Atjaunina..."
       },
+      "buildNotes": {
+        "heading": "Jaunumi versijas {version} būvējumā {build}",
+        "released": "Izlaists {date}",
+        "buildLabel": "Būvējuma numurs",
+        "buildValue": "{build}, izlaists {date}",
+        "disclosure": "Jaunumi šajā būvējumā"
+      },
       "entryIncompatible": "Šis modelis nav pieejams šajā sistēmā.",
       "regionGlobal": "Globāls",
       "hardwareLabel": "Aparatūra",

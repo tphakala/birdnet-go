@@ -50,18 +50,24 @@ func availableORT(string) inference.ORTStatus { return inference.ORTStatus{Avail
 // decoded catalog.
 func catalogRequest(t *testing.T, h *Handler) []CatalogEntryResponse {
 	t.Helper()
+	var resp struct {
+		Catalog []CatalogEntryResponse `json:"catalog"`
+	}
+	require.NoError(t, json.Unmarshal(catalogBody(t, h), &resp))
+	return resp.Catalog
+}
+
+// catalogBody returns the raw JSON body of GET /api/v2/models/catalog, for
+// assertions on which keys the response carries.
+func catalogBody(t *testing.T, h *Handler) []byte {
+	t.Helper()
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/models/catalog", http.NoBody)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 	require.NoError(t, h.GetModelCatalog(ctx))
 	require.Equal(t, http.StatusOK, rec.Code)
-
-	var resp struct {
-		Catalog []CatalogEntryResponse `json:"catalog"`
-	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	return resp.Catalog
+	return rec.Body.Bytes()
 }
 
 func findEntry(catalog []CatalogEntryResponse, id string) *CatalogEntryResponse {

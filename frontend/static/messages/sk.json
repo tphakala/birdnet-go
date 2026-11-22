@@ -6082,6 +6082,13 @@
         "action": "Aktualizovať",
         "applying": "Aktualizuje sa..."
       },
+      "buildNotes": {
+        "heading": "Novinky v zostavení {build} verzie {version}",
+        "released": "Vydané {date}",
+        "buildLabel": "Číslo zostavenia",
+        "buildValue": "{build}, vydané {date}",
+        "disclosure": "Novinky v tomto zostavení"
+      },
       "entryIncompatible": "Tento model nie je v tomto systéme k dispozícii.",
       "regionGlobal": "Globálny",
       "hardwareLabel": "Hardvér",

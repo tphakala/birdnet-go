@@ -6082,6 +6082,13 @@
         "action": "Aktualisieren",
         "applying": "Wird aktualisiert..."
       },
+      "buildNotes": {
+        "heading": "Neu in Build {build} von Version {version}",
+        "released": "Veröffentlicht am {date}",
+        "buildLabel": "Build-Nummer",
+        "buildValue": "{build}, veröffentlicht am {date}",
+        "disclosure": "Neu in diesem Build"
+      },
       "entryIncompatible": "Dieses Modell ist auf diesem System nicht verfügbar.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",

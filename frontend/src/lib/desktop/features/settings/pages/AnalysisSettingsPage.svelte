@@ -112,6 +112,7 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import ModelVariantPicker from '$lib/desktop/features/settings/components/ModelVariantPicker.svelte';
+  import ModelBuildNotes from '$lib/desktop/features/settings/components/ModelBuildNotes.svelte';
   import ModelRegionSelector from '$lib/desktop/features/settings/components/ModelRegionSelector.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import FalsePositiveFilterControl, {
@@ -147,7 +148,7 @@
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
-  import { formatBytes, formatNumber } from '$lib/utils/formatters';
+  import { formatBytes, formatDate, formatNumber } from '$lib/utils/formatters';
   import {
     pickPreselectedVariant,
     familyRegionSlug,
@@ -155,6 +156,7 @@
     DEFAULT_REGION_MODE,
     GLOBAL_REGION_MODE,
     optimizeOffers,
+    targetBuildNotes,
     CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
     type OptimizeOffer,
@@ -332,6 +334,14 @@
   const licenseDownloadSize = $derived(
     licenseSelectedVariant?.sizeBytes ?? licenseModel?.totalSizeBytes ?? 0
   );
+  // The release notes of the build a swap of an installed model installs, shown before
+  // the swap runs; null for a fresh install, a swap within the installed build and a
+  // target build without notes (see targetBuildNotes for an unlisted installed variant).
+  const licenseBuildNotes = $derived(
+    licenseModel ? targetBuildNotes(licenseModel, selectedVariantId) : null
+  );
+  // Names the scrollable release notes region after its heading.
+  const BUILD_NOTES_HEADING_ID = generateId('license-build-notes');
   // The notice the license dialog shows for a non-stable release channel
   const licenseChannelNotice = $derived.by(() => {
     switch (licenseModel?.channel) {
@@ -3738,6 +3748,44 @@
             </summary>
             <p class="mt-1">{t('analysis.gallery.variants.precisionHelp')}</p>
           </details>
+        {/if}
+
+        {#if licenseBuildNotes}
+          <div class="rounded-lg border border-[var(--color-base-300)] p-4 text-sm">
+            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h4 id={BUILD_NOTES_HEADING_ID} class="font-medium text-[var(--color-base-content)]">
+                {t('analysis.gallery.buildNotes.heading', {
+                  build: licenseBuildNotes.build,
+                  version: licenseBuildNotes.version,
+                })}
+              </h4>
+              <time
+                datetime={licenseBuildNotes.date}
+                class="text-xs text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.buildNotes.released', {
+                  date: formatDate(licenseBuildNotes.date),
+                })}
+              </time>
+            </div>
+            <!-- Focusable so keyboard users can scroll long notes. The region has a
+                 bounded height, so the documents and the buttons below stay in reach;
+                 it sits after the variant picker, so a pick that adds or removes it
+                 does not push the picker down within the dialog's content. -->
+            <!-- Keyed on the build, so picking a variant with other notes starts them
+                 at the top instead of keeping the scroll position of the last ones. -->
+            {#key `${licenseBuildNotes.version}:${licenseBuildNotes.build}`}
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+              <div
+                role="region"
+                aria-labelledby={BUILD_NOTES_HEADING_ID}
+                tabindex="0"
+                class="mt-3 max-h-56 overflow-y-auto rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+              >
+                <ModelBuildNotes record={licenseBuildNotes} />
+              </div>
+            {/key}
+          </div>
         {/if}
 
         {#if licenseDocuments.reference.length > 0}

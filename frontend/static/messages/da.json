@@ -6082,6 +6082,13 @@
         "action": "Opdater",
         "applying": "Opdaterer..."
       },
+      "buildNotes": {
+        "heading": "Nyt i build {build} af version {version}",
+        "released": "Udgivet {date}",
+        "buildLabel": "Buildnummer",
+        "buildValue": "{build}, udgivet {date}",
+        "disclosure": "Nyt i dette build"
+      },
       "entryIncompatible": "Denne model er ikke tilgængelig på dette system.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",

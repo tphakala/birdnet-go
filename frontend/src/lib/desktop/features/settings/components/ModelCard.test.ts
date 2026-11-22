@@ -5,6 +5,7 @@ import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
 import type { CatalogVariant } from '$lib/types/models';
+import { formatDate } from '$lib/utils/formatters';
 import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW, CHANNEL_STABLE } from '$lib/utils/variantSelection';
 import {
   catalogEntry as entry,
@@ -841,6 +842,76 @@ describe('ModelCard Accessibility', () => {
     });
 
     await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+  });
+
+  describe('release notes of the installed build', () => {
+    const notes = {
+      version: '2',
+      build: 2,
+      date: '2026-11-21',
+      reason: 'Every regional model now includes the dog.',
+      notes: ['Dogs are reported again.'],
+    };
+    const installedB2 = variant({ id: 'v-b2', installed: true, version: '2', build: 2 });
+
+    it('shows the installed build and its notes behind a disclosure on the Installed tab only', () => {
+      const withNotes = entry({
+        installed: true,
+        installedVariantId: installedB2.id,
+        recommendedVariantId: installedB2.id,
+        builds: [notes],
+        variants: [installedB2],
+      });
+      const { unmount } = renderCard({ entry: withNotes, mode: 'installed' });
+
+      expect(
+        screen.getByText('analysis.gallery.buildNotes.buildLabel', { selector: 'dt' })
+      ).toBeInTheDocument();
+      const summary = screen.getByText('analysis.gallery.buildNotes.disclosure', {
+        selector: 'summary',
+      });
+      expect(summary.closest('details')).toHaveTextContent('Dogs are reported again.');
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.buildNotes.buildValue', {
+        build: 2,
+        date: formatDate('2026-11-21'),
+      });
+      unmount();
+
+      renderCard({ entry: withNotes, mode: 'available' });
+      expect(screen.queryByText('analysis.gallery.buildNotes.disclosure')).toBeNull();
+    });
+
+    it('has no violations with the build row and the open notes disclosure', async () => {
+      const { container } = renderCard({
+        entry: entry({
+          installed: true,
+          installedVariantId: installedB2.id,
+          recommendedVariantId: installedB2.id,
+          builds: [notes],
+          variants: [installedB2],
+        }),
+        mode: 'installed',
+      });
+      const details = container.querySelector('details');
+      expect(details).not.toBeNull();
+      details?.setAttribute('open', '');
+
+      await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+    });
+
+    it('shows no build row or notes for a build without a record', () => {
+      renderCard({
+        entry: entry({
+          installed: true,
+          installedVariantId: installedB2.id,
+          variants: [installedB2],
+        }),
+        mode: 'installed',
+      });
+
+      expect(screen.queryByText('analysis.gallery.buildNotes.buildLabel')).toBeNull();
+      expect(screen.queryByText('analysis.gallery.buildNotes.disclosure')).toBeNull();
+    });
   });
 
   it('has no violations as an installed card with paused actions', async () => {

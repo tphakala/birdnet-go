@@ -4483,6 +4483,11 @@ export type TranslationKey =
   | 'analysis.gallery.update.cardNoticeBuild' // params: to, version, from
   | 'analysis.gallery.update.action'
   | 'analysis.gallery.update.applying'
+  | 'analysis.gallery.buildNotes.heading' // params: build, version
+  | 'analysis.gallery.buildNotes.released' // params: date
+  | 'analysis.gallery.buildNotes.buildLabel'
+  | 'analysis.gallery.buildNotes.buildValue' // params: build, date
+  | 'analysis.gallery.buildNotes.disclosure'
   | 'analysis.gallery.entryIncompatible'
   | 'analysis.gallery.regionGlobal'
   | 'analysis.gallery.hardwareLabel'
@@ -5417,6 +5422,9 @@ export type TranslationParams = {
     version: string | number;
     from: string | number;
   };
+  'analysis.gallery.buildNotes.heading': { build: string | number; version: string | number };
+  'analysis.gallery.buildNotes.released': { date: string | number };
+  'analysis.gallery.buildNotes.buildValue': { build: string | number; date: string | number };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
   'analysis.gallery.documents.source': { repo: string | number };

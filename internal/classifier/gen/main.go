@@ -45,6 +45,12 @@
 // Bootstrap safety: this program is package main and does NOT import
 // internal/classifier, so a broken generated file never blocks regenerating it.
 //
+// Next to each family's variants function the generator emits a builds function
+// (birdnetV30Builds, perchV2Builds, birdnetPlusV30Builds) with the release notes
+// of the current manifest's build records (see buildRecords in builds.go); a
+// record carrying only the maintainer-facing changes text is left out, so a build
+// without notes shows nothing.
+//
 // A second output, model_catalog_documents_gen.go, carries the licence and
 // policy documents of every vendored manifest (gen/manifests/*.models.json and
 // the document-only gen/manifests/documents/*.models.json) as a registry keyed
@@ -102,6 +108,9 @@ var families = []family{
 		},
 		liveVariants:    []string{"fp16", "fp32"},
 		expectedRegions: 43,
+		// The catalog entry's Version; the manifest's regional entries carry
+		// upstream_version "3.0-preview3.1".
+		catalogVersion: "3.0",
 	},
 	{
 		key:          "perch-v2",
@@ -122,6 +131,9 @@ var families = []family{
 		liveVariants: []string{"no-dft-fp32"},
 		// 43 tiles plus central-india.
 		expectedRegions: 44,
+		// The catalog entry's Version, the same string as the manifest's
+		// upstream_version.
+		catalogVersion: "2",
 	},
 	{
 		key:          "birdnet-plus-v3.0",
@@ -228,6 +240,13 @@ type family struct {
 	// that the upstream manifest no longer lists. Their regional entries are
 	// appended and chained to the current manifest by mergeFrozenReleases.
 	frozenManifests []string
+	// catalogVersion is the Version of a one-release family's hand-written
+	// catalog entry, which every variant of the family reports as its release
+	// (VariantVersion). The family's build records are keyed on it, since it
+	// can differ from the manifest's upstream_version, so the gallery can join
+	// a record to a variant. Unused for a multi-release family, whose listed
+	// releases are the catalog's own release strings.
+	catalogVersion  string
 	modelLocalName  func(slug, token, release string, build int) string
 	labelsLocalName func(slug, release string, build int) string
 }
@@ -395,6 +414,9 @@ type manifest struct {
 	Repo       string             `json:"repo"`
 	FamilyMeta manifestFamilyMeta `json:"family_meta"`
 	Models     []manifestModel    `json:"models"`
+	// Builds holds the per-build release records keyed by build tag; see
+	// buildRecords.
+	Builds map[string]manifestBuild `json:"builds"`
 }
 
 type manifestModel struct {
@@ -500,7 +522,11 @@ func run() error {
 	total := 0
 	for i := range families {
 		fam := &families[i]
-		variants, genErr := fam.build(labels)
+		m, genErr := loadManifest(fam.manifestFile)
+		if genErr != nil {
+			return genErr
+		}
+		variants, genErr := fam.buildFrom(m, labels)
 		if genErr != nil {
 			return fmt.Errorf("family %s: %w", fam.key, genErr)
 		}
@@ -512,6 +538,9 @@ func run() error {
 			buf.WriteString(v)
 		}
 		buf.WriteString("\t}\n}\n")
+		if genErr = fam.writeBuilds(&buf, m); genErr != nil {
+			return fmt.Errorf("family %s: %w", fam.key, genErr)
+		}
 	}
 
 	formatted, err := format.Source(buf.Bytes())
@@ -548,6 +577,11 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return f.buildFrom(m, labels)
+}
+
+// buildFrom is build over the family's already parsed current manifest m.
+func (f *family) buildFrom(m *manifest, labels map[string]labelChecksum) ([]string, error) {
 	table, err := loadRegionTable(f.regionsFile)
 	if err != nil {
 		return nil, err

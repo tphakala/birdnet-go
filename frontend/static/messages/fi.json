@@ -6082,6 +6082,13 @@
         "action": "Päivitä",
         "applying": "Päivitetään..."
       },
+      "buildNotes": {
+        "heading": "Uutta version {version} koontiversiossa {build}",
+        "released": "Julkaistu {date}",
+        "buildLabel": "Koontiversion numero",
+        "buildValue": "{build}, julkaistu {date}",
+        "disclosure": "Uutta tässä koontiversiossa"
+      },
       "entryIncompatible": "Tämä malli ei ole saatavilla tässä järjestelmässä.",
       "regionGlobal": "Globaali",
       "hardwareLabel": "Laitteisto",

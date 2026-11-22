@@ -814,3 +814,115 @@ func TestBuildDocuments_KeepsUnknownKind(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []manifestDocument{lic, future}, got["o/a"])
 }
+
+// TestBuildRecords covers the release-notes records the generator emits: a
+// record that carries only the maintainer-facing changes text is skipped (so a
+// build without notes shows nothing), every emitted record must name a valid
+// build of a release the family hosts, a date and non-empty notes, and the
+// output is sorted by release and build whatever the manifest's key order.
+func TestBuildRecords(t *testing.T) {
+	t.Parallel()
+
+	multi := &family{key: "multi", releases: []string{"1.0", "1.1"}}
+	single := familyByKey(t, "birdnet-v3.0")
+	regional := []manifestModel{{Path: "r/a", Variant: "fp32", Region: "a", UpstreamVersion: "3.0-preview3.1"}}
+	rec := func(release string, build *int, reason string, notes ...string) manifestBuild {
+		return manifestBuild{Build: build, UpstreamVersion: release, Date: "2026-11-21", Reason: reason, Notes: notes}
+	}
+
+	tests := []struct {
+		name   string
+		fam    *family
+		builds map[string]manifestBuild
+		// regional overrides the regional entries the family's releases come from.
+		regional []manifestModel
+		want     []buildRecord
+		wantErr  string
+	}{
+		{
+			name: "a record with only changes is skipped",
+			fam:  multi,
+			builds: map[string]manifestBuild{
+				"x-b1": {Build: new(1), UpstreamVersion: "1.1", Date: "2026-11-20"},
+			},
+		},
+		{
+			name: "records are sorted by release and build",
+			fam:  multi,
+			builds: map[string]manifestBuild{
+				"x-b3":     rec("1.1", new(3), "third"),
+				"x-b2":     rec("1.1", new(2), "", "second note"),
+				"x-1.0-b2": rec("1.0", new(2), "older"),
+			},
+			want: []buildRecord{
+				{version: "1.0", build: 2, date: "2026-11-21", reason: "older"},
+				{version: "1.1", build: 2, date: "2026-11-21", notes: []string{"second note"}},
+				{version: "1.1", build: 3, date: "2026-11-21", reason: "third"},
+			},
+		},
+		{
+			name:   "a one-release family keys its records on the catalog release",
+			fam:    single,
+			builds: map[string]manifestBuild{"y-b2": rec("3.0-preview3.1", new(2), "r", "n")},
+			want:   []buildRecord{{version: "3.0", build: 2, date: "2026-11-21", reason: "r", notes: []string{"n"}}},
+		},
+		{name: "a one-release family without a catalog release", fam: &family{key: "bare"}, builds: map[string]manifestBuild{"k": rec("2", new(2), "r")}, wantErr: "catalogVersion"},
+		{
+			name:   "a blank reason without notes is skipped, a padded reason is trimmed",
+			fam:    multi,
+			builds: map[string]manifestBuild{"x-b2": rec("1.1", new(2), "  "), "x-b3": rec("1.1", new(3), " r ")},
+			want:   []buildRecord{{version: "1.1", build: 3, date: "2026-11-21", reason: "r"}},
+		},
+		{
+			name: "two upstream releases of a one-release family emitted as one catalog release and build",
+			fam:  single,
+			regional: []manifestModel{
+				{Path: "r/a", Variant: "fp32", Region: "a", UpstreamVersion: "3.0-preview3.1"},
+				{Path: "r/b", Variant: "fp32", Region: "b", UpstreamVersion: "3.0-preview3.2"},
+			},
+			builds: map[string]manifestBuild{
+				"k1": rec("3.0-preview3.1", new(2), "r"),
+				"k2": rec("3.0-preview3.2", new(2), "s"),
+			},
+			wantErr: "duplicate",
+		},
+		{name: "missing build", fam: multi, builds: map[string]manifestBuild{"k": rec("1.1", nil, "r")}, wantErr: "build"},
+		{name: "build below 1", fam: multi, builds: map[string]manifestBuild{"k": rec("1.1", new(0), "r")}, wantErr: "build"},
+		{name: "release the family does not host", fam: multi, builds: map[string]manifestBuild{"k": rec("2.0", new(2), "r")}, wantErr: `release "2.0"`},
+		{name: "release no regional entry carries", fam: single, builds: map[string]manifestBuild{"k": rec("3", new(2), "r")}, wantErr: `release "3"`},
+		{name: "missing date", fam: multi, builds: map[string]manifestBuild{"k": {Build: new(2), UpstreamVersion: "1.1", Reason: "r"}}, wantErr: "date"},
+		{name: "malformed date", fam: multi, builds: map[string]manifestBuild{"k": {Build: new(2), UpstreamVersion: "1.1", Date: "21.11.2026", Reason: "r"}}, wantErr: "date"},
+		{name: "empty note", fam: multi, builds: map[string]manifestBuild{"k": rec("1.1", new(2), "r", "ok", " ")}, wantErr: "empty note"},
+		{
+			name: "duplicate release and build",
+			fam:  multi,
+			builds: map[string]manifestBuild{
+				"k1": rec("1.1", new(2), "r"),
+				"k2": rec("1.1", new(2), "s"),
+			},
+			wantErr: "duplicate",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			models := regional
+			if tt.regional != nil {
+				models = tt.regional
+			}
+			got, err := tt.fam.buildRecords(&manifest{Builds: tt.builds, Models: models})
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				if tt.fam.catalogVersion != "" || len(tt.fam.releases) > 0 {
+					// A record-level refusal names the record, so the maintainer can find it.
+					assert.True(t, slices.ContainsFunc(slices.Collect(maps.Keys(tt.builds)), func(tag string) bool {
+						return strings.Contains(err.Error(), "build record "+tag+":")
+					}), "error %q names no record tag", err)
+				}
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

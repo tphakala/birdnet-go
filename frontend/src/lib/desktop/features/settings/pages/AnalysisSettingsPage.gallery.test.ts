@@ -118,6 +118,7 @@ import { settingsStore, settingsActions } from '$lib/stores/settings';
 import { getAvailableModels, refreshModels } from '$lib/stores/models.svelte';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
+import { formatDate } from '$lib/utils/formatters';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { ApiError } from '$lib/utils/api';
 import { wizardState } from '$lib/desktop/features/wizard/wizardState.svelte';
@@ -967,6 +968,110 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
       await waitFor(() =>
         expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32-3.0.1')
       );
+    });
+  });
+
+  describe('release notes of a newer build', () => {
+    // An installed build 1 whose successor is build 2 of the same release.
+    function newerBuild(builds: CatalogEntry['builds']): CatalogEntry {
+      const variant = (id: string, build: number, installed: boolean) => ({
+        id,
+        precision: 'fp32',
+        default: false,
+        installed,
+        speciesCount: 10,
+        sizeBytes: 1,
+        compatible: true,
+        recommended: false,
+        version: '2',
+        build,
+      });
+      return birdEntry({
+        version: '2',
+        installed: true,
+        installedVariantId: 'fp32@nordic',
+        update: {
+          variantId: 'fp32-b2@nordic',
+          fromVersion: '2',
+          toVersion: '2',
+          fromBuild: 1,
+          toBuild: 2,
+        },
+        builds,
+        variants: [variant('fp32-b2@nordic', 2, false), variant('fp32@nordic', 1, true)],
+      });
+    }
+
+    async function openUpdateDialog(entry: CatalogEntry): Promise<HTMLElement> {
+      vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [entry] });
+      render(AnalysisSettingsPage);
+      await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+      await fireEvent.click(
+        await screen.findByRole('button', { name: /analysis\.gallery\.update\.action/ })
+      );
+      return screen.findByRole('dialog', { name: 'analysis.gallery.license.title' });
+    }
+
+    it('places the notes after the variant picker, so a pick that adds or removes them does not push the picker down', async () => {
+      const dialog = await openUpdateDialog(
+        newerBuild([{ version: '2', build: 2, date: '2026-11-21', reason: 'Why.' }])
+      );
+      const heading = within(dialog).getByRole('heading', {
+        name: 'analysis.gallery.buildNotes.heading',
+      });
+      const lastRadio = within(dialog).getAllByRole('radio').at(-1);
+      if (!lastRadio) throw new Error('fixture: the dialog lists variants');
+      expect(
+        lastRadio.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it('shows the notes of the target build in the Update dialog, as text, and none without a record', async () => {
+      const dialog = await openUpdateDialog(
+        newerBuild([
+          {
+            version: '2',
+            build: 2,
+            date: '2026-11-21',
+            reason: 'Every regional model now includes the dog.',
+            notes: ['<b>Dogs</b> are reported again.', 'Scores can differ slightly.'],
+          },
+        ])
+      );
+      expect(
+        within(dialog).getByRole('heading', { name: 'analysis.gallery.buildNotes.heading' })
+      ).toBeInTheDocument();
+      expect(
+        within(dialog).getByText('Every regional model now includes the dog.')
+      ).toBeInTheDocument();
+      // Manifest text is never parsed as markup.
+      expect(within(dialog).getByText('<b>Dogs</b> are reported again.')).toBeInTheDocument();
+      expect(within(dialog).getAllByRole('listitem')).toHaveLength(2);
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.buildNotes.heading', {
+        build: 2,
+        version: '2',
+      });
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.buildNotes.released', {
+        date: formatDate('2026-11-21'),
+      });
+
+      // Picking the installed build in the dialog brings nothing new: the notes go away.
+      const installedRadio = within(dialog)
+        .getAllByRole<HTMLInputElement>('radio')
+        .find(r => !r.checked);
+      if (!installedRadio) throw new Error('fixture: the dialog lists the installed build');
+      await fireEvent.click(installedRadio);
+      await waitFor(() =>
+        expect(
+          within(dialog).queryByRole('heading', { name: 'analysis.gallery.buildNotes.heading' })
+        ).toBeNull()
+      );
+
+      cleanup();
+      const bare = await openUpdateDialog(newerBuild(undefined));
+      expect(
+        within(bare).queryByRole('heading', { name: 'analysis.gallery.buildNotes.heading' })
+      ).toBeNull();
     });
   });
 
