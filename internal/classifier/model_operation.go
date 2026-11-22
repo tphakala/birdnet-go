@@ -237,18 +237,10 @@ func (l *OperationLease) Reinstall(ctx context.Context, entry *CatalogEntry, bas
 	return l.mm.reinstall(ctx, entry, baseURL, progress)
 }
 
-// OperationRunningFor reports whether the operation slot is held by an operation on
-// catalogID. An install records the entry before its hot-load ends, so a progress
-// reader uses this to report completion only once the slot is free again. Like
-// BeginOperation it never waits on mm.mu.
-func (mm *ModelManager) OperationRunningFor(catalogID string) bool {
-	mm.opMu.Lock()
-	defer mm.opMu.Unlock()
-	return mm.operationRunningForLocked(catalogID)
-}
-
 // operationRunningForLocked reports whether the operation slot is held by an
-// operation on catalogID. The caller must hold mm.opMu.
+// operation on catalogID. An install records the entry before its hot-load ends,
+// so a progress reader reports completion only once the slot is free again. The
+// caller must hold mm.opMu.
 func (mm *ModelManager) operationRunningForLocked(catalogID string) bool {
 	return mm.activeOp != nil && mm.activeOp.catalogID == catalogID
 }

@@ -1554,9 +1554,12 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 				// No active download. Check if the model is already installed,
 				// which means the download completed before we connected.
 				if c.ModelManager.IsInstalled(catalogID) {
-					if c.ModelManager.OperationRunningFor(catalogID) {
+					if running {
 						// Installed, but the operation still runs (the post-install
 						// hot-load, or a reinstall not yet registered): wait for it.
+						// The flag comes from the snapshot: a fresh read could see the
+						// slot released by an attempt that has just recorded a failed
+						// or cancelled state, and report it as complete.
 						time.Sleep(apicore.SSEEventLoopSleep)
 						continue
 					}

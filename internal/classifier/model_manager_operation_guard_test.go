@@ -374,18 +374,22 @@ func TestOperationGuard_ScanInstalledNotBlockedBySlot(t *testing.T) {
 	requireSlotFree(t, h.newManager(), "a fresh manager starts with a free slot")
 }
 
-func TestOperationGuard_OperationRunningFor(t *testing.T) {
+func TestOperationGuard_RunningInSnapshot(t *testing.T) {
 	t.Parallel()
 	mm := NewModelManager(t.TempDir(), nil, nil)
-	assert.False(t, mm.OperationRunningFor("a"), "a free slot runs nothing")
+	running := func(id string) bool {
+		_, r := mm.DownloadStateAndRunning(id)
+		return r
+	}
+	assert.False(t, running("a"), "a free slot runs nothing")
 
 	lease, err := mm.BeginOperation(OperationInstall, "a")
 	require.NoError(t, err)
-	assert.True(t, mm.OperationRunningFor("a"))
-	assert.False(t, mm.OperationRunningFor("b"), "the slot is held for another entry")
+	assert.True(t, running("a"))
+	assert.False(t, running("b"), "the slot is held for another entry")
 
 	lease.Release()
-	assert.False(t, mm.OperationRunningFor("a"), "a released slot runs nothing")
+	assert.False(t, running("a"), "a released slot runs nothing")
 }
 
 func TestOperationGuard_RefusesWhileManagerLockHeld(t *testing.T) {
@@ -412,5 +416,8 @@ func TestOperationGuard_RefusesWhileManagerLockHeld(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		require.FailNow(t, "BeginOperation blocked on the manager lock instead of refusing")
 	}
-	assert.True(t, mm.OperationRunningFor("a"), "the slot stays readable while the manager lock is held")
+	mm.opMu.Lock()
+	held := mm.operationRunningForLocked("a")
+	mm.opMu.Unlock()
+	assert.True(t, held, "the refused request leaves the uninstall holding the slot")
 }
