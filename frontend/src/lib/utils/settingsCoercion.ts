@@ -41,6 +41,7 @@ import { AUDIO_GAIN_MIN_DB, AUDIO_GAIN_MAX_DB } from '$lib/stores/settings';
 import {
   PLAYBACK_GAIN_MAX_DB,
   PLAYBACK_GAIN_MIN_DB,
+  clampToRange,
   highPassToStored,
 } from '$lib/utils/playbackDefaults';
 
@@ -921,10 +922,7 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
           ...dashboard,
           ...(typeof gain === 'number' && Number.isFinite(gain)
             ? {
-                defaultAudioGain: Math.min(
-                  Math.max(gain, PLAYBACK_GAIN_MIN_DB),
-                  PLAYBACK_GAIN_MAX_DB
-                ),
+                defaultAudioGain: clampToRange(gain, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB),
               }
             : {}),
           playbackDenoise: coerceDenoiseSettings(dashboard.playbackDenoise),

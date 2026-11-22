@@ -35,7 +35,8 @@ export interface PlaybackDefaultValues {
   highPassHz: number;
 }
 
-function clamp(value: number, min: number, max: number): number {
+/** Clamp a value into [min, max]. */
+export function clampToRange(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
@@ -44,13 +45,13 @@ export function clampPlaybackGain(db: unknown): number {
   if (typeof db !== 'number' || !Number.isFinite(db)) return 0;
   const stepped = Math.round(db / PLAYBACK_GAIN_STEP_DB) * PLAYBACK_GAIN_STEP_DB;
   // Math.round(-0.2) is -0, which would print as "-0 dB".
-  return clamp(stepped, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB) || 0;
+  return clampToRange(stepped, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB) || 0;
 }
 
 /** Stored default to the cutoff a player starts with; anything below the floor is the floor. */
 export function highPassFromStored(hz: unknown): number {
   if (typeof hz !== 'number' || !Number.isFinite(hz)) return PLAYBACK_HIGH_PASS_MIN_HZ;
-  return clamp(Math.round(hz), PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
+  return clampToRange(Math.round(hz), PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
 }
 
 /** Player cutoff (or an already stored value) to the stored default: the floor is stored as "off". */
@@ -66,17 +67,16 @@ export function highPassToStored(hz: unknown): number {
  * playback default, export-stage denoise precedence included.
  */
 export function getPlaybackDefaults(): PlaybackDefaultValues {
-  if (get(settingsDataLoaded)) {
-    const dashboard = get(settingsStore).originalData.realtime?.dashboard;
-    return {
-      gainDb: clampPlaybackGain(dashboard?.defaultAudioGain),
-      denoise: getPlaybackDenoiseDefault(),
-      highPassHz: highPassFromStored(dashboard?.playback?.highPassHz),
-    };
-  }
+  const dashboard = get(settingsDataLoaded)
+    ? get(settingsStore).originalData.realtime?.dashboard
+    : undefined;
+  const gainDb = dashboard ? dashboard.defaultAudioGain : appState.playbackDefaults.gainDb;
+  const highPassHz = dashboard
+    ? dashboard.playback?.highPassHz
+    : appState.playbackDefaults.highPassHz;
   return {
-    gainDb: clampPlaybackGain(appState.playbackDefaults.gainDb),
+    gainDb: clampPlaybackGain(gainDb),
     denoise: getPlaybackDenoiseDefault(),
-    highPassHz: highPassFromStored(appState.playbackDefaults.highPassHz),
+    highPassHz: highPassFromStored(highPassHz),
   };
 }

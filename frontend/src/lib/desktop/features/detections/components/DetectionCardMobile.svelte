@@ -20,8 +20,9 @@
   import { navigation } from '$lib/stores/navigation.svelte';
   import { t } from '$lib/i18n';
 
-  const getDefaultAudioGain = () => getPlaybackDefaults().gainDb;
-  const getDefaultAudioFilterFreq = () => getPlaybackDefaults().highPassHz;
+  // Read once per card instance, not at module load: cards are recycled via
+  // keyed {#each}, so a module-level const would go stale
+  const playbackDefaults = getPlaybackDefaults();
 
   // Presentational card: the parent (DetectionsList) owns the action handlers
   // and the ConfirmModal via the shared useDetectionActions composable, and
@@ -63,8 +64,8 @@
   let closeAudibleBatsSignal = $state(0);
   let closeAudioSettingsSignal = $state(0);
 
-  let audioGainValue = $state(getDefaultAudioGain());
-  let audioFilterFreq = $state(getDefaultAudioFilterFreq());
+  let audioGainValue = $state(playbackDefaults.gainDb);
+  let audioFilterFreq = $state(playbackDefaults.highPassHz);
   let audioPlaybackSpeed = $state(DEFAULT_PLAYBACK_SPEED);
   let audioContextAvailable = $state(true);
 
@@ -283,8 +284,8 @@
         gainValue={audioGainValue}
         filterFreq={audioFilterFreq}
         playbackSpeed={audioPlaybackSpeed}
-        defaultGainValue={getDefaultAudioGain()}
-        defaultFilterFreq={getDefaultAudioFilterFreq()}
+        defaultGainValue={playbackDefaults.gainDb}
+        defaultFilterFreq={playbackDefaults.highPassHz}
         onGainChange={handleGainChange}
         onFilterChange={handleFilterChange}
         onSpeedChange={handleSpeedChange}

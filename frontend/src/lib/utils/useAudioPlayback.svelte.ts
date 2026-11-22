@@ -44,6 +44,7 @@ import {
   PLAYBACK_GAIN_MIN_DB,
   PLAYBACK_HIGH_PASS_MAX_HZ,
   PLAYBACK_HIGH_PASS_MIN_HZ,
+  clampToRange,
 } from '$lib/utils/playbackDefaults';
 import { isSpectrogramSourceKnownMissing } from '$lib/utils/spectrogramStatus';
 import {
@@ -457,14 +458,14 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   }
 
   function updateGainInternal(db: number) {
-    gainValue = Math.max(PLAYBACK_GAIN_MIN_DB, Math.min(PLAYBACK_GAIN_MAX_DB, db));
+    gainValue = clampToRange(db, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB);
     if (audioNodes?.gain) {
       audioNodes.gain.gain.value = dbToGain(gainValue);
     }
   }
 
   function updateFilterInternal(freq: number) {
-    filterFreq = Math.max(PLAYBACK_HIGH_PASS_MIN_HZ, Math.min(PLAYBACK_HIGH_PASS_MAX_HZ, freq));
+    filterFreq = clampToRange(freq, PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
     if (audioNodes?.highPass) {
       audioNodes.highPass.frequency.value = filterFreq;
     }

@@ -98,6 +98,7 @@
     PLAYBACK_GAIN_MIN_DB,
     PLAYBACK_HIGH_PASS_MAX_HZ,
     PLAYBACK_HIGH_PASS_MIN_HZ,
+    clampToRange,
     getPlaybackDefaults,
   } from '$lib/utils/playbackDefaults';
   import {
@@ -1604,7 +1605,7 @@
 
   // Volume control
   const updateGain = (newGainDb: number) => {
-    gainValue = Math.max(PLAYBACK_GAIN_MIN_DB, Math.min(PLAYBACK_GAIN_MAX_DB, newGainDb));
+    gainValue = clampToRange(newGainDb, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB);
     if (audioNodes) {
       audioNodes.gain.gain.value = dbToGain(gainValue);
     }
@@ -1612,7 +1613,7 @@
 
   // Filter control
   const updateFilter = (newFreq: number) => {
-    filterFreq = Math.max(PLAYBACK_HIGH_PASS_MIN_HZ, Math.min(PLAYBACK_HIGH_PASS_MAX_HZ, newFreq));
+    filterFreq = clampToRange(newFreq, PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
     if (audioNodes) {
       audioNodes.highPass.frequency.value = filterFreq;
     }
