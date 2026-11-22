@@ -5428,6 +5428,7 @@
         "description": "Varje klipp startar med dessa värden. De sparas på denna station och gäller för alla som använder den.",
         "useCurrent": "Använd aktuella värden",
         "useCurrentHelp": "Kopierar förstärkningen, brusreduceringen och högpassfiltret som den här spelaren är inställd på till fälten nedan. Inget sparas förrän du väljer Spara ändringar.",
+        "useCurrentHelpNoDenoise": "Kopierar förstärkningen och högpassfiltret som den här spelaren är inställd på till fälten nedan. Inget sparas förrän du väljer Spara ändringar.",
         "copied": "Aktuella värden kopierade. Välj Spara ändringar för att behålla dem.",
         "saved": "Standardvärden för uppspelning sparade",
         "saveFailed": "Standardvärdena för uppspelning sparades inte. Inget ändrades.",

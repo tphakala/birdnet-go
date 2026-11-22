@@ -5428,6 +5428,7 @@
         "description": "Ogni clip parte con questi valori. Sono salvati su questa stazione e valgono per chiunque la usi.",
         "useCurrent": "Usa i valori attuali",
         "useCurrentHelp": "Copia nei campi sottostanti il guadagno, la riduzione del rumore e il filtro passa-alto impostati su questo lettore. Nulla viene salvato finché non scegli Salva Modifiche.",
+        "useCurrentHelpNoDenoise": "Copia nei campi sottostanti il guadagno e il filtro passa-alto impostati su questo lettore. Nulla viene salvato finché non scegli Salva Modifiche.",
         "copied": "Valori attuali copiati. Scegli Salva Modifiche per mantenerli.",
         "saved": "Valori di riproduzione predefiniti salvati",
         "saveFailed": "I valori di riproduzione predefiniti non sono stati salvati. Non è stato modificato nulla.",

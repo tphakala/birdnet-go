@@ -5428,6 +5428,7 @@
         "description": "Every clip starts with these values. They are saved on this station and apply to everyone who uses it.",
         "useCurrent": "Use current values",
         "useCurrentHelp": "Copies the gain, denoise and high-pass filter this player is set to into the fields below. Nothing is saved until you choose Save Changes.",
+        "useCurrentHelpNoDenoise": "Copies the gain and high-pass filter this player is set to into the fields below. Nothing is saved until you choose Save Changes.",
         "copied": "Current values copied. Choose Save Changes to keep them.",
         "saved": "Playback defaults saved",
         "saveFailed": "The playback defaults were not saved. Nothing was changed.",

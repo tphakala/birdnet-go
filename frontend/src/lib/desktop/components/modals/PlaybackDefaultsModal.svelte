@@ -267,7 +267,10 @@
               {t('components.audioPlayer.defaults.useCurrent')}
             </Button>
             <p id={useCurrentHelpId} class="help-text mt-1">
-              {t('components.audioPlayer.defaults.useCurrentHelp')}
+              <!-- While export denoise is on, Use current values leaves denoise alone -->
+              {exportDenoiseOn
+                ? t('components.audioPlayer.defaults.useCurrentHelpNoDenoise')
+                : t('components.audioPlayer.defaults.useCurrentHelp')}
             </p>
           </div>
 

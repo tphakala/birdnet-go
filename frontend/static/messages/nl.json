@@ -5428,6 +5428,7 @@
         "description": "Elke clip begint met deze waarden. Ze worden op dit station opgeslagen en gelden voor iedereen die het gebruikt.",
         "useCurrent": "Huidige waarden gebruiken",
         "useCurrentHelp": "Kopieert de versterking, ruisonderdrukking en het hoogdoorlaatfilter waarop deze speler staat naar de velden hieronder. Er wordt niets opgeslagen totdat u Wijzigingen bewaren kiest.",
+        "useCurrentHelpNoDenoise": "Kopieert de versterking en het hoogdoorlaatfilter waarop deze speler staat naar de velden hieronder. Er wordt niets opgeslagen totdat u Wijzigingen bewaren kiest.",
         "copied": "Huidige waarden gekopieerd. Kies Wijzigingen bewaren om ze te behouden.",
         "saved": "Standaardwaarden voor afspelen opgeslagen",
         "saveFailed": "De standaardwaarden voor afspelen zijn niet opgeslagen. Er is niets gewijzigd.",

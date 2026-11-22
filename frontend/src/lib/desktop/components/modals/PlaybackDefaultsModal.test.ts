@@ -243,6 +243,15 @@ describe('PlaybackDefaultsModal', () => {
     expect(select).toHaveAccessibleDescription(PRECEDENCE);
   });
 
+  it('names only gain and high-pass in the Use current values help while export denoise is on', () => {
+    seedSettings({ playbackDenoise: { enabled: true, strength: 'light' } }, true);
+    renderDialog();
+
+    expect(within(dialog()).getByRole('button', { name: USE_CURRENT })).toHaveAccessibleDescription(
+      'components.audioPlayer.defaults.useCurrentHelpNoDenoise'
+    );
+  });
+
   it('copies the player values into the draft without saving them', async () => {
     renderDialog();
 

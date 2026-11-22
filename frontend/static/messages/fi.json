@@ -5428,6 +5428,7 @@
         "description": "Jokainen leike alkaa näillä arvoilla. Ne tallennetaan tälle asemalle ja koskevat kaikkia sen käyttäjiä.",
         "useCurrent": "Käytä nykyisiä arvoja",
         "useCurrentHelp": "Kopioi tämän soittimen nykyisen vahvistuksen, kohinanpoiston ja ylipäästösuodattimen alla oleviin kenttiin. Mitään ei tallenneta ennen kuin valitset Tallenna muutokset.",
+        "useCurrentHelpNoDenoise": "Kopioi tämän soittimen nykyisen vahvistuksen ja ylipäästösuodattimen alla oleviin kenttiin. Mitään ei tallenneta ennen kuin valitset Tallenna muutokset.",
         "copied": "Nykyiset arvot kopioitu. Säilytä ne valitsemalla Tallenna muutokset.",
         "saved": "Toiston oletukset tallennettu",
         "saveFailed": "Toiston oletuksia ei tallennettu. Mitään ei muutettu.",

@@ -4000,6 +4000,7 @@ export type TranslationKey =
   | 'components.audioPlayer.defaults.description'
   | 'components.audioPlayer.defaults.useCurrent'
   | 'components.audioPlayer.defaults.useCurrentHelp'
+  | 'components.audioPlayer.defaults.useCurrentHelpNoDenoise'
   | 'components.audioPlayer.defaults.copied'
   | 'components.audioPlayer.defaults.saved'
   | 'components.audioPlayer.defaults.saveFailed'

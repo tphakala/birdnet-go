@@ -5428,6 +5428,7 @@
         "description": "Minden minta ezekkel az értékekkel indul. Ezen az állomáson tárolódnak, és mindenkire érvényesek, aki használja.",
         "useCurrent": "Jelenlegi értékek használata",
         "useCurrentHelp": "Az alábbi mezőkbe másolja a lejátszó jelenlegi erősítését, zajcsökkentését és felül átengedő szűrőjét. Semmi sem mentődik, amíg a Módosítások mentése gombot nem választja.",
+        "useCurrentHelpNoDenoise": "Az alábbi mezőkbe másolja a lejátszó jelenlegi erősítését és felül átengedő szűrőjét. Semmi sem mentődik, amíg a Módosítások mentése gombot nem választja.",
         "copied": "Jelenlegi értékek átmásolva. A megtartásukhoz válassza a Módosítások mentése gombot.",
         "saved": "Lejátszási alapértékek mentve",
         "saveFailed": "A lejátszási alapértékek nem lettek mentve. Semmi sem változott.",

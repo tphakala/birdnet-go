@@ -5428,6 +5428,7 @@
         "description": "Każdy klip zaczyna się z tymi wartościami. Są zapisywane na tej stacji i dotyczą wszystkich jej użytkowników.",
         "useCurrent": "Użyj bieżących wartości",
         "useCurrentHelp": "Kopiuje do pól poniżej wzmocnienie, odszumianie i filtr górnoprzepustowy ustawione w tym odtwarzaczu. Nic nie zostanie zapisane, dopóki nie wybierzesz Zapisz Zmiany.",
+        "useCurrentHelpNoDenoise": "Kopiuje do pól poniżej wzmocnienie i filtr górnoprzepustowy ustawione w tym odtwarzaczu. Nic nie zostanie zapisane, dopóki nie wybierzesz Zapisz Zmiany.",
         "copied": "Bieżące wartości skopiowane. Wybierz Zapisz Zmiany, aby je zachować.",
         "saved": "Domyślne ustawienia odtwarzania zapisane",
         "saveFailed": "Domyślne ustawienia odtwarzania nie zostały zapisane. Nic nie zmieniono.",

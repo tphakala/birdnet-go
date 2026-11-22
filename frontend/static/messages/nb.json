@@ -5428,6 +5428,7 @@
         "description": "Alle klipp starter med disse verdiene. De lagres på denne stasjonen og gjelder for alle som bruker den.",
         "useCurrent": "Bruk nåværende verdier",
         "useCurrentHelp": "Kopierer forsterkningen, støyreduksjonen og høypassfilteret denne spilleren er satt til, inn i feltene nedenfor. Ingenting lagres før du velger Lagre endringer.",
+        "useCurrentHelpNoDenoise": "Kopierer forsterkningen og høypassfilteret denne spilleren er satt til, inn i feltene nedenfor. Ingenting lagres før du velger Lagre endringer.",
         "copied": "Nåværende verdier kopiert. Velg Lagre endringer for å beholde dem.",
         "saved": "Standardverdier for avspilling lagret",
         "saveFailed": "Standardverdiene for avspilling ble ikke lagret. Ingenting ble endret.",
