@@ -283,10 +283,11 @@ tasks:
       - |
         # Refresh the labels checksum sidecar (networked), regenerate the catalog and
         # run the catalog, region and generator tests, so an unacknowledged tile change
-        # (expectedRegions, goldenTiers, familyOmits) fails here.
+        # (expectedRegions, goldenTiers, familyOmits) fails here. The classifier package
+        # links TensorFlow Lite, so the test needs CGO_FLAGS like task test.
         (cd internal/classifier && go run ./gen -update-labels-checksums)
         go generate ./internal/classifier
-        go test ./internal/classifier/ ./internal/classifier/region/ ./internal/classifier/gen/
+        {{.CGO_FLAGS}} go test -tags noembed,skipfrontend ./internal/classifier/ ./internal/classifier/region/ ./internal/classifier/gen/
 
   generate-species-dict:
     desc: Regenerate per-locale species dictionaries from the OpenFauna dataset
