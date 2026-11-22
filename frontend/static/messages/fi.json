@@ -5107,7 +5107,7 @@
         "denoiseRedenoiseNote": "Leikkeet, jotka tallennettiin „Tallennettujen leikkeiden kohinanpoiston“ ollessa päällä, puhdistetaan kohinasta uudelleen toistettaessa. Valitse leikkeen ääniasetuksista Pois kuullaksesi sen tallennettuna.",
         "denoiseLossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta.",
         "highPassLabel": "Oletusylipäästösuodatin",
-        "highPassHelpText": "Poistaa tätä taajuutta matalamman äänen leikkeen toiston aikana, esimerkiksi tuulen ja liikenteen jyrinän. Se sovelletaan selaimessa, joten tallennettuja, ladattuja ja viedyjä leikkeitä ei suodateta.",
+        "highPassHelpText": "Poistaa tätä taajuutta matalamman äänen leikkeen toiston aikana, esimerkiksi tuulen ja liikenteen jyrinän. Sitä sovelletaan selaimessa, joten tallennettuja, ladattuja ja viedyjä leikkeitä ei suodateta.",
         "highPassUnit": "Hz",
         "highPassOff": "Pois"
       }
