@@ -1245,6 +1245,30 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
     expect(modelsApi.installModel).not.toHaveBeenCalled();
   });
 
+  it("installs the family's own resolved tile when it lacks the page-wide detected region", async () => {
+    // The detected region is a tile this family does not ship; its own table
+    // resolves the same coordinates to the nordic tile.
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue({
+      ...regionsResolvingTo('lacking'),
+      regions: [regionOption('lacking'), regionOption('africa'), regionOption('nordic')],
+      families: [
+        {
+          catalogId: 'test-bird',
+          repo: 'o/test-bird',
+          installed: false,
+          installedVariantRegion: '',
+          resolved: { slug: 'nordic', source: 'auto', ambiguous: false },
+        },
+      ],
+    });
+    await openInstallDialog(true);
+    await acceptLicense();
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32@nordic')
+    );
+  });
+
   it('installs the slice of the unsaved region picked in the form, not the auto-resolved one', async () => {
     settingsStores.birdnetSettings?.set({ ...BIRDNET_FORM_DEFAULTS, modelRegion: 'nordic' });
 
