@@ -439,6 +439,7 @@ func TestDownloadStateAndRunning(t *testing.T) {
 
 	lease, err := h.mm.BeginOperation(OperationInstall, cancelEntryID)
 	require.NoError(t, err)
+	t.Cleanup(lease.Release)
 	_, running = h.mm.DownloadStateAndRunning(cancelEntryID)
 	assert.True(t, running, "a held lease for the entry is running")
 	_, running = h.mm.DownloadStateAndRunning(cancelPermID)

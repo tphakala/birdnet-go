@@ -1012,12 +1012,17 @@ func (mm *ModelManager) ListInstalled() []InstalledModel {
 func (mm *ModelManager) GetDownloadState(catalogID string) *DownloadState {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
+	return mm.downloadStateLocked(catalogID)
+}
 
+// downloadStateLocked returns a copy of the entry's download state, nil when there
+// is none. The copy keeps callers from racing on the shared state. The caller must
+// hold mm.mu.
+func (mm *ModelManager) downloadStateLocked(catalogID string) *DownloadState {
 	state, ok := mm.downloading[catalogID]
 	if !ok {
 		return nil
 	}
-	// Return a copy to avoid races on the caller side.
 	cp := *state
 	return &cp
 }

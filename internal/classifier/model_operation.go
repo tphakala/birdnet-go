@@ -244,6 +244,12 @@ func (l *OperationLease) Reinstall(ctx context.Context, entry *CatalogEntry, bas
 func (mm *ModelManager) OperationRunningFor(catalogID string) bool {
 	mm.opMu.Lock()
 	defer mm.opMu.Unlock()
+	return mm.operationRunningForLocked(catalogID)
+}
+
+// operationRunningForLocked reports whether the operation slot is held by an
+// operation on catalogID. The caller must hold mm.opMu.
+func (mm *ModelManager) operationRunningForLocked(catalogID string) bool {
 	return mm.activeOp != nil && mm.activeOp.catalogID == catalogID
 }
 
@@ -338,11 +344,7 @@ func newCancelledError(catalogID string) error {
 func (mm *ModelManager) DownloadStateAndRunning(catalogID string) (state *DownloadState, running bool) {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
-	if st, ok := mm.downloading[catalogID]; ok {
-		cp := *st
-		state = &cp
-	}
 	mm.opMu.Lock()
 	defer mm.opMu.Unlock()
-	return state, mm.activeOp != nil && mm.activeOp.catalogID == catalogID
+	return mm.downloadStateLocked(catalogID), mm.operationRunningForLocked(catalogID)
 }
