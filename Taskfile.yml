@@ -282,11 +282,11 @@ tasks:
         echo "synced $count coverage maps"
       - |
         # Refresh the labels checksum sidecar (networked), regenerate the catalog and
-        # run the region and generator tests, so an unacknowledged tile change
+        # run the catalog, region and generator tests, so an unacknowledged tile change
         # (expectedRegions, goldenTiers, familyOmits) fails here.
         (cd internal/classifier && go run ./gen -update-labels-checksums)
         go generate ./internal/classifier
-        go test ./internal/classifier/region/ ./internal/classifier/gen/
+        go test ./internal/classifier/ ./internal/classifier/region/ ./internal/classifier/gen/
 
   generate-species-dict:
     desc: Regenerate per-locale species dictionaries from the OpenFauna dataset

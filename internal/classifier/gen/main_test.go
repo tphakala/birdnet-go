@@ -212,6 +212,66 @@ func TestSupersededVariantID(t *testing.T) {
 	}
 }
 
+// TestSupersededVariantID_RefusesOlderTarget checks a superseded entry never
+// points at an earlier release or a lower build, which would offer a downgrade as
+// the update, while the same build number (a withdrawn precision) and a newer
+// build or release are accepted.
+func TestSupersededVariantID_RefusesOlderTarget(t *testing.T) {
+	t.Parallel()
+
+	fam := &family{key: "x", releases: []string{"1.0", "1.1"}}
+	mk := func(path, release string, build int, supersededBy *string) *manifestModel {
+		return &manifestModel{Path: path, Variant: "fp32", Region: "a", UpstreamVersion: release, Build: &build, SupersededBy: supersededBy}
+	}
+	older := mk("1.0-b1", "1.0", 1, nil)
+	lowBuild := mk("1.1-b1", "1.1", 1, nil)
+	highBuild := mk("1.1-b2", "1.1", 2, nil)
+	newer := mk("1.1-b3", "1.1", 3, nil)
+	byPath := map[string]*manifestModel{}
+	for _, m := range []*manifestModel{older, lowBuild, highBuild, newer} {
+		byPath[m.Path] = m
+	}
+
+	tests := []struct {
+		name    string
+		from    *manifestModel
+		target  *manifestModel
+		wantErr string
+	}{
+		{"a lower build of the same release", highBuild, lowBuild, "older release or build"},
+		{"an earlier release", lowBuild, older, "older release or build"},
+		{"the same build number", highBuild, highBuild, ""},
+		{"a higher build", lowBuild, newer, ""},
+		{"a later release", older, lowBuild, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			from := *tt.from
+			from.SupersededBy = new(tt.target.Path)
+			_, err := fam.supersededVariantID(&from, byPath)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestIndexByPath checks two regional entries sharing a model path are refused
+// instead of one silently shadowing the other.
+func TestIndexByPath(t *testing.T) {
+	t.Parallel()
+
+	got, err := indexByPath([]manifestModel{{Path: "a"}, {Path: "b"}})
+	require.NoError(t, err)
+	assert.Len(t, got, 2)
+
+	_, err = indexByPath([]manifestModel{{Path: "a"}, {Path: "b"}, {Path: "a"}})
+	require.ErrorContains(t, err, `duplicate model path "a"`)
+}
+
 // TestFamilyVariantID pins the id scheme: the first release of a family keeps
 // the bare "<variant>@<region>" form, so an id never changes meaning, every
 // later release carries "-<release>", and a build above 1 adds "-b<N>". Build 1

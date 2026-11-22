@@ -603,9 +603,9 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	})
 
 	// Index after the sort: the pointers must address the final slice positions.
-	byPath := make(map[string]*manifestModel, len(regional))
-	for i := range regional {
-		byPath[regional[i].Path] = &regional[i]
+	byPath, err := indexByPath(regional)
+	if err != nil {
+		return nil, err
 	}
 
 	seenID := make(map[string]bool, len(regional))
@@ -812,8 +812,9 @@ func (f *family) olderRelease(e *manifestModel) string {
 // supersededVariantID turns the entry's superseded_by manifest path into the id
 // of the variant that replaces it (variantID of the target), or "" when the entry
 // is not superseded. The target must be a regional entry of the same family and
-// region that is not itself superseded, so the pointer never dangles, crosses
-// regions or chains.
+// region that is not itself superseded and not older (an earlier release, or a
+// lower build of the same release), so the pointer never dangles, crosses
+// regions, chains or points back at a build a new install should not get.
 func (f *family) supersededVariantID(e *manifestModel, byPath map[string]*manifestModel) (string, error) {
 	if e.SupersededBy == nil {
 		return "", nil
@@ -827,8 +828,32 @@ func (f *family) supersededVariantID(e *manifestModel, byPath map[string]*manife
 		return "", fmt.Errorf("variant %s: superseded_by %q is in a different region (%s)", id, *e.SupersededBy, target.Region)
 	case target.SupersededBy != nil:
 		return "", fmt.Errorf("variant %s: superseded_by %q is itself superseded", id, *e.SupersededBy)
+	case f.isOlder(target, e):
+		return "", fmt.Errorf("variant %s: superseded_by %q is an older release or build", id, *e.SupersededBy)
 	}
 	return f.variantID(target), nil
+}
+
+// isOlder reports whether a is an earlier release than b, or a lower build of
+// the same release. Releases are ordered by their position in f.releases.
+func (f *family) isOlder(a, b *manifestModel) bool {
+	if ra, rb := slices.Index(f.releases, a.UpstreamVersion), slices.Index(f.releases, b.UpstreamVersion); ra != rb {
+		return ra < rb
+	}
+	return entryBuild(a) < entryBuild(b)
+}
+
+// indexByPath maps each regional entry's model path to the entry, refusing a path
+// two entries share, which would let one silently shadow the other.
+func indexByPath(regional []manifestModel) (map[string]*manifestModel, error) {
+	byPath := make(map[string]*manifestModel, len(regional))
+	for i := range regional {
+		if _, dup := byPath[regional[i].Path]; dup {
+			return nil, fmt.Errorf("duplicate model path %q", regional[i].Path)
+		}
+		byPath[regional[i].Path] = &regional[i]
+	}
+	return byPath, nil
 }
 
 // scoreCalibration validates the entry's score_calibration block against the
