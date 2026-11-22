@@ -147,8 +147,7 @@ func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
 }
 
 // assertLegacyVariantsUpdate checks each Legacy variant is an update to the live
-// build of its own region, and that build is newer: another release or a higher
-// build.
+// build of its own region and shares no file name with it.
 func assertLegacyVariantsUpdate(t *testing.T, entry *CatalogEntry, legacy []*CatalogVariant, liveIDs map[string]string) {
 	t.Helper()
 	for _, v := range legacy {
@@ -160,11 +159,24 @@ func assertLegacyVariantsUpdate(t *testing.T, entry *CatalogEntry, legacy []*Cat
 		got, ok := VariantUpdate(entry, v.ID)
 		if assert.Truef(t, ok, "VariantUpdate of Legacy variant %q must offer an update", v.ID) {
 			assert.Equalf(t, v.SupersededBy, got.ID, "update target of %q", v.ID)
-			assert.Truef(t,
-				VariantVersion(entry, v.ID) != VariantVersion(entry, got.ID) || VariantBuild(entry, v.ID) < VariantBuild(entry, got.ID),
-				"%q must be an older release or a lower build than %q", v.ID, got.ID)
+			// Different builds never share a file, so the update downloads next to
+			// the installed build instead of overwriting the running model.
+			assert.Empty(t, sharedLocalNames(v, got), "%q and its successor %q must not share a file name", v.ID, got.ID)
 		}
 	}
+}
+
+// sharedLocalNames returns the file names two variants have in common.
+func sharedLocalNames(a, b *CatalogVariant) []string {
+	var shared []string
+	for i := range a.Files {
+		for j := range b.Files {
+			if a.Files[i].LocalName == b.Files[j].LocalName && a.Files[i].Role != RoleTaxonomy {
+				shared = append(shared, a.Files[i].LocalName)
+			}
+		}
+	}
+	return shared
 }
 
 // variantToken is the variant token of a regional variant id: the part before
