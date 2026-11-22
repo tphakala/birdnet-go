@@ -105,16 +105,17 @@ func AliasCount() int {
 // ExpandScientificCodeMap adds species codes to codeMap (scientific name -> code)
 // for alias names it lacks: first each canonical name takes its legacy name's code,
 // then each legacy name takes its canonical name's code. Keys match exactly in the
-// dataset's casing. An existing entry is never overwritten, so a name with its own
-// code keeps it. When several legacy names share a canonical name that has no code,
-// the canonical name takes the code of the first legacy name in sorted order.
+// dataset's casing. A non-empty code is never overwritten, so a name with its own
+// code keeps it; an empty code is filled like a missing one. When several legacy
+// names share a canonical name that has no code, the canonical name takes the code
+// of the first legacy name, in sorted order, that has one.
 func ExpandScientificCodeMap(codeMap map[string]string) {
 	if len(codeMap) == 0 {
 		return
 	}
 	aliasOnce.Do(loadAliases)
 	fill := func(from, to string) {
-		if _, exists := codeMap[to]; exists {
+		if codeMap[to] != "" {
 			return
 		}
 		if code := codeMap[from]; code != "" {
