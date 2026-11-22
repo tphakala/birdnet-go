@@ -3666,38 +3666,6 @@
           </tbody>
         </table>
 
-        {#if licenseBuildNotes}
-          <div class="rounded-lg border border-[var(--color-base-300)] p-4 text-sm">
-            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h4 id={BUILD_NOTES_HEADING_ID} class="font-medium text-[var(--color-base-content)]">
-                {t('analysis.gallery.buildNotes.heading', {
-                  build: licenseBuildNotes.build,
-                  version: licenseBuildNotes.version,
-                })}
-              </h4>
-              <time
-                datetime={licenseBuildNotes.date}
-                class="text-xs text-[var(--color-base-content)]/80"
-              >
-                {t('analysis.gallery.buildNotes.released', {
-                  date: formatDate(licenseBuildNotes.date),
-                })}
-              </time>
-            </div>
-            <!-- Focusable so keyboard users can scroll long notes; the dialog keeps the
-                 variant picker and the buttons in reach below it. -->
-            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-            <div
-              role="region"
-              aria-labelledby={BUILD_NOTES_HEADING_ID}
-              tabindex="0"
-              class="mt-3 max-h-56 overflow-y-auto rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
-            >
-              <ModelBuildNotes record={licenseBuildNotes} />
-            </div>
-          </div>
-        {/if}
-
         {#if licenseModel.variants && licenseModel.variants.length > 0}
           <ModelVariantPicker
             variants={licenseModel.variants}
@@ -3718,6 +3686,40 @@
             </summary>
             <p class="mt-1">{t('analysis.gallery.variants.precisionHelp')}</p>
           </details>
+        {/if}
+
+        {#if licenseBuildNotes}
+          <div class="rounded-lg border border-[var(--color-base-300)] p-4 text-sm">
+            <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h4 id={BUILD_NOTES_HEADING_ID} class="font-medium text-[var(--color-base-content)]">
+                {t('analysis.gallery.buildNotes.heading', {
+                  build: licenseBuildNotes.build,
+                  version: licenseBuildNotes.version,
+                })}
+              </h4>
+              <time
+                datetime={licenseBuildNotes.date}
+                class="text-xs text-[var(--color-base-content)]/80"
+              >
+                {t('analysis.gallery.buildNotes.released', {
+                  date: formatDate(licenseBuildNotes.date),
+                })}
+              </time>
+            </div>
+            <!-- Focusable so keyboard users can scroll long notes. The region has a
+                 bounded height, so the documents and the buttons below stay in reach;
+                 it sits after the variant picker, so a pick that adds or removes it
+                 does not push the picker down within the dialog's content. -->
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+            <div
+              role="region"
+              aria-labelledby={BUILD_NOTES_HEADING_ID}
+              tabindex="0"
+              class="mt-3 max-h-56 overflow-y-auto rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+            >
+              <ModelBuildNotes record={licenseBuildNotes} />
+            </div>
+          </div>
         {/if}
 
         {#if licenseDocuments.reference.length > 0}

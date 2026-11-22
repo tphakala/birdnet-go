@@ -835,6 +835,20 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
       return screen.findByRole('dialog', { name: 'analysis.gallery.license.title' });
     }
 
+    it('places the notes after the variant picker, so a pick that adds or removes them does not push the picker down', async () => {
+      const dialog = await openUpdateDialog(
+        newerBuild([{ version: '2', build: 2, date: '2026-11-21', reason: 'Why.' }])
+      );
+      const heading = within(dialog).getByRole('heading', {
+        name: 'analysis.gallery.buildNotes.heading',
+      });
+      const lastRadio = within(dialog).getAllByRole('radio').at(-1);
+      if (!lastRadio) throw new Error('fixture: the dialog lists variants');
+      expect(
+        lastRadio.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
     it('shows the notes of the target build in the Update dialog, as text, and none without a record', async () => {
       const dialog = await openUpdateDialog(
         newerBuild([
