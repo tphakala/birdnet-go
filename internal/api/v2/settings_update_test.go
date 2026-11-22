@@ -412,6 +412,45 @@ func TestPatchNestedObjectKeepsSiblingSlices(t *testing.T) {
 	assert.Equal(t, 2, eq.Filters[1].Passes)
 }
 
+// TestPatchDashboardPlaybackDefaults pins the dashboard PATCH for the playback
+// defaults: a negative gain inside the range is kept, values outside it are
+// clamped, the nested playback object takes the cutoff and the two older
+// defaults next to it stay untouched when the body does not name them.
+func TestPatchDashboardPlaybackDefaults(t *testing.T) {
+	tests := []struct {
+		name           string
+		body           map[string]any
+		wantGain       float64
+		wantHighPassHz int
+	}{
+		{"negative gain kept", map[string]any{"defaultAudioGain": -6.5}, -6.5, 300},
+		{"gain below the minimum clamped", map[string]any{"defaultAudioGain": -20}, -12, 300},
+		{"gain above the maximum clamped", map[string]any{"defaultAudioGain": 30}, 24, 300},
+		{"nested cutoff merged, gain untouched", map[string]any{"playback": map[string]any{"highPassHz": 500}}, 3, 500},
+		{"cutoff above the maximum clamped", map[string]any{"playback": map[string]any{"highPassHz": 9000}}, 3, 5000},
+		{"cutoff below the floor is off", map[string]any{"playback": map[string]any{"highPassHz": 15}}, 3, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			controller := getTestController(t, e)
+			dashboard := &controller.Settings.Load().Realtime.Dashboard
+			dashboard.DefaultAudioGain = 3
+			dashboard.Playback.HighPassHz = 300
+			dashboard.PlaybackDenoise = conf.DenoiseSettings{Enabled: true, Strength: conf.DenoisePresetHeavy}
+
+			patchSection(t, e, controller, "dashboard", tt.body)
+
+			got := controller.Settings.Load().Realtime.Dashboard
+			assert.InDelta(t, tt.wantGain, got.DefaultAudioGain, 1e-9)
+			assert.Equal(t, tt.wantHighPassHz, got.Playback.HighPassHz)
+			assert.True(t, got.PlaybackDenoise.Enabled, "the denoise default must stay untouched")
+			assert.Equal(t, conf.DenoisePresetHeavy, got.PlaybackDenoise.Strength)
+		})
+	}
+}
+
 // TestStreamsSettingsChanged_DetectsModelEdits verifies that per-stream model
 // list changes trigger reconfigure_rtsp_sources. Without this, a user who
 // adds a classifier to a stream (e.g., enables Perch v2 alongside BirdNET)

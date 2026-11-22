@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Audio Playback",
         "description": "Default settings for playing bird recordings.",
-        "defaultGain": "Default Volume Boost",
-        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "defaultGain": "Default Gain",
+        "defaultGainHelpText": "Gain every clip starts with. Bird sounds are often quiet, so 6 to 12 dB is a good start; a negative value makes clips quieter.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Denoise clips when played",
         "denoiseHelpText": "Plays and downloads a denoised copy of every clip. Stored clips stay unchanged. Downloads become WAV files and are larger. The audio settings of a clip can pick another strength or turn denoising off.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Turn on playback denoising above to choose a strength.",
         "denoiseExportPrecedence": "Not applied while Denoise Saved Clips is on (Audio settings, Processing tab). Those clips are already denoised.",
         "denoiseRedenoiseNote": "Clips saved while Denoise Saved Clips was on are denoised again when played. Choose Off in the audio settings of a clip to hear it as saved.",
-        "denoiseLossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets."
+        "denoiseLossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets.",
+        "highPassLabel": "Default High-Pass Filter",
+        "highPassHelpText": "Removes sound below this frequency while a clip plays, such as wind and traffic rumble. It is applied in the browser, so stored, downloaded and exported clips are not filtered.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Off"
       }
     },
     "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."

@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Prehrávanie zvuku",
         "description": "Predvolené nastavenia pre prehrávanie nahrávok vtákov.",
-        "defaultGain": "Predvolené zosilnenie hlasitosti",
-        "defaultGainHelpText": "Počiatočné zosilnenie pri prehrávaní nahrávok. Zvuky vtákov sú často tiché, preto sa odporúča zosilnenie 6-12 dB.",
+        "defaultGain": "Predvolené zosilnenie",
+        "defaultGainHelpText": "Zosilnenie, s ktorým sa začína každý klip. Zvuky vtákov sú často tiché, preto je dobrým začiatkom 6 až 12 dB; záporná hodnota klipy stíši.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Odšumiť klipy pri prehrávaní",
         "denoiseHelpText": "Prehráva a sťahuje odšumenú kópiu každého klipu. Uložené klipy zostávajú nezmenené. Stiahnuté súbory sú vo formáte WAV a sú väčšie. V nastaveniach zvuku klipu možno zvoliť inú silu alebo odšumenie vypnúť.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Na výber sily zapnite vyššie odšumenie pri prehrávaní.",
         "denoiseExportPrecedence": "Nepoužije sa, kým je zapnuté „Odšumenie uložených klipov“ (Nastavenia zvuku, karta Spracovanie). Tieto klipy sú už odšumené.",
         "denoiseRedenoiseNote": "Klipy uložené pri zapnutom „Odšumení uložených klipov“ sa pri prehrávaní odšumia znova. Ak chcete počuť klip tak, ako bol uložený, zvoľte v jeho nastaveniach zvuku Vypnuté.",
-        "denoiseLossyNote": "Odšumenie funguje najlepšie pri klipoch FLAC alebo WAV. Pod {minBitrate} kb/s obmedzujú čistotu výsledku artefakty kodeku."
+        "denoiseLossyNote": "Odšumenie funguje najlepšie pri klipoch FLAC alebo WAV. Pod {minBitrate} kb/s obmedzujú čistotu výsledku artefakty kodeku.",
+        "highPassLabel": "Predvolený hornopriepustný filter",
+        "highPassHelpText": "Pri prehrávaní klipu odstraňuje zvuk pod touto frekvenciou, napríklad hukot vetra a dopravy. Použije sa v prehliadači, takže uložené, stiahnuté a exportované klipy sa nefiltrujú.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Vypnuté"
       }
     },
     "restartRequired": "Niektoré zmeny vyžadujú reštart servera. Reštartujte BirdNET-Go."

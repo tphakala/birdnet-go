@@ -28,6 +28,11 @@
   import { playButtonAction, playButtonLabelKey } from '$lib/utils/audio';
   import { shortcutTitle, type ShortcutHint } from '$lib/utils/keyboard';
   import { DENOISE_OPTIONS } from '$lib/utils/denoisePresets';
+  import {
+    PLAYBACK_GAIN_MAX_DB,
+    PLAYBACK_GAIN_MIN_DB,
+    PLAYBACK_GAIN_STEP_DB,
+  } from '$lib/utils/playbackDefaults';
   import { formatTime } from '$lib/utils/formatters';
   import {
     clampSeconds,
@@ -386,9 +391,9 @@
       <Volume2 size={14} />
       <input
         type="range"
-        min="-12"
-        max="24"
-        step="0.5"
+        min={PLAYBACK_GAIN_MIN_DB}
+        max={PLAYBACK_GAIN_MAX_DB}
+        step={PLAYBACK_GAIN_STEP_DB}
         value={gainDb}
         oninput={e => onGainChange(Number(e.currentTarget.value))}
         class="gain-slider"

@@ -74,6 +74,8 @@ interface AppConfigResponse {
   audioExportEnabled?: boolean;
   /** Denoise preset applied to playback and downloads by default; empty when none applies */
   playbackDenoise?: string;
+  /** Default gain and high-pass cutoff the browser applies to players (guests read them here) */
+  playbackDefaults?: { gainDb?: number; highPassHz?: number };
   layout?: {
     elements: {
       id?: string;
@@ -140,6 +142,8 @@ interface AppState {
   audioExportEnabled: boolean;
   /** Denoise preset applied to playback and downloads by default; empty when none applies (guests read it here) */
   playbackDenoise: string;
+  /** Default gain (dB) and high-pass cutoff (Hz, 0 when off) players start with; guests read them here */
+  playbackDefaults: { gainDb: number; highPassHz: number };
   /** Dataset version for the per-locale species-name dictionary. Empty string when unknown. */
   speciesDictVersion: string;
   /** Dashboard layout from public config (available before auth) */
@@ -191,6 +195,7 @@ const DEFAULT_STATE: AppState = {
   liveSpectrogram: false,
   audioExportEnabled: true,
   playbackDenoise: '',
+  playbackDefaults: { gainDb: 0, highPassHz: 0 },
   speciesDictVersion: '',
   layout: null,
   projectLinks: DEFAULT_PROJECT_LINKS,
@@ -418,6 +423,10 @@ export async function initApp(): Promise<boolean> {
       appState.liveSpectrogram = config.liveSpectrogram ?? false;
       appState.audioExportEnabled = config.audioExportEnabled ?? true;
       appState.playbackDenoise = config.playbackDenoise ?? '';
+      appState.playbackDefaults = {
+        gainDb: config.playbackDefaults?.gainDb ?? 0,
+        highPassHz: config.playbackDefaults?.highPassHz ?? 0,
+      };
       appState.speciesDictVersion = config.speciesDictVersion ?? '';
       appState.layout = config.layout ?? null;
       appState.projectLinks = config.projectLinks ?? DEFAULT_PROJECT_LINKS;

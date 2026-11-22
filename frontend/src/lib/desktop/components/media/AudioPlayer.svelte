@@ -93,8 +93,14 @@
     type SpectrogramGenerationStatus,
   } from '$lib/utils/spectrogramStatus';
   import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
-  import { get } from 'svelte/store';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import {
+    PLAYBACK_GAIN_MAX_DB,
+    PLAYBACK_GAIN_MIN_DB,
+    PLAYBACK_HIGH_PASS_MAX_HZ,
+    PLAYBACK_HIGH_PASS_MIN_HZ,
+    clampToRange,
+    getPlaybackDefaults,
+  } from '$lib/utils/playbackDefaults';
   import {
     audioUrlFor,
     getPlaybackDenoiseDefault,
@@ -306,11 +312,13 @@
   }> = [];
 
   // Control state
-  // Read persistent default from settings store (one-time, not reactive:
-  // changing the setting while a player is mounted should not cause gain to jump)
-  const defaultGainDb = get(dashboardSettings)?.defaultAudioGain ?? 0;
+  // Read the persistent defaults once (not reactive: changing a setting while a
+  // player is mounted should not cause gain or the filter to jump)
+  const playbackDefaults = getPlaybackDefaults();
+  const defaultGainDb = playbackDefaults.gainDb;
+  const defaultFilterFreq = playbackDefaults.highPassHz;
   let gainValue = $state(defaultGainDb); // dB
-  let filterFreq = $state(20); // Hz
+  let filterFreq = $state(defaultFilterFreq); // Hz
   let playbackSpeed = $state(1.0); // Playback rate multiplier
   let showControls = $state(true); // Will be set based on width
   let isMobile = $state(false);
@@ -395,11 +403,6 @@
   // restored position) are ready, which avoids a race where play() starts from 0
   // before handleLoadedMetadata applies audibleBatsPendingFraction.
   let audibleBatsPendingAutoplay = false;
-
-  // Constants
-  const GAIN_MAX_DB = 24;
-  const FILTER_HP_MIN_FREQ = 20;
-  const FILTER_HP_MAX_FREQ = 10000;
 
   // Frequency scale overlay. Bird spectrograms are drawn for 24 kHz, so their
   // axis is a fixed 0-12 kHz. Bat spectrograms are rendered at the clip's own
@@ -1602,7 +1605,7 @@
 
   // Volume control
   const updateGain = (newGainDb: number) => {
-    gainValue = Math.max(-60, Math.min(GAIN_MAX_DB, newGainDb));
+    gainValue = clampToRange(newGainDb, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB);
     if (audioNodes) {
       audioNodes.gain.gain.value = dbToGain(gainValue);
     }
@@ -1610,7 +1613,7 @@
 
   // Filter control
   const updateFilter = (newFreq: number) => {
-    filterFreq = Math.max(FILTER_HP_MIN_FREQ, Math.min(FILTER_HP_MAX_FREQ, newFreq));
+    filterFreq = clampToRange(newFreq, PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
     if (audioNodes) {
       audioNodes.highPass.frequency.value = filterFreq;
     }
@@ -2793,6 +2796,7 @@
         {filterFreq}
         {playbackSpeed}
         defaultGainValue={defaultGainDb}
+        {defaultFilterFreq}
         onGainChange={updateGain}
         onFilterChange={updateFilter}
         onSpeedChange={handleSpeedChange}

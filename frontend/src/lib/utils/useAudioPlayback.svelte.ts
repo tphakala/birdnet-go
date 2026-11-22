@@ -39,6 +39,13 @@ import {
   probeAudioSource,
 } from '$lib/utils/audio';
 import { swapSourceKeepingPosition } from '$lib/utils/playbackDenoise';
+import {
+  PLAYBACK_GAIN_MAX_DB,
+  PLAYBACK_GAIN_MIN_DB,
+  PLAYBACK_HIGH_PASS_MAX_HZ,
+  PLAYBACK_HIGH_PASS_MIN_HZ,
+  clampToRange,
+} from '$lib/utils/playbackDefaults';
 import { isSpectrogramSourceKnownMissing } from '$lib/utils/spectrogramStatus';
 import {
   getAudioContext,
@@ -69,6 +76,8 @@ export interface AudioPlaybackOptions {
   detectionId: string;
   /** Default gain in dB (default: 0) */
   defaultGainDb?: number;
+  /** Default high-pass cutoff in Hz (default: PLAYBACK_HIGH_PASS_MIN_HZ, which is off) */
+  defaultFilterFreq?: number;
   /** Callback when playback starts - used to freeze SSE detection updates */
   onPlayStart?: () => void;
   /** Callback after playback stops (with PLAY_END_DELAY_MS delay) - resumes SSE */
@@ -106,7 +115,7 @@ export interface AudioPlaybackState {
   togglePlayPause: () => Promise<void>;
   /** Seek to a specific time in seconds */
   seek: (timeSec: number) => void;
-  /** Update gain in dB. Clamps to [0, MAX_GAIN_DB]. */
+  /** Update gain in dB. Clamps to [PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB]. */
   updateGain: (db: number) => void;
   /** Update high-pass filter frequency in Hz */
   updateFilter: (freq: number) => void;
@@ -117,7 +126,14 @@ export interface AudioPlaybackState {
 }
 
 export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackState {
-  const { detectionId, defaultGainDb = 0, onPlayStart, onPlayEnd, debug = false } = options;
+  const {
+    detectionId,
+    defaultGainDb = 0,
+    defaultFilterFreq = PLAYBACK_HIGH_PASS_MIN_HZ,
+    onPlayStart,
+    onPlayEnd,
+    debug = false,
+  } = options;
 
   // Debug logging helper
   const debugLog = (message: string, data?: unknown) => {
@@ -145,7 +161,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   let error = $state<string | null>(null);
   let audioContextAvailable = $state(true);
   let gainValue = $state(defaultGainDb);
-  let filterFreq = $state(20);
+  let filterFreq = $state(defaultFilterFreq);
   let playbackSpeed = $state(1.0);
 
   // --- Non-reactive internal state ---
@@ -168,11 +184,6 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     event: string;
     handler: EventListener;
   }> = [];
-
-  // --- Constants ---
-  const GAIN_MAX_DB = 24;
-  const FILTER_HP_MIN_FREQ = 20;
-  const FILTER_HP_MAX_FREQ = 10000;
 
   // --- Helper functions ---
 
@@ -447,14 +458,14 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   }
 
   function updateGainInternal(db: number) {
-    gainValue = Math.max(0, Math.min(GAIN_MAX_DB, db));
+    gainValue = clampToRange(db, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB);
     if (audioNodes?.gain) {
       audioNodes.gain.gain.value = dbToGain(gainValue);
     }
   }
 
   function updateFilterInternal(freq: number) {
-    filterFreq = Math.max(FILTER_HP_MIN_FREQ, Math.min(FILTER_HP_MAX_FREQ, freq));
+    filterFreq = clampToRange(freq, PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
     if (audioNodes?.highPass) {
       audioNodes.highPass.frequency.value = filterFreq;
     }

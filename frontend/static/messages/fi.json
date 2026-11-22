@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Äänentoisto",
         "description": "Oletusasetukset lintuäänitteiden toistoon.",
-        "defaultGain": "Oletusäänenvahvistus",
-        "defaultGainHelpText": "Alkuvahvistus äänitteiden toistossa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB:n vahvistus on suositeltavaa.",
+        "defaultGain": "Oletusvahvistus",
+        "defaultGainHelpText": "Vahvistus, jolla jokainen leike alkaa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB on hyvä lähtökohta; negatiivinen arvo hiljentää leikkeitä.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Poista kohinaa leikkeistä toistettaessa",
         "denoiseHelpText": "Toistaa ja lataa jokaisesta leikkeestä kohinasta puhdistetun kopion. Tallennetut leikkeet pysyvät muuttumattomina. Lataukset ovat WAV-tiedostoja ja suurempia. Leikkeen ääniasetuksista voi valita toisen voimakkuuden tai kytkeä kohinanpoiston pois.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Ota toiston kohinanpoisto käyttöön yllä valitaksesi voimakkuuden.",
         "denoiseExportPrecedence": "Ei käytössä, kun „Tallennettujen leikkeiden kohinanpoisto“ on päällä (Ääniasetukset, Käsittely-välilehti). Nämä leikkeet on jo puhdistettu kohinasta.",
         "denoiseRedenoiseNote": "Leikkeet, jotka tallennettiin „Tallennettujen leikkeiden kohinanpoiston“ ollessa päällä, puhdistetaan kohinasta uudelleen toistettaessa. Valitse leikkeen ääniasetuksista Pois kuullaksesi sen tallennettuna.",
-        "denoiseLossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta."
+        "denoiseLossyNote": "Kohinanpoisto toimii parhaiten FLAC- tai WAV-leikkeillä. Alle {minBitrate} kbps bitinopeuksilla koodekin artefaktit rajoittavat tuloksen puhtautta.",
+        "highPassLabel": "Oletusylipäästösuodatin",
+        "highPassHelpText": "Poistaa tätä taajuutta matalamman äänen leikkeen toiston aikana, esimerkiksi tuulen ja liikenteen jyrinän. Sitä sovelletaan selaimessa, joten tallennettuja, ladattuja ja viedyjä leikkeitä ei suodateta.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Pois"
       }
     },
     "restartRequired": "Jotkin muutokset vaativat palvelimen uudelleenkäynnistyksen astuakseen voimaan. Käynnistä BirdNET-Go uudelleen."

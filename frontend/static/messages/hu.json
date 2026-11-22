@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Hang lejátszás",
         "description": "Alapértelmezett beállítások a madár hangfelvételek lejátszásához.",
-        "defaultGain": "Alapértelmezett hangerő növelés",
-        "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
+        "defaultGain": "Alapértelmezett erősítés",
+        "defaultGainHelpText": "Az erősítés, amellyel minden klip indul. A madárhangok gyakran halkak, ezért a 6-12 dB jó kiindulópont; a negatív érték halkabbá teszi a klipeket.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Minták zajszűrése lejátszáskor",
         "denoiseHelpText": "Minden minta zajszűrt másolatát játssza le és tölti le. A mentett minták változatlanok maradnak. A letöltések WAV fájlok lesznek, és nagyobbak. Egy minta hangbeállításaiban másik erősség választható, vagy a zajszűrés kikapcsolható.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Az erősség kiválasztásához kapcsolja be fent a lejátszás zajszűrését.",
         "denoiseExportPrecedence": "Nem érvényesül, amíg a „Mentett minták zajszűrése” be van kapcsolva (Hangbeállítások, Feldolgozás lap). Ezek a minták már zajszűrtek.",
         "denoiseRedenoiseNote": "A „Mentett minták zajszűrése” bekapcsolt állapotában mentett minták lejátszáskor újra zajszűrésen esnek át. Válassza a Ki lehetőséget egy minta hangbeállításaiban, hogy úgy hallja, ahogyan mentették.",
-        "denoiseLossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát."
+        "denoiseLossyNote": "A zajszűrés FLAC vagy WAV mintákon működik a legjobban. {minBitrate} kbps alatt a kodek műtermékei korlátozzák az eredmény tisztaságát.",
+        "highPassLabel": "Alapértelmezett felül átengedő szűrő",
+        "highPassHelpText": "Egy klip lejátszása közben eltávolítja az ennél alacsonyabb frekvenciájú hangot, például a szél és a forgalom dübörgését. A böngészőben érvényesül, ezért a tárolt, letöltött és exportált klipek nincsenek szűrve.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Ki"
       }
     },
     "restartRequired": "Néhány változtatáshoz szerver újraindítás szükséges. Kérjük, indítsa újra a BirdNET-Go-t."

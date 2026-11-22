@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Audio atskaņošana",
         "description": "Noklusējuma iestatījumi putnu ierakstu atskaņošanai.",
-        "defaultGain": "Noklusējuma skaļuma pastiprināšana",
-        "defaultGainHelpText": "Sākotnējā pastiprināšana, kas tiek piemērota, atskaņojot ierakstus. Putnu skaņas bieži ir klusas, tāpēc ieteicama 6-12 dB pastiprināšana.",
+        "defaultGain": "Noklusējuma pastiprinājums",
+        "defaultGainHelpText": "Pastiprinājums, ar kādu sākas katrs klips. Putnu skaņas bieži ir klusas, tāpēc 6-12 dB ir labs sākums; negatīva vērtība padara klipus klusākus.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Samazināt klipu troksni atskaņošanas laikā",
         "denoiseHelpText": "Atskaņo un lejupielādē katra klipa kopiju bez trokšņa. Saglabātie klipi paliek nemainīti. Lejupielādes kļūst par WAV failiem un ir lielākas. Klipa audio iestatījumos var izvēlēties citu stiprumu vai izslēgt trokšņu samazināšanu.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Lai izvēlētos stiprumu, augstāk ieslēdziet trokšņu samazināšanu atskaņošanas laikā.",
         "denoiseExportPrecedence": "Netiek lietots, kamēr ir ieslēgta „Saglabāto klipu trokšņu samazināšana“ (Audio iestatījumi, cilne Apstrāde). Šie klipi jau ir attīrīti no trokšņa.",
         "denoiseRedenoiseNote": "Klipi, kas saglabāti, kamēr bija ieslēgta „Saglabāto klipu trokšņu samazināšana“, atskaņošanas laikā tiek attīrīti no trokšņa vēlreiz. Klipa audio iestatījumos izvēlieties Izslēgts, lai to dzirdētu tādu, kāds tas saglabāts.",
-        "denoiseLossyNote": "Trokšņu samazināšana vislabāk darbojas ar FLAC vai WAV klipiem. Zem {minBitrate} kbps kodeka artefakti ierobežo rezultāta tīrību."
+        "denoiseLossyNote": "Trokšņu samazināšana vislabāk darbojas ar FLAC vai WAV klipiem. Zem {minBitrate} kbps kodeka artefakti ierobežo rezultāta tīrību.",
+        "highPassLabel": "Noklusējuma augstfrekvences filtrs",
+        "highPassHelpText": "Klipa atskaņošanas laikā noņem skaņu zem šīs frekvences, piemēram, vēja un satiksmes dunoņu. Tas tiek piemērots pārlūkprogrammā, tāpēc saglabātie, lejupielādētie un eksportētie klipi netiek filtrēti.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Izslēgts"
       }
     },
     "restartRequired": "Dažām izmaiņām nepieciešama servera pārstartēšana, lai tās stātos spēkā. Lūdzu, pārstartējiet BirdNET-Go."

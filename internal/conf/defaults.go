@@ -201,6 +201,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.livespectrogram", false)                         // Auto-start live spectrogram on dashboard
 	viper.SetDefault("realtime.dashboard.playbackdenoise.enabled", false)                 // Playback denoise off by default
 	viper.SetDefault("realtime.dashboard.playbackdenoise.strength", DefaultDenoisePreset) // Strength used when it is switched on
+	viper.SetDefault("realtime.dashboard.playback.highpasshz", 0)                         // Default playback high-pass cutoff in Hz (0 is off)
 
 	// Spectrogram pre-rendering configuration
 	viper.SetDefault("realtime.dashboard.spectrogram.enabled", false)                                // Opt-in for safety

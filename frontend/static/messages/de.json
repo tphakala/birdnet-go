@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Audiowiedergabe",
         "description": "Standardeinstellungen für die Wiedergabe von Vogelaufnahmen.",
-        "defaultGain": "Standard-Lautstärkeverstärkung",
-        "defaultGainHelpText": "Anfangsverstärkung bei der Wiedergabe von Aufnahmen. Vogelstimmen sind oft leise, daher wird eine Verstärkung von 6-12 dB empfohlen.",
+        "defaultGain": "Standardverstärkung",
+        "defaultGainHelpText": "Verstärkung, mit der jeder Clip startet. Vogelstimmen sind oft leise, daher sind 6 bis 12 dB ein guter Anfang; ein negativer Wert macht Clips leiser.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Clips bei der Wiedergabe entrauschen",
         "denoiseHelpText": "Gibt von jedem Clip eine entrauschte Kopie wieder und lädt sie herunter. Gespeicherte Clips bleiben unverändert. Downloads werden WAV-Dateien und sind größer. In den Audioeinstellungen eines Clips lässt sich eine andere Stärke wählen oder die Rauschunterdrückung ausschalten.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Aktivieren Sie oben die Rauschunterdrückung bei der Wiedergabe, um eine Stärke zu wählen.",
         "denoiseExportPrecedence": "Wird nicht angewendet, solange „Rauschunterdrückung für gespeicherte Clips“ aktiv ist (Audioeinstellungen, Registerkarte Verarbeitung). Diese Clips sind bereits entrauscht.",
         "denoiseRedenoiseNote": "Clips, die bei aktiver „Rauschunterdrückung für gespeicherte Clips“ gespeichert wurden, werden bei der Wiedergabe erneut entrauscht. Wählen Sie in den Audioeinstellungen eines Clips Aus, um ihn so zu hören, wie er gespeichert wurde.",
-        "denoiseLossyNote": "Die Rauschunterdrückung funktioniert am besten bei FLAC- oder WAV-Clips. Unter {minBitrate} kbps begrenzen Codec-Artefakte, wie sauber das Ergebnis wird."
+        "denoiseLossyNote": "Die Rauschunterdrückung funktioniert am besten bei FLAC- oder WAV-Clips. Unter {minBitrate} kbps begrenzen Codec-Artefakte, wie sauber das Ergebnis wird.",
+        "highPassLabel": "Standard-Hochpassfilter",
+        "highPassHelpText": "Entfernt beim Abspielen eines Clips Schall unterhalb dieser Frequenz, zum Beispiel Wind- und Verkehrsrumpeln. Er wird im Browser angewendet, gespeicherte, heruntergeladene und exportierte Clips werden daher nicht gefiltert.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Aus"
       }
     },
     "restartRequired": "Einige Änderungen erfordern einen Neustart des Servers. Bitte starten Sie BirdNET-Go neu."

@@ -24,9 +24,16 @@ const (
 
 // Playback gain limits in dB (UI preference, distinct from export gain)
 const (
-	MinPlaybackGain     = 0.0  // Minimum default playback gain
-	MaxPlaybackGain     = 24.0 // Maximum default playback gain (matches AudioSettingsButton GAIN_MAX_DB)
-	DefaultPlaybackGain = 0.0  // Safe default if invalid value provided
+	MinPlaybackGain     = -12.0 // Minimum default playback gain (the player toolbar's lower bound)
+	MaxPlaybackGain     = 24.0  // Maximum default playback gain (the player toolbar's upper bound)
+	DefaultPlaybackGain = 0.0   // Safe default if invalid value provided
+)
+
+// Default playback high-pass cutoff limits in Hz (applied in the browser only)
+const (
+	PlaybackHighPassOffHz   = 0    // 0 means the default high-pass filter is off
+	PlaybackHighPassFloorHz = 20   // The player's slider floor, which is off: a cutoff at or below it is stored as 0
+	MaxPlaybackHighPassHz   = 5000 // Highest default cutoff (the player's slider maximum)
 )
 
 // Audio export type constants

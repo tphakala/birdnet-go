@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Reproducción de audio",
         "description": "Configuración predeterminada para reproducir grabaciones de aves.",
-        "defaultGain": "Amplificación de volumen predeterminada",
-        "defaultGainHelpText": "Ganancia inicial aplicada al reproducir grabaciones. Los sonidos de aves suelen ser suaves, por lo que se recomienda una amplificación de 6-12 dB.",
+        "defaultGain": "Ganancia predeterminada",
+        "defaultGainHelpText": "Ganancia con la que empieza cada clip. Los sonidos de aves suelen ser suaves, así que 6 a 12 dB es un buen punto de partida; un valor negativo hace los clips más silenciosos.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Reducir el ruido de los clips al reproducirlos",
         "denoiseHelpText": "Reproduce y descarga una copia sin ruido de cada clip. Los clips guardados no cambian. Las descargas pasan a ser archivos WAV y son más grandes. Los ajustes de audio de un clip permiten elegir otra intensidad o desactivar la reducción de ruido.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Active arriba la reducción de ruido en la reproducción para elegir una intensidad.",
         "denoiseExportPrecedence": "No se aplica mientras «Reducción de ruido de los clips guardados» esté activada (Ajustes de audio, pestaña Procesamiento). Esos clips ya están sin ruido.",
         "denoiseRedenoiseNote": "Los clips guardados mientras «Reducción de ruido de los clips guardados» estaba activada se limpian de ruido de nuevo al reproducirlos. Elija Desactivado en los ajustes de audio de un clip para oírlo tal como se guardó.",
-        "denoiseLossyNote": "La reducción de ruido funciona mejor con clips FLAC o WAV. Por debajo de {minBitrate} kbps, los artefactos del códec limitan lo limpio que queda el resultado."
+        "denoiseLossyNote": "La reducción de ruido funciona mejor con clips FLAC o WAV. Por debajo de {minBitrate} kbps, los artefactos del códec limitan lo limpio que queda el resultado.",
+        "highPassLabel": "Filtro paso alto predeterminado",
+        "highPassHelpText": "Elimina el sonido por debajo de esta frecuencia mientras se reproduce un clip, como el ruido grave del viento y del tráfico. Se aplica en el navegador, por lo que los clips almacenados, descargados y exportados no se filtran.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Desactivado"
       }
     },
     "restartRequired": "Algunos cambios requieren reiniciar el servidor para aplicarse. Reinicia BirdNET-Go."

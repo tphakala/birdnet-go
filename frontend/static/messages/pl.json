@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Odtwarzanie audio",
         "description": "Domyślne ustawienia odtwarzania nagrań ptaków.",
-        "defaultGain": "Domyślne wzmocnienie głośności",
-        "defaultGainHelpText": "Początkowe wzmocnienie stosowane podczas odtwarzania nagrań. Dźwięki ptaków są często ciche, dlatego zalecane jest wzmocnienie 6-12 dB.",
+        "defaultGain": "Domyślne wzmocnienie",
+        "defaultGainHelpText": "Wzmocnienie, z jakim zaczyna się każdy klip. Dźwięki ptaków są często ciche, więc 6-12 dB to dobry początek; wartość ujemna ścisza klipy.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Redukuj szum klipów podczas odtwarzania",
         "denoiseHelpText": "Odtwarza i pobiera kopię każdego klipu z usuniętym szumem. Zapisane klipy pozostają bez zmian. Pobrane pliki mają format WAV i są większe. W ustawieniach dźwięku klipu można wybrać inną siłę lub wyłączyć redukcję szumów.",
@@ -5105,7 +5105,11 @@
         "denoiseStrengthDisabledHelp": "Aby wybrać siłę, włącz powyżej redukcję szumów podczas odtwarzania.",
         "denoiseExportPrecedence": "Nie jest stosowana, gdy włączona jest „Redukcja szumów zapisanych klipów” (Ustawienia dźwięku, karta Przetwarzanie). Te klipy mają już usunięty szum.",
         "denoiseRedenoiseNote": "Klipy zapisane, gdy „Redukcja szumów zapisanych klipów” była włączona, są odszumiane ponownie podczas odtwarzania. Wybierz Wyłączone w ustawieniach dźwięku klipu, aby usłyszeć go tak, jak został zapisany.",
-        "denoiseLossyNote": "Redukcja szumów działa najlepiej na klipach FLAC lub WAV. Poniżej {minBitrate} kb/s artefakty kodeka ograniczają czystość wyniku."
+        "denoiseLossyNote": "Redukcja szumów działa najlepiej na klipach FLAC lub WAV. Poniżej {minBitrate} kb/s artefakty kodeka ograniczają czystość wyniku.",
+        "highPassLabel": "Domyślny filtr górnoprzepustowy",
+        "highPassHelpText": "Usuwa dźwięk poniżej tej częstotliwości podczas odtwarzania klipu, na przykład szum wiatru i ruchu drogowego. Jest stosowany w przeglądarce, więc zapisane, pobrane i wyeksportowane klipy nie są filtrowane.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Wyłączony"
       }
     },
     "restartRequired": "Niektóre zmiany wymagają ponownego uruchomienia serwera. Uruchom ponownie BirdNET-Go."
