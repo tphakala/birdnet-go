@@ -39,13 +39,14 @@ const buildSeparator = "-b"
 // updateOffer is one installed model build that a newer release or a newer build
 // of the same release replaces.
 type updateOffer struct {
-	CatalogID   string
-	ModelName   string
-	ToVariantID string
-	FromVersion string
-	ToVersion   string
-	FromBuild   int
-	ToBuild     int
+	CatalogID     string
+	ModelName     string
+	FromVariantID string
+	ToVariantID   string
+	FromVersion   string
+	ToVersion     string
+	FromBuild     int
+	ToBuild       int
 }
 
 // updateLabels returns the two sides of an offer as the bell and cards show
@@ -78,13 +79,14 @@ func installedUpdate(entries []classifier.CatalogEntry, entry *classifier.Catalo
 		return updateOffer{}, false
 	}
 	return updateOffer{
-		CatalogID:   entry.ID,
-		ModelName:   entry.Name,
-		ToVariantID: successor.ID,
-		FromVersion: classifier.VariantVersion(entry, installedVariantID),
-		ToVersion:   classifier.VariantVersion(entry, successor.ID),
-		FromBuild:   classifier.VariantBuild(entry, installedVariantID),
-		ToBuild:     classifier.VariantBuild(entry, successor.ID),
+		CatalogID:     entry.ID,
+		ModelName:     entry.Name,
+		FromVariantID: installedVariantID,
+		ToVariantID:   successor.ID,
+		FromVersion:   classifier.VariantVersion(entry, installedVariantID),
+		ToVersion:     classifier.VariantVersion(entry, successor.ID),
+		FromBuild:     classifier.VariantBuild(entry, installedVariantID),
+		ToBuild:       classifier.VariantBuild(entry, successor.ID),
 	}, true
 }
 
@@ -105,11 +107,13 @@ func updateOffers(entries []classifier.CatalogEntry, installedVariant func(id st
 	return offers
 }
 
-// updateOffersSignature identifies an offer set independent of order.
+// updateOffersSignature identifies an offer set independent of order. It covers
+// the installed variant as well as the target, so a change of the installed build
+// re-renders the bell text, which names both.
 func updateOffersSignature(offers []updateOffer) string {
 	parts := make([]string, len(offers))
 	for i := range offers {
-		parts[i] = offers[i].CatalogID + ":" + offers[i].ToVariantID
+		parts[i] = offers[i].CatalogID + ":" + offers[i].FromVariantID + ">" + offers[i].ToVariantID
 	}
 	slices.Sort(parts)
 	return strings.Join(parts, ",")

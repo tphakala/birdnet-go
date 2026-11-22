@@ -71,13 +71,13 @@ func TestUpdateOffers(t *testing.T) {
 	}
 	want := updateOffer{
 		CatalogID: updateEntryID, ModelName: updateModelName,
-		ToVariantID: updateNewID,
+		FromVariantID: updateOldID, ToVariantID: updateNewID,
 		FromVersion: updateOldRel, ToVersion: updateNewRel,
 		FromBuild: 1, ToBuild: 1,
 	}
 	wantBuild := updateOffer{
 		CatalogID: "newer-build", ModelName: "Newer build",
-		ToVariantID: updateNewID,
+		FromVariantID: updateOldID, ToVariantID: updateNewID,
 		FromVersion: updateNewRel, ToVersion: updateNewRel,
 		FromBuild: 1, ToBuild: 2,
 	}
@@ -112,11 +112,12 @@ func TestUpdateOffers(t *testing.T) {
 func TestUpdateOffersSignature(t *testing.T) {
 	t.Parallel()
 
-	a := updateOffer{CatalogID: "a", ToVariantID: "x"}
-	b := updateOffer{CatalogID: "b", ToVariantID: "y"}
+	a := updateOffer{CatalogID: "a", FromVariantID: "w", ToVariantID: "x"}
+	b := updateOffer{CatalogID: "b", FromVariantID: "w", ToVariantID: "y"}
 	assert.Equal(t, updateOffersSignature([]updateOffer{a, b}), updateOffersSignature([]updateOffer{b, a}), "the signature ignores order")
-	assert.Equal(t, "a:x,b:y", updateOffersSignature([]updateOffer{b, a}))
-	assert.NotEqual(t, updateOffersSignature([]updateOffer{a}), updateOffersSignature([]updateOffer{{CatalogID: "a", ToVariantID: "z"}}), "a different target is a different offer")
+	assert.Equal(t, "a:w>x,b:w>y", updateOffersSignature([]updateOffer{b, a}))
+	assert.NotEqual(t, updateOffersSignature([]updateOffer{a}), updateOffersSignature([]updateOffer{{CatalogID: "a", FromVariantID: "w", ToVariantID: "z"}}), "a different target is a different offer")
+	assert.NotEqual(t, updateOffersSignature([]updateOffer{a}), updateOffersSignature([]updateOffer{{CatalogID: "a", FromVariantID: "v", ToVariantID: "x"}}), "a different installed build is a different offer")
 }
 
 func TestNewUpdateNotification(t *testing.T) {
