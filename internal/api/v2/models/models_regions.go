@@ -137,7 +137,11 @@ func (c *Handler) GetRegionCoverageMap(ctx echo.Context) error {
 func representativeTable(tables map[string]*region.Table) *region.Table {
 	var best *region.Table
 	for _, repo := range slices.Sorted(maps.Keys(tables)) {
-		if tbl := tables[repo]; best == nil || len(tbl.Regions) > len(best.Regions) {
+		tbl := tables[repo]
+		if tbl == nil {
+			continue
+		}
+		if best == nil || len(tbl.Regions) > len(best.Regions) {
 			best = tbl
 		}
 	}

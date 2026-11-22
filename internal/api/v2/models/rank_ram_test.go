@@ -120,6 +120,8 @@ func TestRepresentativeTable(t *testing.T) {
 	a, b, c := tbl("a", "x"), tbl("b", "x", "y"), tbl("c", "x", "y")
 
 	assert.Nil(t, representativeTable(nil))
+	assert.Nil(t, representativeTable(map[string]*region.Table{"a": nil}), "a nil table is skipped")
+	assert.Same(t, b, representativeTable(map[string]*region.Table{"a": b, "b": nil}), "a nil table after a real one is skipped")
 	assert.Same(t, b, representativeTable(map[string]*region.Table{"a": a, "b": b}), "the larger table wins over a lower repo id")
 	assert.Same(t, b, representativeTable(map[string]*region.Table{"a": a, "b": b, "c": c}), "a tie goes to the lowest repo id")
 }
