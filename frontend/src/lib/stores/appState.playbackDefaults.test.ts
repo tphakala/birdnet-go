@@ -44,6 +44,8 @@ describe('appState playback defaults from /app/config', () => {
   });
 
   it('falls back to zero for a server that sends no playback defaults', async () => {
+    appStateModule.appState.playbackDefaults = { gainDb: 6, highPassHz: 300 };
+
     await appStateModule.initApp();
 
     expect(appStateModule.appState.playbackDefaults).toEqual({ gainDb: 0, highPassHz: 0 });
