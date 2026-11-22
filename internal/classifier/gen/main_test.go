@@ -913,6 +913,12 @@ func TestBuildRecords(t *testing.T) {
 			got, err := tt.fam.buildRecords(&manifest{Builds: tt.builds, Models: models})
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
+				if tt.fam.catalogVersion != "" || len(tt.fam.releases) > 0 {
+					// A record-level refusal names the record, so the maintainer can find it.
+					assert.True(t, slices.ContainsFunc(slices.Collect(maps.Keys(tt.builds)), func(tag string) bool {
+						return strings.Contains(err.Error(), "build record "+tag+":")
+					}), "error %q names no record tag", err)
+				}
 				return
 			}
 			require.NoError(t, err)

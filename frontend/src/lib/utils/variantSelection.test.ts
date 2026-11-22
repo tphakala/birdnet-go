@@ -667,4 +667,25 @@ describe('targetBuildNotes', () => {
     });
     expect(targetBuildNotes(noNotes, nordicB2.id)).toBeNull();
   });
+
+  it('returns the notes of a newer release with the same build number', () => {
+    const release3: CatalogBuild = { version: '3', build: 2, date: '2026-11-22', reason: 'New.' };
+    const e = entry({
+      installed: true,
+      installedVariantId: nordicB2.id,
+      builds: [build2, release3],
+      variants: [nordicB2, variant({ id: 'x-3-b2@nordic', version: '3', build: 2 })],
+    });
+    expect(targetBuildNotes(e, 'x-3-b2@nordic')).toBe(release3);
+  });
+
+  it('returns the target notes when the installed variant is not listed', () => {
+    const e = entry({
+      installed: true,
+      installedVariantId: 'gone@nordic',
+      builds: [build2],
+      variants: [nordicB2],
+    });
+    expect(targetBuildNotes(e, nordicB2.id)).toBe(build2);
+  });
 });

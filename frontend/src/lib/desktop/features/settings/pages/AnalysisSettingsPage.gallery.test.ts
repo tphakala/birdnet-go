@@ -116,6 +116,7 @@ import { settingsStore, settingsActions } from '$lib/stores/settings';
 import { getAvailableModels, refreshModels } from '$lib/stores/models.svelte';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
+import { formatDate } from '$lib/utils/formatters';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { ApiError } from '$lib/utils/api';
 import { wizardState } from '$lib/desktop/features/wizard/wizardState.svelte';
@@ -855,6 +856,25 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
       // Manifest text is never parsed as markup.
       expect(within(dialog).getByText('<b>Dogs</b> are reported again.')).toBeInTheDocument();
       expect(within(dialog).getAllByRole('listitem')).toHaveLength(2);
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.buildNotes.heading', {
+        build: 2,
+        version: '2',
+      });
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.buildNotes.released', {
+        date: formatDate('2026-11-21'),
+      });
+
+      // Picking the installed build in the dialog brings nothing new: the notes go away.
+      const installedRadio = within(dialog)
+        .getAllByRole<HTMLInputElement>('radio')
+        .find(r => !r.checked);
+      if (!installedRadio) throw new Error('fixture: the dialog lists the installed build');
+      await fireEvent.click(installedRadio);
+      await waitFor(() =>
+        expect(
+          within(dialog).queryByRole('heading', { name: 'analysis.gallery.buildNotes.heading' })
+        ).toBeNull()
+      );
 
       cleanup();
       const bare = await openUpdateDialog(newerBuild(undefined));

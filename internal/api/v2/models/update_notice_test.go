@@ -357,11 +357,15 @@ func TestGetModelCatalog_ReportsReleaseNotes(t *testing.T) {
 		updateOldID: {updateNewRel, 1},
 	}, builds, "the installed build 1 and its build 2 successor carry their release and build")
 
-	// An entry without records omits the field.
+	// An entry without records omits the key, not only its value.
 	useCatalog(t, []classifier.CatalogEntry{updateTestEntry()})
-	got = findEntry(catalogRequest(t, f.h), updateEntryID)
-	require.NotNil(t, got)
-	assert.Nil(t, got.Builds)
+	var raw struct {
+		Catalog []map[string]json.RawMessage `json:"catalog"`
+	}
+	require.NoError(t, json.Unmarshal(catalogBody(t, f.h), &raw))
+	require.Len(t, raw.Catalog, 1)
+	assert.NotContains(t, raw.Catalog[0], "builds")
+	assert.Contains(t, raw.Catalog[0], "variants", "fixture: the entry is in the response")
 }
 
 // TestSyncUpdateNotice_NilModelManagerIsNoop uses a catalog that holds an

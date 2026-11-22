@@ -5,6 +5,7 @@ import { renderTyped, screen } from '../../../../../test/render-helpers';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { t } from '$lib/i18n';
 import type { CatalogVariant } from '$lib/types/models';
+import { formatDate } from '$lib/utils/formatters';
 import { CHANNEL_EXPERIMENTAL, CHANNEL_PREVIEW, CHANNEL_STABLE } from '$lib/utils/variantSelection';
 import {
   catalogEntry as entry,
@@ -821,6 +822,10 @@ describe('ModelCard Accessibility', () => {
         selector: 'summary',
       });
       expect(summary.closest('details')).toHaveTextContent('Dogs are reported again.');
+      expect(vi.mocked(t)).toHaveBeenCalledWith('analysis.gallery.buildNotes.buildValue', {
+        build: 2,
+        date: formatDate('2026-11-21'),
+      });
       unmount();
 
       renderCard({ entry: withNotes, mode: 'available' });
