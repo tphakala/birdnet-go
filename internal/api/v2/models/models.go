@@ -254,6 +254,22 @@ type CatalogEntryResponse struct {
 	// state and the catalog only, not on hardware recommendations, so it is
 	// reported to every caller that can see the catalog.
 	Update *CatalogUpdateResponse `json:"update,omitempty"`
+	// Builds lists the release notes of the model's builds that carry any, sorted
+	// by release and build. A variant's notes are the record whose version and
+	// build match the variant's; a build without a record has no notes. Omitted
+	// when the model has none.
+	Builds []CatalogBuildResponse `json:"builds,omitempty"`
+}
+
+// CatalogBuildResponse is the release notes of one build of one release of a
+// model. Reason and Notes are English text from the upstream manifest, not
+// translated, and are plain text (never markup). Date is YYYY-MM-DD.
+type CatalogBuildResponse struct {
+	Version string   `json:"version"`
+	Build   int      `json:"build"`
+	Date    string   `json:"date"`
+	Reason  string   `json:"reason,omitempty"`
+	Notes   []string `json:"notes,omitempty"`
 }
 
 // CatalogUpdateResponse describes the newer release or build that replaces the
@@ -307,6 +323,11 @@ type CatalogVariantResponse struct {
 	// request is eligible for recommendations; otherwise the intrinsic "cpu"/"gpu"
 	// class (from the variant's own recommended backends) is emitted.
 	HardwareClass string `json:"hardwareClass,omitempty"`
+	// Version is the release of the variant's files (the variant's own release or
+	// the model's) and Build their build within it (1 or more). Together they
+	// select the variant's release notes in the entry's builds.
+	Version string `json:"version,omitempty"`
+	Build   int    `json:"build"`
 }
 
 // VariantReasonResponse is a structured, localizable reason for a variant's
@@ -643,6 +664,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 			InstalledVariantID:   installedVariantID,
 			RecommendedVariantID: recommendedVariant[entry.ID],
 			Update:               update,
+			Builds:               buildBuildResponses(entry.Builds),
 			Variants:             buildVariantResponses(entry, installed, installedVariantID, recsByVariant[entry.ID], hostArch),
 		})
 	}
@@ -666,6 +688,19 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"catalog": catalog,
 	})
+}
+
+// buildBuildResponses maps an entry's release-notes records to their API form;
+// an entry with none gets nil, which omitempty drops.
+func buildBuildResponses(builds []classifier.CatalogBuild) []CatalogBuildResponse {
+	if len(builds) == 0 {
+		return nil
+	}
+	out := make([]CatalogBuildResponse, 0, len(builds))
+	for i := range builds {
+		out = append(out, CatalogBuildResponse(builds[i]))
+	}
+	return out
 }
 
 // buildDocumentResponses maps the documents of the entry's own repo to their API
@@ -717,6 +752,8 @@ func buildVariantResponses(entry *classifier.CatalogEntry, installed bool, insta
 			Installed:    isInstalledVariant,
 			BuiltIn:      v.BuiltIn,
 			SizeBytes:    sizeBytes,
+			Version:      classifier.VariantVersion(entry, v.ID),
+			Build:        classifier.VariantBuild(entry, v.ID),
 			// Neutral default: without a recommendation the variant is not claimed
 			// incompatible. Overwritten below when recommendations are present.
 			Compatible: true,

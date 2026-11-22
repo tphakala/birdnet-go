@@ -6078,6 +6078,13 @@
         "action": "Oppdater",
         "applying": "Oppdaterer..."
       },
+      "buildNotes": {
+        "heading": "Nytt i build {build} av versjon {version}",
+        "released": "Utgitt {date}",
+        "buildLabel": "Buildnummer",
+        "buildValue": "{build}, utgitt {date}",
+        "disclosure": "Nytt i denne builden"
+      },
       "entryIncompatible": "Denne modellen er ikke tilgjengelig på dette systemet.",
       "regionGlobal": "Global",
       "hardwareLabel": "Maskinvare",

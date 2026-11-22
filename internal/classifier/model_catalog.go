@@ -116,6 +116,30 @@ type CatalogEntry struct {
 	// a classifier. It is removed automatically when an uninstall leaves nothing
 	// installed or actively downloading that depends on it. omitempty as above.
 	Component bool `json:"component,omitempty"`
+	// Builds holds the release notes of the entry's builds that carry any, sorted
+	// by release and build (generated from the upstream manifest's build records).
+	// A variant's notes are the record whose Version and Build equal its
+	// VariantVersion and VariantBuild; a build without notes has no record. omitempty keeps
+	// the on-disk JSON of every entry without records byte-identical, so adding
+	// this field does not shift catalogChecksum or force a schema-version bump.
+	Builds []CatalogBuild `json:"builds,omitempty"`
+}
+
+// CatalogBuild is the release notes of one build of one release of a model:
+// why the build was made and what changed for the user. Reason and Notes are
+// English text from the upstream manifest, shown as is (never as markup).
+type CatalogBuild struct {
+	// Version is the release the build belongs to (a variant's release, see
+	// VariantVersion).
+	Version string `json:"version"`
+	// Build is the build number within the release, 1 or more.
+	Build int `json:"build"`
+	// Date is the build's release date, YYYY-MM-DD.
+	Date string `json:"date"`
+	// Reason is a one-sentence summary of why the build exists.
+	Reason string `json:"reason,omitempty"`
+	// Notes lists what changed for the user, one sentence or short paragraph each.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // CatalogVariant describes one hardware or regional variant of a model: a
@@ -319,6 +343,7 @@ var EmbeddedCatalog = []CatalogEntry{
 				}, birdnetPlusV30LabelsFile(), taxonomyFiles()),
 			},
 		}, birdnetPlusV30RegionalVariants()),
+		Builds: birdnetPlusV30Builds(),
 	},
 	// BirdNET v3.0 acoustic classifier (developer preview). Global GPU-native model
 	// (EfficientNetV2-S backbone, 11,560 species, 32kHz/5s), paired with the v3.0
@@ -425,6 +450,7 @@ var EmbeddedCatalog = []CatalogEntry{
 				}, birdnetV30LabelsFile(), taxonomyFiles()),
 			},
 		}, birdnetV30RegionalVariants()),
+		Builds: birdnetV30Builds(),
 	},
 	{
 		ID:              "perch-v2",
@@ -505,6 +531,7 @@ var EmbeddedCatalog = []CatalogEntry{
 				}, perchV2LabelsFile(), taxonomyFiles()),
 			},
 		}, perchV2RegionalVariants()),
+		Builds: perchV2Builds(),
 	},
 	{
 		ID:              "bsg-finland",

@@ -6078,6 +6078,13 @@
         "action": "Mettre à jour",
         "applying": "Mise à jour..."
       },
+      "buildNotes": {
+        "heading": "Nouveautés du build {build} de la version {version}",
+        "released": "Publié le {date}",
+        "buildLabel": "Numéro de build",
+        "buildValue": "{build}, publié le {date}",
+        "disclosure": "Nouveautés de ce build"
+      },
       "entryIncompatible": "Ce modèle n'est pas disponible sur ce système.",
       "regionGlobal": "Global",
       "hardwareLabel": "Matériel",

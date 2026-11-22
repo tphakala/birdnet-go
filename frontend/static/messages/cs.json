@@ -6078,6 +6078,13 @@
         "action": "Aktualizovat",
         "applying": "Aktualizace..."
       },
+      "buildNotes": {
+        "heading": "Novinky v sestavení {build} verze {version}",
+        "released": "Vydáno {date}",
+        "buildLabel": "Číslo sestavení",
+        "buildValue": "{build}, vydáno {date}",
+        "disclosure": "Novinky v tomto sestavení"
+      },
       "entryIncompatible": "Tento model není v tomto systému k dispozici.",
       "regionGlobal": "Globální",
       "hardwareLabel": "Hardware",

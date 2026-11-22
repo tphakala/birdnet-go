@@ -41,6 +41,23 @@ export interface CatalogVariant {
    * server, in which case the client derives a coarser class from the id.
    */
   hardwareClass?: string;
+  /** Release of the variant's files (its own or the model's); absent on an older server. */
+  version?: string;
+  /** Build of the variant's files within its release (1 or more); absent on an older server, meaning 1. */
+  build?: number;
+}
+
+/**
+ * Release notes of one build of one release of a model. Mirrors the Go
+ * CatalogBuildResponse. `reason` and `notes` are English text from the upstream
+ * manifest, shown as plain text (never as markup); `date` is YYYY-MM-DD.
+ */
+export interface CatalogBuild {
+  version: string;
+  build: number;
+  date: string;
+  reason?: string;
+  notes?: string[];
 }
 
 /**
@@ -135,6 +152,8 @@ export interface CatalogEntry {
   dependsOn?: string[];
   /** Licence and policy documents of the entry's own repo; absent when it has none. */
   documents?: CatalogDocument[];
+  /** Release notes of the model's builds that carry any, sorted by release and build; absent when it has none. */
+  builds?: CatalogBuild[];
 }
 
 /** Response wrapper for the catalog endpoint. */

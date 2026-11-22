@@ -215,3 +215,43 @@ func backendRecommended(v *CatalogVariant) bool {
 	}
 	return false
 }
+
+// TestEmbeddedCatalog_LaterBuildsHaveReleaseNotes checks that every live
+// regional variant above build 1 of the families that publish release notes
+// has a release-notes record, and that a build 1 variant (whose
+// manifest record carries no notes) resolves none. Catches a hand-written entry
+// that does not wire its generated builds function.
+func TestEmbeddedCatalog_LaterBuildsHaveReleaseNotes(t *testing.T) {
+	t.Parallel()
+
+	for _, entryID := range []string{"perch-v2", "birdnet-plus-v3.0"} {
+		t.Run(entryID, func(t *testing.T) {
+			t.Parallel()
+
+			entry, ok := GetCatalogEntry(entryID)
+			require.Truef(t, ok, "catalog entry %q", entryID)
+			laterBuilds := 0
+			for i := range entry.Variants {
+				v := &entry.Variants[i]
+				if v.Region == "" {
+					continue
+				}
+				i := slices.IndexFunc(entry.Builds, func(b CatalogBuild) bool {
+					return b.Version == VariantVersion(&entry, v.ID) && b.Build == VariantBuild(&entry, v.ID)
+				})
+				has := i >= 0
+				if v.Build <= 1 {
+					assert.Falsef(t, has, "build 1 variant %q must have no release notes", v.ID)
+					continue
+				}
+				if v.Legacy {
+					continue
+				}
+				laterBuilds++
+				require.Truef(t, has, "live variant %q (build %d) must have release notes", v.ID, v.Build)
+				assert.NotEmptyf(t, entry.Builds[i].Notes, "variant %q release notes", v.ID)
+			}
+			assert.Positivef(t, laterBuilds, "%s must ship live builds above 1", entryID)
+		})
+	}
+}

@@ -6078,6 +6078,13 @@
         "action": "Bijwerken",
         "applying": "Bijwerken..."
       },
+      "buildNotes": {
+        "heading": "Nieuw in build {build} van versie {version}",
+        "released": "Uitgebracht op {date}",
+        "buildLabel": "Buildnummer",
+        "buildValue": "{build}, uitgebracht op {date}",
+        "disclosure": "Nieuw in deze build"
+      },
       "entryIncompatible": "Dit model is niet beschikbaar op dit systeem.",
       "regionGlobal": "Globaal",
       "hardwareLabel": "Hardware",

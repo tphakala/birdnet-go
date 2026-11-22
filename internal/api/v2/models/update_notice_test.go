@@ -329,6 +329,41 @@ func TestGetModelCatalog_ReportsUpdate(t *testing.T) {
 	assert.Nil(t, entry.Update, "a model that is not installed has no update")
 }
 
+// TestGetModelCatalog_ReportsReleaseNotes pins the release-notes fields of the
+// catalog response: the entry's build records, and each variant's release and
+// build, for an installed Legacy build 1 and its live build 2 successor of the
+// same release. The client matches the two to show the notes of the build an
+// update installs.
+func TestGetModelCatalog_ReportsReleaseNotes(t *testing.T) {
+	f := newUpdateFixture(t)
+
+	entry := updateTestEntry()
+	entry.Variants[0].Build = 2
+	entry.Variants[1].Version = ""
+	notes := classifier.CatalogBuild{Version: updateNewRel, Build: 2, Date: "2026-11-21", Reason: "Why build 2 exists.", Notes: []string{"First change.", "Second change."}}
+	entry.Builds = []classifier.CatalogBuild{notes}
+	useCatalog(t, []classifier.CatalogEntry{entry})
+	f.setBuild(t, "m_v1")
+
+	got := findEntry(catalogRequest(t, f.h), updateEntryID)
+	require.NotNil(t, got)
+	assert.Equal(t, []CatalogBuildResponse{{Version: notes.Version, Build: notes.Build, Date: notes.Date, Reason: notes.Reason, Notes: notes.Notes}}, got.Builds)
+	builds := make(map[string][2]any, len(got.Variants))
+	for _, v := range got.Variants {
+		builds[v.ID] = [2]any{v.Version, v.Build}
+	}
+	assert.Equal(t, map[string][2]any{
+		updateNewID: {updateNewRel, 2},
+		updateOldID: {updateNewRel, 1},
+	}, builds, "the installed build 1 and its build 2 successor carry their release and build")
+
+	// An entry without records omits the field.
+	useCatalog(t, []classifier.CatalogEntry{updateTestEntry()})
+	got = findEntry(catalogRequest(t, f.h), updateEntryID)
+	require.NotNil(t, got)
+	assert.Nil(t, got.Builds)
+}
+
 // TestSyncUpdateNotice_NilModelManagerIsNoop uses a catalog that holds an
 // installed older release, so an evaluation that reached the model manager
 // would dereference it.

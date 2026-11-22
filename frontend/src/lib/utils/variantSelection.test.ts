@@ -10,10 +10,18 @@ import {
   variantHardwareClass,
   variantHardwareLabel,
   optimizeOffers,
+  buildRecordFor,
+  targetBuildNotes,
   CHANNEL_STABLE,
   HARDWARE_CLASS,
 } from './variantSelection';
-import type { CatalogEntry, CatalogVariant, RegionFamily, VariantReason } from '$lib/types/models';
+import type {
+  CatalogBuild,
+  CatalogEntry,
+  CatalogVariant,
+  RegionFamily,
+  VariantReason,
+} from '$lib/types/models';
 
 // Controlled i18n mock: only these two keys have a "translation"; every other key
 // echoes back, which is how the real t() signals an untranslated key. This lets us
@@ -589,5 +597,62 @@ describe('normalizeRegionMode', () => {
     expect(normalizeRegionMode('auto')).toBe('auto');
     expect(normalizeRegionMode('global')).toBe('global');
     expect(normalizeRegionMode('nordic')).toBe('nordic');
+  });
+});
+
+describe('buildRecordFor', () => {
+  const build1: CatalogBuild = { version: '2', build: 1, date: '2026-07-01', reason: 'First.' };
+  const build2: CatalogBuild = { version: '2', build: 2, date: '2026-11-21', notes: ['Second.'] };
+  const notes = entry({ version: '2', builds: [build1, build2] });
+
+  it('resolves a variant without a build to build 1 of its release', () => {
+    expect(buildRecordFor(notes, variant({ id: 'a', version: '2' }))).toBe(build1);
+  });
+
+  it('takes the entry release when the variant carries none', () => {
+    expect(buildRecordFor(notes, variant({ id: 'a', build: 2 }))).toBe(build2);
+  });
+
+  it('finds no record for another release or a build without one', () => {
+    expect(buildRecordFor(notes, variant({ id: 'a', version: '1', build: 2 }))).toBeNull();
+    expect(buildRecordFor(notes, variant({ id: 'a', version: '2', build: 3 }))).toBeNull();
+  });
+});
+
+describe('targetBuildNotes', () => {
+  const build2: CatalogBuild = { version: '2', build: 2, date: '2026-11-21', notes: ['Second.'] };
+  const installedB1 = variant({ id: 'x@nordic', version: '2', build: 1, installed: true });
+  const nordicB2 = variant({ id: 'x-b2@nordic', version: '2', build: 2 });
+  const alpineB2 = variant({ id: 'x-b2@alps', version: '2', build: 2 });
+
+  it('returns the notes of a different build the swap installs', () => {
+    const e = entry({
+      installed: true,
+      installedVariantId: installedB1.id,
+      builds: [build2],
+      variants: [nordicB2, installedB1],
+    });
+    expect(targetBuildNotes(e, nordicB2.id)).toBe(build2);
+  });
+
+  it('returns null for a fresh install, the installed build itself and a target without notes', () => {
+    const fresh = entry({ builds: [build2], variants: [nordicB2] });
+    expect(targetBuildNotes(fresh, nordicB2.id)).toBeNull();
+
+    // Swapping between two regions of the installed build brings nothing new.
+    const sameBuild = entry({
+      installed: true,
+      installedVariantId: nordicB2.id,
+      builds: [build2],
+      variants: [nordicB2, alpineB2],
+    });
+    expect(targetBuildNotes(sameBuild, alpineB2.id)).toBeNull();
+
+    const noNotes = entry({
+      installed: true,
+      installedVariantId: installedB1.id,
+      variants: [nordicB2, installedB1],
+    });
+    expect(targetBuildNotes(noNotes, nordicB2.id)).toBeNull();
   });
 });

@@ -2,7 +2,13 @@
 // unit-testable; the only non-pure import is `t` for reason localization, which
 // every test environment mocks (see src/test/setup.ts).
 
-import type { CatalogEntry, CatalogVariant, RegionFamily, VariantReason } from '$lib/types/models';
+import type {
+  CatalogBuild,
+  CatalogEntry,
+  CatalogVariant,
+  RegionFamily,
+  VariantReason,
+} from '$lib/types/models';
 import { t } from '$lib/i18n';
 
 /**
@@ -289,6 +295,48 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
     offers.push({ entry, from, to, reasons: topReasons(to.reasons) });
   }
   return offers;
+}
+
+/** The build a variant without a `build` (an older server, a hand-written variant) belongs to. */
+const DEFAULT_BUILD = 1;
+
+/** The release and build of a variant's files: its own, else the entry's release and build 1. */
+function variantBuildKey(entry: CatalogEntry, variant: CatalogVariant): [string, number] {
+  return [variant.version ?? entry.version, variant.build ?? DEFAULT_BUILD];
+}
+
+/**
+ * The release notes of a variant's build: the entry's `builds` record with the
+ * variant's release and build, or null when that build has none (a build without
+ * notes shows nothing).
+ */
+export function buildRecordFor(entry: CatalogEntry, variant: CatalogVariant): CatalogBuild | null {
+  const [version, build] = variantBuildKey(entry, variant);
+  return entry.builds?.find(b => b.version === version && b.build === build) ?? null;
+}
+
+/**
+ * The release notes the install dialog shows before a variant swap: those of the
+ * target variant's build, when the model is installed and the target is a
+ * different release or build than the installed variant. Null for a fresh
+ * install, for a swap within the installed build (another region or precision of
+ * it brings nothing new), and for a target build without notes.
+ */
+export function targetBuildNotes(
+  entry: CatalogEntry,
+  targetVariantId: string
+): CatalogBuild | null {
+  if (!entry.installed) return null;
+  const variants = entry.variants ?? [];
+  const target = variants.find(v => v.id === targetVariantId);
+  if (!target) return null;
+  const installed = variants.find(v => v.id === entry.installedVariantId);
+  if (installed) {
+    const [fromVersion, fromBuild] = variantBuildKey(entry, installed);
+    const [toVersion, toBuild] = variantBuildKey(entry, target);
+    if (fromVersion === toVersion && fromBuild === toBuild) return null;
+  }
+  return buildRecordFor(entry, target);
 }
 
 /**

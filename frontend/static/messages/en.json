@@ -6078,6 +6078,13 @@
         "action": "Update",
         "applying": "Updating..."
       },
+      "buildNotes": {
+        "heading": "What's new in build {build} of version {version}",
+        "released": "Released {date}",
+        "buildLabel": "Build number",
+        "buildValue": "{build}, released {date}",
+        "disclosure": "What's new in this build"
+      },
       "entryIncompatible": "This model is not available on this system.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hardware",

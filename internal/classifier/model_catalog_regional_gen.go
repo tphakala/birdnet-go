@@ -1569,6 +1569,12 @@ func birdnetV30RegionalVariants() []CatalogVariant {
 	}
 }
 
+// birdnetV30Builds returns the release notes of the birdnet-v3.0 model's builds that carry any,
+// generated from BirdNET-v3.0-Models.models.json.
+func birdnetV30Builds() []CatalogBuild {
+	return nil
+}
+
 // perchV2RegionalVariants returns the 130 region-sliced variants of the perch-v2 model,
 // generated from Perch-v2-Models.models.json.
 func perchV2RegionalVariants() []CatalogVariant {
@@ -4086,6 +4092,22 @@ func perchV2RegionalVariants() []CatalogVariant {
 				{RemotePath: "regional/western-palearctic/perch_v2_western-palearctic_labels.txt", LocalName: "perch_v2_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "4e63079981649c4bffda95d1254c3c22689ade06dd2bc55ce08b14d03d8360b1", SizeBytes: 28913},
 			}, taxonomyFiles()),
 		},
+	}
+}
+
+// perchV2Builds returns the release notes of the perch-v2 model's builds that carry any,
+// generated from Perch-v2-Models.models.json.
+func perchV2Builds() []CatalogBuild {
+	return []CatalogBuild{
+		{Version: "2", Build: 2, Date: "2026-11-21", Reason: "Every regional model now includes the domestic dog, humans and all other domestic, farmed and pet animals, which many regions were missing.", Notes: []string{
+			"Every regional model now includes humans and the domestic animals: dog, cat, horse, cattle, sheep, goat, pig, chicken, pigeon, and pets and farm animals such as rabbit, donkey, carp, budgerigar, canary, guinea pig and hamster.",
+			"Before this build the domestic dog was missing from 18 regional models, including the Nordic one, so barking dogs could not be reported there.",
+			"Carp, pig, yak, guinea pig, hamster and humans were missing from all of the earlier regional models, and many of them also lacked cattle, sheep, goat and chicken.",
+			"27 regional models also gained wild species that the species limit had cut or whose names were not matched before, 191 additions in all, for example Demoiselle Crane in the western Palearctic and the Himalaya, Peron's Tree Frog in eastern Australia and Northern Bat in the Nordic region.",
+			"Regional models grow by 12 to 38 classes and no regional model lost a class.",
+			"The score scaling of each regional model was updated for its new class list, so confidence values can differ slightly from the earlier build.",
+			"The global model, the sound classes and the Central India model are unchanged.",
+		}},
 	}
 }
 
@@ -6701,5 +6723,24 @@ func birdnetPlusV30RegionalVariants() []CatalogVariant {
 				{RemotePath: "regional/western-palearctic/birdnet-plus-v3.0.1-western-palearctic-labels-b1.txt", LocalName: "birdnet_plus_v3.0.1_western-palearctic_labels.txt", Role: RoleLabels, SHA256: "0b3374bf19148e3c4e6d99c750ea85ecce436ea30928d3dac46a7a4044a595bc", SizeBytes: 51767},
 			}, taxonomyFiles()),
 		},
+	}
+}
+
+// birdnetPlusV30Builds returns the release notes of the birdnet-plus-v3.0 model's builds that carry any,
+// generated from BirdNET-Plus-V3.0.models.json.
+func birdnetPlusV30Builds() []CatalogBuild {
+	return []CatalogBuild{
+		{Version: "3.0.1", Build: 2, Date: "2026-11-21", Reason: "Every regional model now includes the domestic dog and all other domestic animals, which some regions were missing.", Notes: []string{
+			"Every regional model now includes the domestic dog, cat, horse, cattle, sheep, goat, chicken and pigeon, and other pets and farmed animals such as rabbit, donkey, goldfish, carp, budgerigar and canary.",
+			"Before this build the domestic dog was missing from 17 regional models, including the Nordic one, so barking dogs could not be reported there. Cat, horse, cattle, sheep, goat and chicken were missing from many regions as well.",
+			"Six regions with a species limit gained between 4 and 24 more wild species each, for example Corn Crake and Asian Elephant in the Himalaya region and Fieldfare in western North America.",
+			"Regional models grow by 5 to 28 classes and no regional model lost a class.",
+			"The global model and the sound classes are unchanged.",
+		}},
+		{Version: "3.0.1", Build: 3, Date: "2026-11-21", Reason: "Adds a regional model for Central India, where the existing Indian regional models do not fit.", Notes: []string{
+			"New regional model for Central India: the Deccan plateau and the Narmada and Godavari basins, roughly Madhya Pradesh, Maharashtra, Chhattisgarh and Telangana.",
+			"It covers 656 wild species of the region, for example Indian Roller, Sarus Crane, Indian Peafowl and Painted Spurfowl, and it includes the domestic dog and all other domestic animals and sound classes like every other regional model.",
+			"All other regional models and the global model are unchanged.",
+		}},
 	}
 }

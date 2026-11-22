@@ -45,6 +45,12 @@
 // Bootstrap safety: this program is package main and does NOT import
 // internal/classifier, so a broken generated file never blocks regenerating it.
 //
+// Next to each family's variants function the generator emits a builds function
+// (birdnetV30Builds, perchV2Builds, birdnetPlusV30Builds) with the release notes
+// of the current manifest's build records (see buildRecords in builds.go); a
+// record carrying only the maintainer-facing changes text is left out, so a build
+// without notes shows nothing.
+//
 // A second output, model_catalog_documents_gen.go, carries the licence and
 // policy documents of every vendored manifest (gen/manifests/*.models.json and
 // the document-only gen/manifests/documents/*.models.json) as a registry keyed
@@ -395,6 +401,9 @@ type manifest struct {
 	Repo       string             `json:"repo"`
 	FamilyMeta manifestFamilyMeta `json:"family_meta"`
 	Models     []manifestModel    `json:"models"`
+	// Builds holds the per-build release records keyed by build tag; see
+	// buildRecords.
+	Builds map[string]manifestBuild `json:"builds"`
 }
 
 type manifestModel struct {
@@ -500,7 +509,11 @@ func run() error {
 	total := 0
 	for i := range families {
 		fam := &families[i]
-		variants, genErr := fam.build(labels)
+		m, genErr := loadManifest(fam.manifestFile)
+		if genErr != nil {
+			return genErr
+		}
+		variants, genErr := fam.buildFrom(m, labels)
 		if genErr != nil {
 			return fmt.Errorf("family %s: %w", fam.key, genErr)
 		}
@@ -512,6 +525,9 @@ func run() error {
 			buf.WriteString(v)
 		}
 		buf.WriteString("\t}\n}\n")
+		if genErr = fam.writeBuilds(&buf, m); genErr != nil {
+			return fmt.Errorf("family %s: %w", fam.key, genErr)
+		}
 	}
 
 	formatted, err := format.Source(buf.Bytes())
@@ -548,6 +564,11 @@ func (f *family) build(labels map[string]labelChecksum) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return f.buildFrom(m, labels)
+}
+
+// buildFrom is build over the family's already parsed current manifest m.
+func (f *family) buildFrom(m *manifest, labels map[string]labelChecksum) ([]string, error) {
 	table, err := loadRegionTable(f.regionsFile)
 	if err != nil {
 		return nil, err

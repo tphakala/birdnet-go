@@ -63,9 +63,11 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { validateProtocolURL } from '$lib/utils/security';
-  import { formatBytes, formatNumber } from '$lib/utils/formatters';
+  import { formatBytes, formatDate, formatNumber } from '$lib/utils/formatters';
   import { generateId } from '$lib/utils/uuid';
+  import ModelBuildNotes from './ModelBuildNotes.svelte';
   import {
+    buildRecordFor,
     CHANNEL_EXPERIMENTAL,
     CHANNEL_PREVIEW,
     NEW_MODEL_IDS,
@@ -191,6 +193,11 @@
       : entry.region || t('analysis.gallery.regionGlobal')
   );
   const speciesCount = $derived(shownVariant?.speciesCount ?? entry.speciesCount);
+  // The release notes of the installed build, on the Installed tab only. A build without notes
+  // shows no build row and no disclosure.
+  const buildNotes = $derived(
+    mode === 'installed' && shownVariant ? buildRecordFor(entry, shownVariant) : null
+  );
   // A caller that passes only `busy` still pauses the card's other buttons
   const inFlight = $derived(actionInFlight || busy !== null);
   // Available cards dim the logo of an entry this host cannot run; the text keeps full contrast
@@ -527,6 +534,15 @@
           {/if}
         </dd>
       {/if}
+      {#if buildNotes}
+        <dt>{t('analysis.gallery.buildNotes.buildLabel')}</dt>
+        <dd class="tabular-nums">
+          {t('analysis.gallery.buildNotes.buildValue', {
+            build: buildNotes.build,
+            date: formatDate(buildNotes.date),
+          })}
+        </dd>
+      {/if}
       <dt>{t('analysis.gallery.license.license')}</dt>
       <dd class="flex flex-wrap items-center gap-x-2 gap-y-1">
         <StatusPill
@@ -540,6 +556,17 @@
         <span>{license.note}</span>
       </dd>
     </dl>
+    {#if buildNotes}
+      <!-- A native <details> opens by keyboard and touch alike. -->
+      <details class="mt-2.5 text-xs">
+        <summary
+          class="w-fit cursor-pointer rounded-sm py-1 text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+        >
+          {t('analysis.gallery.buildNotes.disclosure')}
+        </summary>
+        <ModelBuildNotes record={buildNotes} className="mt-1.5 leading-relaxed" />
+      </details>
+    {/if}
     {#if showGeomodel}
       <div class="mt-2.5">
         <StatusPill variant="info" size="sm" label={t('analysis.gallery.geomodelBadge')}>

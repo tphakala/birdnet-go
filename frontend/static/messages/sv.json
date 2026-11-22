@@ -6078,6 +6078,13 @@
         "action": "Uppdatera",
         "applying": "Uppdaterar..."
       },
+      "buildNotes": {
+        "heading": "Nytt i bygge {build} av version {version}",
+        "released": "Publicerat {date}",
+        "buildLabel": "Byggnummer",
+        "buildValue": "{build}, publicerat {date}",
+        "disclosure": "Nytt i det här bygget"
+      },
       "entryIncompatible": "Den här modellen är inte tillgänglig på detta system.",
       "regionGlobal": "Global",
       "hardwareLabel": "Hårdvara",

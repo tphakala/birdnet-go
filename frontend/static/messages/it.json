@@ -6078,6 +6078,13 @@
         "action": "Aggiorna",
         "applying": "Aggiornamento..."
       },
+      "buildNotes": {
+        "heading": "Novità della build {build} della versione {version}",
+        "released": "Pubblicata il {date}",
+        "buildLabel": "Numero di build",
+        "buildValue": "{build}, pubblicata il {date}",
+        "disclosure": "Novità di questa build"
+      },
       "entryIncompatible": "Questo modello non è disponibile su questo sistema.",
       "regionGlobal": "Globale",
       "hardwareLabel": "Hardware",

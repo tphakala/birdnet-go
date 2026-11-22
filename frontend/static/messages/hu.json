@@ -6078,6 +6078,13 @@
         "action": "Frissítés",
         "applying": "Frissítés..."
       },
+      "buildNotes": {
+        "heading": "A(z) {version} verzió {build}. buildjének újdonságai",
+        "released": "Megjelent: {date}",
+        "buildLabel": "Build száma",
+        "buildValue": "{build}, megjelent: {date}",
+        "disclosure": "Újdonságok ebben a buildben"
+      },
       "entryIncompatible": "Ez a modell nem érhető el ezen a rendszeren.",
       "regionGlobal": "Globális",
       "hardwareLabel": "Hardver",
