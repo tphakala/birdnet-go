@@ -116,8 +116,8 @@ type CatalogEntry struct {
 	// a classifier. It is removed automatically when an uninstall leaves nothing
 	// installed or actively downloading that depends on it. omitempty as above.
 	Component bool `json:"component,omitempty"`
-	// Builds holds the release notes of the entry's builds that carry any, sorted
-	// by release and build (generated from the upstream manifest's build records).
+	// Builds holds the release notes of the entry's builds that carry any,
+	// ordered by release string (compared as text) and then build (generated from the upstream manifest's build records).
 	// A variant's notes are the record whose Version and Build equal its
 	// VariantVersion and VariantBuild; a build without notes has no record. omitempty keeps
 	// the on-disk JSON of every entry without records byte-identical, so adding

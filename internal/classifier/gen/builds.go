@@ -44,7 +44,7 @@ func (f *family) buildsFuncName() string {
 }
 
 // buildRecords returns the release-notes records of the family's current
-// manifest, sorted by release and build. A record with neither a reason nor
+// manifest, ordered by release string (compared as text) and then build. A record with neither a reason nor
 // notes (a blank reason counts as none, and a reason is emitted trimmed) is
 // skipped: it carries only the maintainer-facing changes text, which
 // the gallery never shows. Every other record must name a build of 1 or more of

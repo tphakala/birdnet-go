@@ -152,7 +152,7 @@ export interface CatalogEntry {
   dependsOn?: string[];
   /** Licence and policy documents of the entry's own repo; absent when it has none. */
   documents?: CatalogDocument[];
-  /** Release notes of the model's builds that carry any, sorted by release and build; absent when it has none. */
+  /** Release notes of the model's builds that carry any, ordered by release string (compared as text) and then build; absent when it has none. */
   builds?: CatalogBuild[];
 }
 

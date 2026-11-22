@@ -326,7 +326,9 @@ export function buildRecordFor(entry: CatalogEntry, variant: CatalogVariant): Ca
  * target variant's build, when the model is installed and the target is a
  * different release or build than the installed variant. Null for a fresh
  * install, for a swap within the installed build (another region or precision of
- * it brings nothing new), and for a target build without notes.
+ * it brings nothing new), and for a target build without notes. When the
+ * installed variant is not in the list its build is unknown, so the target's
+ * notes are returned.
  */
 export function targetBuildNotes(
   entry: CatalogEntry,

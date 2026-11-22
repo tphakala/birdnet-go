@@ -254,8 +254,8 @@ type CatalogEntryResponse struct {
 	// state and the catalog only, not on hardware recommendations, so it is
 	// reported to every caller that can see the catalog.
 	Update *CatalogUpdateResponse `json:"update,omitempty"`
-	// Builds lists the release notes of the model's builds that carry any, sorted
-	// by release and build. A variant's notes are the record whose version and
+	// Builds lists the release notes of the model's builds that carry any,
+	// ordered by release string (compared as text) and then build. A variant's notes are the record whose version and
 	// build match the variant's; a build without a record has no notes. Omitted
 	// when the model has none.
 	Builds []CatalogBuildResponse `json:"builds,omitempty"`

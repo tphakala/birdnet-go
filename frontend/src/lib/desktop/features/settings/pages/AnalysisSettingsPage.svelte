@@ -330,7 +330,7 @@
   );
   // The release notes of the build a swap of an installed model installs, shown before
   // the swap runs; null for a fresh install, a swap within the installed build and a
-  // target build without notes.
+  // target build without notes (see targetBuildNotes for an unlisted installed variant).
   const licenseBuildNotes = $derived(
     licenseModel ? targetBuildNotes(licenseModel, selectedVariantId) : null
   );
