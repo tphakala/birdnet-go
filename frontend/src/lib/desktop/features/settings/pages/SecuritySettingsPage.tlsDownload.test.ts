@@ -33,6 +33,7 @@ function seedSelfSignedTls() {
 describe('SecuritySettingsPage TLS certificate download', () => {
   const initialState = get(settingsStore);
   // The shared settingsAPI mock has no tls section; stub the certificate load the page runs on mount.
+  const hadTls = Reflect.has(settingsAPI, 'tls');
   const originalTls = Reflect.get(settingsAPI, 'tls');
 
   beforeEach(() => {
@@ -44,10 +45,14 @@ describe('SecuritySettingsPage TLS certificate download', () => {
   });
 
   afterEach(() => {
-    Object.assign(settingsAPI, { tls: originalTls });
+    if (hadTls) {
+      Object.assign(settingsAPI, { tls: originalTls });
+    } else {
+      Reflect.deleteProperty(settingsAPI, 'tls');
+    }
     settingsStore.set(initialState);
-    navigation.redirect('/ui/dashboard');
     resetBasePath();
+    navigation.redirect('/ui/dashboard');
   });
 
   it('links the certificate download under the reverse proxy prefix', async () => {
