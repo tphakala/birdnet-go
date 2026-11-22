@@ -195,9 +195,7 @@ type Config struct {
 	Labels []string
 
 	// SpeciesCodeMap maps scientific names to eBird species codes.
-	// Built from taxonomy data (e.g., classifier.CreateScientificNameIndex, which
-	// also indexes OpenFauna alias names so species stored under a newer
-	// scientific name still resolve their code).
+	// Built from taxonomy data (e.g., classifier.CreateScientificNameIndex).
 	SpeciesCodeMap map[string]string
 }
 

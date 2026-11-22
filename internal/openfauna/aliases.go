@@ -60,14 +60,13 @@ func loadAliases() {
 		// return that name), and a case- or whitespace-only "self alias" is skipped
 		// as the no-op it is. The stored value is trimmed so CanonicalName always
 		// returns a stable key form.
-		trimmedLegacy := strings.TrimSpace(legacy)
-		normLegacy := normalizeName(trimmedLegacy)
+		normLegacy := normalizeName(legacy)
 		canonical = strings.TrimSpace(canonical)
 		if normLegacy == "" || canonical == "" || normLegacy == normalizeName(canonical) {
 			continue
 		}
 		m[normLegacy] = canonical
-		pairs = append(pairs, aliasPair{legacy: trimmedLegacy, canonical: canonical})
+		pairs = append(pairs, aliasPair{legacy: strings.TrimSpace(legacy), canonical: canonical})
 	}
 	slices.SortFunc(pairs, func(a, b aliasPair) int {
 		return strings.Compare(a.legacy, b.legacy)
