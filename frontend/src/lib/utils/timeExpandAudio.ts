@@ -368,11 +368,10 @@ export function encodePcm16Wav(channelData: Float32Array[], sampleRate: number):
   if (!firstChannel || firstChannel.length === 0) {
     throw new TimeExpandAudioError('empty_audio', 'Decoded audio contains zero samples');
   }
-  if (!Number.isFinite(sampleRate) || sampleRate < 1 || sampleRate > MAX_UINT32) {
+  const numChannels = channelData.length;
+  if (!Number.isFinite(sampleRate) || sampleRate < 1 || sampleRate * numChannels * 2 > MAX_UINT32) {
     throw new TimeExpandAudioError('invalid_wav', `Invalid output WAV sample rate: ${sampleRate}`);
   }
-
-  const numChannels = channelData.length;
   const numFrames = firstChannel.length;
   const dataByteLength = numFrames * numChannels * 2;
   const totalByteLength = WAV_PCM_HEADER_SIZE + dataByteLength;
@@ -401,14 +400,20 @@ function appendDecodedChunk(
   outBuffer: ArrayBuffer | null,
   chunks: Float32Array[][],
   framesWritten: number,
+  expectedChannels: number,
   decoded: DecodedFlacChunk
-): { framesAdded: number; detectedRate: number } {
+): number {
   if (decoded.samplesDecoded === 0 || decoded.channelData.length === 0) {
-    return { framesAdded: 0, detectedRate: decoded.sampleRate };
+    return 0;
+  }
+  if (decoded.channelData.length !== expectedChannels) {
+    throw new TimeExpandAudioError(
+      'flac_decode_failed',
+      `Decoded FLAC channel count (${decoded.channelData.length}) does not match STREAMINFO (${expectedChannels})`
+    );
   }
   const frames = decoded.samplesDecoded;
-  const numChannels = decoded.channelData.length;
-  const newTotalBytes = (framesWritten + frames) * numChannels * 2;
+  const newTotalBytes = (framesWritten + frames) * expectedChannels * 2;
   if (newTotalBytes > MAX_DECODED_PCM_BYTES) {
     throw new TimeExpandAudioError(
       'pcm_too_large',
@@ -417,10 +422,10 @@ function appendDecodedChunk(
   }
 
   if (outBuffer !== null) {
-    const capacityFrames = (outBuffer.byteLength - WAV_PCM_HEADER_SIZE) / (numChannels * 2);
+    const capacityFrames = (outBuffer.byteLength - WAV_PCM_HEADER_SIZE) / (expectedChannels * 2);
     if (framesWritten + frames <= capacityFrames) {
       writeFramesPcm16(outBuffer, framesWritten, decoded.channelData, frames);
-      return { framesAdded: frames, detectedRate: decoded.sampleRate };
+      return frames;
     }
     throw new TimeExpandAudioError(
       'pcm_too_large',
@@ -430,7 +435,7 @@ function appendDecodedChunk(
 
   // Fallback for STREAMINFO.totalSamples === 0: retain per-chunk copies up to MAX_DECODED_PCM_BYTES.
   chunks.push(decoded.channelData.map(ch => ch.slice(0, frames)));
-  return { framesAdded: frames, detectedRate: decoded.sampleRate };
+  return frames;
 }
 
 async function expandFlacAudio(
@@ -488,26 +493,26 @@ async function expandFlacAudio(
       const decoded = await decoder.decode(chunk);
       if (decoded.sampleRate > 0) detectedSampleRate = decoded.sampleRate;
       firstErrorMsg ??= decoded.errors.at(0)?.message;
-      const { framesAdded } = appendDecodedChunk(
+      framesWritten += appendDecodedChunk(
         preAllocatedBuffer,
         fallbackChunks,
         framesWritten,
+        headerInfo.channels,
         decoded
       );
-      framesWritten += framesAdded;
     }
 
     throwIfAborted(signal);
     const flushed = await decoder.flush();
     if (flushed.sampleRate > 0) detectedSampleRate = flushed.sampleRate;
     firstErrorMsg ??= flushed.errors.at(0)?.message;
-    const { framesAdded } = appendDecodedChunk(
+    framesWritten += appendDecodedChunk(
       preAllocatedBuffer,
       fallbackChunks,
       framesWritten,
+      headerInfo.channels,
       flushed
     );
-    framesWritten += framesAdded;
   } finally {
     if (isReady) {
       try {
@@ -518,6 +523,7 @@ async function expandFlacAudio(
     }
   }
 
+  throwIfAborted(signal);
   if (framesWritten === 0) {
     throw new TimeExpandAudioError('flac_decode_failed', firstErrorMsg ?? 'Failed to decode FLAC');
   }

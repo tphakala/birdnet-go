@@ -1,4 +1,3 @@
-import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 /**
  * Recovery tests for AudioPlayer: a play press must never be a silent no-op,
  * the error overlay must not block the controls, and the Play/Pause state must
@@ -7,6 +6,7 @@ import { makeBatWavBuffer } from '../../../../test/audioFixtures';
  * element's load algorithm (src assignment pauses without a pause event).
  */
 
+import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
 import {

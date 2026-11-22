@@ -1,8 +1,8 @@
-import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 /**
  * Selection playback and the clip extraction listeners in AudioPlayer.
  */
 
+import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';

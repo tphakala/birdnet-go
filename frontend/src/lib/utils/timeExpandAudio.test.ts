@@ -320,6 +320,68 @@ describe('timeExpandAudio', () => {
     expect(view.getInt16(58, true)).toBe(-32768);
   });
 
+  it('falls back to streaming chunk merge when STREAMINFO totalSamples is 0', async () => {
+    const standardBlob = await timeExpandAudio(base64ToArrayBuffer(VALID_FLAC_256KHZ_B64), 10);
+    const standardOut = new Uint8Array(await standardBlob.arrayBuffer());
+
+    const zeroTotal = new Uint8Array(base64ToArrayBuffer(VALID_FLAC_256KHZ_B64));
+    // Zero 36-bit totalSamples in STREAMINFO (lower nibble of byte 21 + bytes 22..25).
+    zeroTotal[21] &= 0xf0;
+    zeroTotal[22] = 0;
+    zeroTotal[23] = 0;
+    zeroTotal[24] = 0;
+    zeroTotal[25] = 0;
+
+    const fallbackBlob = await timeExpandAudio(zeroTotal.buffer, 10);
+    const fallbackOut = new Uint8Array(await fallbackBlob.arrayBuffer());
+    expect(fallbackOut).toEqual(standardOut);
+  });
+
+  it('rejects FLAC whose decoded frames exceed STREAMINFO capacity or channel count', async () => {
+    const src = base64ToArrayBuffer(VALID_FLAC_256KHZ_B64);
+
+    vi.doMock('@wasm-audio-decoders/flac', () => ({
+      FLACDecoder: class {
+        ready = Promise.resolve();
+        decode = vi.fn(async () => ({
+          // STREAMINFO declares 128 frames; returning 256 must fail runtime capacity guard.
+          channelData: [new Float32Array(256)],
+          samplesDecoded: 256,
+          sampleRate: 256000,
+          bitDepth: 16,
+          errors: [],
+        }));
+        flush = vi.fn();
+        free = vi.fn();
+      },
+    }));
+    const { timeExpandAudio: expandOverflow } = await import('./timeExpandAudio');
+    await expect(expandOverflow(src, 10)).rejects.toMatchObject({
+      code: 'pcm_too_large',
+    });
+
+    vi.resetModules();
+    vi.doMock('@wasm-audio-decoders/flac', () => ({
+      FLACDecoder: class {
+        ready = Promise.resolve();
+        decode = vi.fn(async () => ({
+          // STREAMINFO declares 1 channel; returning 2 must fail channel validation.
+          channelData: [new Float32Array(128), new Float32Array(128)],
+          samplesDecoded: 128,
+          sampleRate: 256000,
+          bitDepth: 16,
+          errors: [],
+        }));
+        flush = vi.fn();
+        free = vi.fn();
+      },
+    }));
+    const { timeExpandAudio: expandMismatch } = await import('./timeExpandAudio');
+    await expect(expandMismatch(src, 10)).rejects.toMatchObject({
+      code: 'flac_decode_failed',
+    });
+  });
+
   it('aborts cleanly before and during FLAC decoding', async () => {
     const controller = new AbortController();
     controller.abort();
