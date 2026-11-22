@@ -265,15 +265,15 @@ func validateDashboardSettings(settings *Dashboard) error {
 		settings.DefaultAudioGain = min(max(settings.DefaultAudioGain, MinPlaybackGain), MaxPlaybackGain)
 	}
 
-	// Default playback high-pass cutoff (applied in the browser only): a value
-	// below the lowest active cutoff is off, and anything above the maximum is
-	// clamped to it.
-	if hz := settings.Playback.HighPassHz; hz != PlaybackHighPassOffHz && (hz < MinPlaybackHighPassHz || hz > MaxPlaybackHighPassHz) {
+	// Default playback high-pass cutoff (applied in the browser only): the
+	// player's floor is its off position, so a value at or below the floor is
+	// stored as off, and anything above the maximum is clamped to it.
+	if hz := settings.Playback.HighPassHz; hz != PlaybackHighPassOffHz && (hz <= PlaybackHighPassFloorHz || hz > MaxPlaybackHighPassHz) {
 		GetLogger().Warn("Dashboard playback HighPassHz out of range, normalizing",
 			logger.Int("invalid_value", hz),
-			logger.Int("min", MinPlaybackHighPassHz),
+			logger.Int("floor", PlaybackHighPassFloorHz),
 			logger.Int("max", MaxPlaybackHighPassHz))
-		if hz < MinPlaybackHighPassHz {
+		if hz <= PlaybackHighPassFloorHz {
 			settings.Playback.HighPassHz = PlaybackHighPassOffHz
 		} else {
 			settings.Playback.HighPassHz = MaxPlaybackHighPassHz

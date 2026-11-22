@@ -31,9 +31,9 @@ const (
 
 // Default playback high-pass cutoff limits in Hz (applied in the browser only)
 const (
-	PlaybackHighPassOffHz = 0    // 0 means the default high-pass filter is off
-	MinPlaybackHighPassHz = 20   // Lowest active cutoff; a lower value is off (the player's slider floor)
-	MaxPlaybackHighPassHz = 5000 // Highest default cutoff (the player's slider maximum)
+	PlaybackHighPassOffHz   = 0    // 0 means the default high-pass filter is off
+	PlaybackHighPassFloorHz = 20   // The player's slider floor, which is off: a cutoff at or below it is stored as 0
+	MaxPlaybackHighPassHz   = 5000 // Highest default cutoff (the player's slider maximum)
 )
 
 // Audio export type constants

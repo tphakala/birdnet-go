@@ -46,8 +46,8 @@ func TestValidateDashboardSettings_PlaybackGain(t *testing.T) {
 }
 
 // TestValidateDashboardSettings_PlaybackHighPass pins the default high-pass
-// cutoff: 0 is off, 1 to 19 Hz normalize to off (the client shows anything
-// below the floor as off), 20 to the maximum are kept, and a larger value
+// cutoff: 0 is off, 1 to 20 Hz normalize to off (the client shows the floor,
+// 20 Hz, and anything below it as off), 21 to the maximum are kept, and a larger value
 // clamps to the maximum. A zero value Dashboard, as an old config or a test
 // builds it, means off.
 func TestValidateDashboardSettings_PlaybackHighPass(t *testing.T) {
@@ -62,7 +62,9 @@ func TestValidateDashboardSettings_PlaybackHighPass(t *testing.T) {
 		{"negative is off", -5, 0},
 		{"1 Hz is off", 1, 0},
 		{"19 Hz is off", 19, 0},
-		{"lowest active cutoff kept", 20, 20},
+		{"the floor is off", 20, 0},
+		{"just above the floor kept", 21, 21},
+		{"30 Hz kept", 30, 30},
 		{"in range", 300, 300},
 		{"maximum kept", 5000, 5000},
 		{"above maximum clamped", 5001, 5000},

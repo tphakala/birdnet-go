@@ -491,6 +491,8 @@ describe('settingsCoercion realtime dashboard playback defaults', () => {
     { name: '1 Hz', stored: 1, want: 0 },
     { name: '19 Hz', stored: 19, want: 0 },
     { name: 'the floor', stored: 20, want: 0 },
+    { name: 'just above the floor', stored: 21, want: 21 },
+    { name: 'the lowest cutoff the slider offers', stored: 30, want: 30 },
     { name: 'an active cutoff', stored: 300, want: 300 },
     { name: 'above the maximum', stored: 9000, want: 5000 },
     { name: 'not a number', stored: 'high', want: 0 },
