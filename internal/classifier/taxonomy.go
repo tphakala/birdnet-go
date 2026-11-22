@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
 
 //go:embed data/eBird_taxonomy_codes_2021E.json
@@ -71,7 +72,9 @@ func LoadTaxonomyData(customPath string) (TaxonomyMap, ScientificNameIndex, erro
 	return taxonomyMap, scientificIndex, nil
 }
 
-// CreateScientificNameIndex builds an index mapping scientific names to codes
+// CreateScientificNameIndex builds an index mapping scientific names to codes.
+// It also indexes the OpenFauna alias names the taxonomy lacks, so a species
+// listed under an older or newer scientific name resolves to the same code.
 func CreateScientificNameIndex(taxonomyMap TaxonomyMap) ScientificNameIndex {
 	index := make(ScientificNameIndex)
 	for taxonName, taxonCode := range taxonomyMap {
@@ -83,6 +86,7 @@ func CreateScientificNameIndex(taxonomyMap TaxonomyMap) ScientificNameIndex {
 			}
 		}
 	}
+	openfauna.ExpandScientificCodeMap(index)
 	return index
 }
 

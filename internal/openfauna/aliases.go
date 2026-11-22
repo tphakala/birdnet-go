@@ -2,6 +2,7 @@ package openfauna
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"sync"
 
@@ -17,7 +18,8 @@ import (
 // is the authoritative source for these reclassifications; its compiled dataset
 // ships an alias map (legacy scientific name -> canonical scientific name) that
 // this package exposes so consumers can collapse the variants to one canonical
-// name (range-filter species matching, detection de-duplication).
+// name (range-filter species matching, detection de-duplication) or carry a
+// species code from one variant to the other (ExpandScientificCodeMap).
 //
 // Keys can also be a newer model label whose canonical name is the one the
 // geomodel uses (for example a renamed BirdNET+ genus), not only a legacy name.
@@ -25,9 +27,15 @@ import (
 // The map is small (a few hundred entries), so it is parsed once on first use and
 // kept in memory, unlike the large streaming translation/metadata artifacts.
 
+type aliasPair struct {
+	legacy    string
+	canonical string
+}
+
 var (
-	aliasOnce sync.Once
-	aliasMap  map[string]string // normalized legacy scientific name -> canonical scientific name (dataset case)
+	aliasOnce  sync.Once
+	aliasMap   map[string]string // normalized legacy scientific name -> canonical scientific name (dataset case)
+	aliasPairs []aliasPair       // sorted by legacy name (dataset case) for deterministic code-map expansion
 )
 
 // loadAliases parses the embedded alias map once. Keys are normalized for
@@ -44,6 +52,7 @@ func loadAliases() {
 		return
 	}
 	m := make(map[string]string, len(raw))
+	pairs := make([]aliasPair, 0, len(raw))
 	for legacy, canonical := range raw {
 		// Normalize both sides before validating. Using the normalized key for the
 		// guards means a whitespace-only legacy key (which normalizes to "") cannot
@@ -57,8 +66,13 @@ func loadAliases() {
 			continue
 		}
 		m[normLegacy] = canonical
+		pairs = append(pairs, aliasPair{legacy: strings.TrimSpace(legacy), canonical: canonical})
 	}
+	slices.SortFunc(pairs, func(a, b aliasPair) int {
+		return strings.Compare(a.legacy, b.legacy)
+	})
 	aliasMap = m
+	aliasPairs = pairs
 }
 
 // CanonicalName resolves a possibly-reclassified scientific name to its canonical
@@ -86,4 +100,32 @@ func CanonicalName(scientific string) string {
 func AliasCount() int {
 	aliasOnce.Do(loadAliases)
 	return len(aliasMap)
+}
+
+// ExpandScientificCodeMap adds species codes to codeMap (scientific name -> code)
+// for alias names it lacks: first each canonical name takes its legacy name's code,
+// then each legacy name takes its canonical name's code. Keys match exactly in the
+// dataset's casing. A non-empty code is never overwritten, so a name with its own
+// code keeps it; an empty code is filled like a missing one. When several legacy
+// names share a canonical name that has no code, the canonical name takes the code
+// of the first legacy name, in sorted order, that has one.
+func ExpandScientificCodeMap(codeMap map[string]string) {
+	if len(codeMap) == 0 {
+		return
+	}
+	aliasOnce.Do(loadAliases)
+	fill := func(from, to string) {
+		if codeMap[to] != "" {
+			return
+		}
+		if code := codeMap[from]; code != "" {
+			codeMap[to] = code
+		}
+	}
+	for _, pair := range aliasPairs {
+		fill(pair.legacy, pair.canonical)
+	}
+	for _, pair := range aliasPairs {
+		fill(pair.canonical, pair.legacy)
+	}
 }

@@ -195,7 +195,7 @@ type Config struct {
 	Labels []string
 
 	// SpeciesCodeMap maps scientific names to eBird species codes.
-	// Built from taxonomy data (e.g., birdnet.CreateScientificNameIndex).
+	// Built from taxonomy data (e.g., classifier.CreateScientificNameIndex).
 	SpeciesCodeMap map[string]string
 }
 

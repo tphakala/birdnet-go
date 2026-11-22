@@ -194,3 +194,30 @@ func TestLabelSplitters_AgreeOnScientificName(t *testing.T) {
 	sciB, _ := SplitSpeciesName("Domestic_animals_and_pets")
 	assert.NotEqual(t, sciA, sciB)
 }
+
+// TestGetSpeciesCodeFromName_OpenFaunaAliases verifies that the embedded index
+// resolves OpenFauna alias names the 2021 eBird snapshot does not list, and that
+// a name with its own code keeps it.
+func TestGetSpeciesCodeFromName_OpenFaunaAliases(t *testing.T) {
+	t.Parallel()
+
+	taxonomyMap, scientificIndex, err := LoadTaxonomyData("")
+	require.NoError(t, err, "failed to load embedded taxonomy data")
+
+	code, found := GetSpeciesCodeFromName(taxonomyMap, scientificIndex, "Hesperiphona vespertina_Evening Grosbeak")
+	require.True(t, found, "canonical Hesperiphona vespertina must resolve via alias")
+	assert.Equal(t, "evegro", code)
+
+	code, found = GetSpeciesCodeFromName(taxonomyMap, scientificIndex, "Leuconotopicus villosus_Hairy Woodpecker")
+	require.True(t, found, "canonical Leuconotopicus villosus must resolve via alias")
+	assert.Equal(t, "haiwoo", code)
+
+	code, found = GetSpeciesCodeFromName(taxonomyMap, scientificIndex, "Hyla versicolor")
+	require.True(t, found, "legacy Hyla versicolor must resolve via reverse alias")
+	assert.Equal(t, "t-11124704", code)
+
+	// Both names of this alias pair are in the snapshot with different codes;
+	// neither may take the other's code.
+	assert.Equal(t, "fotdro4", scientificIndex["Dicrurus divaricatus"])
+	assert.Equal(t, "fotdro5", scientificIndex["Dicrurus adsimilis"])
+}

@@ -28,12 +28,10 @@ type taxonomyResolver interface {
 // inputs pass through unchanged and raw is empty; the resolver is not consulted, so
 // the hot path pays only one alias-map lookup per detection.
 //
-// The eBird code depends on which kind of alias key the model emitted. A key that
-// is a legacy name held by the embedded eBird snapshot keeps its own code, which is
-// the taxon's real code. A key that is a newer model label the snapshot does not
-// hold arrives with a synthetic placeholder, so the canonical name's code is used
-// when the snapshot has it. When neither name is in the taxonomy the incoming
-// placeholder is kept, and when both are, the raw name's code wins. The common name
+// The eBird code is the incoming code, which the caller looked up for the raw name,
+// when the taxonomy holds the raw name; otherwise the canonical name's code (the
+// alias map matches letter case loosely, the code index does not, so a letter-case
+// variant reaches this step); otherwise the incoming placeholder. The common name
 // is re-resolved: OpenFauna localizes both the legacy and canonical names, so the
 // canonical resolution is reliable.
 func canonicalizeSpecies(resolver taxonomyResolver, scientificName, commonName, speciesCode string) (canonicalSci, common, code, raw string) {
@@ -55,8 +53,9 @@ func canonicalizeSpecies(resolver taxonomyResolver, scientificName, commonName, 
 	if canonicalCommon == "" {
 		canonicalCommon = commonName
 	}
-	// Keep the raw name's code when the taxonomy holds it. Otherwise the incoming code
-	// is a placeholder, so prefer the canonical name's real code if it has one.
+	// Keep the incoming (raw name's) code when the taxonomy holds the raw name.
+	// Otherwise the incoming code is a placeholder, so prefer the canonical name's
+	// real code if it has one.
 	code = speciesCode
 	if _, rawFound := resolver.GetSpeciesCode(scientificName); !rawFound {
 		if canonicalCode, ok := resolver.GetSpeciesCode(canonical); ok {
