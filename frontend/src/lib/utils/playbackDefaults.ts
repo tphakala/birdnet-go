@@ -142,10 +142,13 @@ interface PlaybackDefaultItemBase {
 }
 
 /**
- * One row of the playback defaults dialog. The dialog renders one control per
- * `kind`, so a new default is a new entry here (plus its field in
+ * One row of the playback defaults dialog. The dialog lays out its sliders from
+ * this list, so a new slider needs no layout change; it still needs its field in
  * PlaybackDefaultValues, its line in readPlaybackDefaults, changedPlaybackDefaults
- * and playbackDefaultsPatch, and its stored key), not a layout change.
+ * and playbackDefaultsPatch, its stored key, and its step in the player's
+ * applySavedDefaults. The dialog's select branch is written for denoise (its
+ * options, change handler, help text and disabled state), so a second select item
+ * needs that branch made generic first.
  */
 export type PlaybackDefaultItem =
   | (PlaybackDefaultItemBase & {
@@ -226,7 +229,8 @@ export function changedPlaybackDefaults(
 /**
  * The dashboard PATCH body for the changed keys only. Turning denoise off keeps
  * the saved strength, so the Settings page still shows it. `playback` is sent
- * whole, because the store merges a section patch one level deep.
+ * whole, so the patch states every playback field and does not depend on how the
+ * store and the server merge it.
  */
 export function playbackDefaultsPatch(
   changed: Partial<PlaybackDefaultValues>,
