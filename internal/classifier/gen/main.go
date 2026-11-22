@@ -108,6 +108,9 @@ var families = []family{
 		},
 		liveVariants:    []string{"fp16", "fp32"},
 		expectedRegions: 43,
+		// The catalog entry's Version; the manifest's regional entries carry
+		// upstream_version "3.0-preview3.1".
+		catalogVersion: "3.0",
 	},
 	{
 		key:          "perch-v2",
@@ -128,6 +131,9 @@ var families = []family{
 		liveVariants: []string{"no-dft-fp32"},
 		// 43 tiles plus central-india.
 		expectedRegions: 44,
+		// The catalog entry's Version, the same string as the manifest's
+		// upstream_version.
+		catalogVersion: "2",
 	},
 	{
 		key:          "birdnet-plus-v3.0",
@@ -234,6 +240,13 @@ type family struct {
 	// that the upstream manifest no longer lists. Their regional entries are
 	// appended and chained to the current manifest by mergeFrozenReleases.
 	frozenManifests []string
+	// catalogVersion is the Version of a one-release family's hand-written
+	// catalog entry, which every variant of the family reports as its release
+	// (VariantVersion). The family's build records are keyed on it, since it
+	// can differ from the manifest's upstream_version, so the gallery can join
+	// a record to a variant. Unused for a multi-release family, whose listed
+	// releases are the catalog's own release strings.
+	catalogVersion  string
 	modelLocalName  func(slug, token, release string, build int) string
 	labelsLocalName func(slug, release string, build int) string
 }

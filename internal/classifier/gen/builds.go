@@ -49,11 +49,17 @@ func (f *family) buildsFuncName() string {
 // skipped: it carries only the maintainer-facing changes text, which
 // the gallery never shows. Every other record must name a build of 1 or more of
 // a release the family hosts (its listed releases, or for a one-release family a
-// release one of its regional entries carries), a calendar date and no empty
-// note, and a (release, build) pair may appear once.
+// release one of its regional entries carries, emitted as the family's
+// catalogVersion so it matches the release the catalog reports), a calendar
+// date and no empty
+// note, and a (release, build) pair, with the release as emitted, may appear once.
 func (f *family) buildRecords(m *manifest) ([]buildRecord, error) {
 	releases := f.releases
-	if len(releases) == 0 {
+	oneRelease := len(f.releases) == 0
+	if oneRelease {
+		if f.catalogVersion == "" {
+			return nil, fmt.Errorf("family %s: a one-release family needs a catalogVersion to key its build records on", f.key)
+		}
 		regional := regionalEntries(m)
 		for i := range regional {
 			if v := regional[i].UpstreamVersion; !slices.Contains(releases, v) {
@@ -89,12 +95,18 @@ func (f *family) buildRecords(m *manifest) ([]buildRecord, error) {
 				return nil, fmt.Errorf("build record %s: empty note", tag)
 			}
 		}
-		k := key{b.UpstreamVersion, *b.Build}
+		// The record is emitted under the release the catalog reports, so the
+		// duplicate check keys on that.
+		version := b.UpstreamVersion
+		if oneRelease {
+			version = f.catalogVersion
+		}
+		k := key{version, *b.Build}
 		if prev, dup := seen[k]; dup {
 			return nil, fmt.Errorf("build record %s: duplicate release %s build %d (also %s)", tag, k.version, k.build, prev)
 		}
 		seen[k] = tag
-		out = append(out, buildRecord{version: b.UpstreamVersion, build: *b.Build, date: b.Date, reason: reason, notes: b.Notes})
+		out = append(out, buildRecord{version: version, build: *b.Build, date: b.Date, reason: reason, notes: b.Notes})
 	}
 	slices.SortFunc(out, func(a, b buildRecord) int {
 		if c := strings.Compare(a.version, b.version); c != 0 {

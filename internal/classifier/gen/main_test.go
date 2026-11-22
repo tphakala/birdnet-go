@@ -824,18 +824,20 @@ func TestBuildRecords(t *testing.T) {
 	t.Parallel()
 
 	multi := &family{key: "multi", releases: []string{"1.0", "1.1"}}
-	single := &family{key: "single"}
-	regional := []manifestModel{{Path: "r/a", Variant: "fp32", Region: "a", UpstreamVersion: "2"}}
+	single := familyByKey(t, "birdnet-v3.0")
+	regional := []manifestModel{{Path: "r/a", Variant: "fp32", Region: "a", UpstreamVersion: "3.0-preview3.1"}}
 	rec := func(release string, build *int, reason string, notes ...string) manifestBuild {
 		return manifestBuild{Build: build, UpstreamVersion: release, Date: "2026-11-21", Reason: reason, Notes: notes}
 	}
 
 	tests := []struct {
-		name    string
-		fam     *family
-		builds  map[string]manifestBuild
-		want    []buildRecord
-		wantErr string
+		name   string
+		fam    *family
+		builds map[string]manifestBuild
+		// regional overrides the regional entries the family's releases come from.
+		regional []manifestModel
+		want     []buildRecord
+		wantErr  string
 	}{
 		{
 			name: "a record with only changes is skipped",
@@ -859,16 +861,30 @@ func TestBuildRecords(t *testing.T) {
 			},
 		},
 		{
-			name:   "a one-release family takes the release of its regional entries",
+			name:   "a one-release family keys its records on the catalog release",
 			fam:    single,
-			builds: map[string]manifestBuild{"y-b2": rec("2", new(2), "r", "n")},
-			want:   []buildRecord{{version: "2", build: 2, date: "2026-11-21", reason: "r", notes: []string{"n"}}},
+			builds: map[string]manifestBuild{"y-b2": rec("3.0-preview3.1", new(2), "r", "n")},
+			want:   []buildRecord{{version: "3.0", build: 2, date: "2026-11-21", reason: "r", notes: []string{"n"}}},
 		},
+		{name: "a one-release family without a catalog release", fam: &family{key: "bare"}, builds: map[string]manifestBuild{"k": rec("2", new(2), "r")}, wantErr: "catalogVersion"},
 		{
 			name:   "a blank reason without notes is skipped, a padded reason is trimmed",
 			fam:    multi,
 			builds: map[string]manifestBuild{"x-b2": rec("1.1", new(2), "  "), "x-b3": rec("1.1", new(3), " r ")},
 			want:   []buildRecord{{version: "1.1", build: 3, date: "2026-11-21", reason: "r"}},
+		},
+		{
+			name: "two upstream releases of a one-release family emitted as one catalog release and build",
+			fam:  single,
+			regional: []manifestModel{
+				{Path: "r/a", Variant: "fp32", Region: "a", UpstreamVersion: "3.0-preview3.1"},
+				{Path: "r/b", Variant: "fp32", Region: "b", UpstreamVersion: "3.0-preview3.2"},
+			},
+			builds: map[string]manifestBuild{
+				"k1": rec("3.0-preview3.1", new(2), "r"),
+				"k2": rec("3.0-preview3.2", new(2), "s"),
+			},
+			wantErr: "duplicate",
 		},
 		{name: "missing build", fam: multi, builds: map[string]manifestBuild{"k": rec("1.1", nil, "r")}, wantErr: "build"},
 		{name: "build below 1", fam: multi, builds: map[string]manifestBuild{"k": rec("1.1", new(0), "r")}, wantErr: "build"},
@@ -890,7 +906,11 @@ func TestBuildRecords(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := tt.fam.buildRecords(&manifest{Builds: tt.builds, Models: regional})
+			models := regional
+			if tt.regional != nil {
+				models = tt.regional
+			}
+			got, err := tt.fam.buildRecords(&manifest{Builds: tt.builds, Models: models})
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
 				return

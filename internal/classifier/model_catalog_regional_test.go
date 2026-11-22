@@ -255,3 +255,22 @@ func TestEmbeddedCatalog_LaterBuildsHaveReleaseNotes(t *testing.T) {
 		})
 	}
 }
+
+// TestEmbeddedCatalog_BuildRecordsMatchAVariant checks that every release-notes
+// record of every embedded entry belongs to a build some variant of the entry
+// reports (VariantVersion and VariantBuild), so the gallery can join each record
+// to a variant. Catches a record keyed on a release string the catalog never
+// reports, such as an upstream_version that differs from the entry's Version.
+func TestEmbeddedCatalog_BuildRecordsMatchAVariant(t *testing.T) {
+	t.Parallel()
+
+	for i := range EmbeddedCatalog {
+		entry := &EmbeddedCatalog[i]
+		for _, b := range entry.Builds {
+			matched := slices.ContainsFunc(entry.Variants, func(v CatalogVariant) bool {
+				return VariantVersion(entry, v.ID) == b.Version && VariantBuild(entry, v.ID) == b.Build
+			})
+			assert.Truef(t, matched, "%s: release notes of version %s build %d match no variant", entry.ID, b.Version, b.Build)
+		}
+	}
+}
