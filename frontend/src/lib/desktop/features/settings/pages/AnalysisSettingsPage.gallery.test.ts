@@ -403,6 +403,41 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     expect(toastActions.warning).not.toHaveBeenCalled();
   });
 
+  it('ignores a delayed cancel rejection after the same model was restarted and cancelled again', async () => {
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress());
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    const first = deferred();
+    vi.mocked(modelsApi.cancelInstall)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(new Promise<void>(() => {}));
+    await startTestBirdInstall();
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+    await waitFor(() => expect(modelsApi.cancelInstall).toHaveBeenCalledTimes(1));
+    cancelled?.();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+    await waitFor(() => expect(modelsApi.cancelInstall).toHaveBeenCalledTimes(2));
+    vi.mocked(toastActions.warning).mockClear();
+
+    first.reject(new Error('late failure'));
+    await tick();
+    await tick();
+
+    expect(toastActions.warning).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: /analysis\.gallery\.cancelling Test Bird Model/ })
+    ).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('ends a reinstall quietly when it is sent a retained cancelled state', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],

@@ -248,6 +248,8 @@
   let reinstallingId = $state<string | null>(null);
   // The entry whose Cancel was requested and whose operation has not ended yet.
   let cancellingId = $state<string | null>(null);
+  // Counts cancel requests, so a late rejection can tell it is no longer the current one.
+  let cancelRequestCount = 0;
   let downloadProgress = $state<DownloadProgress | null>(null);
   let completionTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -2160,12 +2162,13 @@
   async function handleCancelInstall(entry: CatalogEntry) {
     if (installingId !== entry.id || cancellingId !== null) return;
     cancellingId = entry.id;
+    const request = ++cancelRequestCount;
     try {
       await cancelInstall(entry.id);
     } catch (e) {
-      // A rejection that arrives after this request's install ended, or after another
-      // model's cancel took over, owns no state any more: leave it alone.
-      if (unmounted || cancellingId !== entry.id) return;
+      // A rejection of an earlier request owns no state any more, whether its install
+      // ended or the same or another model was cancelled since: leave it alone.
+      if (unmounted || request !== cancelRequestCount || cancellingId !== entry.id) return;
       cancellingId = null;
       const showMessage =
         e instanceof Error &&
