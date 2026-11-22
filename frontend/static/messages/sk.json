@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Prehrávanie zvuku",
         "description": "Predvolené nastavenia pre prehrávanie nahrávok vtákov.",
-        "defaultGain": "Predvolené zosilnenie hlasitosti",
-        "defaultGainHelpText": "Počiatočné zosilnenie pri prehrávaní nahrávok. Zvuky vtákov sú často tiché, preto sa odporúča zosilnenie 6-12 dB.",
+        "defaultGain": "Predvolené zosilnenie",
+        "defaultGainHelpText": "Zosilnenie, s ktorým sa začína každý klip. Zvuky vtákov sú často tiché, preto je dobrým začiatkom 6 až 12 dB; záporná hodnota klipy stíši.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Odšumiť klipy pri prehrávaní",
         "denoiseHelpText": "Prehráva a sťahuje odšumenú kópiu každého klipu. Uložené klipy zostávajú nezmenené. Stiahnuté súbory sú vo formáte WAV a sú väčšie. V nastaveniach zvuku klipu možno zvoliť inú silu alebo odšumenie vypnúť.",

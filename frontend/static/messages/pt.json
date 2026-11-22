@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Reprodução de Áudio",
         "description": "Definições padrão para reprodução de gravações de aves.",
-        "defaultGain": "Amplificação de Volume Padrão",
-        "defaultGainHelpText": "Ganho inicial aplicado ao reproduzir gravações. Os sons de aves são frequentemente baixos, pelo que um reforço de 6-12 dB é recomendado.",
+        "defaultGain": "Ganho padrão",
+        "defaultGainHelpText": "Ganho com que cada clipe começa. Os sons de aves são frequentemente baixos, por isso 6 a 12 dB é um bom ponto de partida; um valor negativo torna os clipes mais silenciosos.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Reduzir o ruído dos clipes ao reproduzir",
         "denoiseHelpText": "Reproduz e transfere uma cópia sem ruído de cada clipe. Os clipes guardados não mudam. As transferências passam a ser ficheiros WAV e são maiores. As definições de áudio de um clipe permitem escolher outra intensidade ou desativar a redução de ruído.",

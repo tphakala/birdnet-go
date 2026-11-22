@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Hang lejátszás",
         "description": "Alapértelmezett beállítások a madár hangfelvételek lejátszásához.",
-        "defaultGain": "Alapértelmezett hangerő növelés",
-        "defaultGainHelpText": "Kezdeti erősítés a felvételek lejátszásakor. A madár hangok gyakran halkak, ezért 6-12 dB erősítés ajánlott.",
+        "defaultGain": "Alapértelmezett erősítés",
+        "defaultGainHelpText": "Az erősítés, amellyel minden klip indul. A madárhangok gyakran halkak, ezért a 6-12 dB jó kiindulópont; a negatív érték halkabbá teszi a klipeket.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Minták zajszűrése lejátszáskor",
         "denoiseHelpText": "Minden minta zajszűrt másolatát játssza le és tölti le. A mentett minták változatlanok maradnak. A letöltések WAV fájlok lesznek, és nagyobbak. Egy minta hangbeállításaiban másik erősség választható, vagy a zajszűrés kikapcsolható.",

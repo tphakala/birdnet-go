@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Odtwarzanie audio",
         "description": "Domyślne ustawienia odtwarzania nagrań ptaków.",
-        "defaultGain": "Domyślne wzmocnienie głośności",
-        "defaultGainHelpText": "Początkowe wzmocnienie stosowane podczas odtwarzania nagrań. Dźwięki ptaków są często ciche, dlatego zalecane jest wzmocnienie 6-12 dB.",
+        "defaultGain": "Domyślne wzmocnienie",
+        "defaultGainHelpText": "Wzmocnienie, z jakim zaczyna się każdy klip. Dźwięki ptaków są często ciche, więc 6-12 dB to dobry początek; wartość ujemna ścisza klipy.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Redukuj szum klipów podczas odtwarzania",
         "denoiseHelpText": "Odtwarza i pobiera kopię każdego klipu z usuniętym szumem. Zapisane klipy pozostają bez zmian. Pobrane pliki mają format WAV i są większe. W ustawieniach dźwięku klipu można wybrać inną siłę lub wyłączyć redukcję szumów.",

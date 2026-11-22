@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Audio atskaņošana",
         "description": "Noklusējuma iestatījumi putnu ierakstu atskaņošanai.",
-        "defaultGain": "Noklusējuma skaļuma pastiprināšana",
-        "defaultGainHelpText": "Sākotnējā pastiprināšana, kas tiek piemērota, atskaņojot ierakstus. Putnu skaņas bieži ir klusas, tāpēc ieteicama 6-12 dB pastiprināšana.",
+        "defaultGain": "Noklusējuma pastiprinājums",
+        "defaultGainHelpText": "Pastiprinājums, ar kādu sākas katrs klips. Putnu skaņas bieži ir klusas, tāpēc 6-12 dB ir labs sākums; negatīva vērtība padara klipus klusākus.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Samazināt klipu troksni atskaņošanas laikā",
         "denoiseHelpText": "Atskaņo un lejupielādē katra klipa kopiju bez trokšņa. Saglabātie klipi paliek nemainīti. Lejupielādes kļūst par WAV failiem un ir lielākas. Klipa audio iestatījumos var izvēlēties citu stiprumu vai izslēgt trokšņu samazināšanu.",

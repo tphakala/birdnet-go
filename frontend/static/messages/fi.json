@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Äänentoisto",
         "description": "Oletusasetukset lintuäänitteiden toistoon.",
-        "defaultGain": "Oletusäänenvahvistus",
-        "defaultGainHelpText": "Alkuvahvistus äänitteiden toistossa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB:n vahvistus on suositeltavaa.",
+        "defaultGain": "Oletusvahvistus",
+        "defaultGainHelpText": "Vahvistus, jolla jokainen leike alkaa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB on hyvä lähtökohta; negatiivinen arvo hiljentää leikkeitä.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Poista kohinaa leikkeistä toistettaessa",
         "denoiseHelpText": "Toistaa ja lataa jokaisesta leikkeestä kohinasta puhdistetun kopion. Tallennetut leikkeet pysyvät muuttumattomina. Lataukset ovat WAV-tiedostoja ja suurempia. Leikkeen ääniasetuksista voi valita toisen voimakkuuden tai kytkeä kohinanpoiston pois.",

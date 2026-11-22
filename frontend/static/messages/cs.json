@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Přehrávání zvuku",
         "description": "Výchozí nastavení pro přehrávání nahrávek ptáků.",
-        "defaultGain": "Výchozí zesílení hlasitosti",
-        "defaultGainHelpText": "Počáteční zesílení při přehrávání nahrávek. Zvuky ptáků jsou často tiché, proto se doporučuje zesílení 6-12 dB.",
+        "defaultGain": "Výchozí zesílení",
+        "defaultGainHelpText": "Zesílení, se kterým každý klip začíná. Zvuky ptáků jsou často tiché, proto je dobrým začátkem 6 až 12 dB; záporná hodnota klipy ztiší.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Odšumit klipy při přehrávání",
         "denoiseHelpText": "Přehrává a stahuje odšuměnou kopii každého klipu. Uložené klipy zůstávají beze změny. Stažené soubory jsou ve formátu WAV a jsou větší. V nastavení zvuku klipu lze zvolit jinou sílu nebo odšumění vypnout.",

@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Audiowiedergabe",
         "description": "Standardeinstellungen für die Wiedergabe von Vogelaufnahmen.",
-        "defaultGain": "Standard-Lautstärkeverstärkung",
-        "defaultGainHelpText": "Anfangsverstärkung bei der Wiedergabe von Aufnahmen. Vogelstimmen sind oft leise, daher wird eine Verstärkung von 6-12 dB empfohlen.",
+        "defaultGain": "Standardverstärkung",
+        "defaultGainHelpText": "Verstärkung, mit der jeder Clip startet. Vogelstimmen sind oft leise, daher sind 6 bis 12 dB ein guter Anfang; ein negativer Wert macht Clips leiser.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Clips bei der Wiedergabe entrauschen",
         "denoiseHelpText": "Gibt von jedem Clip eine entrauschte Kopie wieder und lädt sie herunter. Gespeicherte Clips bleiben unverändert. Downloads werden WAV-Dateien und sind größer. In den Audioeinstellungen eines Clips lässt sich eine andere Stärke wählen oder die Rauschunterdrückung ausschalten.",

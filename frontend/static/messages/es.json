@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Reproducción de audio",
         "description": "Configuración predeterminada para reproducir grabaciones de aves.",
-        "defaultGain": "Amplificación de volumen predeterminada",
-        "defaultGainHelpText": "Ganancia inicial aplicada al reproducir grabaciones. Los sonidos de aves suelen ser suaves, por lo que se recomienda una amplificación de 6-12 dB.",
+        "defaultGain": "Ganancia predeterminada",
+        "defaultGainHelpText": "Ganancia con la que empieza cada clip. Los sonidos de aves suelen ser suaves, así que 6 a 12 dB es un buen punto de partida; un valor negativo hace los clips más silenciosos.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Reducir el ruido de los clips al reproducirlos",
         "denoiseHelpText": "Reproduce y descarga una copia sin ruido de cada clip. Los clips guardados no cambian. Las descargas pasan a ser archivos WAV y son más grandes. Los ajustes de audio de un clip permiten elegir otra intensidad o desactivar la reducción de ruido.",

@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Audio Playback",
         "description": "Default settings for playing bird recordings.",
-        "defaultGain": "Default Volume Boost",
-        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "defaultGain": "Default Gain",
+        "defaultGainHelpText": "Gain every clip starts with. Bird sounds are often quiet, so 6 to 12 dB is a good start; a negative value makes clips quieter.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Denoise clips when played",
         "denoiseHelpText": "Plays and downloads a denoised copy of every clip. Stored clips stay unchanged. Downloads become WAV files and are larger. The audio settings of a clip can pick another strength or turn denoising off.",

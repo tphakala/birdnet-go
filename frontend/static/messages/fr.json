@@ -5095,8 +5095,8 @@
       "audioPlayback": {
         "title": "Lecture audio",
         "description": "Paramètres par défaut pour la lecture des enregistrements d'oiseaux.",
-        "defaultGain": "Amplification du volume par défaut",
-        "defaultGainHelpText": "Gain initial appliqué lors de la lecture des enregistrements. Les sons d'oiseaux sont souvent faibles, une amplification de 6 à 12 dB est recommandée.",
+        "defaultGain": "Gain par défaut",
+        "defaultGainHelpText": "Gain avec lequel chaque clip démarre. Les sons d'oiseaux sont souvent faibles, donc 6 à 12 dB est un bon point de départ ; une valeur négative rend les clips plus silencieux.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Réduire le bruit des clips à la lecture",
         "denoiseHelpText": "Lit et télécharge une copie débruitée de chaque clip. Les clips enregistrés restent inchangés. Les téléchargements deviennent des fichiers WAV et sont plus volumineux. Les paramètres audio d'un clip permettent de choisir une autre intensité ou de désactiver la réduction de bruit.",
