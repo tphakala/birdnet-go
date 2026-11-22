@@ -2,7 +2,7 @@
 // unit-testable; the only non-pure import is `t` for reason localization, which
 // every test environment mocks (see src/test/setup.ts).
 
-import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
+import type { CatalogEntry, CatalogVariant, RegionFamily, VariantReason } from '$lib/types/models';
 import { t } from '$lib/i18n';
 
 /**
@@ -46,6 +46,27 @@ export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = '
     local.at(0) ??
     variants[0];
   return preferred.id;
+}
+
+/**
+ * The region slug an entry's variant picker is scoped to. Model families ship
+ * different tile sets, so the page-wide slug (the detected or pinned region) may
+ * name a tile this entry's family lacks; the server then resolves the station
+ * coordinates to the family's own nearest tile (RegionFamily.resolved, computed
+ * from the saved location, so an unsaved region change is not reflected). Returns the active slug when the
+ * entry ships a variant for it, else the family's own resolution from `families`
+ * ('' when that is the global model), and the active slug when the entry has no
+ * family record. '' (no region) stays '' so a global scope is never narrowed.
+ */
+export function familyRegionSlug(
+  entry: CatalogEntry,
+  activeRegionSlug: string,
+  families: readonly RegionFamily[] | undefined
+): string {
+  if (!activeRegionSlug) return '';
+  if (entry.variants?.some(v => v.region === activeRegionSlug)) return activeRegionSlug;
+  const family = families?.find(f => f.catalogId === entry.id);
+  return family ? family.resolved.slug : activeRegionSlug;
 }
 
 /**
@@ -246,7 +267,7 @@ export interface OptimizeOffer {
  * no DFT build is active). An entry with `supersededBy` (the server sets it only when
  * the successor is visible) gets no offer: the superseded notice tells the user to
  * move to the successor instead of switching builds of the old model. An entry with
- * `update` (its installed build is an older release) gets none either: the update notice
+ * `update` (its installed build is an older release or an older build) gets none either: the update notice
  * and the card's Update action cover it, so one model never has two prompts.
  */
 export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {

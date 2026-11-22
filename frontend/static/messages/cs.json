@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "Novější sestavení ({to}) nahrazuje nainstalované sestavení {from}.",
+        "cardNoticeBuild": "Sestavení {to} verze {version} nahrazuje nainstalované sestavení {from}.",
         "action": "Aktualizovat",
         "applying": "Aktualizace..."
       },

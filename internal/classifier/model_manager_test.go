@@ -197,8 +197,8 @@ func TestScanVariantEntry_BirdNETPlusReleases(t *testing.T) {
 		{name: "only the 3.0.1 global file", onDisk: []string{"fp32-3.0.1"}, wantID: "fp32-3.0.1", wantVersion: "3.0.1"},
 		{name: "both global files and no path", onDisk: []string{"fp32", "fp32-3.0.1"}, wantID: "fp32-3.0.1", wantVersion: "3.0.1"},
 		{name: "both global files and the path on 3.0", onDisk: []string{"fp32", "fp32-3.0.1"}, hintVariant: "fp32", wantID: "fp32", wantVersion: "3.0"},
-		{name: "3.0 global file next to a 3.0.1 tile and no path", onDisk: []string{"fp32", "fp32-3.0.1@nordic"}, wantID: "fp32-3.0.1@nordic", wantVersion: "3.0.1"},
-		{name: "3.0 tile of an earlier region next to a 3.0.1 tile and no path", onDisk: []string{"fp32@amazonia", "fp32-3.0.1@nordic"}, wantID: "fp32-3.0.1@nordic", wantVersion: "3.0.1"},
+		{name: "3.0 global file next to a 3.0.1 tile and no path", onDisk: []string{"fp32", "fp32-3.0.1-b2@nordic"}, wantID: "fp32-3.0.1-b2@nordic", wantVersion: "3.0.1"},
+		{name: "3.0 tile of an earlier region next to a 3.0.1 tile and no path", onDisk: []string{"fp32@amazonia", "fp32-3.0.1-b2@nordic"}, wantID: "fp32-3.0.1-b2@nordic", wantVersion: "3.0.1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

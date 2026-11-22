@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "En nyare version ({to}) ersätter den installerade versionen {from}.",
+        "cardNoticeBuild": "Bygge {to} av version {version} ersätter det installerade bygget {from}.",
         "action": "Uppdatera",
         "applying": "Uppdaterar..."
       },

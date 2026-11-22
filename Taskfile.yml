@@ -201,7 +201,7 @@ tasks:
       - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
 
   sync-region-snapshots:
-    desc: Refresh the embedded region snapshots, coverage maps, vendored model manifests, and document-only manifests from a sibling acoustic-models checkout
+    desc: Refresh the embedded region snapshots, coverage maps, vendored model manifests, and document-only manifests from a sibling acoustic-models checkout, then refresh the labels checksums and regenerate the catalog
     vars:
       ACOUSTIC_MODELS_DIR: '{{.ACOUSTIC_MODELS_DIR | default "../acoustic-models"}}'
       REGION_DATA_DIR: internal/classifier/region/data
@@ -241,45 +241,53 @@ tasks:
           cp "$SRC/$f" "{{.GEN_DOCUMENT_MANIFESTS_DIR}}/$f"
           echo "synced $f (documents)"
         done
-        echo "Refreshed region snapshots, model manifests and document manifests. Next: run"
-        echo "  go run ./gen -update-labels-checksums   (from internal/classifier; networked)"
-        echo "  go generate ./internal/classifier"
-        echo "and if tiers changed, update golden_tier_test.go."
+        echo "Refreshed region snapshots, model manifests and document manifests."
       - |
         # Sync per-region coverage maps (SVG). The geometry is model-family-agnostic,
         # so a tile's coverage.svg is byte-identical across families; we embed ONE set
-        # keyed by slug and cmp each primary map against its twin to enforce that
+        # keyed by slug, taken from whichever family trees ship the slug, and cmp every
+        # later copy of a slug against the first one of this run to enforce that
         # invariant loudly (a future upstream divergence must fail here, not silently).
+        # A family may ship fewer tiles than the others. Stray maps from an earlier
+        # sync are not deleted here: TestCoverageMap_NoStrayFiles names them.
         AM="{{.ACOUSTIC_MODELS_DIR}}"
-        PRIMARY="$AM/models/birdnet-v3.0-regional"
-        TWIN="$AM/models/perch-v2-regional"
-        if [ ! -d "$PRIMARY" ] || [ ! -d "$TWIN" ]; then
-          echo "regional model tree not found for both model families ($PRIMARY, $TWIN)" >&2
-          exit 1
-        fi
         mkdir -p "{{.MAPS_DIR}}"
-        rm -f "{{.MAPS_DIR}}"/*.svg
         count=0
-        for d in "$PRIMARY"/*/; do
-          slug="$(basename "$d")"
-          src="$d/coverage.svg"
-          [ -f "$src" ] || continue
-          twin="$TWIN/$slug/coverage.svg"
-          # The twin must exist AND be byte-identical: the slug-keyed embed serves
-          # one map per slug for both families, so a missing or divergent twin
-          # would silently break that invariant.
-          if [ ! -f "$twin" ]; then
-            echo "coverage.svg for '$slug' is missing from the Perch family; both families must ship it" >&2
+        seen=" "
+        for tree in perch-v2-regional birdnet-plus-v3.0.1-regional birdnet-v3.0-regional; do
+          TREE="$AM/models/$tree"
+          if [ ! -d "$TREE" ]; then
+            echo "regional model tree not found: $TREE" >&2
             exit 1
           fi
-          if ! cmp -s "$src" "$twin"; then
-            echo "coverage.svg for '$slug' differs between families; the slug-keyed embed assumes they are identical" >&2
-            exit 1
-          fi
-          cp "$src" "{{.MAPS_DIR}}/$slug.svg"
-          count=$((count + 1))
+          for d in "$TREE"/*/; do
+            slug="$(basename "$d")"
+            src="$d/coverage.svg"
+            [ -f "$src" ] || continue
+            case "$seen" in
+              *" $slug "*)
+                if ! cmp -s "$src" "{{.MAPS_DIR}}/$slug.svg"; then
+                  echo "coverage.svg for '$slug' differs between families ($tree); the slug-keyed embed assumes they are identical" >&2
+                  exit 1
+                fi
+                ;;
+              *)
+                cp "$src" "{{.MAPS_DIR}}/$slug.svg"
+                seen="$seen$slug "
+                count=$((count + 1))
+                ;;
+            esac
+          done
         done
         echo "synced $count coverage maps"
+      - |
+        # Refresh the labels checksum sidecar (networked), regenerate the catalog and
+        # run the catalog, region and generator tests, so an unacknowledged tile change
+        # (expectedRegions, goldenTiers, familyOmits) fails here. The classifier package
+        # links TensorFlow Lite, so the test needs CGO_FLAGS like task test.
+        (cd internal/classifier && go run ./gen -update-labels-checksums)
+        go generate ./internal/classifier
+        {{.CGO_FLAGS}} go test -tags noembed,skipfrontend ./internal/classifier/ ./internal/classifier/region/ ./internal/classifier/gen/
 
   generate-species-dict:
     desc: Regenerate per-locale species dictionaries from the OpenFauna dataset

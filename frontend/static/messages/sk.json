@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "Novšie zostavenie ({to}) nahrádza nainštalované zostavenie {from}.",
+        "cardNoticeBuild": "Zostavenie {to} verzie {version} nahrádza nainštalované zostavenie {from}.",
         "action": "Aktualizovať",
         "applying": "Aktualizuje sa..."
       },

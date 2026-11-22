@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "Een nieuwere versie ({to}) vervangt de geïnstalleerde versie {from}.",
+        "cardNoticeBuild": "Build {to} van versie {version} vervangt de geïnstalleerde build {from}.",
         "action": "Bijwerken",
         "applying": "Bijwerken..."
       },

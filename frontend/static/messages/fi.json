@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "Uudempi versio ({to}) korvaa asennetun version {from}.",
+        "cardNoticeBuild": "Version {version} koontiversio {to} korvaa asennetun koontiversion {from}.",
         "action": "Päivitä",
         "applying": "Päivitetään..."
       },

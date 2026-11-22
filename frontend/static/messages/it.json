@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "Una build più recente ({to}) sostituisce la build {from} installata.",
+        "cardNoticeBuild": "La build {to} della versione {version} sostituisce la build installata {from}.",
         "action": "Aggiorna",
         "applying": "Aggiornamento..."
       },

@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "Jaunāka versija ({to}) aizstāj instalēto versiju {from}.",
+        "cardNoticeBuild": "Versijas {version} būvējums {to} aizstāj instalēto būvējumu {from}.",
         "action": "Atjaunināt",
         "applying": "Atjaunina..."
       },

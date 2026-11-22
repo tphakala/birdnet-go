@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"maps"
@@ -767,16 +768,28 @@ func TestVariantUpdate(t *testing.T) {
 			{ID: "dangling", Legacy: true, SupersededBy: "missing", Version: "1.0"},
 			{ID: "chained", Legacy: true, SupersededBy: "old", Version: "0.9"},
 			{ID: "unlinked", Legacy: true, Version: "1.0"},
+			{ID: "newer-build-live", Build: 3},
+			{ID: "same-release-lower-build", Legacy: true, SupersededBy: "newer-build-live", Build: 2},
+			{ID: "same-release-build-one", Legacy: true, SupersededBy: "newer-build-live"},
+			{ID: "higher-build-legacy", Legacy: true, SupersededBy: "lower-build-live", Build: 4},
+			{ID: "lower-build-live", Build: 2},
+			{ID: "same-build-withdrawn", Legacy: true, SupersededBy: "same-build-live", Build: 2},
+			{ID: "same-build-live", Build: 2},
 		},
 	}
 	tests := []struct {
 		name      string
 		variantID string
 		wantOK    bool
+		wantNext  string // successor id, "live" when empty
 	}{
 		{name: "older release with a live successor", variantID: "old", wantOK: true},
 		{name: "live variant", variantID: "live"},
 		{name: "withdrawn build of the same release", variantID: "withdrawn"},
+		{name: "newer build of the same release", variantID: "same-release-lower-build", wantOK: true, wantNext: "newer-build-live"},
+		{name: "build 1 replaced by a newer build of the same release", variantID: "same-release-build-one", wantOK: true, wantNext: "newer-build-live"},
+		{name: "successor of a lower build", variantID: "higher-build-legacy"},
+		{name: "withdrawn build replaced by the same build number", variantID: "same-build-withdrawn"},
 		{name: "successor missing from the entry", variantID: "dangling"},
 		{name: "successor is itself Legacy", variantID: "chained"},
 		{name: "Legacy variant naming no successor", variantID: "unlinked"},
@@ -790,7 +803,7 @@ func TestVariantUpdate(t *testing.T) {
 			assert.Equal(t, tt.wantOK, ok)
 			if tt.wantOK {
 				require.NotNil(t, successor)
-				assert.Equal(t, "live", successor.ID)
+				assert.Equal(t, cmp.Or(tt.wantNext, "live"), successor.ID)
 			} else {
 				assert.Nil(t, successor)
 			}
@@ -803,6 +816,10 @@ func TestVariantUpdate(t *testing.T) {
 	assert.Equal(t, "1.0", VariantVersion(entry, "old"), "a variant's own release wins")
 	assert.Equal(t, "2.0", VariantVersion(entry, "withdrawn"), "a variant without a release takes the entry's")
 	assert.Equal(t, "2.0", VariantVersion(entry, "nope"), "an unknown variant takes the entry's")
+
+	assert.Equal(t, 3, VariantBuild(entry, "newer-build-live"), "a variant's own build")
+	assert.Equal(t, 1, VariantBuild(entry, "live"), "a variant without a build is build 1")
+	assert.Equal(t, 1, VariantBuild(entry, "nope"), "an unknown variant is build 1")
 }
 
 // TestEmbeddedCatalog_GlobalVariantResolution verifies the multi-variant global
@@ -892,7 +909,14 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 			// followed by the generated regional tiles.
 			require.GreaterOrEqualf(t, len(gotIDs), len(tc.variantIDs), "%s exposes at least its global variants", tc.id)
 			assert.Equalf(t, tc.variantIDs, gotIDs[:len(tc.variantIDs)], "%s global variant ids come first, in order", tc.id)
-			assert.Lenf(t, gotIDs, len(tc.variantIDs)+regionalTilesFor(tc.id), "%s exposes its global variants plus %d regional tiles", tc.id, regionalTilesFor(tc.id))
+			regionalVariants := 0
+			for i := range entry.Variants {
+				if entry.Variants[i].Region != "" {
+					regionalVariants++
+				}
+			}
+			assert.Positivef(t, regionalVariants, "%s exposes regional tiles after its global variants", tc.id)
+			assert.Lenf(t, gotIDs, len(tc.variantIDs)+regionalVariants, "%s exposes its global variants plus its regional tiles", tc.id)
 			assert.Equalf(t, 1, defaults, "%s must have exactly one Default variant (regional tiles are never Default)", tc.id)
 
 			// Resolved Files: default model + labels LocalName/sha unchanged, companions present.

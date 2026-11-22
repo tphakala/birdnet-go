@@ -741,7 +741,13 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
         installed: true,
         installedVariantId: 'fp32',
         recommendedVariantId: 'fp32-3.0.1@nordic',
-        update: { variantId: 'fp32-3.0.1', fromVersion: '3.0', toVersion: '3.0.1' },
+        update: {
+          variantId: 'fp32-3.0.1',
+          fromVersion: '3.0',
+          toVersion: '3.0.1',
+          fromBuild: 1,
+          toBuild: 1,
+        },
         variants: [
           variant('fp32', true, false),
           variant('fp32-3.0.1', false, false),
@@ -1237,6 +1243,30 @@ describe('AnalysisSettingsPage model gallery variant preselection', () => {
       0
     );
     expect(modelsApi.installModel).not.toHaveBeenCalled();
+  });
+
+  it("installs the family's own resolved tile when it lacks the page-wide detected region", async () => {
+    // The detected region is a tile this family does not ship; its own table
+    // resolves the same coordinates to the nordic tile.
+    vi.mocked(modelsApi.fetchModelRegions).mockResolvedValue({
+      ...regionsResolvingTo('lacking'),
+      regions: [regionOption('lacking'), regionOption('africa'), regionOption('nordic')],
+      families: [
+        {
+          catalogId: 'test-bird',
+          repo: 'o/test-bird',
+          installed: false,
+          installedVariantRegion: '',
+          resolved: { slug: 'nordic', source: 'auto', ambiguous: false },
+        },
+      ],
+    });
+    await openInstallDialog(true);
+    await acceptLicense();
+
+    await waitFor(() =>
+      expect(modelsApi.installModel).toHaveBeenCalledWith('test-bird', 'fp32@nordic')
+    );
   });
 
   it('installs the slice of the unsaved region picked in the form, not the auto-resolved one', async () => {

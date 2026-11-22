@@ -1,8 +1,9 @@
 package models
 
-// update_notice.go surfaces installed model builds that a newer release of the
-// same model replaces (an installed variant that is Legacy and names a live
-// variant of a different release, classifier.VariantUpdate) in the notification
+// update_notice.go surfaces installed model builds that a newer release, or a
+// newer build of the same release, replaces (an installed variant that is Legacy
+// and names a live variant of a different release or a higher build,
+// classifier.VariantUpdate) in the notification
 // bell, so a user who never opens Settings > Analysis > Models still learns that
 // a newer build exists. It only informs: the installed build keeps working and
 // nothing is downloaded until the user chooses Update on the model card. The
@@ -31,13 +32,31 @@ const (
 	updateMessageFormat   = "A newer build replaces the installed one for: %s. The installed build keeps working until you switch. Open Settings > Analysis > Models and choose Update."
 )
 
-// updateOffer is one installed model build that a newer release replaces.
+// buildSeparator joins a release and its build number in the bell text of a
+// same-release update ("2-b1"), matching the upstream build tags.
+const buildSeparator = "-b"
+
+// updateOffer is one installed model build that a newer release or a newer build
+// of the same release replaces.
 type updateOffer struct {
-	CatalogID   string
-	ModelName   string
-	ToVariantID string
-	FromVersion string
-	ToVersion   string
+	CatalogID     string
+	ModelName     string
+	FromVariantID string
+	ToVariantID   string
+	FromVersion   string
+	ToVersion     string
+	FromBuild     int
+	ToBuild       int
+}
+
+// updateLabels returns the two sides of an offer as the bell and cards show
+// them: the releases when they differ, else the release with its build number on
+// both sides (for example "2-b1" and "2-b2").
+func (o *updateOffer) updateLabels() (from, to string) {
+	if o.FromVersion != o.ToVersion {
+		return o.FromVersion, o.ToVersion
+	}
+	return fmt.Sprintf("%s%s%d", o.FromVersion, buildSeparator, o.FromBuild), fmt.Sprintf("%s%s%d", o.ToVersion, buildSeparator, o.ToBuild)
 }
 
 // updateNotice is the single persistent update bell notice per process, latched
@@ -51,7 +70,7 @@ type updateNotice struct {
 // installedUpdate returns the update offer for the installed variant of entry,
 // or false when there is none. An entry that a visible entry supersedes has none
 // (its own notice tells the user to move to the successor), and neither does an
-// installed variant that is not an older release with a live successor
+// installed variant whose live successor is not a newer release or a newer build
 // (classifier.VariantUpdate). It is the one rule behind the bell notice, the
 // catalog response's update field and, through them, the card action.
 func installedUpdate(entries []classifier.CatalogEntry, entry *classifier.CatalogEntry, installedVariantID string) (updateOffer, bool) {
@@ -60,11 +79,14 @@ func installedUpdate(entries []classifier.CatalogEntry, entry *classifier.Catalo
 		return updateOffer{}, false
 	}
 	return updateOffer{
-		CatalogID:   entry.ID,
-		ModelName:   entry.Name,
-		ToVariantID: successor.ID,
-		FromVersion: classifier.VariantVersion(entry, installedVariantID),
-		ToVersion:   classifier.VariantVersion(entry, successor.ID),
+		CatalogID:     entry.ID,
+		ModelName:     entry.Name,
+		FromVariantID: installedVariantID,
+		ToVariantID:   successor.ID,
+		FromVersion:   classifier.VariantVersion(entry, installedVariantID),
+		ToVersion:     classifier.VariantVersion(entry, successor.ID),
+		FromBuild:     classifier.VariantBuild(entry, installedVariantID),
+		ToBuild:       classifier.VariantBuild(entry, successor.ID),
 	}, true
 }
 
@@ -85,11 +107,13 @@ func updateOffers(entries []classifier.CatalogEntry, installedVariant func(id st
 	return offers
 }
 
-// updateOffersSignature identifies an offer set independent of order.
+// updateOffersSignature identifies an offer set independent of order. It covers
+// the installed variant as well as the target, so a change of the installed build
+// re-renders the bell text, which names both.
 func updateOffersSignature(offers []updateOffer) string {
 	parts := make([]string, len(offers))
 	for i := range offers {
-		parts[i] = offers[i].CatalogID + ":" + offers[i].ToVariantID
+		parts[i] = offers[i].CatalogID + ":" + offers[i].FromVariantID + ">" + offers[i].ToVariantID
 	}
 	slices.Sort(parts)
 	return strings.Join(parts, ",")
@@ -131,12 +155,14 @@ func (c *Handler) applyUpdateNotice(svc noticeService, offers []updateOffer) {
 }
 
 // newUpdateNotification builds the bell notice for a non-empty offer set. Each
-// model reads "Name (from → to)", which keeps the list language-neutral; the
-// English fallbacks mirror en.json.
+// model reads "Name (from → to)", which keeps the list language-neutral: the
+// releases, or the release with its build number when only the build differs
+// (updateOffer.updateLabels). The English fallbacks mirror en.json.
 func newUpdateNotification(offers []updateOffer) *notification.Notification {
 	entries := make([]string, len(offers))
 	for i := range offers {
-		entries[i] = fmt.Sprintf("%s (%s → %s)", offers[i].ModelName, offers[i].FromVersion, offers[i].ToVersion)
+		from, to := offers[i].updateLabels()
+		entries[i] = fmt.Sprintf("%s (%s → %s)", offers[i].ModelName, from, to)
 	}
 	models := strings.Join(entries, ", ")
 	title := fmt.Sprintf(updateTitleManyFormat, len(offers))

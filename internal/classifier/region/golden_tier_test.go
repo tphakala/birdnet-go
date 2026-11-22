@@ -1,6 +1,7 @@
 package region
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,6 +25,7 @@ var goldenTiers = map[string]int{
 	"cape-verde":            TierLocal,
 	"central-africa":        TierRegional,
 	"central-europe":        TierRegional,
+	"central-india":         TierLocal,
 	"china-north-central":   TierRegional,
 	"china-northeast":       TierRegional,
 	"china-southeast":       TierRegional,
@@ -58,9 +60,28 @@ var goldenTiers = map[string]int{
 	"western-palearctic":    TierContinental,
 }
 
+// familyOmits lists, per repo, the slugs of goldenTiers that the family does not
+// ship. A family may lag the shared tile set (the superseded BirdNET v3.0 preview
+// is not rebuilt for tiles added later); the omission must be acknowledged here,
+// so a family that silently loses a tile still fails TestGoldenTierTable.
+var familyOmits = map[string][]string{
+	// The superseded BirdNET v3.0 preview is not rebuilt for tiles added later.
+	"tphakala/BirdNET-v3.0-Models": {"central-india"},
+}
+
+// goldenTiersFor returns goldenTiers without the slugs the repo's family omits.
+func goldenTiersFor(repo string) map[string]int {
+	want := make(map[string]int, len(goldenTiers))
+	maps.Copy(want, goldenTiers)
+	for _, slug := range familyOmits[repo] {
+		delete(want, slug)
+	}
+	return want
+}
+
 // TestGoldenTierTable asserts every embedded family matches the golden banding
-// exactly, tile for tile. It runs against all families because D8 assumes their
-// geometry stays in step; a family that changes a tier or drops a tile fails here.
+// exactly, tile for tile, apart from the slugs it acknowledges in familyOmits. A
+// family that changes a tier, drops a tile or gains an unlisted one fails here.
 func TestGoldenTierTable(t *testing.T) {
 	t.Parallel()
 	tables, err := Tables()
@@ -73,7 +94,7 @@ func TestGoldenTierTable(t *testing.T) {
 			for slug, r := range tbl.Regions {
 				got[slug] = r.Tier
 			}
-			assert.Equal(t, goldenTiers, got, "tier banding for %s drifted from golden", repo)
+			assert.Equal(t, goldenTiersFor(repo), got, "tier banding for %s drifted from golden", repo)
 		})
 	}
 }

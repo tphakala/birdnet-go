@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   pickPreselectedVariant,
+  familyRegionSlug,
   reasonKey,
   variantLabel,
   translateReason,
@@ -12,7 +13,7 @@ import {
   CHANNEL_STABLE,
   HARDWARE_CLASS,
 } from './variantSelection';
-import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
+import type { CatalogEntry, CatalogVariant, RegionFamily, VariantReason } from '$lib/types/models';
 
 // Controlled i18n mock: only these two keys have a "translation"; every other key
 // echoes back, which is how the real t() signals an untranslated key. This lets us
@@ -187,6 +188,66 @@ describe('pickPreselectedVariant', () => {
       ],
     });
     expect(pickPreselectedVariant(e, 'nordic')).toBe('int8');
+  });
+});
+
+describe('familyRegionSlug', () => {
+  const family = (catalogId: string, slug: string): RegionFamily => ({
+    catalogId,
+    repo: 'r',
+    installed: false,
+    installedVariantRegion: '',
+    resolved: { slug, source: slug ? 'auto' : 'global', ambiguous: false },
+  });
+  // BirdNET v3.0 ships no central-india tile; its own table resolves the same
+  // coordinates to south-asia-peninsular.
+  const v30 = entry({
+    id: 'v30',
+    variants: [
+      variant({ id: 'fp32' }),
+      variant({ id: 'fp32@south-asia-peninsular', region: 'south-asia-peninsular' }),
+    ],
+  });
+  const perch = entry({
+    id: 'perch',
+    variants: [variant({ id: 'g' }), variant({ id: 'b2@central-india', region: 'central-india' })],
+  });
+  const families = [family('v30', 'south-asia-peninsular'), family('perch', 'central-india')];
+
+  it('keeps the active slug for a family that ships that tile', () => {
+    expect(familyRegionSlug(perch, 'central-india', families)).toBe('central-india');
+  });
+
+  it('uses the family own resolution when it lacks the active tile', () => {
+    expect(familyRegionSlug(v30, 'central-india', families)).toBe('south-asia-peninsular');
+  });
+
+  it('is the global model when the family resolves to none', () => {
+    expect(familyRegionSlug(v30, 'central-india', [family('v30', '')])).toBe('');
+  });
+
+  it('keeps the active slug for an entry without a family record', () => {
+    expect(familyRegionSlug(v30, 'central-india', undefined)).toBe('central-india');
+    expect(familyRegionSlug(v30, 'central-india', [family('perch', 'central-india')])).toBe(
+      'central-india'
+    );
+  });
+
+  it('stays unscoped when no region is active', () => {
+    expect(familyRegionSlug(v30, '', families)).toBe('');
+  });
+
+  it('lets the preselection fall back to the family own tile', () => {
+    const bare = entry({
+      id: 'v30',
+      variants: [
+        variant({ id: 'fp32@south-asia-peninsular', region: 'south-asia-peninsular' }),
+        variant({ id: 'fp32@other', region: 'other', default: true }),
+      ],
+    });
+    expect(pickPreselectedVariant(bare, familyRegionSlug(bare, 'central-india', families))).toBe(
+      'fp32@south-asia-peninsular'
+    );
   });
 });
 
@@ -434,7 +495,13 @@ describe('optimizeOffers', () => {
     // The update notice and the card Update action cover this entry, so it gets
     // no Optimize offer on top of them (one model, one notice and one card action).
     const e = v24Entry({
-      update: { variantId: 'fp32-dfttrunc', fromVersion: '3.0', toVersion: '3.0.1' },
+      update: {
+        variantId: 'fp32-dfttrunc',
+        fromVersion: '3.0',
+        toVersion: '3.0.1',
+        fromBuild: 1,
+        toBuild: 1,
+      },
     });
     expect(optimizeOffers([e])).toHaveLength(0);
   });

@@ -148,6 +148,7 @@
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
   import {
     pickPreselectedVariant,
+    familyRegionSlug,
     normalizeRegionMode,
     DEFAULT_REGION_MODE,
     GLOBAL_REGION_MODE,
@@ -301,14 +302,21 @@
   // The variant the user picked in the license/install dialog, null until they pick
   // one. Reset each time the dialog opens.
   let chosenVariantId = $state<string | null>(null);
+  // The region the dialog's picker is scoped to: the page-wide slug, or the model
+  // family's own resolution when its tile set lacks that slug (familyRegionSlug).
+  const licenseRegionSlug = $derived.by(() =>
+    licenseModel
+      ? familyRegionSlug(licenseModel, activeRegionSlug, regionsData?.families)
+      : activeRegionSlug
+  );
   // The variant the dialog installs: the user's pick, else the smart default (the
   // server-recommended one, falling back sensibly and skipping other regions'
-  // slices). The default follows activeRegionSlug, so it is recomputed when the
+  // slices). The default follows licenseRegionSlug, so it is recomputed when the
   // regions load after the dialog opened. Empty for flat (variant-less) entries.
   const selectedVariantId = $derived.by(
     () =>
       chosenVariantId ??
-      (licenseModel ? pickPreselectedVariant(licenseModel, activeRegionSlug) : '')
+      (licenseModel ? pickPreselectedVariant(licenseModel, licenseRegionSlug) : '')
   );
   // The download-size row and the install target follow the selected variant when
   // the entry has variants; otherwise they fall back to the whole-entry size.
@@ -440,7 +448,7 @@
     return regionNameMap.has(liveModelRegion) ? liveModelRegion : '';
   });
   // The SAVED region the catalog's recommendation flags were computed from. Those
-  // flags come from the persisted setting (resolveRecommendRegion on the server),
+  // flags come from the persisted setting (resolveRecommendRegions on the server),
   // so the picker's server-side recommendation only needs a re-fetch when this
   // changes, not on unsaved toggles.
   const savedModelRegion = $derived.by<string | null>(() => {
@@ -3653,7 +3661,7 @@
             variants={licenseModel.variants}
             installedVariantId={licenseModel.installedVariantId}
             {selectedVariantId}
-            {activeRegionSlug}
+            activeRegionSlug={licenseRegionSlug}
             regionNames={regionNameMap}
             onSelect={id => (chosenVariantId = id)}
             idPrefix="license-variant"

@@ -6074,6 +6074,7 @@
       },
       "update": {
         "cardNotice": "Ein neuerer Build ({to}) ersetzt den installierten Build {from}.",
+        "cardNoticeBuild": "Build {to} von Version {version} ersetzt den installierten Build {from}.",
         "action": "Aktualisieren",
         "applying": "Wird aktualisiert..."
       },

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "repo": "tphakala/BirdNET-Plus-V3.0",
-  "updated": "2026-11-20",
+  "updated": "2026-11-21",
   "regions": {
     "nordic": {
       "name": "Nordic",
@@ -31,7 +31,7 @@
         ],
         "partial": []
       },
-      "classes": 443,
+      "classes": 464,
       "map": "regional/nordic/coverage.svg"
     },
     "british-isles": {
@@ -62,7 +62,7 @@
           "GG"
         ]
       },
-      "classes": 579,
+      "classes": 590,
       "map": "regional/british-isles/coverage.svg"
     },
     "central-europe": {
@@ -109,7 +109,7 @@
           "RS"
         ]
       },
-      "classes": 667,
+      "classes": 673,
       "map": "regional/central-europe/coverage.svg"
     },
     "baltics": {
@@ -140,7 +140,7 @@
         ],
         "partial": []
       },
-      "classes": 460,
+      "classes": 479,
       "map": "regional/baltics/coverage.svg"
     },
     "iberia": {
@@ -171,7 +171,7 @@
           "FR"
         ]
       },
-      "classes": 649,
+      "classes": 654,
       "map": "regional/iberia/coverage.svg"
     },
     "southern-europe": {
@@ -218,7 +218,7 @@
           "TR"
         ]
       },
-      "classes": 638,
+      "classes": 653,
       "map": "regional/southern-europe/coverage.svg"
     },
     "eastern-europe": {
@@ -251,7 +251,7 @@
           "PL"
         ]
       },
-      "classes": 540,
+      "classes": 556,
       "map": "regional/eastern-europe/coverage.svg"
     },
     "western-palearctic": {
@@ -385,7 +385,7 @@
           "TM"
         ]
       },
-      "classes": 1418,
+      "classes": 1446,
       "map": "regional/western-palearctic/coverage.svg"
     },
     "iceland": {
@@ -412,7 +412,7 @@
         ],
         "partial": []
       },
-      "classes": 409,
+      "classes": 429,
       "map": "regional/iceland/coverage.svg"
     },
     "svalbard": {
@@ -439,7 +439,7 @@
         ],
         "partial": []
       },
-      "classes": 298,
+      "classes": 323,
       "map": "regional/svalbard/coverage.svg"
     },
     "canary-islands": {
@@ -467,7 +467,7 @@
         ],
         "partial": []
       },
-      "classes": 412,
+      "classes": 428,
       "map": "regional/canary-islands/coverage.svg"
     },
     "madeira": {
@@ -494,7 +494,7 @@
         ],
         "partial": []
       },
-      "classes": 274,
+      "classes": 293,
       "map": "regional/madeira/coverage.svg"
     },
     "azores": {
@@ -521,7 +521,7 @@
         ],
         "partial": []
       },
-      "classes": 242,
+      "classes": 263,
       "map": "regional/azores/coverage.svg"
     },
     "south-asia-peninsular": {
@@ -549,8 +549,35 @@
         ],
         "partial": []
       },
-      "classes": 671,
+      "classes": 690,
       "map": "regional/south-asia-peninsular/coverage.svg"
+    },
+    "central-india": {
+      "name": "Central India",
+      "group": "asia",
+      "group_display": "Asia",
+      "realm": "indomalayan",
+      "tier": 90,
+      "bboxes": [
+        [
+          16.0,
+          26.0,
+          73.0,
+          86.5
+        ]
+      ],
+      "centroid": [
+        21.0,
+        79.75
+      ],
+      "countries": {
+        "core": [
+          "IN"
+        ],
+        "partial": []
+      },
+      "classes": 708,
+      "map": "regional/central-india/coverage.svg"
     },
     "indo-gangetic": {
       "name": "Indo-Gangetic Plain",
@@ -582,7 +609,7 @@
           "CN"
         ]
       },
-      "classes": 1199,
+      "classes": 1212,
       "map": "regional/indo-gangetic/coverage.svg"
     },
     "himalaya": {
@@ -614,7 +641,7 @@
           "PK"
         ]
       },
-      "classes": 1226,
+      "classes": 1254,
       "map": "regional/himalaya/coverage.svg"
     },
     "japan": {
@@ -646,7 +673,7 @@
           "RU"
         ]
       },
-      "classes": 609,
+      "classes": 629,
       "map": "regional/japan/coverage.svg"
     },
     "china-northeast": {
@@ -677,7 +704,7 @@
           "MN"
         ]
       },
-      "classes": 688,
+      "classes": 706,
       "map": "regional/china-northeast/coverage.svg"
     },
     "china-north-central": {
@@ -704,7 +731,7 @@
         ],
         "partial": []
       },
-      "classes": 791,
+      "classes": 809,
       "map": "regional/china-north-central/coverage.svg"
     },
     "china-southeast": {
@@ -734,7 +761,7 @@
         ],
         "partial": []
       },
-      "classes": 1178,
+      "classes": 1191,
       "map": "regional/china-southeast/coverage.svg"
     },
     "china-southwest": {
@@ -764,7 +791,7 @@
           "VN"
         ]
       },
-      "classes": 1228,
+      "classes": 1256,
       "map": "regional/china-southwest/coverage.svg"
     },
     "tibet": {
@@ -793,7 +820,7 @@
           "NP"
         ]
       },
-      "classes": 1226,
+      "classes": 1239,
       "map": "regional/tibet/coverage.svg"
     },
     "north-america-east": {
@@ -822,7 +849,7 @@
         ],
         "partial": []
       },
-      "classes": 818,
+      "classes": 846,
       "map": "regional/north-america-east/coverage.svg"
     },
     "north-america-west": {
@@ -850,7 +877,7 @@
         ],
         "partial": []
       },
-      "classes": 821,
+      "classes": 847,
       "map": "regional/north-america-west/coverage.svg"
     },
     "canada-alaska": {
@@ -878,7 +905,7 @@
         ],
         "partial": []
       },
-      "classes": 777,
+      "classes": 793,
       "map": "regional/canada-alaska/coverage.svg"
     },
     "amazonia": {
@@ -915,7 +942,7 @@
           "PA"
         ]
       },
-      "classes": 3182,
+      "classes": 3196,
       "map": "regional/amazonia/coverage.svg"
     },
     "andes": {
@@ -953,7 +980,7 @@
         ],
         "partial": []
       },
-      "classes": 3314,
+      "classes": 3325,
       "map": "regional/andes/coverage.svg"
     },
     "eastern-brazil": {
@@ -984,7 +1011,7 @@
           "AR"
         ]
       },
-      "classes": 1972,
+      "classes": 1986,
       "map": "regional/eastern-brazil/coverage.svg"
     },
     "southern-cone": {
@@ -1018,7 +1045,7 @@
           "BR"
         ]
       },
-      "classes": 1639,
+      "classes": 1648,
       "map": "regional/southern-cone/coverage.svg"
     },
     "galapagos": {
@@ -1045,7 +1072,7 @@
         ],
         "partial": []
       },
-      "classes": 156,
+      "classes": 181,
       "map": "regional/galapagos/coverage.svg"
     },
     "southern-africa": {
@@ -1077,7 +1104,7 @@
         ],
         "partial": []
       },
-      "classes": 820,
+      "classes": 847,
       "map": "regional/southern-africa/coverage.svg"
     },
     "reunion": {
@@ -1104,7 +1131,7 @@
         ],
         "partial": []
       },
-      "classes": 92,
+      "classes": 118,
       "map": "regional/reunion/coverage.svg"
     },
     "mauritius": {
@@ -1131,7 +1158,7 @@
         ],
         "partial": []
       },
-      "classes": 90,
+      "classes": 116,
       "map": "regional/mauritius/coverage.svg"
     },
     "seychelles": {
@@ -1158,7 +1185,7 @@
         ],
         "partial": []
       },
-      "classes": 137,
+      "classes": 162,
       "map": "regional/seychelles/coverage.svg"
     },
     "cape-verde": {
@@ -1185,7 +1212,7 @@
         ],
         "partial": []
       },
-      "classes": 162,
+      "classes": 187,
       "map": "regional/cape-verde/coverage.svg"
     },
     "sao-tome-principe": {
@@ -1212,7 +1239,7 @@
         ],
         "partial": []
       },
-      "classes": 133,
+      "classes": 159,
       "map": "regional/sao-tome-principe/coverage.svg"
     },
     "west-africa": {
@@ -1255,7 +1282,7 @@
           "MR"
         ]
       },
-      "classes": 1027,
+      "classes": 1043,
       "map": "regional/west-africa/coverage.svg"
     },
     "central-africa": {
@@ -1295,7 +1322,7 @@
           "TD"
         ]
       },
-      "classes": 1537,
+      "classes": 1556,
       "map": "regional/central-africa/coverage.svg"
     },
     "east-africa": {
@@ -1341,7 +1368,7 @@
           "ZW"
         ]
       },
-      "classes": 1824,
+      "classes": 1840,
       "map": "regional/east-africa/coverage.svg"
     },
     "australia-east": {
@@ -1368,7 +1395,7 @@
         ],
         "partial": []
       },
-      "classes": 757,
+      "classes": 766,
       "map": "regional/australia-east/coverage.svg"
     },
     "new-zealand": {
@@ -1395,7 +1422,7 @@
         ],
         "partial": []
       },
-      "classes": 289,
+      "classes": 302,
       "map": "regional/new-zealand/coverage.svg"
     },
     "hawaii": {
@@ -1422,7 +1449,7 @@
         ],
         "partial": []
       },
-      "classes": 294,
+      "classes": 304,
       "map": "regional/hawaii/coverage.svg"
     },
     "new-caledonia": {
@@ -1449,7 +1476,7 @@
         ],
         "partial": []
       },
-      "classes": 190,
+      "classes": 214,
       "map": "regional/new-caledonia/coverage.svg"
     }
   }

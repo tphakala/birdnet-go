@@ -678,6 +678,29 @@ func TestRank_RegionResolvedButNoMatchingSlice(t *testing.T) {
 	assert.False(t, hasReason(&slice, ReasonRegionGlobalFallback))
 }
 
+// TestRank_RegionPerEntry checks each entry is scored against its own family's
+// resolved region: RegionByEntry overrides ResolvedRegion, and an entry absent
+// from the map uses ResolvedRegion.
+func TestRank_RegionPerEntry(t *testing.T) {
+	t.Parallel()
+
+	entry := func(id string) classifier.CatalogEntry {
+		e := regionEntry(100, "iberia", "amazonia")
+		e.ID = id
+		return e
+	}
+	recs := Rank(&Input{
+		Capabilities:   []string{hwprofile.CapX86_64, hwprofile.CapONNXRuntimeCPU},
+		ResolvedRegion: "iberia",
+		RegionByEntry:  map[string]string{"in-amazonia": "amazonia", "no-tile": ""},
+		Entries:        []classifier.CatalogEntry{entry("in-amazonia"), entry("fallback"), entry("no-tile")},
+	})
+
+	assert.Equal(t, "slice-amazonia", recommendedVariant(recs, "in-amazonia"), "the entry's own resolved region wins")
+	assert.Equal(t, "slice-iberia", recommendedVariant(recs, "fallback"), "an entry absent from the map uses ResolvedRegion")
+	assert.Equal(t, "global", recommendedVariant(recs, "no-tile"), "an entry mapped to the global model is not scored against ResolvedRegion")
+}
+
 func TestRank_PureInputNotMutated(t *testing.T) {
 	t.Parallel()
 

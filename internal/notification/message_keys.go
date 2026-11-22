@@ -268,7 +268,7 @@ const (
 	MsgModelSupersededMessage = "notifications.content.modelSuperseded.message"
 
 	// Model update notifications (an installed build of a model has a newer release
-	// in the model gallery; recommend-only, never swaps a model by itself)
+	// or build in the model gallery; recommend-only, never swaps a model by itself)
 	MsgModelUpdateTitle   = "notifications.content.modelUpdate.title"
 	MsgModelUpdateMessage = "notifications.content.modelUpdate.message"
 

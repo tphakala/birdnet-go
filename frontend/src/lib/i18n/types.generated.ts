@@ -4476,6 +4476,7 @@ export type TranslationKey =
   | 'analysis.gallery.superseded.cardNotice' // params: name
   | 'analysis.gallery.superseded.dialogNotice' // params: name
   | 'analysis.gallery.update.cardNotice' // params: to, from
+  | 'analysis.gallery.update.cardNoticeBuild' // params: to, version, from
   | 'analysis.gallery.update.action'
   | 'analysis.gallery.update.applying'
   | 'analysis.gallery.entryIncompatible'
@@ -5405,6 +5406,11 @@ export type TranslationParams = {
   'analysis.gallery.superseded.cardNotice': { name: string | number };
   'analysis.gallery.superseded.dialogNotice': { name: string | number };
   'analysis.gallery.update.cardNotice': { to: string | number; from: string | number };
+  'analysis.gallery.update.cardNoticeBuild': {
+    to: string | number;
+    version: string | number;
+    from: string | number;
+  };
   'analysis.gallery.optimize.bannerTitle': { count: string | number };
   'analysis.gallery.optimize.fromTo': { from: string | number; to: string | number };
   'analysis.gallery.documents.source': { repo: string | number };

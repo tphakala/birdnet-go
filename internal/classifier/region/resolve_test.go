@@ -14,8 +14,8 @@ const (
 )
 
 // perchTable loads the embedded Perch v2 region table, the shared geometry the
-// resolver tests exercise (all families carry identical geometry; see
-// TestCrossFamilyGeometryIdentity).
+// resolver tests exercise (a slug shared by families has identical geometry; see
+// TestCrossFamilyGeometryIdentity_SharedSlugs).
 func perchTable(t *testing.T) *Table {
 	t.Helper()
 	tbl, ok := TableForRepo(perchRepo)

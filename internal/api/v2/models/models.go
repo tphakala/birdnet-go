@@ -69,7 +69,7 @@ type Handler struct {
 	// evaluated alongside the optimize notice.
 	superseded supersededNotice
 	// update latches the bell notice for an installed build that a newer release
-	// replaces (update_notice.go), evaluated alongside the other two.
+	// or a newer build of the same release replaces (update_notice.go), evaluated alongside the other two.
 	update updateNotice
 	// modelRuntime reports the live backend and precision of each loaded model,
 	// keyed by registry ID. It is an injectable seam: nil means the live default
@@ -249,20 +249,24 @@ type CatalogEntryResponse struct {
 	// Omitted for flat entries and when the request is not eligible for hardware
 	// recommendations (an unauthenticated request on an auth-enabled instance).
 	RecommendedVariantID string `json:"recommendedVariantId,omitempty"`
-	// Update is set when the installed build is an older release that a newer
-	// release of this model replaces. Omitted otherwise. It depends on install
+	// Update is set when the installed build is superseded by a newer release or a
+	// newer build of the same release of this model. Omitted otherwise. It depends on install
 	// state and the catalog only, not on hardware recommendations, so it is
 	// reported to every caller that can see the catalog.
 	Update *CatalogUpdateResponse `json:"update,omitempty"`
 }
 
-// CatalogUpdateResponse describes the newer release that replaces the installed
-// build of a catalog entry. VariantID is the variant of that release to install:
-// the successor of the installed variant.
+// CatalogUpdateResponse describes the newer release or build that replaces the
+// installed build of a catalog entry. VariantID is the variant to install: the
+// successor of the installed variant. FromBuild and ToBuild are the build numbers
+// within the two releases (1 or more); when the releases are equal the update is
+// a newer build of the same release.
 type CatalogUpdateResponse struct {
 	VariantID   string `json:"variantId"`
 	FromVersion string `json:"fromVersion"`
 	ToVersion   string `json:"toVersion"`
+	FromBuild   int    `json:"fromBuild"`
+	ToBuild     int    `json:"toBuild"`
 }
 
 // CatalogSuccessorResponse identifies the catalog entry that supersedes another.
@@ -553,8 +557,8 @@ func visibleSuccessor(visible []classifier.CatalogEntry, id string) *CatalogSucc
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information. An entry's successor is reported only when
 // the successor is itself visible, and its documents are those of its own repo only.
-// An installed older release that a newer release of the entry replaces carries
-// update, whether or not hardware recommendations are computed for the request.
+// An installed build that a newer release, or a newer build of the same release,
+// replaces carries update, whether or not hardware recommendations are computed for the request.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
@@ -598,7 +602,10 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 
 		var update *CatalogUpdateResponse
 		if offer, ok := installedUpdate(visible, entry, installedVariantID); ok {
-			update = &CatalogUpdateResponse{VariantID: offer.ToVariantID, FromVersion: offer.FromVersion, ToVersion: offer.ToVersion}
+			update = &CatalogUpdateResponse{
+				VariantID: offer.ToVariantID, FromVersion: offer.FromVersion, ToVersion: offer.ToVersion,
+				FromBuild: offer.FromBuild, ToBuild: offer.ToBuild,
+			}
 		}
 
 		// Models requiring ONNX Runtime are incompatible when ORT is absent.
@@ -901,11 +908,13 @@ func (c *Handler) rankCatalog(entries []classifier.CatalogEntry, ort inference.O
 	}
 	profile := profileFn(ort)
 	hostArch = profile.Arch
+	fallbackRegion, regionByEntry := c.resolveRecommendRegions(entries)
 	recs := recommend.Rank(&recommend.Input{
 		Capabilities:   profile.Capabilities(),
 		TotalRAMBytes:  profile.RAMUpperBound(),
 		DeviceClass:    recommend.DeviceClass(profile.Board.Tier, profile.Arch),
-		ResolvedRegion: c.resolveRecommendRegion(),
+		ResolvedRegion: fallbackRegion,
+		RegionByEntry:  regionByEntry,
 		Entries:        entries,
 	})
 
