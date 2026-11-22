@@ -35,7 +35,8 @@ describe('install and reinstall request bodies', () => {
 });
 
 describe('subscribeInstallProgress', () => {
-  it('calls onCancelled, never onError, for a cancelled event', async () => {
+  // Opens a subscription against a fake event source and delivers one progress event.
+  async function subscribeAndDeliver(status: string, withOnCancelled: boolean) {
     const listeners = new Map<string, (event: Event) => void>();
     const close = vi.fn();
     vi.doMock('$lib/utils/ReconnectingEventSource', () => ({
@@ -49,20 +50,45 @@ describe('subscribeInstallProgress', () => {
     }));
     vi.resetModules();
     const { subscribeInstallProgress } = await import('./modelsApi');
-    const [onProgress, onComplete, onError, onCancelled] = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
+    const handlers = {
+      onProgress: vi.fn(),
+      onComplete: vi.fn(),
+      onError: vi.fn(),
+      onCancelled: vi.fn(),
+    };
 
-    subscribeInstallProgress('m', onProgress, onComplete, onError, onCancelled);
+    subscribeInstallProgress(
+      'm',
+      handlers.onProgress,
+      handlers.onComplete,
+      handlers.onError,
+      withOnCancelled ? handlers.onCancelled : undefined
+    );
     listeners.get('progress')?.(
-      new MessageEvent('progress', {
-        data: JSON.stringify({ catalogId: 'm', status: 'cancelled' }),
-      })
+      new MessageEvent('progress', { data: JSON.stringify({ catalogId: 'm', status }) })
+    );
+    vi.doUnmock('$lib/utils/ReconnectingEventSource');
+    return { ...handlers, close };
+  }
+
+  it('calls onCancelled, never onError, for a cancelled event', async () => {
+    const { onCancelled, onError, onComplete, close } = await subscribeAndDeliver(
+      'cancelled',
+      true
     );
 
     expect(onCancelled).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
     expect(onComplete).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalled();
-    vi.doUnmock('$lib/utils/ReconnectingEventSource');
+  });
+
+  it('ends a subscriber without onCancelled through onError for a cancelled event', async () => {
+    const { onError, onComplete, close } = await subscribeAndDeliver('cancelled', false);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
   });
 });
 

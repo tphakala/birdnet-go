@@ -187,10 +187,13 @@ export function subscribeInstallProgress(
       onError(data.error ?? 'Unknown error');
       source.close();
     } else if (data.status === 'cancelled') {
-      // A user cancel is not an error: it never reaches onError, so the mirror hint
-      // (isNetworkDownloadError) is never consulted.
+      // A user cancel is not a download failure, so with an onCancelled handler it never
+      // reaches onError and the mirror hint (isNetworkDownloadError) is never consulted.
+      // A subscriber without one (a reinstall can be sent a retained cancelled state of
+      // an earlier install) must still see its operation end, so it gets onError.
       terminalReceived = true;
-      onCancelled?.();
+      if (onCancelled) onCancelled();
+      else onError(data.error ?? 'Cancelled');
       source.close();
     }
   });

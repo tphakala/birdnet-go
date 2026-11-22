@@ -2331,6 +2331,13 @@
           reinstallingId = null;
           downloadProgress = null;
           progressCleanup = null;
+        },
+        // A reinstall is not cancellable; this ends one that was sent the retained
+        // cancelled state of an earlier install of the same model.
+        () => {
+          reinstallingId = null;
+          downloadProgress = null;
+          progressCleanup = null;
         }
       );
     } catch (e) {
