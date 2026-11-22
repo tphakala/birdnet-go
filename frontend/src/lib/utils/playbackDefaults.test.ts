@@ -3,10 +3,6 @@ import { get } from 'svelte/store';
 import { appState } from '$lib/stores/appState.svelte';
 import { settingsStore } from '$lib/stores/settings';
 import {
-  PLAYBACK_GAIN_MAX_DB,
-  PLAYBACK_GAIN_MIN_DB,
-  PLAYBACK_HIGH_PASS_MAX_HZ,
-  PLAYBACK_HIGH_PASS_MIN_HZ,
   clampPlaybackGain,
   getPlaybackDefaults,
   highPassFromStored,
@@ -18,9 +14,9 @@ describe('clampPlaybackGain', () => {
     { name: 'in range', input: 6, want: 6 },
     { name: 'negative in range', input: -6.5, want: -6.5 },
     { name: 'rounds to the half step', input: 6.3, want: 6.5 },
-    { name: 'minimum', input: PLAYBACK_GAIN_MIN_DB, want: PLAYBACK_GAIN_MIN_DB },
-    { name: 'below the minimum', input: -20, want: PLAYBACK_GAIN_MIN_DB },
-    { name: 'above the maximum', input: 40, want: PLAYBACK_GAIN_MAX_DB },
+    { name: 'minimum', input: -12, want: -12 },
+    { name: 'below the minimum', input: -20, want: -12 },
+    { name: 'above the maximum', input: 40, want: 24 },
     { name: 'NaN', input: NaN, want: 0 },
     { name: 'infinity', input: Infinity, want: 0 },
     { name: 'a string', input: '6', want: 0 },
@@ -37,14 +33,14 @@ describe('clampPlaybackGain', () => {
 
 describe('highPassFromStored and highPassToStored', () => {
   it.each([
-    { name: 'off', stored: 0, shown: PLAYBACK_HIGH_PASS_MIN_HZ },
-    { name: 'below the floor', stored: 19, shown: PLAYBACK_HIGH_PASS_MIN_HZ },
-    { name: 'the floor', stored: 20, shown: PLAYBACK_HIGH_PASS_MIN_HZ },
+    { name: 'off', stored: 0, shown: 20 },
+    { name: 'below the floor', stored: 19, shown: 20 },
+    { name: 'the floor', stored: 20, shown: 20 },
     { name: 'in range', stored: 300, shown: 300 },
-    { name: 'the maximum', stored: PLAYBACK_HIGH_PASS_MAX_HZ, shown: PLAYBACK_HIGH_PASS_MAX_HZ },
-    { name: 'above the maximum', stored: 9000, shown: PLAYBACK_HIGH_PASS_MAX_HZ },
-    { name: 'NaN', stored: NaN, shown: PLAYBACK_HIGH_PASS_MIN_HZ },
-    { name: 'a string', stored: '300', shown: PLAYBACK_HIGH_PASS_MIN_HZ },
+    { name: 'the maximum', stored: 5000, shown: 5000 },
+    { name: 'above the maximum', stored: 9000, shown: 5000 },
+    { name: 'NaN', stored: NaN, shown: 20 },
+    { name: 'a string', stored: '300', shown: 20 },
   ])('reads $name as the cutoff a player starts with', ({ stored, shown }) => {
     expect(highPassFromStored(stored)).toBe(shown);
   });
@@ -56,10 +52,10 @@ describe('highPassFromStored and highPassToStored', () => {
     { name: 'an active cutoff is kept', cutoff: 300, want: 300 },
     {
       name: 'the maximum is kept',
-      cutoff: PLAYBACK_HIGH_PASS_MAX_HZ,
-      want: PLAYBACK_HIGH_PASS_MAX_HZ,
+      cutoff: 5000,
+      want: 5000,
     },
-    { name: 'above the maximum is clamped', cutoff: 9000, want: PLAYBACK_HIGH_PASS_MAX_HZ },
+    { name: 'above the maximum is clamped', cutoff: 9000, want: 5000 },
     { name: 'NaN is stored as off', cutoff: NaN, want: 0 },
   ])('$name', ({ cutoff, want }) => {
     expect(highPassToStored(cutoff)).toBe(want);
@@ -100,7 +96,7 @@ describe('getPlaybackDefaults', () => {
     expect(getPlaybackDefaults()).toEqual({
       gainDb: 0,
       denoise: '',
-      highPassHz: PLAYBACK_HIGH_PASS_MIN_HZ,
+      highPassHz: 20,
     });
   });
 
@@ -134,6 +130,6 @@ describe('getPlaybackDefaults', () => {
   it('shows a stored 0 as the floor', () => {
     loadSettings({ defaultAudioGain: 0, playback: { highPassHz: 0 } });
 
-    expect(getPlaybackDefaults().highPassHz).toBe(PLAYBACK_HIGH_PASS_MIN_HZ);
+    expect(getPlaybackDefaults().highPassHz).toBe(20);
   });
 });

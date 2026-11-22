@@ -3,14 +3,6 @@ import { fireEvent } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
 import { renderTyped } from '../../../../../test/render-helpers';
 import AudioSettingsButton from './AudioSettingsButton.svelte';
-import {
-  PLAYBACK_GAIN_MAX_DB,
-  PLAYBACK_GAIN_MIN_DB,
-  PLAYBACK_GAIN_STEP_DB,
-  PLAYBACK_HIGH_PASS_MAX_HZ,
-  PLAYBACK_HIGH_PASS_MIN_HZ,
-  PLAYBACK_HIGH_PASS_STEP_HZ,
-} from '$lib/utils/playbackDefaults';
 
 const DEFAULT_FILTER_HZ = 300;
 
@@ -23,7 +15,7 @@ function renderButton(props: Partial<ComponentProps<typeof AudioSettingsButton>>
   const result = renderTyped(AudioSettingsButton, {
     props: {
       gainValue: 0,
-      filterFreq: PLAYBACK_HIGH_PASS_MIN_HZ,
+      filterFreq: 20,
       playbackSpeed: 1,
       ...handlers,
       ...props,
@@ -43,7 +35,7 @@ describe('AudioSettingsButton defaults', () => {
 
   it('shows the modified dot when the filter was moved off a non-zero default', () => {
     const { container } = renderButton({
-      filterFreq: PLAYBACK_HIGH_PASS_MIN_HZ,
+      filterFreq: 20,
       defaultFilterFreq: DEFAULT_FILTER_HZ,
     });
     expect(container.querySelector('.settings-indicator')).not.toBeNull();
@@ -81,15 +73,7 @@ describe('AudioSettingsButton defaults', () => {
 
     const sliders = container.querySelectorAll<HTMLInputElement>('input[type="range"]');
     const [gain, filter] = [sliders[0], sliders[1]];
-    expect([gain.min, gain.max, gain.step]).toEqual([
-      String(PLAYBACK_GAIN_MIN_DB),
-      String(PLAYBACK_GAIN_MAX_DB),
-      String(PLAYBACK_GAIN_STEP_DB),
-    ]);
-    expect([filter.min, filter.max, filter.step]).toEqual([
-      String(PLAYBACK_HIGH_PASS_MIN_HZ),
-      String(PLAYBACK_HIGH_PASS_MAX_HZ),
-      String(PLAYBACK_HIGH_PASS_STEP_HZ),
-    ]);
+    expect([gain.min, gain.max, gain.step]).toEqual(['-12', '24', '0.5']);
+    expect([filter.min, filter.max, filter.step]).toEqual(['20', '5000', '10']);
   });
 });

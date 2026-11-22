@@ -11,12 +11,6 @@ import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../test/render-helpers';
 import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS } from '$lib/utils/audio';
 import { safeGet } from '$lib/utils/security';
-import {
-  PLAYBACK_GAIN_MAX_DB,
-  PLAYBACK_GAIN_MIN_DB,
-  PLAYBACK_HIGH_PASS_MAX_HZ,
-  PLAYBACK_HIGH_PASS_MIN_HZ,
-} from '$lib/utils/playbackDefaults';
 import type { AudioPlaybackState } from './useAudioPlayback.svelte';
 import Wrapper from './UseAudioPlaybackWrapper.test.svelte';
 
@@ -203,23 +197,23 @@ describe('useAudioPlayback', () => {
     await renderAndWait();
 
     expect(getState().gainValue).toBe(0);
-    expect(getState().filterFreq).toBe(PLAYBACK_HIGH_PASS_MIN_HZ);
+    expect(getState().filterFreq).toBe(20);
   });
 
   it('clamps gain and filter updates to the shared playback ranges', async () => {
     await renderAndWait();
 
     getState().updateGain(-30);
-    expect(getState().gainValue).toBe(PLAYBACK_GAIN_MIN_DB);
+    expect(getState().gainValue).toBe(-12);
     getState().updateGain(-6.5);
     expect(getState().gainValue).toBe(-6.5);
     getState().updateGain(99);
-    expect(getState().gainValue).toBe(PLAYBACK_GAIN_MAX_DB);
+    expect(getState().gainValue).toBe(24);
 
     getState().updateFilter(5);
-    expect(getState().filterFreq).toBe(PLAYBACK_HIGH_PASS_MIN_HZ);
+    expect(getState().filterFreq).toBe(20);
     getState().updateFilter(99999);
-    expect(getState().filterFreq).toBe(PLAYBACK_HIGH_PASS_MAX_HZ);
+    expect(getState().filterFreq).toBe(5000);
   });
 
   // ---------------------------------------------------------------
