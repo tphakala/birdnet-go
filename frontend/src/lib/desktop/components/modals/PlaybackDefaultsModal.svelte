@@ -195,6 +195,9 @@
       const detail = error instanceof Error && error.message ? ` ${error.message}` : '';
       clearAnnouncement();
       errorMessage = `${t('components.audioPlayer.defaults.saveFailed')}${detail}`;
+      // The player can close the dialog, or unmount it, while the request runs; the
+      // inline alert is not seen then
+      if (!isOpen || destroyed) toastActions.error(errorMessage);
       saving = false;
       return;
     }

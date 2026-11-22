@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { get } from 'svelte/store';
-import { renderTyped } from '../../../../test/render-helpers';
+import { createComponentTestFactory, renderTyped } from '../../../../test/render-helpers';
 import { deferred } from '../../../../test/async-helpers';
 import { seedSavedRealtime } from '../../../../test/settings-store-helpers';
 import { settingsActions, settingsStore, type DenoiseSettings } from '$lib/stores/settings';
@@ -95,6 +95,7 @@ describe('PlaybackDefaultsModal', () => {
     vi.mocked(settingsAPI.load).mockReset();
     if (originalLoad) vi.mocked(settingsAPI.load).mockImplementation(originalLoad);
     vi.mocked(toastActions.success).mockClear();
+    vi.mocked(toastActions.error).mockClear();
     // Only the vi.spyOn spies; the shared module mocks keep their implementations
     vi.restoreAllMocks();
     settingsStore.set(initialStore);
@@ -188,6 +189,49 @@ describe('PlaybackDefaultsModal', () => {
     await waitFor(() => expect(toastActions.success).toHaveBeenCalled());
     expect(onSaved).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed save in a toast when the dialog was closed while it ran', async () => {
+    const pending = deferred<Record<string, never>>();
+    vi.mocked(settingsAPI.patchSection).mockImplementation(() => pending.promise);
+    const view = createComponentTestFactory(PlaybackDefaultsModal).render({
+      props: { isOpen: true, current: CURRENT, onClose: vi.fn(), onSaved: vi.fn() },
+    });
+
+    await moveSlider(GAIN_LABEL, 9);
+    await fireEvent.click(saveButton());
+    await view.rerender({ isOpen: false });
+    pending.reject(new Error('Server said no.'));
+
+    await waitFor(() =>
+      expect(toastActions.error).toHaveBeenCalledWith(`${SAVE_FAILED} Server said no.`)
+    );
+  });
+
+  it('reports a failed save in a toast when the dialog unmounted while it ran', async () => {
+    const pending = deferred<Record<string, never>>();
+    vi.mocked(settingsAPI.patchSection).mockImplementation(() => pending.promise);
+    const { unmount } = renderDialog();
+
+    await moveSlider(GAIN_LABEL, 9);
+    await fireEvent.click(saveButton());
+    unmount();
+    pending.reject(new Error('Server said no.'));
+
+    await waitFor(() =>
+      expect(toastActions.error).toHaveBeenCalledWith(`${SAVE_FAILED} Server said no.`)
+    );
+  });
+
+  it('shows a failed save inline, not as a toast, while the dialog is open', async () => {
+    vi.mocked(settingsAPI.patchSection).mockRejectedValue(new Error('Server said no.'));
+    renderDialog();
+
+    await moveSlider(GAIN_LABEL, 9);
+    await fireEvent.click(saveButton());
+
+    expect(await within(dialog()).findByRole('alert')).toBeInTheDocument();
+    expect(toastActions.error).not.toHaveBeenCalled();
   });
 
   it('disables the denoise default with the reason while export denoise is on', () => {
