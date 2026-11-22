@@ -399,3 +399,125 @@ func TestReinstallModel_ReleasesSlotOnValidationFailure(t *testing.T) {
 	require.NoError(t, err, "a refused reinstall frees the slot")
 	lease.Release()
 }
+
+// startGatedInstall starts an install of the A entry through the handler with its
+// first file request parked, and returns the manager and handler once the request
+// has arrived.
+func startGatedInstall(t *testing.T) (*classifier.ModelManager, *Handler) {
+	t.Helper()
+	useCatalog(t, guardCatalog())
+	hub := newGatedHub(t)
+	core := apitest.NewCore(t, apitest.WithSettingsFunc(func(s *conf.Settings) {
+		s.BirdNET.HuggingFaceEndpoint = hub.URL
+	}))
+	mm := classifier.NewModelManager(t.TempDir(), nil, nil)
+	core.ModelManager = mm
+	h := New(core, nil)
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
+		return hwprofile.Profile{Arch: "amd64", TotalRAMBytes: 16 << 30}
+	}
+	rec := guardRequest(t, h.InstallModel, http.MethodPost, apiDepA, "")
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+	select {
+	case <-hub.reached:
+	case <-time.After(guardWait):
+		require.FailNow(t, "the background install never requested a file")
+	}
+	return mm, h
+}
+
+func TestCancelInstall(t *testing.T) {
+	t.Run("accepts while a held install downloads", func(t *testing.T) {
+		mm, h := startGatedInstall(t)
+
+		rec := guardRequest(t, h.CancelInstall, http.MethodPost, apiDepA, "")
+
+		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+		assert.JSONEq(t, `{"catalogId":"`+apiDepA+`","status":"cancelling"}`, rec.Body.String())
+		h.Wait()
+		state := mm.GetDownloadState(apiDepA)
+		require.NotNil(t, state)
+		assert.Equal(t, classifier.StatusCancelled, state.Status)
+		assert.Empty(t, state.Error)
+		lease, err := mm.BeginOperation(classifier.OperationInstall, apiDepA)
+		require.NoError(t, err, "the slot is free after the cancel")
+		lease.Release()
+	})
+
+	t.Run("409 with the error key when nothing runs", func(t *testing.T) {
+		useCatalog(t, guardCatalog())
+		h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+
+		rec := guardRequest(t, h.CancelInstall, http.MethodPost, apiDepA, "")
+
+		requireCancelUnavailable(t, rec)
+	})
+
+	t.Run("409 with the error key while a reinstall runs", func(t *testing.T) {
+		useCatalog(t, guardCatalog())
+		mm, _ := guardInstalledManager(t)
+		h := dependencyHandler(t, mm)
+		lease, err := mm.BeginOperation(classifier.OperationReinstall, apiDepA)
+		require.NoError(t, err)
+		t.Cleanup(lease.Release)
+
+		rec := guardRequest(t, h.CancelInstall, http.MethodPost, apiDepA, "")
+
+		requireCancelUnavailable(t, rec)
+	})
+
+	t.Run("404 for an unknown id", func(t *testing.T) {
+		useCatalog(t, guardCatalog())
+		h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+
+		rec := guardRequest(t, h.CancelInstall, http.MethodPost, "no-such-model", "")
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("404 for a hidden id", func(t *testing.T) {
+		useCatalog(t, guardCatalog())
+		h := dependencyHandler(t, classifier.NewModelManager(t.TempDir(), nil, nil))
+
+		rec := guardRequest(t, h.CancelInstall, http.MethodPost, apiDepT, "")
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
+// requireCancelUnavailable asserts rec is the 409 of a refused cancel.
+func requireCancelUnavailable(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	var body struct {
+		ErrorKey    string `json:"error_key"`
+		ErrorParams struct {
+			Name string `json:"name"`
+		} `json:"error_params"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Equal(t, cancelUnavailableKey, body.ErrorKey)
+	assert.NotEmpty(t, body.ErrorParams.Name)
+}
+
+func TestStreamInstallProgress_RetainedTerminalStateWaitsForOperationSlot(t *testing.T) {
+	mm, h := startGatedInstall(t)
+	rec := guardRequest(t, h.CancelInstall, http.MethodPost, apiDepA, "")
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+	h.Wait()
+	require.NotNil(t, mm.GetDownloadState(apiDepA), "the cancelled state is retained")
+
+	// A retry has taken the slot but not registered its own state yet: the stream
+	// must not replay the previous attempt's cancelled state.
+	lease, err := mm.BeginOperation(classifier.OperationInstall, apiDepA)
+	require.NoError(t, err)
+	t.Cleanup(lease.Release)
+	ctx, cancel := context.WithTimeout(t.Context(), streamHoldWait)
+	defer cancel()
+	body := streamProgress(t, h, ctx, apiDepA)
+	assert.NotContains(t, body, string(classifier.StatusCancelled), "a retained terminal state is sent while the slot is held")
+
+	lease.Release()
+	body = streamProgress(t, h, t.Context(), apiDepA)
+	assert.Contains(t, body, string(classifier.StatusCancelled), "the cancelled state is sent once the slot is free")
+}

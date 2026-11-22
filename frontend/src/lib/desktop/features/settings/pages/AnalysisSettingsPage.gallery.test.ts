@@ -21,6 +21,7 @@ vi.mock('$lib/utils/modelsApi', async () => {
     ...actual,
     fetchCatalog: vi.fn(),
     fetchInstalled: vi.fn(),
+    cancelInstall: vi.fn(),
     installModel: vi.fn(),
     reinstallModel: vi.fn(),
     uninstallModel: vi.fn(),
@@ -110,6 +111,7 @@ import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
 import {
   MODEL_AGREEMENT_REQUIRED_KEY,
+  MODEL_CANCEL_UNAVAILABLE_KEY,
   MODEL_OPERATION_IN_PROGRESS_KEY,
 } from '$lib/utils/modelsApi';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
@@ -349,6 +351,142 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
       await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
     );
   }
+
+  it('shows no error banner or mirror hint when a download is cancelled', async () => {
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress());
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    vi.mocked(modelsApi.cancelInstall).mockResolvedValue(undefined);
+    await startTestBirdInstall();
+
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+    expect(modelsApi.cancelInstall).toHaveBeenCalledWith('test-bird');
+    expect(
+      await screen.findByRole('button', { name: /analysis\.gallery\.cancelling Test Bird Model/ })
+    ).toHaveAttribute('aria-disabled', 'true');
+
+    cancelled?.();
+
+    expect(await screen.findByRole('button', { name: installButtonName })).toBeInTheDocument();
+    expect(screen.queryByText(/analysis\.gallery\.errors\.actionFailed/)).toBeNull();
+    expect(screen.queryByText(/analysis\.gallery\.errors\.downloadSourceHint/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Cancel / })).toBeNull();
+  });
+
+  it('ignores a delayed cancel rejection once the install it belonged to has ended', async () => {
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress());
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    const request = deferred();
+    vi.mocked(modelsApi.cancelInstall).mockReturnValue(request.promise);
+    await startTestBirdInstall();
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+    await waitFor(() => expect(modelsApi.cancelInstall).toHaveBeenCalledTimes(1));
+    cancelled?.();
+    await screen.findByRole('button', { name: installButtonName });
+    vi.mocked(toastActions.warning).mockClear();
+
+    request.reject(new Error('late failure'));
+    await tick();
+    await tick();
+
+    expect(toastActions.warning).not.toHaveBeenCalled();
+  });
+
+  it('ignores a delayed cancel rejection after the same model was restarted and cancelled again', async () => {
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress());
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    const first = deferred();
+    vi.mocked(modelsApi.cancelInstall)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(new Promise<void>(() => {}));
+    await startTestBirdInstall();
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+    await waitFor(() => expect(modelsApi.cancelInstall).toHaveBeenCalledTimes(1));
+    cancelled?.();
+    await fireEvent.click(await screen.findByRole('button', { name: installButtonName }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.license\.acceptAndInstall/ })
+    );
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+    await waitFor(() => expect(modelsApi.cancelInstall).toHaveBeenCalledTimes(2));
+    vi.mocked(toastActions.warning).mockClear();
+
+    first.reject(new Error('late failure'));
+    await tick();
+    await tick();
+
+    expect(toastActions.warning).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: /analysis\.gallery\.cancelling Test Bird Model/ })
+    ).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('ends a reinstall quietly when it is sent a retained cancelled state', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.reinstallModel).mockResolvedValue(undefined);
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress({ catalogId: 'inst' }));
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+    );
+    await waitFor(() => expect(cancelled).toBeDefined());
+
+    cancelled?.();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+      ).not.toHaveAttribute('aria-disabled')
+    );
+    expect(screen.queryByText(/analysis\.gallery\.errors\.actionFailed/)).toBeNull();
+  });
+
+  it('keeps the download running and clears Cancelling when the cancel is refused', async () => {
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation((_id, onProgress) => {
+      onProgress(downloadProgress());
+      return () => {};
+    });
+    const refusal = new ApiError('too late', 409, new Response(null, { status: 409 }));
+    refusal.errorKey = MODEL_CANCEL_UNAVAILABLE_KEY;
+    vi.mocked(modelsApi.cancelInstall).mockRejectedValue(refusal);
+    await startTestBirdInstall();
+
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /^Cancel Test Bird Model/ })).not.toHaveAttribute(
+        'aria-disabled'
+      )
+    );
+    expect(screen.queryByText(/analysis\.gallery\.errors\.actionFailed/)).toBeNull();
+  });
 
   it('shows the in-progress reason and keeps Retry when an install is refused because another operation runs', async () => {
     const reason = 'A model install is already in progress (Geomodel). Try again when it finishes.';
@@ -675,6 +813,45 @@ describe('AnalysisSettingsPage model gallery optimize + permanent card', () => {
       ...overrides,
     });
   }
+
+  it('stops the apply-all queue when a swap is cancelled, marking the item neither applied nor failed', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [
+        v24Installed(),
+        v24Installed({ id: 'second-model', name: 'Second Model', permanent: false }),
+      ],
+    });
+    vi.mocked(modelsApi.installModel).mockResolvedValue(undefined);
+    vi.mocked(modelsApi.cancelInstall).mockResolvedValue(undefined);
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress({ catalogId: id }));
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.optimize\.review/ })
+    );
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.optimize\.applyAll/ })
+    );
+    await waitFor(() => expect(modelsApi.installModel).toHaveBeenCalledTimes(1));
+
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel BirdNET v2\.4/ }));
+    await waitFor(() => expect(modelsApi.cancelInstall).toHaveBeenCalledWith('birdnet-v2.4'));
+    cancelled?.();
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Cancel / })).toBeNull());
+    // Give the completion effect and the queue a chance to start the next swap
+    await tick();
+    expect(modelsApi.installModel).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('analysis.gallery.optimize.applied')).toBeNull();
+    expect(screen.queryByText(/^analysis\.gallery\.retry$/)).toBeNull();
+  });
 
   it('shows the optimize banner when an installed model has a better variant, and dismisses it', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [v24Installed()] });

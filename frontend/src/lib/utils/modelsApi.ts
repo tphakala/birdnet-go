@@ -25,6 +25,9 @@ const BASE = '/api/v2/models';
  */
 export const MODEL_OPERATION_IN_PROGRESS_KEY = 'analysis.gallery.errors.operationInProgress';
 
+/** error_key of the 409 for a cancel that can no longer be honoured (the download finished or activation began). */
+export const MODEL_CANCEL_UNAVAILABLE_KEY = 'analysis.gallery.errors.cancelUnavailable';
+
 /**
  * The error_key of the 409 the install and reinstall endpoints return while a
  * requires-agreement document of the entry has no recorded agreement. Its
@@ -84,6 +87,17 @@ export async function installModel(
   );
 }
 
+/**
+ * Ask the server to cancel the install or variant swap running for a model. The
+ * outcome (cancelled) arrives over the progress stream. A cancel sent after
+ * activation started is refused and the install completes. Rejects with an ApiError, errorKey
+ * 'analysis.gallery.errors.cancelUnavailable' when the download can no longer be
+ * cancelled.
+ */
+export async function cancelInstall(id: string): Promise<void> {
+  await api.post(`${BASE}/install/${encodeURIComponent(id)}/cancel`);
+}
+
 /** Remove an installed model from disk. */
 export async function uninstallModel(id: string): Promise<void> {
   await api.delete(`${BASE}/installed/${encodeURIComponent(id)}`);
@@ -129,7 +143,8 @@ export function isNetworkDownloadError(message: string): boolean {
 }
 
 /**
- * Subscribe to SSE progress events for an ongoing model install.
+ * Subscribe to SSE progress events for an ongoing model install. `onCancelled` is
+ * called when the install ended because the user cancelled it.
  *
  * Returns a cleanup function that closes the EventSource connection.
  */
@@ -137,7 +152,8 @@ export function subscribeInstallProgress(
   id: string,
   onProgress: (state: DownloadProgress) => void,
   onComplete: () => void,
-  onError: (err: string) => void
+  onError: (err: string) => void,
+  onCancelled: () => void
 ): () => void {
   const url = buildAppUrl(`${BASE}/install/${encodeURIComponent(id)}/progress`);
   const source = new ReconnectingEventSource(url, {
@@ -169,6 +185,13 @@ export function subscribeInstallProgress(
     } else if (data.status === 'failed') {
       terminalReceived = true;
       onError(data.error ?? 'Unknown error');
+      source.close();
+    } else if (data.status === 'cancelled') {
+      // A user cancel is not an error: it never reaches onError, so the mirror hint
+      // (isNetworkDownloadError) is never consulted. The handler is required so that
+      // every subscriber sees its operation end.
+      terminalReceived = true;
+      onCancelled();
       source.close();
     }
   });

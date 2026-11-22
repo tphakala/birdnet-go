@@ -13,6 +13,8 @@
   - pausedReasonId: id of the visible status line saying why actions are paused
   - optimizeEntryIds: Installed entries that have a better variant for this host
   - onAction: Called with the action and the entry when a card's action button is used
+  - onCancel: Called with the entry when its Cancel button is used; Cancel is offered only on a card whose install or update runs, never for a reinstall
+  - cancellingId: id of the entry whose cancel was requested and not yet settled
   - className: Classes for the root element
 
   Layout: cards are direct children of the grid and share its rows through subgrid. The grid
@@ -38,6 +40,9 @@
     optimizeEntryIds?: ReadonlySet<string>;
     // eslint-disable-next-line no-unused-vars -- the param names document the callback contract
     onAction: (action: ModelCardAction, entry: CatalogEntry) => void;
+    // eslint-disable-next-line no-unused-vars -- the param names document the callback contract
+    onCancel?: (entry: CatalogEntry) => void;
+    cancellingId?: string | null;
     className?: string;
   }
 
@@ -50,6 +55,8 @@
     pausedReasonId,
     optimizeEntryIds,
     onAction,
+    onCancel,
+    cancellingId = null,
     className,
   }: Props = $props();
 
@@ -77,6 +84,8 @@
           {pausedReasonId}
           progress={progressFor(entry)}
           optimizeAvailable={optimizeEntryIds?.has(entry.id) ?? false}
+          onCancel={onCancel && busyFor(entry) === 'install' ? () => onCancel(entry) : undefined}
+          cancelling={cancellingId === entry.id}
           {onAction}
         />
       {/each}

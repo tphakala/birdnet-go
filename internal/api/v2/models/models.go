@@ -119,7 +119,8 @@ func New(core *apicore.Core, authService auth.Service) *Handler {
 
 // RegisterRoutes registers all model-related API endpoints on the supplied API
 // v2 group, preserving the exact routes and order the facade used before the
-// models domain was extracted.
+// models domain was extracted. Cancelling a running install is POST
+// /models/install/:id/cancel, registered before the reinstall route.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/models", c.ListModels)
 	g.GET("/models/catalog", c.GetModelCatalog)
@@ -130,6 +131,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/models/documents/:sha256", c.GetModelDocument, c.AuthMiddleware)
 	g.GET("/models/installed", c.GetInstalledModels)
 	g.POST("/models/install/:id", c.InstallModel, c.AuthMiddleware)
+	g.POST("/models/install/:id/cancel", c.CancelInstall, c.AuthMiddleware)
 	g.POST("/models/reinstall/:id", c.ReinstallModel, c.AuthMiddleware)
 	g.DELETE("/models/installed/:id", c.UninstallModel, c.AuthMiddleware)
 	g.GET("/models/install/:id/progress", c.StreamInstallProgress)
@@ -514,6 +516,14 @@ const removeHasDependentsKey = "analysis.gallery.errors.removeHasDependents"
 // whose operation is running); error_params.operation and error_params.running
 // ({id, name}) identify it.
 const operationInProgressKey = "analysis.gallery.errors.operationInProgress"
+
+// cancelUnavailableKey is the i18n key of the 409 returned when a cancel is refused
+// because no cancellable download runs for the model (it finished, never started, or
+// activation has begun). The frontend interpolates error_params.name.
+const cancelUnavailableKey = "analysis.gallery.errors.cancelUnavailable"
+
+// cancelUnavailableMsg is the message of the cancel-unavailable 409.
+const cancelUnavailableMsg = "no cancellable download is running for this model"
 
 // operationInProgressMsg is the message of the operation-in-progress 409.
 const operationInProgressMsg = "another model operation is in progress"
@@ -1089,7 +1099,8 @@ func (c *Handler) GetInstalledModels(ctx echo.Context) error {
 // hot load of the model succeeded. A request for an entry whose own repo has a
 // requires-agreement document that is neither agreed nor listed in
 // acceptedDocuments gets a synchronous 409 with agreementRequiredKey before the
-// slot is taken, and records nothing.
+// slot is taken, and records nothing. The running install can be cancelled with
+// CancelInstall; a cancelled install is logged at info and announces nothing.
 func (c *Handler) InstallModel(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1212,11 +1223,18 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 			}
 		}()
 		if err := lease.InstallOrReplace(c.Context(), &entry, req.VariantID, "", progressChan); err != nil {
-			c.LogErrorIfEnabled("Model install failed",
-				logger.String("catalog_id", catalogID),
-				logger.String("variant_id", req.VariantID),
-				logger.Error(err),
-			)
+			if errors.Is(err, classifier.ErrOperationCancelled) {
+				c.LogInfoIfEnabled("Model install cancelled",
+					logger.String("catalog_id", catalogID),
+					logger.String("variant_id", req.VariantID),
+				)
+			} else {
+				c.LogErrorIfEnabled("Model install failed",
+					logger.String("catalog_id", catalogID),
+					logger.String("variant_id", req.VariantID),
+					logger.Error(err),
+				)
+			}
 		} else {
 			c.announceModelListChange()
 		}
@@ -1232,6 +1250,47 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 		"status":    classifier.StatusDownloading,
 	})
 }
+
+// CancelInstall handles POST /api/v2/models/install/:id/cancel. It cancels the
+// install or variant swap running for the entry and answers 202 with status
+// "cancelling"; the outcome (cancelled) arrives over the progress stream. A
+// reinstall is not cancellable, and a cancel that cannot be honoured, because no
+// install runs for the entry, its download has ended or its activation has started,
+// gets a 409 with cancelUnavailableKey and changes nothing; the install then
+// completes as it would have.
+func (c *Handler) CancelInstall(ctx echo.Context) error {
+	catalogID := ctx.Param("id")
+	if catalogID == "" {
+		return c.HandleError(ctx, nil, "catalog ID is required", http.StatusBadRequest)
+	}
+
+	entry, ok := classifier.GetCatalogEntry(catalogID)
+	if !ok || entry.Hidden {
+		return c.HandleError(ctx, nil, "unknown catalog ID: "+catalogID, http.StatusNotFound)
+	}
+
+	if c.ModelManager == nil {
+		return c.HandleError(ctx, nil, "model manager is not available", http.StatusServiceUnavailable)
+	}
+
+	if err := c.ModelManager.CancelOperation(catalogID); err != nil {
+		if _, refused := errors.AsType[*classifier.OperationNotCancellableError](err); refused {
+			return c.HandleErrorWithKey(ctx, err, cancelUnavailableMsg, http.StatusConflict,
+				cancelUnavailableKey, map[string]any{"name": entry.Name})
+		}
+		return c.HandleError(ctx, err, "failed to cancel model operation", http.StatusInternalServerError)
+	}
+
+	return ctx.JSON(http.StatusAccepted, map[string]string{
+		"catalogId": catalogID,
+		"status":    cancellingStatus,
+	})
+}
+
+// cancellingStatus is the status CancelInstall answers: the cancel was accepted and
+// the operation is winding down. It is not a download state; the final state comes
+// over the progress stream.
+const cancellingStatus = "cancelling"
 
 // reinstallRefusal returns a responder for the first check that refuses a
 // reinstall of entry (the model is not installed, or it needs an ONNX Runtime that
@@ -1433,10 +1492,22 @@ func (c *Handler) UninstallModel(ctx echo.Context) error {
 	})
 }
 
+// isTerminalStatus reports whether a download status ends the progress stream.
+func isTerminalStatus(status string) bool {
+	switch status {
+	case classifier.StatusComplete, classifier.StatusFailed, classifier.StatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
 // StreamInstallProgress streams model download progress as Server-Sent Events.
-// The stream closes automatically when the download completes or fails. Completion
-// is reported only once the entry's operation has released the manager's operation
-// slot, so a client that starts the next operation on it is not refused with 409.
+// The stream closes automatically when the download completes, fails or is
+// cancelled. A terminal state is reported only once the entry's operation has
+// released the manager's operation slot, so a client that starts the next
+// operation on it is not refused with 409, and a retry's stream never replays the
+// previous attempt's retained outcome.
 func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {
@@ -1484,14 +1555,20 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 			flusher.Flush()
 
 		default:
-			state := c.ModelManager.GetDownloadState(catalogID)
+			// State and slot are read together: a state that was retained from an
+			// earlier attempt cannot then be paired with a slot the next attempt has
+			// already released.
+			state, running := c.ModelManager.DownloadStateAndRunning(catalogID)
 			if state == nil {
 				// No active download. Check if the model is already installed,
 				// which means the download completed before we connected.
 				if c.ModelManager.IsInstalled(catalogID) {
-					if c.ModelManager.OperationRunningFor(catalogID) {
+					if running {
 						// Installed, but the operation still runs (the post-install
 						// hot-load, or a reinstall not yet registered): wait for it.
+						// The flag comes from the snapshot: a fresh read could see the
+						// slot released by an attempt that has just recorded a failed
+						// or cancelled state, and report it as complete.
 						time.Sleep(apicore.SSEEventLoopSleep)
 						continue
 					}
@@ -1526,6 +1603,16 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 			// Reset counter when we have valid state.
 			noStateCount = 0
 
+			// A retained failed or cancelled state is the end of an earlier attempt,
+			// or of an operation still cleaning up. While an operation holds the
+			// slot for the entry, wait: an immediate retry's stream must not replay
+			// the previous attempt's outcome, and a client that sees the end must be
+			// able to start the next operation without a 409.
+			if isTerminalStatus(state.Status) && running {
+				time.Sleep(apicore.SSEEventLoopSleep)
+				continue
+			}
+
 			// Send current progress.
 			if err := writeSSEEvent(ctx, "progress", state); err != nil {
 				return nil
@@ -1533,7 +1620,7 @@ func (c *Handler) StreamInstallProgress(ctx echo.Context) error {
 			flusher.Flush()
 
 			// Terminal states end the stream.
-			if state.Status == classifier.StatusComplete || state.Status == classifier.StatusFailed {
+			if isTerminalStatus(state.Status) {
 				return nil
 			}
 

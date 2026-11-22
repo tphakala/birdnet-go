@@ -5967,6 +5967,8 @@
       },
       "actionInProgress": "Várd meg a modell jelenlegi telepítésének, újratelepítésének vagy eltávolításának befejezését",
       "installSuccess": "{name} telepítve",
+      "cancelling": "Megszakítás...",
+      "cancelled": "A(z) {name} letöltése megszakítva.",
       "installedEnableOnSources": "A(z) {name} telepítve van. A használatához kapcsolja be a forrásaihoz a Beállítások > Hang menüben.",
       "removeSuccess": "{name} eltávolítva",
       "reasons": {
@@ -6014,7 +6016,8 @@
         "verifying": "Ellenőrzés...",
         "loading": "Betöltés...",
         "complete": "Sikeresen telepítve",
-        "failed": "Sikertelen"
+        "failed": "Sikertelen",
+        "cancelled": "Megszakítva"
       },
       "license": {
         "title": "Licencszerződés",
@@ -6042,6 +6045,7 @@
         "removeFailed": "Nem sikerült eltávolítani a modellt",
         "removeHasDependents": "{name} szükséges a következő modellekhez: {models}. Először távolítsa el ezeket a modelleket.",
         "operationInProgress": "Már folyamatban van egy modell telepítése, újratelepítése vagy eltávolítása ({name}). Próbáld újra, ha befejeződött.",
+        "cancelUnavailable": "A(z) {name} letöltése már nem szakítható meg.",
         "actionFailed": "Probléma történt a következővel: {name}",
         "downloadSourceHint": "Ha a huggingface.co blokkolva van vagy lassú a hálózatán, állítson be egy tükörszervert az alábbi Letöltési forrás szakaszban.",
         "goToDownloadSource": "Ugrás a Letöltési forráshoz",
