@@ -3710,15 +3710,19 @@
                  bounded height, so the documents and the buttons below stay in reach;
                  it sits after the variant picker, so a pick that adds or removes it
                  does not push the picker down within the dialog's content. -->
-            <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-            <div
-              role="region"
-              aria-labelledby={BUILD_NOTES_HEADING_ID}
-              tabindex="0"
-              class="mt-3 max-h-56 overflow-y-auto rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
-            >
-              <ModelBuildNotes record={licenseBuildNotes} />
-            </div>
+            <!-- Keyed on the build, so picking a variant with other notes starts them
+                 at the top instead of keeping the scroll position of the last ones. -->
+            {#key `${licenseBuildNotes.version}:${licenseBuildNotes.build}`}
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+              <div
+                role="region"
+                aria-labelledby={BUILD_NOTES_HEADING_ID}
+                tabindex="0"
+                class="mt-3 max-h-56 overflow-y-auto rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+              >
+                <ModelBuildNotes record={licenseBuildNotes} />
+              </div>
+            {/key}
           </div>
         {/if}
 

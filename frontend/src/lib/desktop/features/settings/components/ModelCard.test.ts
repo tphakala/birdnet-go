@@ -832,6 +832,24 @@ describe('ModelCard Accessibility', () => {
       expect(screen.queryByText('analysis.gallery.buildNotes.disclosure')).toBeNull();
     });
 
+    it('has no violations with the build row and the open notes disclosure', async () => {
+      const { container } = renderCard({
+        entry: entry({
+          installed: true,
+          installedVariantId: installedB2.id,
+          recommendedVariantId: installedB2.id,
+          builds: [notes],
+          variants: [installedB2],
+        }),
+        mode: 'installed',
+      });
+      const details = container.querySelector('details');
+      expect(details).not.toBeNull();
+      details?.setAttribute('open', '');
+
+      await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+    });
+
     it('shows no build row or notes for a build without a record', () => {
       renderCard({
         entry: entry({
