@@ -218,7 +218,7 @@
       id="header-settings-menu"
       in:dropdown
       out:dropdown={{ duration: 100 }}
-      class="absolute right-0 top-full mt-2 min-w-48 rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--color-base-100)] shadow-lg"
+      class="absolute right-0 top-full mt-2 w-max min-w-48 max-w-[calc(100vw-2rem)] rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--color-base-100)] shadow-lg"
       style:z-index="1010"
       aria-label={t('navigation.settingsMenu')}
     >
@@ -258,7 +258,7 @@
           aria-keyshortcuts={helpHint?.aria}
         >
           <Keyboard class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
-          <span class="flex-1 whitespace-nowrap text-start">{t('shortcuts.menuItem')}</span>
+          <span class="flex-1 text-start">{t('shortcuts.menuItem')}</span>
           {#if helpHint}
             <Kbd keys={helpHint.keys} size="sm" className="text-[var(--color-base-content)]/70" />
           {/if}

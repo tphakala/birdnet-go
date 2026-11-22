@@ -230,7 +230,7 @@
         in:dropdown
         out:dropdown={{ duration: 100 }}
         class={cn(
-          'fixed z-[1100] p-2 shadow-lg rounded-lg w-52 border',
+          'fixed z-[1100] p-2 shadow-lg rounded-lg w-max min-w-52 max-w-[calc(100vw-2rem)] border',
           variant === 'overlay'
             ? 'bg-[var(--color-base-100)]/95 border-[var(--color-base-300)]/60 backdrop-blur-md'
             : 'bg-[var(--color-base-100)] border-[var(--color-base-300)]'
