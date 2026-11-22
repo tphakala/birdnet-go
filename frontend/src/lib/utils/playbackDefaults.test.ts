@@ -175,6 +175,8 @@ describe('formatPlaybackHighPass', () => {
   it.each([
     { name: 'the floor', hz: 20, want: 'settings.userInterface.audioPlayback.highPassOff' },
     { name: 'below the floor', hz: 0, want: 'settings.userInterface.audioPlayback.highPassOff' },
+    { name: 'not a number', hz: NaN, want: 'settings.userInterface.audioPlayback.highPassOff' },
+    { name: 'infinity', hz: Infinity, want: 'settings.userInterface.audioPlayback.highPassOff' },
     {
       name: 'an active cutoff',
       hz: 300,

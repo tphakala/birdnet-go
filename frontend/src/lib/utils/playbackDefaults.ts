@@ -126,9 +126,12 @@ export function formatPlaybackGainLabel(db: number): string {
   return formatPlaybackGain(db, t('settings.userInterface.audioPlayback.defaultGainUnit'));
 }
 
-/** A cutoff as text: the floor reads "Off", any other value carries the unit ("300 Hz"). */
+/**
+ * A cutoff as text: the floor reads "Off", any other value carries the unit ("300 Hz").
+ * A value that is not finite reads as the floor.
+ */
 export function formatPlaybackHighPass(hz: number): string {
-  return hz <= PLAYBACK_HIGH_PASS_MIN_HZ
+  return !Number.isFinite(hz) || hz <= PLAYBACK_HIGH_PASS_MIN_HZ
     ? t('settings.userInterface.audioPlayback.highPassOff')
     : `${hz} ${t('settings.userInterface.audioPlayback.highPassUnit')}`;
 }
