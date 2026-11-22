@@ -2155,13 +2155,17 @@
 
   // Ask the server to cancel the running install or update. A refusal (the download can
   // no longer be cancelled, or the request failed) clears the "Cancelling..." state and
-  // leaves the operation running: the progress stream reports how it ends.
+  // leaves the operation running: the progress stream reports how it ends. A refusal that
+  // arrives late, once that state belongs to nothing or to another model, does nothing.
   async function handleCancelInstall(entry: CatalogEntry) {
     if (installingId !== entry.id || cancellingId !== null) return;
     cancellingId = entry.id;
     try {
       await cancelInstall(entry.id);
     } catch (e) {
+      // A rejection that arrives after this request's install ended, or after another
+      // model's cancel took over, owns no state any more: leave it alone.
+      if (unmounted || cancellingId !== entry.id) return;
       cancellingId = null;
       const showMessage =
         e instanceof Error &&

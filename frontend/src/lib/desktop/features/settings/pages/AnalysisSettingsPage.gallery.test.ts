@@ -378,6 +378,31 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     expect(screen.queryByRole('button', { name: /^Cancel / })).toBeNull();
   });
 
+  it('ignores a delayed cancel rejection once the install it belonged to has ended', async () => {
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress());
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    const request = deferred();
+    vi.mocked(modelsApi.cancelInstall).mockReturnValue(request.promise);
+    await startTestBirdInstall();
+    await fireEvent.click(await screen.findByRole('button', { name: /^Cancel Test Bird Model/ }));
+    await waitFor(() => expect(modelsApi.cancelInstall).toHaveBeenCalledTimes(1));
+    cancelled?.();
+    await screen.findByRole('button', { name: installButtonName });
+    vi.mocked(toastActions.warning).mockClear();
+
+    request.reject(new Error('late failure'));
+    await tick();
+    await tick();
+
+    expect(toastActions.warning).not.toHaveBeenCalled();
+  });
+
   it('ends a reinstall quietly when it is sent a retained cancelled state', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
