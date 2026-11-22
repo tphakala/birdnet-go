@@ -1289,6 +1289,7 @@ func (mm *ModelManager) install(ctx context.Context, entry *CatalogEntry, varian
 
 	// Check if already installed or already downloading.
 	mm.mu.Lock()
+	mm.dropRetainedStateLocked(entry.ID)
 	if _, ok := mm.installed[entry.ID]; ok {
 		mm.mu.Unlock()
 		return errors.Newf("model %s is already installed", entry.ID).
@@ -1341,6 +1342,7 @@ func (mm *ModelManager) Reinstall(ctx context.Context, entry *CatalogEntry, base
 func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, baseURL string, progress chan<- DownloadState) error {
 	// Check that the model IS installed (opposite of Install's guard).
 	mm.mu.Lock()
+	mm.dropRetainedStateLocked(entry.ID)
 	im, ok := mm.installed[entry.ID]
 	if !ok {
 		mm.mu.Unlock()
@@ -1365,20 +1367,21 @@ func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, base
 	// would strand the running model unloaded until a restart.
 	reinstallVariantID := im.VariantID
 	if _, resolvable := variantFilesByID(entry, reinstallVariantID); !resolvable {
-		mm.mu.Unlock()
-		return errors.Newf("cannot reinstall %s: installed variant %q is no longer in the catalog", entry.ID, reinstallVariantID).
+		err := errors.Newf("cannot reinstall %s: installed variant %q is no longer in the catalog", entry.ID, reinstallVariantID).
 			Component("classifier.model_manager").
 			Category(errors.CategoryValidation).
 			Context("catalog_id", entry.ID).
 			Context("variant_id", reinstallVariantID).
 			Build()
+		mm.recordEarlyFailureLocked(entry.ID, err)
+		mm.mu.Unlock()
+		return err
 	}
 
 	// Unload from orchestrator BEFORE overwriting files to avoid crashes.
 	unloaded := false
 	if mm.orchestrator != nil && entry.RegistryID != "" && mm.orchestrator.IsModelLoaded(entry.RegistryID) {
 		if err := mm.unloadModel(entry.RegistryID); err != nil {
-			mm.mu.Unlock()
 			// Reinstall runs asynchronously, so the HTTP caller cannot surface
 			// this. Log at the always-on manager logger; the API logger that the
 			// handler uses may be disabled, which would otherwise leave a refused
@@ -1387,13 +1390,16 @@ func (mm *ModelManager) reinstall(ctx context.Context, entry *CatalogEntry, base
 				logger.String("catalog_id", entry.ID),
 				logger.String("registry_id", entry.RegistryID),
 				logger.Error(err))
-			return errors.Newf("cannot reinstall %s: model still in use", entry.ID).
+			inUseErr := errors.Newf("cannot reinstall %s: model still in use", entry.ID).
 				Component("classifier.model_manager").
 				Category(errors.CategorySystem).
 				Context("catalog_id", entry.ID).
 				Context("registry_id", entry.RegistryID).
 				Context("unload_error", err.Error()).
 				Build()
+			mm.recordEarlyFailureLocked(entry.ID, inUseErr)
+			mm.mu.Unlock()
+			return inUseErr
 		}
 		unloaded = true
 	}
@@ -1472,6 +1478,7 @@ func (mm *ModelManager) installOrReplace(ctx context.Context, entry *CatalogEntr
 			Context("catalog_id", entry.ID).
 			Build()
 	}
+	mm.dropRetainedStateLocked(entry.ID)
 	current, installed := mm.installed[entry.ID]
 
 	// Permanent primary model (BirdNET v2.4): always "installed". Its variant swap runs
@@ -2347,6 +2354,25 @@ func (mm *ModelManager) settleDownloadFailure(ctx context.Context, catalogID str
 	}
 	mm.markFailed(catalogID, err, progress)
 	return err
+}
+
+// dropRetainedStateLocked removes a terminal (failed or cancelled) download state an
+// earlier attempt left for the entry, when a new attempt begins. Without it an
+// attempt that ends before writing a state of its own, a same-variant no-op or an
+// early refusal, would have the old outcome replayed to its progress stream. The
+// caller must hold mm.mu.
+func (mm *ModelManager) dropRetainedStateLocked(catalogID string) {
+	if state := mm.downloading[catalogID]; state != nil && !state.IsActive() {
+		delete(mm.downloading, catalogID)
+	}
+}
+
+// recordEarlyFailureLocked records a failed download state for an operation that
+// gave up before it registered one, so its progress stream reports the failure,
+// and retains it like any failed state. The caller must hold mm.mu.
+func (mm *ModelManager) recordEarlyFailureLocked(catalogID string, err error) {
+	mm.downloading[catalogID] = &DownloadState{CatalogID: catalogID, Status: StatusFailed, Error: err.Error()}
+	mm.retainTerminalStateLocked(catalogID)
 }
 
 // retainTerminalState keeps the entry's terminal (failed or cancelled) download

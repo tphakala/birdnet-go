@@ -382,3 +382,45 @@ func TestGetHuggingFace_StatusRacingCancelIsSuppressible(t *testing.T) {
 	require.ErrorIs(t, err, ErrOperationCancelled)
 	assert.False(t, shouldFailover(err))
 }
+
+// retainCancelledSwap installs variant A of the cancel entry, then cancels a swap to
+// B, leaving the cancelled state retained for the retention window.
+func (h *depHarness) retainCancelledSwap() {
+	h.t.Helper()
+	done, _ := h.startHeldSwap(cancelVarA, cancelVarB, cancelVarB+"-labels.txt")
+	require.NoError(h.t, h.mm.CancelOperation(cancelEntryID))
+	require.ErrorIs(h.t, awaitResult(h.t, done), ErrOperationCancelled)
+	requireCancelled(h.t, h.mm, cancelEntryID)
+}
+
+// TestNewAttemptDropsRetainedState pins that an attempt that ends without writing a
+// state of its own does not leave the previous attempt's retained state to be
+// replayed to its progress stream: a same-variant no-op leaves none, and a reinstall
+// that gives up early records a failure of its own.
+func TestNewAttemptDropsRetainedState(t *testing.T) {
+	t.Run("same-variant install", func(t *testing.T) {
+		h := newDepHarnessWithCatalog(t, cancelCatalog())
+		h.retainCancelledSwap()
+		e := h.entry(cancelEntryID)
+
+		require.NoError(t, h.mm.InstallOrReplace(t.Context(), &e, cancelVarA, h.srv.URL, nil))
+
+		assert.Nil(t, h.mm.GetDownloadState(cancelEntryID), "the no-op leaves no state to replay")
+	})
+
+	t.Run("reinstall of a variant that left the catalog", func(t *testing.T) {
+		h := newDepHarnessWithCatalog(t, cancelCatalog())
+		h.retainCancelledSwap()
+		e := h.entry(cancelEntryID)
+		e.Variants = e.Variants[1:] // drop the installed variant A
+
+		err := h.mm.Reinstall(t.Context(), &e, h.srv.URL, nil)
+
+		require.Error(t, err)
+		state := h.mm.GetDownloadState(cancelEntryID)
+		require.NotNil(t, state)
+		assert.Equal(t, StatusFailed, state.Status, "the reinstall failure replaces the retained cancel")
+		assert.NotEmpty(t, state.Error)
+		requireSlotFree(t, h.mm, "the early failure frees the slot")
+	})
+}
