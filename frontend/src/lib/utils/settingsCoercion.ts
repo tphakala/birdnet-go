@@ -912,7 +912,7 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       // Backfill the playback defaults for a response from an older server: the
       // denoise object so an Off state is a real value and the strength is always
       // a valid preset, and the high-pass object with the cutoff in the stored
-      // form (a cutoff below the floor is off, stored as 0), so the Settings form
+      // form (a cutoff at or below the floor is off, stored as 0), so the Settings form
       // never reads a server-normalized value as a change. The gain is held to
       // the default's range.
       if (isPlainObject(data.dashboard)) {
