@@ -18,7 +18,8 @@ import (
 // is the authoritative source for these reclassifications; its compiled dataset
 // ships an alias map (legacy scientific name -> canonical scientific name) that
 // this package exposes so consumers can collapse the variants to one canonical
-// name (range-filter species matching, detection de-duplication).
+// name (range-filter species matching, detection de-duplication) or carry a
+// species code from one variant to the other (ExpandScientificCodeMap).
 //
 // Keys can also be a newer model label whose canonical name is the one the
 // geomodel uses (for example a renamed BirdNET+ genus), not only a legacy name.
@@ -102,27 +103,29 @@ func AliasCount() int {
 	return len(aliasMap)
 }
 
-// ExpandScientificCodeMap populates missing eBird species codes in codeMap
-// across OpenFauna taxonomic aliases in both directions (legacy -> canonical,
-// then canonical -> legacy) using dataset casing. Direct entries already in
-// codeMap always take precedence and are never overwritten.
+// ExpandScientificCodeMap adds species codes to codeMap (scientific name -> code)
+// for alias names it lacks: first each canonical name takes its legacy name's code,
+// then each legacy name takes its canonical name's code. Keys match exactly in the
+// dataset's casing. An existing entry is never overwritten, so a name with its own
+// code keeps it. When several legacy names share a canonical name that has no code,
+// the canonical name takes the code of the first legacy name in sorted order.
 func ExpandScientificCodeMap(codeMap map[string]string) {
 	if len(codeMap) == 0 {
 		return
 	}
 	aliasOnce.Do(loadAliases)
-	for _, pair := range aliasPairs {
-		if code := codeMap[pair.legacy]; code != "" {
-			if _, exists := codeMap[pair.canonical]; !exists {
-				codeMap[pair.canonical] = code
-			}
+	fill := func(from, to string) {
+		if _, exists := codeMap[to]; exists {
+			return
+		}
+		if code := codeMap[from]; code != "" {
+			codeMap[to] = code
 		}
 	}
 	for _, pair := range aliasPairs {
-		if code := codeMap[pair.canonical]; code != "" {
-			if _, exists := codeMap[pair.legacy]; !exists {
-				codeMap[pair.legacy] = code
-			}
-		}
+		fill(pair.legacy, pair.canonical)
+	}
+	for _, pair := range aliasPairs {
+		fill(pair.canonical, pair.legacy)
 	}
 }

@@ -97,5 +97,6 @@ func TestExpandScientificCodeMap_BidirectionalAndDirectPrecedence(t *testing.T) 
 
 	require.Equal(t, "evegro", m["Hesperiphona vespertina"])
 	require.Equal(t, "t-11124704", m["Hyla versicolor"])
-	require.Equal(t, "direct-code", m["Spilopelia senegalensis"])
+	require.Equal(t, "direct-code", m["Spilopelia senegalensis"], "forward pass must not overwrite a canonical entry")
+	require.Equal(t, "laudov1", m["Streptopelia senegalensis"], "reverse pass must not overwrite a legacy entry")
 }

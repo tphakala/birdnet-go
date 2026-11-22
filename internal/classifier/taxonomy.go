@@ -72,7 +72,9 @@ func LoadTaxonomyData(customPath string) (TaxonomyMap, ScientificNameIndex, erro
 	return taxonomyMap, scientificIndex, nil
 }
 
-// CreateScientificNameIndex builds an index mapping scientific names to codes
+// CreateScientificNameIndex builds an index mapping scientific names to codes.
+// It also indexes the OpenFauna alias names the taxonomy lacks, so a species
+// listed under an older or newer scientific name resolves to the same code.
 func CreateScientificNameIndex(taxonomyMap TaxonomyMap) ScientificNameIndex {
 	index := make(ScientificNameIndex)
 	for taxonName, taxonCode := range taxonomyMap {
@@ -80,7 +82,7 @@ func CreateScientificNameIndex(taxonomyMap TaxonomyMap) ScientificNameIndex {
 			parts := strings.SplitN(taxonName, "_", 2)
 			if len(parts) == 2 {
 				scientificName := strings.TrimSpace(parts[0])
-				index[scientificName] = RemapLegacyCode(taxonCode)
+				index[scientificName] = taxonCode
 			}
 		}
 	}
