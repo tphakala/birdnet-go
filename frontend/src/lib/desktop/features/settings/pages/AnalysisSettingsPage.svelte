@@ -440,7 +440,7 @@
     return regionNameMap.has(liveModelRegion) ? liveModelRegion : '';
   });
   // The SAVED region the catalog's recommendation flags were computed from. Those
-  // flags come from the persisted setting (resolveRecommendRegion on the server),
+  // flags come from the persisted setting (resolveRecommendRegions on the server),
   // so the picker's server-side recommendation only needs a re-fetch when this
   // changes, not on unsaved toggles.
   const savedModelRegion = $derived.by<string | null>(() => {

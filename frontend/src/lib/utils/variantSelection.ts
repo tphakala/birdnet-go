@@ -246,7 +246,7 @@ export interface OptimizeOffer {
  * no DFT build is active). An entry with `supersededBy` (the server sets it only when
  * the successor is visible) gets no offer: the superseded notice tells the user to
  * move to the successor instead of switching builds of the old model. An entry with
- * `update` (its installed build is an older release) gets none either: the update notice
+ * `update` (its installed build is an older release or an older build) gets none either: the update notice
  * and the card's Update action cover it, so one model never has two prompts.
  */
 export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {

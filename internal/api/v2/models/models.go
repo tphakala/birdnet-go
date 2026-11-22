@@ -69,7 +69,7 @@ type Handler struct {
 	// evaluated alongside the optimize notice.
 	superseded supersededNotice
 	// update latches the bell notice for an installed build that a newer release
-	// replaces (update_notice.go), evaluated alongside the other two.
+	// or a newer build of the same release replaces (update_notice.go), evaluated alongside the other two.
 	update updateNotice
 	// modelRuntime reports the live backend and precision of each loaded model,
 	// keyed by registry ID. It is an injectable seam: nil means the live default
@@ -557,8 +557,8 @@ func visibleSuccessor(visible []classifier.CatalogEntry, id string) *CatalogSucc
 // GetModelCatalog returns the embedded model catalog enriched with install
 // status and compatibility information. An entry's successor is reported only when
 // the successor is itself visible, and its documents are those of its own repo only.
-// An installed older release that a newer release of the entry replaces carries
-// update, whether or not hardware recommendations are computed for the request.
+// An installed build that a newer release, or a newer build of the same release,
+// replaces carries update, whether or not hardware recommendations are computed for the request.
 func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	visible := classifier.VisibleCatalog()
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
