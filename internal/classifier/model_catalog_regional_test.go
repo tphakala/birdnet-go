@@ -33,7 +33,8 @@ var allowedRegionalPrecisions = map[string]bool{"fp32": true, "fp16": true, "int
 // never fires), a tile marked Default (wrong preselection), a region without its
 // live builds (one per live token), a Legacy marking that does not match
 // SupersededBy, a successor that is not a live build of the same region, a
-// Legacy build that is not an update, a missing checksum, or a species count of a
+// successor of a lower build, a newer build that is not offered as an update, a
+// missing checksum, or a species count of a
 // live build that has drifted from the region table. Each entry is checked
 // against its own family's table, since families may ship different tile sets.
 func TestEmbeddedCatalog_RegionalVariants(t *testing.T) {
@@ -159,9 +160,16 @@ func assertLegacyVariantsUpdate(t *testing.T, entry *CatalogEntry, legacy []*Cat
 			assert.Falsef(t, succ.Legacy, "successor %q of %q must be live", succ.ID, v.ID)
 		}
 		got, ok := VariantUpdate(entry, v.ID)
-		if succ != nil && variantRelease(entry, succ) == variantRelease(entry, v) && variantBuild(succ) <= variantBuild(v) {
-			assert.Falsef(t, ok, "Legacy variant %q has a successor of the same release and build, which is no update", v.ID)
-			continue
+		if succ != nil && variantRelease(entry, succ) == variantRelease(entry, v) {
+			// Within one release a successor never has a lower build. An equal build
+			// is only a withdrawn variant token pointing at another token of the same
+			// build, which is not an update.
+			require.GreaterOrEqualf(t, variantBuild(succ), variantBuild(v), "successor %q of %q has a lower build", succ.ID, v.ID)
+			if variantBuild(succ) == variantBuild(v) {
+				assert.NotEqualf(t, variantToken(v.ID), variantToken(succ.ID), "Legacy variant %q is superseded by its own token at the same build", v.ID)
+				assert.Falsef(t, ok, "Legacy variant %q has a successor of the same release and build, which is no update", v.ID)
+				continue
+			}
 		}
 		if assert.Truef(t, ok, "VariantUpdate of Legacy variant %q must offer an update", v.ID) {
 			assert.Equalf(t, v.SupersededBy, got.ID, "update target of %q", v.ID)

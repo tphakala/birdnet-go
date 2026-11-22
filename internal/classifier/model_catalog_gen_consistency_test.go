@@ -218,7 +218,9 @@ func TestGlobalVariants_MatchManifest(t *testing.T) {
 				v := &entry.Variants[j]
 				for k := range v.Files {
 					if v.Files[k].Role == RoleModel {
-						byModelPath[v.Files[k].RemotePath] = v
+						modelPath := v.Files[k].RemotePath
+						require.NotContainsf(t, byModelPath, modelPath, "model path %q is carried by more than one variant", modelPath)
+						byModelPath[modelPath] = v
 					}
 				}
 			}
