@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
+import { screen, fireEvent, cleanup } from '@testing-library/svelte';
+import { renderTyped } from '../../../../test/render-helpers';
 import { appState } from '$lib/stores/appState.svelte';
 import AudioPlayer from './AudioPlayer.svelte';
 
@@ -49,7 +50,7 @@ describe('AudioPlayer gain and high-pass defaults', () => {
   });
 
   function mount() {
-    return render(AudioPlayer, {
+    return renderTyped(AudioPlayer, {
       props: {
         audioUrl: '/api/v2/audio/4242',
         detectionId: '4242',

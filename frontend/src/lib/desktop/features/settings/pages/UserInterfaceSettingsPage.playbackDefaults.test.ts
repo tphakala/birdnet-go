@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/svelte';
+import { screen, fireEvent, cleanup } from '@testing-library/svelte';
+import { renderTyped } from '../../../../../test/render-helpers';
 import { get } from 'svelte/store';
 import { settingsStore } from '$lib/stores/settings';
 import UserInterfaceSettingsPage from './UserInterfaceSettingsPage.svelte';
@@ -48,7 +49,7 @@ function seedStore(dashboardOverrides: Record<string, unknown> = {}) {
 
 async function renderTab(dashboardOverrides: Record<string, unknown> = {}) {
   seedStore(dashboardOverrides);
-  render(UserInterfaceSettingsPage);
+  renderTyped(UserInterfaceSettingsPage);
   await fireEvent.click(await screen.findByRole('tab', { name: new RegExp(TAB_LABEL) }));
   const slider = await screen.findByLabelText<HTMLInputElement>(HIGH_PASS_LABEL);
   return slider;

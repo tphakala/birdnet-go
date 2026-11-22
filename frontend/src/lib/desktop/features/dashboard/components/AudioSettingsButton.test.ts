@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, fireEvent } from '@testing-library/svelte';
+import { fireEvent } from '@testing-library/svelte';
+import type { ComponentProps } from 'svelte';
+import { renderTyped } from '../../../../../test/render-helpers';
 import AudioSettingsButton from './AudioSettingsButton.svelte';
 import {
   PLAYBACK_GAIN_MAX_DB,
@@ -12,13 +14,13 @@ import {
 
 const DEFAULT_FILTER_HZ = 300;
 
-function renderButton(props: Record<string, unknown> = {}) {
+function renderButton(props: Partial<ComponentProps<typeof AudioSettingsButton>> = {}) {
   const handlers = {
     onGainChange: vi.fn(),
     onFilterChange: vi.fn(),
     onSpeedChange: vi.fn(),
   };
-  const result = render(AudioSettingsButton, {
+  const result = renderTyped(AudioSettingsButton, {
     props: {
       gainValue: 0,
       filterFreq: PLAYBACK_HIGH_PASS_MIN_HZ,
