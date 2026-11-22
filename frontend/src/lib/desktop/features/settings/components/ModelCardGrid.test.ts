@@ -108,6 +108,28 @@ describe('ModelCardGrid', () => {
     expect(within(card('Model b')).getByRole('button', { name: optimize })).toBeInTheDocument();
   });
 
+  it.each([
+    ['install', 1],
+    ['reinstall', 0],
+    ['remove', 0],
+  ] as const)(
+    'offers Cancel on the running card for a %s only when it is an install',
+    (action, count) => {
+      const onCancel = vi.fn();
+      renderGrid({
+        entries: [entry('a'), entry('b')],
+        activeAction: { entryId: 'a', action },
+        progress,
+        onCancel,
+      });
+
+      expect(screen.queryAllByRole('button', { name: /^Cancel / })).toHaveLength(count);
+      expect(within(card('Model a')).queryAllByRole('button', { name: /^Cancel / })).toHaveLength(
+        count
+      );
+    }
+  );
+
   it('keeps a card expanded when the entries are reordered or another is removed', async () => {
     stubLayout(LONG_DESCRIPTION);
     const a = entry('a', { description: LONG_DESCRIPTION });

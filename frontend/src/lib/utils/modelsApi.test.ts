@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { installModel, isNetworkDownloadError, reinstallModel } from './modelsApi';
+import { cancelInstall, installModel, isNetworkDownloadError, reinstallModel } from './modelsApi';
 import { api } from '$lib/utils/api';
 
 vi.mock('$lib/utils/api', () => ({
@@ -89,6 +89,16 @@ describe('subscribeInstallProgress', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onComplete).not.toHaveBeenCalled();
     expect(close).toHaveBeenCalled();
+  });
+});
+
+describe('cancelInstall', () => {
+  it('posts to the cancel route of the entry', async () => {
+    vi.mocked(api.post).mockClear();
+
+    await cancelInstall('perch v2');
+
+    expect(api.post).toHaveBeenCalledWith('/api/v2/models/install/perch%20v2/cancel');
   });
 });
 

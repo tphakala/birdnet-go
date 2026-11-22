@@ -138,7 +138,10 @@ func TestCancelOperation_RetryAndUninstallStartAtOnce(t *testing.T) {
 	assert.NoError(t, h.mm.Uninstall(cancelEntryID), "an uninstall right after a cancel is not refused")
 }
 
-func TestRetainTerminalState_KeepsNewerState(t *testing.T) {
+// TestExpireDownloadState_KeepsNewerState pins the pointer check of the retention
+// expiry: the timer retainTerminalState schedules calls expireDownloadState with the
+// state it captured, and that call must leave a newer state alone.
+func TestExpireDownloadState_KeepsNewerState(t *testing.T) {
 	mm := NewModelManager(t.TempDir(), nil, nil)
 	old := &DownloadState{CatalogID: "m", Status: StatusCancelled}
 	newer := &DownloadState{CatalogID: "m", Status: StatusDownloading}
@@ -322,4 +325,37 @@ func TestCancelOperation_RefusedAfterFailure(t *testing.T) {
 	_, refused := errors.AsType[*OperationNotCancellableError](cancelErr)
 	assert.True(t, refused, "a cancel after the failure is refused, got %v", cancelErr)
 	require.NoError(t, ctx.Err(), "the refused cancel leaves the context alone")
+}
+
+// TestDownloadVariantFiles_ActivationBoundary pins the point of no return inside
+// the download: with every file already on disk the loop downloads nothing, so only
+// the boundary after it decides. A cancel before it ends the call cancelled; without
+// one the state moves to loading.
+func TestDownloadVariantFiles_ActivationBoundary(t *testing.T) {
+	h := newDepHarnessWithCatalog(t, cancelCatalog())
+	require.NoError(t, h.install(cancelEntryID, cancelVarA))
+	e := h.entry(cancelEntryID)
+
+	t.Run("cancelled before the boundary", func(t *testing.T) {
+		h.setDownloading(cancelEntryID, StatusDownloading)
+		ctx, cancel := context.WithCancelCause(t.Context())
+		cancel(ErrOperationCancelled)
+
+		_, _, _, _, err := h.mm.downloadVariantFiles(ctx, &e, cancelVarA, h.srv.URL, nil, true)
+
+		require.ErrorIs(t, err, ErrOperationCancelled)
+		requireCancelled(t, h.mm, cancelEntryID)
+		assert.FileExists(t, h.own(cancelEntryID, cancelVarA+"-model.onnx"), "files this call did not write stay")
+	})
+
+	t.Run("not cancelled", func(t *testing.T) {
+		h.setDownloading(cancelEntryID, StatusDownloading)
+
+		_, _, _, _, err := h.mm.downloadVariantFiles(t.Context(), &e, cancelVarA, h.srv.URL, nil, true)
+
+		require.NoError(t, err)
+		state := h.mm.GetDownloadState(cancelEntryID)
+		require.NotNil(t, state)
+		assert.Equal(t, StatusLoading, state.Status, "activation starts once every file is on disk")
+	})
 }
