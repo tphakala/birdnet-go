@@ -40,6 +40,9 @@ describe('formatPlaybackGain', () => {
     { name: 'a negative half step', db: -6.5, want: '-6.5 dB' },
     { name: 'the minimum', db: -12, want: '-12 dB' },
     { name: 'negative zero', db: -0, want: '0 dB' },
+    { name: 'infinity', db: Infinity, want: '0 dB' },
+    { name: 'negative infinity', db: -Infinity, want: '0 dB' },
+    { name: 'not a number', db: NaN, want: '0 dB' },
   ])('formats $name', ({ db, want }) => {
     expect(formatPlaybackGain(db, 'dB')).toBe(want);
   });

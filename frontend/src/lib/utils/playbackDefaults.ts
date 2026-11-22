@@ -35,7 +35,7 @@ export interface PlaybackDefaultValues {
   highPassHz: number;
 }
 
-/** Clamp a value into [min, max]. */
+/** Clamp a finite number into [min, max]. A NaN stays NaN, so callers pass numbers they have checked. */
 export function clampToRange(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -50,10 +50,11 @@ export function clampPlaybackGain(db: unknown): number {
 
 /**
  * A gain as text: signed when positive, no trailing ".0", a space before the
- * unit ("+7.5 dB", "0 dB", "-6.5 dB"). Negative zero reads as "0".
+ * unit ("+7.5 dB", "0 dB", "-6.5 dB"). Negative zero and a value that is not
+ * finite read as "0".
  */
 export function formatPlaybackGain(db: number, unit: string): string {
-  const value = db || 0;
+  const value = Number.isFinite(db) ? db || 0 : 0;
   return `${value > 0 ? '+' : ''}${value} ${unit}`;
 }
 
