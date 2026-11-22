@@ -378,6 +378,36 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     expect(screen.queryByRole('button', { name: /^Cancel / })).toBeNull();
   });
 
+  it('ends a reinstall quietly when it is sent a retained cancelled state', async () => {
+    vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+      catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+    });
+    vi.mocked(modelsApi.reinstallModel).mockResolvedValue(undefined);
+    let cancelled: (() => void) | undefined;
+    vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+      (_id, onProgress, _onComplete, _onError, onCancelled) => {
+        onProgress(downloadProgress({ catalogId: 'inst' }));
+        cancelled = onCancelled;
+        return () => {};
+      }
+    );
+    render(AnalysisSettingsPage);
+    await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+    await fireEvent.click(
+      await screen.findByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+    );
+    await waitFor(() => expect(cancelled).toBeDefined());
+
+    cancelled?.();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /analysis\.gallery\.reinstall.*Installed Model/ })
+      ).not.toHaveAttribute('aria-disabled')
+    );
+    expect(screen.queryByText(/analysis\.gallery\.errors\.actionFailed/)).toBeNull();
+  });
+
   it('keeps the download running and clears Cancelling when the cancel is refused', async () => {
     vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation((_id, onProgress) => {
       onProgress(downloadProgress());
