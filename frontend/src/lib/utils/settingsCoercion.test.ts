@@ -475,6 +475,7 @@ describe('settingsCoercion realtime dashboard playbackDenoise', () => {
 });
 
 describe('settingsCoercion realtime dashboard playback defaults', () => {
+  // coerceSettings returns a loose object; read back only the dashboard fields under test.
   const dashboardOf = (dashboard: Record<string, unknown>) =>
     (
       coerceSettings('realtime', { dashboard }) as {

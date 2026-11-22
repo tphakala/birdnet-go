@@ -83,6 +83,8 @@ describe('highPassFromStored and highPassToStored', () => {
 describe('getPlaybackDefaults', () => {
   const initial = get(settingsStore);
 
+  // The loaded store is seeded with only the dashboard section these tests read,
+  // not a full form type.
   function loadSettings(dashboard: Record<string, unknown>, unsaved: Record<string, unknown> = {}) {
     settingsStore.update(store => {
       const withDashboard = (values: Record<string, unknown>) => ({

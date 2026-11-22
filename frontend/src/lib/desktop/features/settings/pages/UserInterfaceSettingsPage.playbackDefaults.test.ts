@@ -21,7 +21,9 @@ interface DashboardView {
 }
 
 function seedStore(dashboardOverrides: Record<string, unknown> = {}) {
-  const formData = {
+  // A factory, so each copy gets its own default nested objects. The override values are
+  // shared by both copies; the page replaces nested objects whole, so none is mutated.
+  const buildFormData = () => ({
     realtime: {
       dashboard: {
         thumbnails: { summary: true, recent: true, imageProvider: 'avicommons' },
@@ -33,7 +35,7 @@ function seedStore(dashboardOverrides: Record<string, unknown> = {}) {
       },
       audio: { export: { type: 'flac', denoise: { enabled: false, strength: 'light-medium' } } },
     },
-  };
+  });
   // The seeded store holds only the sections the page reads, not a full form type.
   settingsStore.update(
     store =>
@@ -42,8 +44,8 @@ function seedStore(dashboardOverrides: Record<string, unknown> = {}) {
         isLoading: false,
         isSaving: false,
         dataLoaded: true,
-        originalData: JSON.parse(JSON.stringify(formData)) as typeof formData,
-        formData: JSON.parse(JSON.stringify(formData)) as typeof formData,
+        originalData: buildFormData(),
+        formData: buildFormData(),
       }) as unknown as typeof store
   );
 }
@@ -56,6 +58,7 @@ async function renderTab(dashboardOverrides: Record<string, unknown> = {}) {
   return slider;
 }
 
+// The store's form data is a loose type; read back only the one section under test.
 function dashboard(source: 'formData' | 'originalData'): DashboardView {
   const data = get(settingsStore)[source] as unknown as { realtime: { dashboard: DashboardView } };
   return data.realtime.dashboard;
