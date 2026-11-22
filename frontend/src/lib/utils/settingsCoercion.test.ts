@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { coerceSettings } from './settingsCoercion';
 import { hasSettingsChanged } from './settingsChanges';
+import { isPlainObject } from './security';
 
 describe('settingsCoercion realtime rtsp streams', () => {
   it('defaults missing stream enabled flag to true', () => {
@@ -475,13 +476,12 @@ describe('settingsCoercion realtime dashboard playbackDenoise', () => {
 });
 
 describe('settingsCoercion realtime dashboard playback defaults', () => {
-  // coerceSettings returns a loose object; read back only the dashboard fields under test.
-  const dashboardOf = (dashboard: Record<string, unknown>) =>
-    (
-      coerceSettings('realtime', { dashboard }) as {
-        dashboard: { playback: unknown; defaultAudioGain?: number };
-      }
-    ).dashboard;
+  // coerceSettings returns a loose object; narrow it to the dashboard section under test.
+  const dashboardOf = (dashboard: Record<string, unknown>) => {
+    const section = coerceSettings('realtime', { dashboard }).dashboard;
+    if (!isPlainObject(section)) throw new Error('the coerced realtime section has no dashboard');
+    return section;
+  };
 
   it('backfills a missing playback object as the filter off (older server)', () => {
     expect(dashboardOf({ summaryLimit: 30 }).playback).toEqual({ highPassHz: 0 });
