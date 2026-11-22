@@ -222,6 +222,18 @@ describe('timeExpandAudio', () => {
 
     const zeroPayloadWav = buildTestWav({ sampleRate: 256000, sampleCount: 0 });
     expect(() => rewriteWavSampleRate(zeroPayloadWav, 10)).toThrow('zero audio bytes');
+
+    // Zero-size data chunk followed by a LIST metadata chunk has zero audio bytes.
+    const listPayload = 12;
+    const withTrailingList = new ArrayBuffer(zeroPayloadWav.byteLength + 8 + listPayload);
+    new Uint8Array(withTrailingList).set(new Uint8Array(zeroPayloadWav), 0);
+    const listView = new DataView(withTrailingList);
+    listView.setUint32(4, withTrailingList.byteLength - 8, true);
+    const listOff = zeroPayloadWav.byteLength;
+    writeAscii(listView, listOff, 'LIST');
+    listView.setUint32(listOff + 4, listPayload, true);
+    writeAscii(listView, listOff + 8, 'INFOINAM');
+    expect(() => rewriteWavSampleRate(withTrailingList, 10)).toThrow('zero audio bytes');
   });
 
   it('rewrites truncated and 0xFFFFFFFF unknown-size WAV data chunks', async () => {
@@ -246,6 +258,17 @@ describe('timeExpandAudio', () => {
     expect(readWavHeaderSampleRate(streamOut)).toEqual({
       sampleRate: 16000,
       byteRate: 16000 * 2,
+    });
+
+    // Unfinalized streaming writer with zeroed RIFF + data sizes followed by PCM payload.
+    const unfinalized = fullWav.slice(0);
+    const unfinView = new DataView(unfinalized);
+    unfinView.setUint32(4, 0, true);
+    unfinView.setUint32(40, 0, true);
+    const unfinOut = await rewriteWavSampleRate(unfinalized, 10).arrayBuffer();
+    expect(readWavHeaderSampleRate(unfinOut)).toEqual({
+      sampleRate: 25600,
+      byteRate: 25600 * 2,
     });
   });
 

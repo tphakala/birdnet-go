@@ -105,6 +105,28 @@ function readAscii4(bytes: Uint8Array, offset: number): string {
   );
 }
 
+function isPrintableAscii4(bytes: Uint8Array, offset: number): boolean {
+  for (let i = 0; i < 4; i++) {
+    const ch = bytes.at(offset + i) ?? 0;
+    if (ch < 0x20 || ch > 0x7e) return false;
+  }
+  return true;
+}
+
+function hasTrailingRiffChunks(bytes: Uint8Array, view: DataView, startOffset: number): boolean {
+  let off = startOffset;
+  let count = 0;
+  while (off + CHUNK_HEADER_SIZE <= bytes.byteLength) {
+    if (!isPrintableAscii4(bytes, off)) return false;
+    const size = view.getUint32(off + 4, true);
+    const paddedEnd = off + CHUNK_HEADER_SIZE + size + (size & 1);
+    if (paddedEnd > bytes.byteLength) return false;
+    off = paddedEnd;
+    count++;
+  }
+  return count > 0 && off === bytes.byteLength;
+}
+
 function writeAscii4(view: DataView, offset: number, text: string): void {
   for (let i = 0; i < 4; i++) {
     view.setUint8(offset + i, text.charCodeAt(i));
@@ -216,7 +238,10 @@ export function rewriteWavSampleRate(buffer: ArrayBuffer, expansion: number): Bl
     const payloadOffset = offset + CHUNK_HEADER_SIZE;
 
     if (chunkId === 'data') {
-      if (payloadOffset >= bytes.byteLength) {
+      const hasZeroPayload =
+        payloadOffset >= bytes.byteLength ||
+        (chunkSize === 0 && hasTrailingRiffChunks(bytes, view, payloadOffset));
+      if (hasZeroPayload) {
         throw new TimeExpandAudioError('empty_audio', 'WAV file contains zero audio bytes');
       }
       sawDataChunk = true;
