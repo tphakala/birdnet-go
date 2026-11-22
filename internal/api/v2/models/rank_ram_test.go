@@ -125,3 +125,17 @@ func TestRepresentativeTable(t *testing.T) {
 	assert.Same(t, b, representativeTable(map[string]*region.Table{"a": a, "b": b}), "the larger table wins over a lower repo id")
 	assert.Same(t, b, representativeTable(map[string]*region.Table{"a": a, "b": b, "c": c}), "a tie goes to the lowest repo id")
 }
+
+// TestBuildRegionOptions_SkipsNilTable pins that a nil table in the map is skipped
+// instead of dereferenced, whatever its position in repo order.
+func TestBuildRegionOptions_SkipsNilTable(t *testing.T) {
+	t.Parallel()
+	present := &region.Table{Repo: "a", Regions: map[string]region.Region{"x": {}}}
+
+	var opts []RegionOption
+	require.NotPanics(t, func() {
+		opts = buildRegionOptions(map[string]*region.Table{"a": present, "b": nil})
+	})
+	require.Len(t, opts, 1)
+	assert.Equal(t, "x", opts[0].Slug)
+}

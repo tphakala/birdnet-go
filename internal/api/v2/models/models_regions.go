@@ -226,6 +226,9 @@ func buildRegionOptions(tables map[string]*region.Table) []RegionOption {
 	seen := make(map[string]RegionOption)
 	for _, repo := range slices.Sorted(maps.Keys(tables)) {
 		tbl := tables[repo]
+		if tbl == nil {
+			continue
+		}
 		for slug := range tbl.Regions {
 			if _, ok := seen[slug]; ok {
 				continue
