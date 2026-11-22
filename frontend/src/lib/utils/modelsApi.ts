@@ -89,8 +89,8 @@ export async function installModel(
 
 /**
  * Ask the server to cancel the install or variant swap running for a model. The
- * outcome (cancelled, or complete when activation had already started) arrives over
- * the progress stream. Rejects with an ApiError, errorKey
+ * outcome (cancelled) arrives over the progress stream. A cancel sent after
+ * activation started is refused and the install completes. Rejects with an ApiError, errorKey
  * 'analysis.gallery.errors.cancelUnavailable' when the download can no longer be
  * cancelled.
  */

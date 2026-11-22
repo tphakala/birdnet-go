@@ -1244,10 +1244,11 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 
 // CancelInstall handles POST /api/v2/models/install/:id/cancel. It cancels the
 // install or variant swap running for the entry and answers 202 with status
-// "cancelling"; the outcome (cancelled, or complete when activation had already
-// started) arrives over the progress stream. A reinstall is not cancellable, and a
-// cancel that cannot be honoured, because no install runs for the entry or its
-// activation has started, gets a 409 with cancelUnavailableKey and changes nothing.
+// "cancelling"; the outcome (cancelled) arrives over the progress stream. A
+// reinstall is not cancellable, and a cancel that cannot be honoured, because no
+// install runs for the entry, its download has ended or its activation has started,
+// gets a 409 with cancelUnavailableKey and changes nothing; the install then
+// completes as it would have.
 func (c *Handler) CancelInstall(ctx echo.Context) error {
 	catalogID := ctx.Param("id")
 	if catalogID == "" {

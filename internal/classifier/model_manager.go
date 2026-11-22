@@ -49,8 +49,8 @@ const (
 	StatusRemoved   = "removed"
 )
 
-// failedStateRetention is how long a failed download state is kept in the
-// downloading map so SSE pollers can observe the failure before cleanup.
+// failedStateRetention is how long a failed or cancelled download state is kept in
+// the downloading map so SSE pollers can observe the outcome before cleanup.
 const failedStateRetention = 30 * time.Second
 
 // diskSpaceMarginBytes is the free-space headroom required beyond a download's
