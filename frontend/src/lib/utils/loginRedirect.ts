@@ -19,8 +19,10 @@ import { buildAppUrl, getAppBasePath, isRelativePath } from './urlHelpers';
 export const LOGIN_ROUTE_PATH = ['', 'ui', 'login'].join('/');
 /** The path the backend redirects to; the navigation store prefixes it to the login route. */
 export const LEGACY_LOGIN_PATH = ['', 'login'].join('/');
+/** The dashboard route, the app's default page. */
+export const DASHBOARD_PATH = ['', 'ui', 'dashboard'].join('/');
 /** Where a login goes when the redirect parameter is missing or not acceptable. */
-export const DEFAULT_LOGIN_TARGET = ['', 'ui', 'dashboard'].join('/');
+export const DEFAULT_LOGIN_TARGET = DASHBOARD_PATH;
 /** Query parameter that carries the post-login target (set by the backend middleware). */
 export const LOGIN_REDIRECT_PARAM = 'redirect';
 

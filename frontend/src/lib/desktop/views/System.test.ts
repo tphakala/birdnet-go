@@ -5,6 +5,7 @@ import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
 import { setCsrfToken } from '$lib/stores/appState.svelte';
 import { connectionState } from '$lib/stores/connectionState.svelte';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 import { deferred } from '../../../test/async-helpers';
 import System from './System.svelte';
 
@@ -25,13 +26,13 @@ const HISTORY_URL = '/api/v2/system/metrics/history';
 /** The history request of a host with no models; held by its full URL, query included. */
 const HISTORY_REQUEST = `${HISTORY_URL}?points=60&metrics=cpu.total,memory.used_percent,cpu.temperature`;
 
-// jsdom has no EventSource; count what the view opens and closes
-const stream = vi.hoisted(() => ({ opened: 0, closed: 0 }));
+// jsdom has no EventSource; record the URL of each stream the view opens and count closes
+const stream = vi.hoisted(() => ({ closed: 0, urls: new Array<string>() }));
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class {
-    constructor() {
-      stream.opened++;
+    constructor(url: string) {
+      stream.urls.push(url);
     }
     addEventListener() {}
     close() {
@@ -155,8 +156,8 @@ describe('System view', () => {
     requests = [];
     held = new Map();
     failures = new Map();
-    stream.opened = 0;
     stream.closed = 0;
+    stream.urls.length = 0;
     navigation.navigate(OVERVIEW_PATH);
     setCsrfToken('token-1');
     vi.mocked(fetch).mockImplementation(input => answer(String(input)));
@@ -168,6 +169,16 @@ describe('System view', () => {
     vi.mocked(fetch).mockReset();
     if (originalFetch) vi.mocked(fetch).mockImplementation(originalFetch);
     connectionState.isOnline = true;
+    resetBasePath();
+  });
+
+  it('opens the live metrics stream under the reverse proxy prefix', async () => {
+    // BirdNET-Go served by a proxy at /birdnet, which does not rewrite response bodies.
+    setBasePath('/birdnet');
+    await mountAt(OVERVIEW_PATH);
+
+    expect(stream.urls).toHaveLength(1);
+    expect(stream.urls[0]).toMatch(/^\/birdnet\/api\/v2\/system\/metrics\/stream\?metrics=/);
   });
 
   it('shows the labelled loading state until the process list answers, then on a Show All switch', async () => {
@@ -539,14 +550,14 @@ describe('System view', () => {
   it('a CSRF token change does not reload the page or reconnect the metrics stream', async () => {
     await mountAt(OVERVIEW_PATH);
     expect(count(INFO_URL)).toBe(1);
-    expect(stream.opened).toBe(1);
+    expect(stream.urls).toHaveLength(1);
 
     setCsrfToken('token-2');
     flushSync();
     await flush();
 
     expect(count(INFO_URL)).toBe(1);
-    expect(stream.opened).toBe(1);
+    expect(stream.urls).toHaveLength(1);
     expect(stream.closed).toBe(0);
   });
 });

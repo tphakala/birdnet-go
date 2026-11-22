@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import SupportDumpCard from './SupportDumpCard.svelte';
 import { api } from '$lib/utils/api';
 import { unsavedChanges, type NavigationTarget } from '$lib/stores/unsavedChanges.svelte';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 
 vi.mock('$lib/utils/api', async importOriginal => ({
   ...(await importOriginal<typeof import('$lib/utils/api')>()),
@@ -29,9 +30,21 @@ describe('SupportDumpCard unsaved-changes guard', () => {
   afterEach(() => {
     cleanup();
     unsavedChanges.resetForTesting();
+    resetBasePath();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
+
+  /** Records the href and download attribute of every anchor the card clicks. */
+  function captureAnchorClicks(): Array<{ href: string | null; download: boolean }> {
+    const clicked: Array<{ href: string | null; download: boolean }> = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement
+    ) {
+      clicked.push({ href: this.getAttribute('href'), download: this.hasAttribute('download') });
+    });
+    return clicked;
+  }
 
   async function typeMessage(text: string) {
     render(SupportDumpCard);
@@ -77,12 +90,7 @@ describe('SupportDumpCard unsaved-changes guard', () => {
 
   it('downloads a local dump through an anchor and does not navigate the page', async () => {
     const hrefBefore = window.location.href;
-    const clicked: Array<{ href: string | null; download: boolean }> = [];
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
-      this: HTMLAnchorElement
-    ) {
-      clicked.push({ href: this.getAttribute('href'), download: this.hasAttribute('download') });
-    });
+    const clicked = captureAnchorClicks();
     await typeMessage('');
 
     await generateLocalDownload();
@@ -90,5 +98,42 @@ describe('SupportDumpCard unsaved-changes guard', () => {
 
     expect(clicked).toEqual([{ href: DOWNLOAD_URL, download: true }]);
     expect(window.location.href).toBe(hrefBefore);
+  });
+
+  it('downloads a local dump under the reverse proxy prefix', async () => {
+    // The server returns an unprefixed download_url; a proxy at /birdnet does not rewrite it.
+    setBasePath('/birdnet');
+    const clicked = captureAnchorClicks();
+    await typeMessage('');
+
+    await generateLocalDownload();
+    await vi.advanceTimersByTimeAsync(DOWNLOAD_DELAY_MS);
+
+    expect(clicked).toEqual([{ href: `/birdnet${DOWNLOAD_URL}`, download: true }]);
+  });
+
+  it('does not download when the server returns a non-relative download_url', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      success: true,
+      download_url: 'https://example.com/support/dump-1.zip',
+    });
+    const clicked = captureAnchorClicks();
+    await typeMessage('');
+
+    await generateLocalDownload();
+    await vi.advanceTimersByTimeAsync(DOWNLOAD_DELAY_MS);
+
+    expect(clicked).toEqual([]);
+  });
+
+  it('does not download when the server returns no download_url', async () => {
+    vi.mocked(api.post).mockResolvedValue({ success: true });
+    const clicked = captureAnchorClicks();
+    await typeMessage('');
+
+    await generateLocalDownload();
+    await vi.advanceTimersByTimeAsync(DOWNLOAD_DELAY_MS);
+
+    expect(clicked).toEqual([]);
   });
 });

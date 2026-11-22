@@ -1,9 +1,10 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { t } from '$lib/i18n';
   import { appState } from '$lib/stores/appState.svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { buildLoginUrl } from '$lib/utils/loginRedirect';
+  import { buildLoginUrl, DASHBOARD_PATH } from '$lib/utils/loginRedirect';
 
   interface SecuritySettings {
     enabled: boolean;
@@ -56,7 +57,7 @@
     <!-- Link Buttons -->
     <div class="mt-8 space-x-4">
       <a
-        href="/"
+        href={buildAppUrl(DASHBOARD_PATH)}
         class="btn btn-primary normal-case text-base font-semibold transition duration-300"
       >
         {t('common.goToDashboard')}

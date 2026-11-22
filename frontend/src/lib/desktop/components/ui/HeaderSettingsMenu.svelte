@@ -28,11 +28,9 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import Kbd from '$lib/desktop/components/ui/Kbd.svelte';
   import { HELP_SHORTCUT_ID, shortcuts } from '$lib/stores/shortcuts.svelte';
+  import { DASHBOARD_PATH } from '$lib/utils/loginRedirect';
 
   const logger = getLogger('dashboard');
-
-  // Built with join so proxy sub_filter rewriting of quoted '/ui/...' strings cannot corrupt it.
-  const DASHBOARD_PATH = ['', 'ui', 'dashboard'].join('/');
 
   interface Props {
     securityEnabled?: boolean;

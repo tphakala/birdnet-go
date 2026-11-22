@@ -3,6 +3,7 @@ import { t } from '$lib/i18n';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 import SystemInference from './SystemInference.svelte';
 import type {
   InferenceStatusResponse,
@@ -36,9 +37,14 @@ vi.mock('$lib/utils/api', () => ({
 // the registered listeners so tests can fire SSE events (e.g. a topology change)
 // without opening a real EventSource.
 const sseListeners = new Map<string, (event: Event) => void>();
+// The URL of each stream the view opened, to check the reverse proxy prefix.
+const streamUrls: string[] = [];
 
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class ReconnectingEventSource {
+    constructor(url: string) {
+      streamUrls.push(url);
+    }
     addEventListener(type: string, listener: (event: Event) => void): void {
       sseListeners.set(type, listener);
     }
@@ -146,10 +152,29 @@ describe('SystemInference', () => {
     vi.clearAllMocks();
     // Reset captured SSE listeners so each test starts from a clean slate.
     sseListeners.clear();
+    streamUrls.length = 0;
   });
 
   afterEach(() => {
     cleanup();
+    resetBasePath();
+  });
+
+  it('opens the live metrics stream under the reverse proxy prefix', async () => {
+    // BirdNET-Go served by a proxy at /birdnet, which does not rewrite response bodies.
+    setBasePath('/birdnet');
+    // The view connects the stream once the history request succeeds; it polls when there
+    // are no models or the request fails.
+    installApi(makeSnapshot([makeModel({ id: 'model-1', name: 'BirdNET GLOBAL 6K' })]), {
+      metrics: {
+        'inference.model-1.avg_ms': [{ timestamp: '2026-06-18T00:00:00Z', value: 47.2 }],
+      },
+    });
+
+    inferenceTest.render({});
+
+    await waitFor(() => expect(streamUrls).toHaveLength(1));
+    expect(streamUrls[0]).toMatch(/^\/birdnet\/api\/v2\/system\/metrics\/stream\?metrics=/);
   });
 
   it('shows a card skeleton, not a spinner, while the snapshot request is pending', async () => {
@@ -812,9 +837,9 @@ describe('SystemInference', () => {
     // Topology event name must match the backend constant and the component.
     const TOPOLOGY_EVENT = 'system.inference_topology_changed';
 
-    // Start with a single model. A non-empty history seed makes the component
-    // connect the SSE stream (and register the topology listener), rather than
-    // falling back to polling.
+    // Start with a single model. A successful history request makes the component
+    // connect the SSE stream (and register the topology listener); it falls back
+    // to polling when there are no models or that request fails.
     const firstModel = makeModel({ id: 'model-1', name: 'BirdNET GLOBAL 6K' });
     const firstHistory = {
       metrics: {

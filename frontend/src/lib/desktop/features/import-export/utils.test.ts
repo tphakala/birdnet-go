@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 import {
+  buildDetectionsFilterUrl,
+  connectImportProgressStream,
   deriveSourceStepState,
   importProgressPercent,
   isUnreadable,
@@ -7,6 +10,19 @@ import {
   STREAM_STALL_THRESHOLD,
 } from './utils';
 import type { ImportProgress, ImportSourcesResponse, SourceCandidate } from './types';
+
+// The URL of each stream opened; the mock constructor reads it only after the module loaded.
+const streamUrls: string[] = [];
+
+vi.mock('$lib/utils/ReconnectingEventSource', () => ({
+  ReconnectingEventSource: class {
+    addEventListener = vi.fn();
+    close = vi.fn();
+    constructor(url: string) {
+      streamUrls.push(url);
+    }
+  },
+}));
 
 function candidate(overrides: Partial<SourceCandidate> = {}): SourceCandidate {
   return {
@@ -118,5 +134,46 @@ describe('shouldReconcileStalledStream', () => {
     expect(shouldReconcileStalledStream(STREAM_STALL_THRESHOLD + 1)).toBe(false);
     expect(shouldReconcileStalledStream(STREAM_STALL_THRESHOLD * 2)).toBe(true);
     expect(shouldReconcileStalledStream(STREAM_STALL_THRESHOLD * 3)).toBe(true);
+  });
+});
+
+describe('reverse proxy prefix', () => {
+  // BirdNET-Go served by a proxy at /birdnet, which does not rewrite response bodies.
+  const PROXY_PREFIX = '/birdnet';
+
+  afterEach(() => {
+    resetBasePath();
+    streamUrls.length = 0;
+  });
+
+  it('builds the imported detections link under the proxy prefix', () => {
+    setBasePath(PROXY_PREFIX);
+    expect(buildDetectionsFilterUrl()).toBe('/birdnet/ui/detections?source=birdnet-pi');
+  });
+
+  it('opens the import progress stream under the proxy prefix', () => {
+    setBasePath(PROXY_PREFIX);
+    connectImportProgressStream('job-1', {
+      onProgress: vi.fn(),
+      onComplete: vi.fn(),
+      onCancelled: vi.fn(),
+      onError: vi.fn(),
+    });
+    expect(streamUrls).toEqual(['/birdnet/api/v2/import/jobs/job-1/progress']);
+  });
+
+  it('encodes the job id in the import progress stream URL', () => {
+    connectImportProgressStream('job/1?x#y', {
+      onProgress: vi.fn(),
+      onComplete: vi.fn(),
+      onCancelled: vi.fn(),
+      onError: vi.fn(),
+    });
+    expect(streamUrls).toEqual(['/api/v2/import/jobs/job%2F1%3Fx%23y/progress']);
+  });
+
+  it('keeps unprefixed URLs when no proxy prefix is set', () => {
+    setBasePath('');
+    expect(buildDetectionsFilterUrl()).toBe('/ui/detections?source=birdnet-pi');
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { t } from '$lib/i18n';
@@ -21,15 +21,22 @@ vi.mock('$lib/utils/api', async importOriginal => ({
   api: { get: apiGet, post: apiPost },
 }));
 
+// The URL of each stream opened; the mock constructor reads it only after the module loaded.
+const streamUrls: string[] = [];
+
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class {
     addEventListener = vi.fn();
     close = vi.fn();
+    constructor(url: string) {
+      streamUrls.push(url);
+    }
   },
 }));
 
 import { ApiError } from '$lib/utils/api';
 import { connectionState } from '$lib/stores/connectionState.svelte';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 import DatabaseDashboard from './DatabaseDashboard.svelte';
 import { renderTyped } from '../../../../test/render-helpers';
 import { deferred } from '../../../../test/async-helpers';
@@ -1721,5 +1728,32 @@ describe('DatabaseDashboard initial load', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('DatabaseDashboard metrics stream', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+    streamUrls.length = 0;
+  });
+
+  afterEach(() => {
+    resetBasePath();
+  });
+
+  it('opens the live metrics stream under the reverse proxy prefix', async () => {
+    // BirdNET-Go served by a proxy at /birdnet, which does not rewrite response bodies.
+    setBasePath('/birdnet');
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: overview });
+
+    renderTyped(DatabaseDashboard);
+
+    await waitFor(() =>
+      expect(streamUrls).toEqual([
+        '/birdnet/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec',
+      ])
+    );
   });
 });
