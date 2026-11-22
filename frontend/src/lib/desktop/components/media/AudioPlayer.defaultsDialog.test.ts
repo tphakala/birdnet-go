@@ -347,6 +347,59 @@ describe('AudioPlayer playback defaults dialog', () => {
     expect(openDialogCount()).toBe(0);
   });
 
+  describe('Escape with a clip selection', () => {
+    const SKIP_TO_START_LABEL = 'components.audioPlayer.processing.skipToStart';
+    const SELECTION_START_PX = 40;
+    const SELECTION_END_PX = 200;
+    const originalRect = Element.prototype.getBoundingClientRect;
+
+    beforeEach(() => {
+      Element.prototype.getBoundingClientRect = () =>
+        new DOMRect(0, 0, WIDE_CONTAINER_PX, WIDE_CONTAINER_PX);
+    });
+
+    afterEach(() => {
+      Element.prototype.getBoundingClientRect = originalRect;
+    });
+
+    async function selectRange(container: HTMLElement) {
+      const playerRoot = container.firstElementChild;
+      if (!(playerRoot instanceof HTMLElement)) throw new Error('player container missing');
+      await fireEvent.mouseDown(playerRoot, { button: 0, clientX: SELECTION_START_PX });
+      await fireEvent.mouseMove(document, { buttons: 1, clientX: SELECTION_END_PX });
+      await fireEvent.mouseUp(document, { clientX: SELECTION_END_PX });
+    }
+
+    const hasSelection = () => screen.getByLabelText(SKIP_TO_START_LABEL).matches(':enabled');
+
+    it('closes only the dialog and keeps the selection', async () => {
+      const { container } = mount();
+      ctl.completeLoad();
+      await settle();
+      await selectRange(container);
+      expect(hasSelection()).toBe(true);
+
+      await openDialog();
+      await fireEvent.keyDown(document, { key: 'Escape' });
+      await settle();
+
+      expect(openDialogCount()).toBe(0);
+      expect(hasSelection()).toBe(true);
+    });
+
+    it('still clears the selection when no dialog is open', async () => {
+      const { container } = mount();
+      ctl.completeLoad();
+      await settle();
+      await selectRange(container);
+
+      await fireEvent.keyDown(document, { key: 'Escape' });
+      await settle();
+
+      expect(hasSelection()).toBe(false);
+    });
+  });
+
   it('closes the dialog when the player moves to another clip', async () => {
     const view = mount();
     await settle();

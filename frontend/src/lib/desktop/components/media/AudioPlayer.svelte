@@ -38,6 +38,7 @@
   import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import AudioToolbar from './AudioToolbar.svelte';
   import PlaybackDefaultsModal from '$lib/desktop/components/modals/PlaybackDefaultsModal.svelte';
+  import { openDialogCount } from '$lib/desktop/components/ui/Modal.svelte';
   import { isAuthenticated } from '$lib/utils/auth';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -2378,6 +2379,9 @@
   });
 
   const handleSelectionKeydown = (e: KeyboardEvent) => {
+    // A key pressed while a dialog is open belongs to that dialog (Escape closes it),
+    // even when the dialog was opened from this player
+    if (openDialogCount() > 0) return;
     if (e.key === 'Escape' && (selectionStartSec !== null || selectionEndSec !== null)) {
       clearSelection();
     }
