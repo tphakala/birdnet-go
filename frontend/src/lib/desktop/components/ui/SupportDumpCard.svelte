@@ -1,6 +1,6 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { buildAppUrl, isRelativePath } from '$lib/utils/urlHelpers';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { Check, Globe, ShieldCheck, Info, Download, XCircle, CircleCheck } from '@lucide/svelte';
   import { onMount } from 'svelte';
@@ -209,7 +209,7 @@
               100
             );
           }
-        } else if (data.download_url) {
+        } else if (data.download_url && isRelativePath(data.download_url)) {
           updateStatus(
             t('settings.support.supportReport.statusMessages.downloadSuccess'),
             'success',

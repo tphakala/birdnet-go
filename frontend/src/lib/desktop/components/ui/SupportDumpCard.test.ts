@@ -111,4 +111,29 @@ describe('SupportDumpCard unsaved-changes guard', () => {
 
     expect(clicked).toEqual([{ href: `/birdnet${DOWNLOAD_URL}`, download: true }]);
   });
+
+  it('does not download when the server returns a non-relative download_url', async () => {
+    vi.mocked(api.post).mockResolvedValue({
+      success: true,
+      download_url: 'https://example.com/support/dump-1.zip',
+    });
+    const clicked = captureAnchorClicks();
+    await typeMessage('');
+
+    await generateLocalDownload();
+    await vi.advanceTimersByTimeAsync(DOWNLOAD_DELAY_MS);
+
+    expect(clicked).toEqual([]);
+  });
+
+  it('does not download when the server returns no download_url', async () => {
+    vi.mocked(api.post).mockResolvedValue({ success: true });
+    const clicked = captureAnchorClicks();
+    await typeMessage('');
+
+    await generateLocalDownload();
+    await vi.advanceTimersByTimeAsync(DOWNLOAD_DELAY_MS);
+
+    expect(clicked).toEqual([]);
+  });
 });

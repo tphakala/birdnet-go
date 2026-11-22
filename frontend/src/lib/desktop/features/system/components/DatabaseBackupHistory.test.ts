@@ -51,6 +51,20 @@ describe('DatabaseBackupHistory', () => {
     );
   });
 
+  it('shows no download link for a non-relative download_url', () => {
+    renderHistory({
+      backups: [{ ...completedBackup, download_url: 'https://example.com/backup.db' }],
+    });
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('shows no download link for a completed backup without a download_url', () => {
+    renderHistory({ backups: [completedBackup] });
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
   it('says there are no backups when the list is empty and nothing failed', () => {
     renderHistory();
 
