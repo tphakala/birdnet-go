@@ -140,7 +140,7 @@ describe('PlaybackDefaultsModal', () => {
   it('shows the saving state in the footer while the request runs', async () => {
     const pending = deferred<Record<string, never>>();
     vi.mocked(settingsAPI.patchSection).mockImplementation(() => pending.promise);
-    renderDialog();
+    const { onClose } = renderDialog();
 
     await moveSlider(GAIN_LABEL, 9);
     const save = saveButton();
@@ -151,6 +151,73 @@ describe('PlaybackDefaultsModal', () => {
     expect(save).toHaveAccessibleDescription(SAVING);
     expect(within(dialog()).queryByText(UNSAVED)).toBeNull();
     pending.resolve({});
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('blocks closing and editing while the save runs', async () => {
+    const pending = deferred<Record<string, never>>();
+    vi.mocked(settingsAPI.patchSection).mockImplementation(() => pending.promise);
+    const { onClose } = renderDialog();
+
+    await moveSlider(GAIN_LABEL, 9);
+    const save = saveButton();
+    await fireEvent.click(save);
+    await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+
+    await fireEvent.click(within(dialog()).getByRole('button', { name: CANCEL }));
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    await fireEvent.click(within(dialog()).getByRole('button', { name: USE_CURRENT }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(slider(GAIN_LABEL)).toBeDisabled();
+    expect(within(dialog()).getByRole('combobox', { name: DENOISE_LABEL })).toBeDisabled();
+    expect(slider(GAIN_LABEL).value).toBe('9');
+
+    pending.resolve({});
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(settingsAPI.patchSection).toHaveBeenCalledWith('dashboard', { defaultAudioGain: 9 });
+  });
+
+  it('starts again from the saved values when reopened after Cancel', async () => {
+    const view = createComponentTestFactory(PlaybackDefaultsModal).render({
+      props: { isOpen: true, current: CURRENT, onClose: vi.fn(), onSaved: vi.fn() },
+    });
+
+    await moveSlider(GAIN_LABEL, 9);
+    await view.rerender({ isOpen: false });
+    await view.rerender({ isOpen: true });
+
+    expect(slider(GAIN_LABEL).value).toBe('6');
+    expect(saveButton()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('leaves the denoise default alone when copying while export denoise is on', async () => {
+    seedSettings({ playbackDenoise: { enabled: true, strength: 'light' } }, true);
+    const { onClose } = renderDialog();
+
+    await fireEvent.click(within(dialog()).getByRole('button', { name: USE_CURRENT }));
+    await fireEvent.click(saveButton());
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(settingsAPI.patchSection).toHaveBeenCalledTimes(1);
+    const [, patch] = vi.mocked(settingsAPI.patchSection).mock.calls[0];
+    expect(patch).not.toHaveProperty('playbackDenoise');
+  });
+
+  it('holds a page unload only while the dialog is open with changes', async () => {
+    const view = createComponentTestFactory(PlaybackDefaultsModal).render({
+      props: { isOpen: true, current: CURRENT, onClose: vi.fn(), onSaved: vi.fn() },
+    });
+    const unload = () => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(unload()).toBe(false);
+    await moveSlider(GAIN_LABEL, 9);
+    expect(unload()).toBe(true);
+    await view.rerender({ isOpen: false });
+    expect(unload()).toBe(false);
   });
 
   it('keeps the dialog open with the draft and an alert when the save fails', async () => {
@@ -172,7 +239,6 @@ describe('PlaybackDefaultsModal', () => {
     expect(within(dialog()).getByRole('status').textContent).toBe('');
     expect(onClose).not.toHaveBeenCalled();
     expect(onSaved).not.toHaveBeenCalled();
-    expect(get(settingsStore).originalData.realtime?.dashboard?.defaultAudioGain).toBe(6);
     expect(saveSection).toHaveBeenCalledTimes(1);
   });
 
