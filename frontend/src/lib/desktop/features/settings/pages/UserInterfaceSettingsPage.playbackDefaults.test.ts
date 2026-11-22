@@ -9,6 +9,8 @@ const TAB_LABEL = 'settings.userInterface.tabs.audioPlayback';
 const GAIN_LABEL = 'settings.userInterface.audioPlayback.defaultGain';
 const HIGH_PASS_LABEL = 'settings.userInterface.audioPlayback.highPassLabel';
 const HIGH_PASS_OFF = 'settings.userInterface.audioPlayback.highPassOff';
+const TAB_CHANGED = 'settings.tabs.hasChanges';
+const CARD_CHANGED = 'settings.card.changed';
 
 interface DashboardView {
   defaultAudioGain: number;
@@ -98,6 +100,18 @@ describe('UserInterfaceSettingsPage playback defaults sliders', () => {
     expect(
       screen.getByText('300 settings.userInterface.audioPlayback.highPassUnit')
     ).toBeInTheDocument();
+  });
+
+  it('marks the tab and the section changed once the cutoff moves, and not before', async () => {
+    const slider = await renderTab();
+    const tab = screen.getByRole('tab', { name: new RegExp(TAB_LABEL) });
+    expect(tab).not.toHaveAccessibleDescription(TAB_CHANGED);
+    expect(screen.queryByText(CARD_CHANGED)).toBeNull();
+
+    await fireEvent.input(slider, { target: { value: '300' } });
+
+    expect(tab).toHaveAccessibleDescription(TAB_CHANGED);
+    expect(screen.getByText(CARD_CHANGED)).toBeInTheDocument();
   });
 
   it('stores the floor as 0, not 20', async () => {
