@@ -57,15 +57,35 @@ export function formatPlaybackGain(db: number, unit: string): string {
   return `${value > 0 ? '+' : ''}${value} ${unit}`;
 }
 
-/** Stored default to the cutoff a player starts with; anything below the floor is the floor. */
-export function highPassFromStored(hz: unknown): number {
+/** A cutoff rounded to whole Hz and held to the player's range; anything that is not a number is the floor. */
+function clampHighPass(hz: unknown): number {
   if (typeof hz !== 'number' || !Number.isFinite(hz)) return PLAYBACK_HIGH_PASS_MIN_HZ;
   return clampToRange(Math.round(hz), PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
 }
 
-/** Player cutoff (or an already stored value) to the stored default: the floor is stored as "off". */
+/**
+ * Stored default to the cutoff a player starts with: held to the player's range
+ * and snapped to the slider's step, so the thumb, its label and the filter agree
+ * (a hand-edited 21 Hz starts at the floor, 333 Hz at 330). Anything below the
+ * floor is the floor.
+ */
+export function highPassFromStored(hz: unknown): number {
+  const cutoff = clampHighPass(hz);
+  const steps = Math.round((cutoff - PLAYBACK_HIGH_PASS_MIN_HZ) / PLAYBACK_HIGH_PASS_STEP_HZ);
+  return clampToRange(
+    PLAYBACK_HIGH_PASS_MIN_HZ + steps * PLAYBACK_HIGH_PASS_STEP_HZ,
+    PLAYBACK_HIGH_PASS_MIN_HZ,
+    PLAYBACK_HIGH_PASS_MAX_HZ
+  );
+}
+
+/**
+ * Player cutoff (or an already stored value) to the stored default: the floor is
+ * stored as "off". Other values are kept as they are, off the slider's step
+ * included, because the server keeps them.
+ */
 export function highPassToStored(hz: unknown): number {
-  const cutoff = highPassFromStored(hz);
+  const cutoff = clampHighPass(hz);
   return cutoff <= PLAYBACK_HIGH_PASS_MIN_HZ ? PLAYBACK_HIGH_PASS_STORED_OFF_HZ : cutoff;
 }
 
