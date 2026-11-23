@@ -17,8 +17,7 @@ const (
 	// speciesQueryParam is the repeatable query parameter that carries the species names.
 	speciesQueryParam = "species"
 	// maxCoverageSpecies is the most species names one request may carry, counted
-	// after trimming and dropping blanks. It matches the order of the detection
-	// batch limit, so a settings page can send a long rule list in one call.
+	// after trimming and dropping blanks.
 	maxCoverageSpecies = 500
 )
 
