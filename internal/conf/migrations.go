@@ -514,7 +514,10 @@ func readLegacyModelConsensus() (legacyModelConsensus, error) {
 // makes an every-species rule, otherwise listedspecies with at least one non-blank
 // species makes a rule for those species; nothing else makes a rule. An unusable
 // minmodels becomes the default, as normalization did before. read supplies the old
-// keys; a read error creates no rule and is recorded as a warning. Returns true when
+// keys. A read error aborts the conversion: it is recorded as a warning, no rule is
+// created and the version is not stamped, so nothing is persisted and the next start
+// retries with the old keys still in the file. Load carries on with the filter off,
+// since a removed setting must not stop the station from starting. Returns true when
 // the version was stamped.
 func (s *Settings) migrateModelConsensusRules(read func() (legacyModelConsensus, error)) bool {
 	if s.ConfigVersion >= configVersionModelConsensusRules {
@@ -524,7 +527,9 @@ func (s *Settings) migrateModelConsensusRules(read func() (legacyModelConsensus,
 	if err != nil {
 		s.recordValidationWarning(warnComponentRealtime,
 			"the old model consensus settings could not be read; no consensus rule was created: %v", err)
-	} else if rule, ok := legacy.rule(); ok {
+		return false
+	}
+	if rule, ok := legacy.rule(); ok {
 		m := &s.Realtime.ModelConsensus
 		m.Rules = append(m.Rules, rule)
 		GetLogger().Info("Converted the old model consensus settings to a rule",

@@ -77,15 +77,15 @@ func TestMigrateModelConsensusRules(t *testing.T) {
 		assert.Empty(t, s.Realtime.ModelConsensus.Rules)
 	})
 
-	t.Run("a read error makes no rule, warns and still stamps", func(t *testing.T) {
+	t.Run("a read error aborts without a rule or a stamp, and warns", func(t *testing.T) {
 		t.Parallel()
 		s := &Settings{ConfigVersion: 3}
 		changed := s.migrateModelConsensusRules(func() (legacyModelConsensus, error) {
 			return legacyModelConsensus{}, errors.NewStd("decode failed")
 		})
-		assert.True(t, changed)
+		assert.False(t, changed, "nothing to persist, so the old keys stay in the file for the next start")
 		assert.Empty(t, s.Realtime.ModelConsensus.Rules)
-		assert.Equal(t, configVersionModelConsensusRules, s.ConfigVersion)
+		assert.Equal(t, 3, s.ConfigVersion, "the version stays unstamped so the next start retries")
 		assert.Contains(t, warningsText(s), "could not be read")
 	})
 }
