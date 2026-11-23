@@ -19,15 +19,15 @@ _Prices are approximate retail estimates (excluding shipping) and vary by retail
 
 ### USB Microphones
 
-| Microphone                                                    | Max Rate | Approx. Price                    | Highlights / Caveats                                                 |
-| ------------------------------------------------------------- | -------- | -------------------------------- | -------------------------------------------------------------------- |
-| [AudioMoth](#audiomoth)                                       | 384 kHz  | ~$100                            | Micro-USB (USB-mic firmware); standard case has no USB opening       |
-| [AudioMoth USB Microphone](#audiomoth-usb-microphone)         | 384 kHz  | ~$80 (+$30 case)                 | Micro-USB; optional splashproof USB mic case                         |
-| [Dodotronic UltraMic 384K PRO](#dodotronic-ultramic-384k-pro) | 384 kHz  | ~€140 to €155                    | USB-C; audible + ultrasonic (~190 kHz); optional waterproof membrane |
-| [Dodotronic Avicantus](#dodotronic-avicantus)                 | 192 kHz  | ~€69                             | USB; audible focus (ultrasonic unverified); 3.5 mm ext. mic input    |
-| [Vleermic 384kHz](#vleermic-384khz)                           | 384 kHz  | ~€53                             | USB-C (UAC2); 0.1 to 150 kHz; not rainproof                          |
-| [Pippyg](#pippyg)                                             | 384 kHz  | ~£15 to £20 DIY / ~€75 pre-built | Micro-USB (`pippyg_mic.uf2`); enclose outdoors                       |
-| [Griff and Griff Mini](#griff-and-griff-mini)                 | 384 kHz  | ~£5 to £10 (DIY)                 | Micro-USB; bare PCB; enclose outdoors                                |
+| Microphone                                                    | Max kHz | Approx. Price                    | Highlights / Caveats                                                 |
+| ------------------------------------------------------------- | ------- | -------------------------------- | -------------------------------------------------------------------- |
+| [AudioMoth](#audiomoth)                                       | 384     | ~$100                            | Micro-USB (USB-mic firmware); standard case has no USB opening       |
+| [AudioMoth USB Microphone](#audiomoth-usb-microphone)         | 384     | ~$80 (+$30 case)                 | Micro-USB; optional splashproof USB mic case                         |
+| [Dodotronic UltraMic 384K PRO](#dodotronic-ultramic-384k-pro) | 384     | ~€140 to €155                    | USB-C; audible + ultrasonic (~190 kHz); optional waterproof membrane |
+| [Dodotronic Avicantus](#dodotronic-avicantus)                 | 192     | ~€69                             | USB; audible focus (ultrasonic unverified); 3.5 mm ext. mic input    |
+| [Vleermic 384kHz](#vleermic-384khz)                           | 384     | ~€53                             | USB-C (UAC2); 0.1 to 150 kHz; not rainproof                          |
+| [Pippyg](#pippyg)                                             | 384     | ~£15 to £20 DIY / ~€75 pre-built | Micro-USB (`pippyg_mic.uf2`); enclose outdoors                       |
+| [Griff and Griff Mini](#griff-and-griff-mini)                 | 384     | ~£5 to £10 (DIY)                 | Micro-USB; bare PCB; enclose outdoors                                |
 
 ### XLR and Analog Microphones
 
