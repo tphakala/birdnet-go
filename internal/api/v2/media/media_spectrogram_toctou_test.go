@@ -12,6 +12,8 @@
 package media
 
 import (
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,7 +76,6 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 		"generateSpectrogramFromRel must derive the spectrogram path from the threaded relAudioPath, not the live Export.Path")
 }
 
-
 func TestFindExistingSpectrogramFallback(t *testing.T) {
 	withRestoredGlobalSettings(t)
 
@@ -116,31 +117,59 @@ func TestFindExistingSpectrogramFallback(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, mdSpectrogramPath, got)
 
-	// 5. Test legacy bare <basename>.png fallback
+	// 5. Test legacy/pre-rendered <basename>.png fallback
+	writePNG := func(path string, w, h int) {
+		t.Helper()
+		f, err := os.Create(path) //nolint:gosec // test TempDir path
+		require.NoError(t, err)
+		defer func() { _ = f.Close() }()
+		require.NoError(t, png.Encode(f, image.NewNRGBA(image.Rect(0, 0, w, h))))
+	}
+
 	relAudioBare := "2024/06/04/Turdus_bare.wav"
 	barePath := "2024/06/04/Turdus_bare.png"
 	fullBare := filepath.Join(tmp, barePath)
-	require.NoError(t, os.WriteFile(fullBare, []byte("PNG_BARE_DATA"), 0o600))
+	writePNG(fullBare, SpectrogramSizeSm, 129)
 
-	// Should match for SpectrogramSizeSm when raw=true, style="", dynamicRange="", freqSuffix=""
+	specSettings := apitest.NewValidTestSettings()
+	specSettings.Realtime.Dashboard.Spectrogram.Size = "sm"
+	specSettings.Realtime.Dashboard.Spectrogram.Raw = true
+	specSettings.Realtime.Dashboard.Spectrogram.Style = "default"
+	specSettings.Realtime.Dashboard.Spectrogram.DynamicRange = "100"
+	controller.Settings.Store(specSettings)
+
 	foundBare, existsBare := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeSm, true, "", "", "", 0)
-	require.True(t, existsBare, "findExistingSpectrogram should find bare .png for smallest standard size (sm)")
+	require.True(t, existsBare, "findExistingSpectrogram should find bare .png when raw/style match and width >= requestedWidth")
 	assert.Equal(t, barePath, foundBare)
 
-	// Should NOT match for SpectrogramSizeMd to prevent serving a render smaller than requested
+	// Should NOT match larger size even when settings later increase to lg (PNG width is still 258px)
+	specSettingsLg := apitest.NewValidTestSettings()
+	specSettingsLg.Realtime.Dashboard.Spectrogram.Size = "lg"
+	specSettingsLg.Realtime.Dashboard.Spectrogram.Raw = true
+	controller.Settings.Store(specSettingsLg)
 	_, existsBareMd := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeMd, true, "", "", "", 0)
-	assert.False(t, existsBareMd, "findExistingSpectrogram should not match bare .png for sizes larger than sm")
+	assert.False(t, existsBareMd, "findExistingSpectrogram must inspect PNG width so a 258px bare .png is never served for md/lg")
 
-	// Should NOT match when raw=false (axes requested)
+	// When bare .png actually has lg dimensions (1026px), lg/md/sm match while xl rejects
+	writePNG(fullBare, SpectrogramSizeLg, 513)
+	_, existsBareLg := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeLg, true, "", "", "", 0)
+	assert.True(t, existsBareLg, "findExistingSpectrogram should reuse a 1026px bare .png for lg")
+	_, existsBareXl := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeXl, true, "", "", "", 0)
+	assert.False(t, existsBareXl, "findExistingSpectrogram must not reuse a 1026px bare .png for xl")
+
+	// Should NOT match when requested raw or style differs from prerenderer config
 	_, existsNonRaw := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeSm, false, "", "", "", 0)
-	assert.False(t, existsNonRaw, "findExistingSpectrogram should not match bare .png when raw=false")
-
-	// Should NOT match when non-default style requested
+	assert.False(t, existsNonRaw, "findExistingSpectrogram should not match bare .png when raw disagrees with config")
 	_, existsStyle := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeSm, true, "scientific_dark", "", "", 0)
-	assert.False(t, existsStyle, "findExistingSpectrogram should not match bare .png when non-default style requested")
-
-	// Should NOT match when freqSuffix is non-empty
+	assert.False(t, existsStyle, "findExistingSpectrogram should not match bare .png when style disagrees with config")
 	_, existsFreq := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeSm, true, "", "", "-bat", 0)
 	assert.False(t, existsFreq, "findExistingSpectrogram should not match bare .png when freqSuffix is set")
-}
 
+	// If config itself uses raw=false, raw=true requests must reject bare .png
+	specNonRaw := apitest.NewValidTestSettings()
+	specNonRaw.Realtime.Dashboard.Spectrogram.Size = "lg"
+	specNonRaw.Realtime.Dashboard.Spectrogram.Raw = false
+	controller.Settings.Store(specNonRaw)
+	_, existsMismatchedRaw := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeSm, true, "", "", "", 0)
+	assert.False(t, existsMismatchedRaw, "findExistingSpectrogram must reject non-raw bare .png for raw=true requests")
+}

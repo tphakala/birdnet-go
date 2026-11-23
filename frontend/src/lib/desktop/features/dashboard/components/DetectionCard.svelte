@@ -34,8 +34,12 @@
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { getPlaybackDefaults } from '$lib/utils/playbackDefaults';
-  import { get } from 'svelte/store';
+  import { appState } from '$lib/stores/appState.svelte';
   import { dashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
+  import {
+    getSpectrogramDefaults,
+    resolveSpectrogramDefaults,
+  } from '$lib/utils/spectrogramDefaults';
   import { t } from '$lib/i18n';
 
   // Read once per card instance, not at module load: cards are recycled via
@@ -71,9 +75,8 @@
   }: Props = $props();
 
   const loader = createSpectrogramLoader({
-    size: () =>
-      get(settingsDataLoaded) ? (get(dashboardSettings)?.spectrogram?.size ?? 'sm') : 'sm',
-    raw: () => get(dashboardSettings)?.spectrogram?.raw ?? true,
+    size: () => getSpectrogramDefaults().size,
+    raw: () => getSpectrogramDefaults().raw,
   });
 
   let cardElement = $state<HTMLElement | undefined>(undefined);
@@ -163,23 +166,26 @@
 
   // Start/stop loader based on visibility. Skip entirely when this detection has
   // no clip: there is no spectrogram to fetch.
-  let currentSpectrogramSize = $derived(
-    $settingsDataLoaded ? ($dashboardSettings?.spectrogram?.size ?? 'sm') : 'sm'
+  const spectrogramConfig = $derived(
+    resolveSpectrogramDefaults(
+      $settingsDataLoaded,
+      $dashboardSettings?.spectrogram,
+      appState.spectrogramDefaults
+    )
   );
   // svelte-ignore state_referenced_locally
-  let previousSpectrogramSize = currentSpectrogramSize;
-  let currentSpectrogramRaw = $derived($dashboardSettings?.spectrogram?.raw ?? true);
+  let previousSpectrogramSize = spectrogramConfig.size;
   // svelte-ignore state_referenced_locally
-  let previousSpectrogramRaw = currentSpectrogramRaw;
+  let previousSpectrogramRaw = spectrogramConfig.raw;
 
   $effect(() => {
     // If configured spectrogram size or raw mode changes, restart loader
     if (
-      currentSpectrogramSize !== previousSpectrogramSize ||
-      currentSpectrogramRaw !== previousSpectrogramRaw
+      spectrogramConfig.size !== previousSpectrogramSize ||
+      spectrogramConfig.raw !== previousSpectrogramRaw
     ) {
-      previousSpectrogramSize = currentSpectrogramSize;
-      previousSpectrogramRaw = currentSpectrogramRaw;
+      previousSpectrogramSize = spectrogramConfig.size;
+      previousSpectrogramRaw = spectrogramConfig.raw;
       if (detection.clipName && isVisible) {
         loader.restart(detection.id);
         return;

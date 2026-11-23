@@ -4,6 +4,7 @@ package media
 import (
 	"context"
 	"fmt"
+	"image/png"
 	"io/fs"
 	"math"
 	"net/http"
@@ -3157,15 +3158,48 @@ func (c *Handler) findExistingSpectrogram(relAudioPath string, requestedWidth in
 	}
 
 	// 3. Fallback for pre-rendered spectrograms created as <basename>.png.
-	// Only permitted when requestedWidth <= SpectrogramSizeSm so we never serve a render smaller than requested.
-	if requestedWidth <= SpectrogramSizeSm && raw && buildStyleSuffix(style, dynamicRange) == "" && freqSuffix == "" {
-		barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
-		if statInfo, err := c.SFS.StatRel(barePath); err == nil && statInfo.Size() > 0 {
-			return barePath, true
+	// The bare file omits size/raw/style suffixes and is rendered using the station's
+	// Realtime.Dashboard.Spectrogram settings, so only reuse it when raw mode and visual
+	// style match and the image is at least requestedWidth wide.
+	spec := c.CurrentSettings().Realtime.Dashboard.Spectrogram
+	if freqSuffix == "" && raw == spec.Raw &&
+		buildStyleSuffix(style, dynamicRange) == buildStyleSuffix(spec.Style, spec.DynamicRange) {
+		bareWidth, err := spectrogram.SizeToPixels(spec.Size)
+		if err == nil {
+			barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
+			if statInfo, statErr := c.SFS.StatRel(barePath); statErr == nil && statInfo.Size() > 0 {
+				if pngWidth, ok := c.readPNGWidth(barePath); ok {
+					if raw {
+						if _, sizeErr := spectrogram.PixelsToSize(pngWidth); sizeErr != nil {
+							return "", false
+						}
+					}
+					bareWidth = pngWidth
+				}
+				if bareWidth >= requestedWidth {
+					return barePath, true
+				}
+			}
 		}
 	}
 
 	return "", false
+}
+
+// readPNGWidth decodes only the PNG IHDR header of relPath to obtain its pixel width.
+// Returns (0, false) for non-PNG files or I/O errors so callers can apply safe fallbacks.
+func (c *Handler) readPNGWidth(relPath string) (int, bool) {
+	f, err := c.SFS.OpenRegularRel(relPath)
+	if err != nil {
+		return 0, false
+	}
+	defer func() { _ = f.Close() }()
+
+	cfg, err := png.DecodeConfig(f)
+	if err != nil || cfg.Width <= 0 {
+		return 0, false
+	}
+	return cfg.Width, true
 }
 
 // buildStyleSuffix returns a filename suffix encoding visual style settings.

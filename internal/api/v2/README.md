@@ -226,7 +226,7 @@ served to them as to anyone.
 `GET /app/config` also carries the playback defaults the browser applies itself, as
 `playbackDefaults`: `gainDb` (the dashboard default gain in dB, -12 to 24) and
 `highPassHz` (the default high-pass cutoff in Hz, 0 when off). Both are read from the live
-settings per request, so guests and signed-in users start every clip the same way.
+settings per request, so guests and signed-in users start every clip the same way. It also exposes `spectrogramDefaults` (`size` and `raw` from `realtime.dashboard.spectrogram`) so detection cards use the configured thumbnail size immediately without waiting for `/settings`.
 
 **Denoised spectrogram (`GET /spectrogram/:id?denoise=<preset>`).** Without the parameter the
 stored spectrogram is served as before. With a preset the response is a PNG rendered from the

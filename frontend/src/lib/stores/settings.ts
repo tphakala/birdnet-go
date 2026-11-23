@@ -1176,10 +1176,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
           fallbackPolicy: 'none',
         },
         summaryLimit: 30,
-        spectrogram: {
-          ...DEFAULT_SPECTROGRAM_SETTINGS,
-          size: 'sm',
-        },
+        spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
         temperatureUnit: 'celsius',
         layout: {
           elements: [

@@ -14,6 +14,12 @@
   import { cn } from '$lib/utils/cn';
   import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
+  import { appState } from '$lib/stores/appState.svelte';
+  import { dashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
+  import {
+    getSpectrogramDefaults,
+    resolveSpectrogramDefaults,
+  } from '$lib/utils/spectrogramDefaults';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { getPlaybackDefaults } from '$lib/utils/playbackDefaults';
@@ -51,7 +57,10 @@
     onDelete,
   }: Props = $props();
 
-  const loader = createSpectrogramLoader({ size: 'md', raw: true });
+  const loader = createSpectrogramLoader({
+    size: () => getSpectrogramDefaults().size,
+    raw: () => getSpectrogramDefaults().raw,
+  });
 
   let cardElement = $state<HTMLElement | undefined>(undefined);
   let isVisible = $state(false);
@@ -93,7 +102,32 @@
     }
   });
 
+  const spectrogramConfig = $derived(
+    resolveSpectrogramDefaults(
+      $settingsDataLoaded,
+      $dashboardSettings?.spectrogram,
+      appState.spectrogramDefaults
+    )
+  );
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramSize = spectrogramConfig.size;
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramRaw = spectrogramConfig.raw;
+
   $effect(() => {
+    if (
+      spectrogramConfig.size !== previousSpectrogramSize ||
+      spectrogramConfig.raw !== previousSpectrogramRaw
+    ) {
+      previousSpectrogramSize = spectrogramConfig.size;
+      previousSpectrogramRaw = spectrogramConfig.raw;
+      if (detection.clipName && isVisible) {
+        loader.restart(detection.id);
+        return;
+      }
+      loader.reset();
+    }
+
     if (detection.clipName && isVisible) {
       loader.start(detection.id);
     } else {
