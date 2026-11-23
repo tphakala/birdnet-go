@@ -212,7 +212,7 @@ func (t *consensusTick) evaluate(item *PendingDetection, settings *conf.Settings
 		if run.covers(spanFrom, spanTo) &&
 			t.models.groupOf(k.model) == group &&
 			t.models.knows(k.model, key) &&
-			passesRangeFilter(k.model, settings, sci) {
+			classifier.PassesRangeFilter(k.model, settings, sci) {
 			eligible = append(eligible, k.model)
 		}
 	}

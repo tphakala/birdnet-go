@@ -7,11 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 // legacyShouldRangeFilter reproduces the pre-capability gate that
-// processor.shouldApplyRangeFilter ran before this change: resolve the model ID
+// the processor's range-filter gate ran before this change: resolve the model ID
 // through DetectionModelInfoForID and match the default BirdNET name or Perch. It
 // exists only so the equivalence test below can prove ParticipatesInRangeFilter is
 // byte-for-byte behavior-identical to what it replaced.
@@ -98,5 +99,79 @@ func TestParticipatesInRangeFilter_ExpectedPerModel(t *testing.T) {
 	for id := range ModelRegistry {
 		_, ok := want[id]
 		assert.True(t, ok, "want-table must include an explicit expectation for registry ID %q", id)
+	}
+}
+
+func TestShouldApplyRangeFilter(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, ShouldApplyRangeFilter("Perch_V2", nil))
+
+	tests := []struct {
+		name               string
+		modelID            string
+		locationConfigured bool
+		expected           bool
+	}{
+		{
+			name:               "BirdNET V2.4 filtered when location configured",
+			modelID:            "BirdNET_V2.4",
+			locationConfigured: true,
+			expected:           true,
+		},
+		{
+			name:               "BirdNET V2.4 not filtered when location not configured",
+			modelID:            "BirdNET_V2.4",
+			locationConfigured: false,
+			expected:           false,
+		},
+		{
+			name:               "BirdNET V3.0 filtered when location configured",
+			modelID:            "BirdNET_V3.0",
+			locationConfigured: true,
+			expected:           true,
+		},
+		{
+			name:               "Perch V2 filtered when location configured",
+			modelID:            "Perch_V2",
+			locationConfigured: true,
+			expected:           true,
+		},
+		{
+			name:               "Perch V2 not filtered when location not configured",
+			modelID:            "Perch_V2",
+			locationConfigured: false,
+			expected:           false,
+		},
+		{
+			name:               "Bat never filtered",
+			modelID:            "Bat",
+			locationConfigured: true,
+			expected:           false,
+		},
+		{
+			name:               "BSG never filtered",
+			modelID:            "BSG",
+			locationConfigured: true,
+			expected:           false,
+		},
+		{
+			name:               "unknown/custom model ID is not range-filtered",
+			modelID:            "SomeUnknownModel",
+			locationConfigured: true,
+			expected:           false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			settings := &conf.Settings{}
+			settings.BirdNET.LocationConfigured = tt.locationConfigured
+
+			result := ShouldApplyRangeFilter(tt.modelID, settings)
+			assert.Equal(t, tt.expected, result)
+		})
 	}
 }

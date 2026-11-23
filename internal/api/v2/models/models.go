@@ -80,6 +80,10 @@ type Handler struct {
 	// models that failed to load. Injectable like modelRuntime: nil means the live
 	// orchestrator's LoadErrors, and tests inject a fixed map.
 	loadErrors func() map[string]string
+	// speciesKnowledge reports which species each loaded model can classify (see
+	// speciesKnowledge in species_coverage.go). It is an injectable seam: nil means
+	// the live orchestrator's ModelSpecies snapshot, and tests inject a fixed one.
+	speciesKnowledge func() (speciesKnowledge, error)
 	// announceListChange tells connected clients that the model list changed. nil
 	// means a topology broadcast on the metrics store, and tests inject a counter.
 	announceListChange func()
@@ -118,13 +122,15 @@ func New(core *apicore.Core, authService auth.Service) *Handler {
 }
 
 // RegisterRoutes registers all model-related API endpoints on the supplied API
-// v2 group, preserving the exact routes and order the facade used before the
-// models domain was extracted. Cancelling a running install is POST
+// v2 group: the routes and order the facade used before the models domain was
+// extracted, plus the species coverage route. Cancelling a running install is POST
 // /models/install/:id/cancel, registered before the reinstall route.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/models", c.ListModels)
 	g.GET("/models/catalog", c.GetModelCatalog)
 	g.GET("/models/regions", c.GetModelRegions, c.AuthMiddleware)
+	// Auth-gated: the result depends on the configured location through the range filter.
+	g.GET("/models/species-coverage", c.GetSpeciesCoverage, c.AuthMiddleware)
 	// Public: serves fixed embedded SVG bytes selected by a public region slug,
 	// nothing user-derived, matching the public /models/catalog route.
 	g.GET("/models/regions/:slug/map", c.GetRegionCoverageMap)
