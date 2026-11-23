@@ -1,7 +1,6 @@
 package models
 
 import (
-	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -81,8 +80,9 @@ func (c *Handler) liveSpeciesKnowledge() (speciesKnowledge, error) {
 //
 // At most maxCoverageSpecies names are accepted per request, counted after
 // trimming and dropping blanks; more is a 400. Names are matched as scientific
-// names, as consensus rules store them after a save; common names are not resolved. It is auth-gated because rangeFilterPass is
-// derived from the configured location. The first call after a model topology
+// names, as consensus rules store them after a save; common names are not
+// resolved. It is auth-gated because rangeFilterPass is derived from the
+// configured location. The first call after a model topology
 // change can wait for the snapshot to be rebuilt.
 //
 // @Summary Get per-species model coverage
@@ -117,32 +117,37 @@ func (c *Handler) GetSpeciesCoverage(ctx echo.Context) error {
 	}
 
 	settings := c.CurrentSettings()
-	enabled := make(map[string]struct{}, len(settings.Models.Enabled))
+	// The model-invariant fields are built once per enabled model, sorted by alias.
+	seen := make(map[string]struct{}, len(settings.Models.Enabled))
+	candidates := make([]SpeciesCoverageModel, 0, len(settings.Models.Enabled))
 	for _, alias := range settings.Models.Enabled {
-		if id, ok := classifier.ResolveConfigModelID(alias); ok {
-			enabled[id] = struct{}{}
+		id, ok := classifier.ResolveConfigModelID(alias)
+		if !ok {
+			continue
 		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		candidates = append(candidates, SpeciesCoverageModel{
+			ID:         classifier.ConfigAliasForRegistry(id),
+			RegistryID: id,
+			Name:       classifier.ModelRegistry[id].Name,
+			TaxonGroup: string(classifier.TaxonGroupFor(id)),
+		})
 	}
-	ids := slices.Collect(maps.Keys(enabled))
-	slices.SortFunc(ids, func(a, b string) int {
-		return strings.Compare(classifier.ConfigAliasForRegistry(a), classifier.ConfigAliasForRegistry(b))
-	})
+	slices.SortFunc(candidates, func(a, b SpeciesCoverageModel) int { return strings.Compare(a.ID, b.ID) })
 
 	resp := SpeciesCoverageResponse{Species: make([]SpeciesCoverageEntry, 0, len(names))}
 	for _, name := range names {
 		key := speciesindex.CanonicalKey(name)
-		models := make([]SpeciesCoverageModel, 0, len(ids))
-		for _, id := range ids {
-			if !know.HasModel(id) || !know.Knows(id, key) {
+		models := make([]SpeciesCoverageModel, 0, len(candidates))
+		for _, m := range candidates {
+			if !know.HasModel(m.RegistryID) || !know.Knows(m.RegistryID, key) {
 				continue
 			}
-			models = append(models, SpeciesCoverageModel{
-				ID:              classifier.ConfigAliasForRegistry(id),
-				RegistryID:      id,
-				Name:            classifier.ModelRegistry[id].Name,
-				TaxonGroup:      string(classifier.TaxonGroupFor(id)),
-				RangeFilterPass: classifier.PassesRangeFilter(id, settings, name),
-			})
+			m.RangeFilterPass = classifier.PassesRangeFilter(m.RegistryID, settings, name)
+			models = append(models, m)
 		}
 		resp.Species = append(resp.Species, SpeciesCoverageEntry{Species: name, Models: models})
 	}

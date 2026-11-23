@@ -151,8 +151,8 @@ func TestGetSpeciesCoverage(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 
-	t.Run("duplicate spellings of one enabled model list it once", func(t *testing.T) {
-		resp := decodeCoverage(t, getCoverage(t, enabled("perch_v2", "perch-v2", "PERCH_V2"),
+	t.Run("duplicate spellings of one enabled model list it once and an unknown alias is skipped", func(t *testing.T) {
+		resp := decodeCoverage(t, getCoverage(t, enabled("perch_v2", "perch-v2", "PERCH_V2", "no_such_model"),
 			fakeSpeciesKnowledge{classifier.RegistryIDPerchV2: {fulica}},
 			url.Values{"species": {"Fulica atra"}}))
 		require.Len(t, resp.Species, 1)
