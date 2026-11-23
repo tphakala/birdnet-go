@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // fakeSpeciesKnowledge is a fixed per-model species snapshot: registry ID to the
@@ -35,9 +36,15 @@ func (f fakeSpeciesKnowledge) Knows(modelID, key string) bool {
 // snapshot, and returns the recorder.
 func getCoverage(t *testing.T, mutate func(*conf.Settings), know speciesKnowledge, query url.Values) *httptest.ResponseRecorder {
 	t.Helper()
+	return getCoverageFrom(t, mutate, func() (speciesKnowledge, error) { return know, nil }, query)
+}
+
+// getCoverageFrom is getCoverage with an arbitrary seam, so a test can make it fail.
+func getCoverageFrom(t *testing.T, mutate func(*conf.Settings), seam func() (speciesKnowledge, error), query url.Values) *httptest.ResponseRecorder {
+	t.Helper()
 	core := apitest.NewCore(t, apitest.WithSettingsFunc(mutate))
 	h := New(core, nil)
-	h.speciesKnowledge = func() (speciesKnowledge, error) { return know, nil }
+	h.speciesKnowledge = seam
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/models/species-coverage?"+query.Encode(), http.NoBody)
@@ -75,9 +82,8 @@ func TestGetSpeciesCoverage(t *testing.T) {
 		m := resp.Species[0].Models[0]
 		assert.Equal(t, conf.ModelIDPerchV2, m.ID)
 		assert.Equal(t, classifier.RegistryIDPerchV2, m.RegistryID)
-		assert.Equal(t, classifier.ModelRegistry[classifier.RegistryIDPerchV2].Name, m.Name)
-		assert.Equal(t, string(classifier.TaxonGroupFor(classifier.RegistryIDPerchV2)), m.TaxonGroup)
-		assert.NotEmpty(t, m.TaxonGroup)
+		assert.Equal(t, "Google Perch v2", m.Name)
+		assert.Equal(t, "bird", m.TaxonGroup)
 		assert.True(t, m.RangeFilterPass, "no location configured: the range filter does not apply")
 	})
 
@@ -115,6 +121,33 @@ func TestGetSpeciesCoverage(t *testing.T) {
 		}
 		assert.Equal(t, map[string]bool{conf.ModelIDPerchV2: false, conf.ModelIDBat: true}, byAlias,
 			"a participating model fails outside the included list; a non-participating model always passes")
+	})
+
+	t.Run("a participating model passes the range filter for an included species", func(t *testing.T) {
+		resp := decodeCoverage(t, getCoverage(t,
+			func(s *conf.Settings) {
+				s.Models.Enabled = []string{conf.ModelIDPerchV2, conf.ModelIDBat}
+				s.BirdNET.LocationConfigured = true
+				s.BirdNET.RangeFilter.IncludedScientificNames = map[string]struct{}{fulica: {}}
+			},
+			fakeSpeciesKnowledge{
+				classifier.RegistryIDPerchV2: {fulica},
+				classifier.RegistryIDBat:     {fulica},
+			},
+			url.Values{"species": {"Fulica atra"}}))
+		require.Len(t, resp.Species[0].Models, 2)
+		for _, m := range resp.Species[0].Models {
+			assert.True(t, m.RangeFilterPass, m.ID)
+		}
+		assert.Equal(t, conf.ModelIDBat, resp.Species[0].Models[0].ID)
+		assert.Equal(t, "bat", resp.Species[0].Models[0].TaxonGroup)
+	})
+
+	t.Run("reports 500 when the species snapshot is unavailable", func(t *testing.T) {
+		rec := getCoverageFrom(t, enabled(conf.ModelIDPerchV2),
+			func() (speciesKnowledge, error) { return nil, errors.NewStd("unavailable") },
+			url.Values{"species": {"Fulica atra"}})
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 
 	t.Run("duplicate spellings of one enabled model list it once", func(t *testing.T) {
