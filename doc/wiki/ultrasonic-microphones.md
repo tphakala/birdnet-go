@@ -19,15 +19,16 @@ _Prices are approximate retail estimates (excluding shipping) and vary by retail
 
 ### USB Microphones
 
-| Microphone                                                    | Max kHz | Approx. Price                    | Highlights / Caveats                                                 |
-| ------------------------------------------------------------- | ------- | -------------------------------- | -------------------------------------------------------------------- |
-| [AudioMoth](#audiomoth)                                       | 384     | ~$100                            | Micro-USB (USB-mic firmware); standard case has no USB opening       |
-| [AudioMoth USB Microphone](#audiomoth-usb-microphone)         | 384     | ~$80 (+$30 case)                 | Micro-USB; optional splashproof USB mic case                         |
-| [Dodotronic UltraMic 384K PRO](#dodotronic-ultramic-384k-pro) | 384     | ~€140 to €155                    | USB-C; audible + ultrasonic (~190 kHz); optional waterproof membrane |
-| [Dodotronic Avicantus](#dodotronic-avicantus)                 | 192     | ~€69                             | USB; audible focus (ultrasonic unverified); 3.5 mm ext. mic input    |
-| [Vleermic 384kHz](#vleermic-384khz)                           | 384     | ~€53                             | USB-C (UAC2); 0.1 to 150 kHz; not rainproof                          |
-| [Pippyg](#pippyg)                                             | 384     | ~£15 to £20 DIY / ~€75 pre-built | Micro-USB (`pippyg_mic.uf2`); enclose outdoors                       |
-| [Griff and Griff Mini](#griff-and-griff-mini)                 | 384     | ~£5 to £10 (DIY)                 | Micro-USB; bare PCB; enclose outdoors                                |
+| Microphone                                                    | Max kHz | Approx. Price                    | Highlights / Caveats                                                           |
+| ------------------------------------------------------------- | ------- | -------------------------------- | ------------------------------------------------------------------------------ |
+| [AudioMoth](#audiomoth)                                       | 384     | ~$100                            | Micro-USB (USB-mic firmware); standard case has no USB opening                 |
+| [AudioMoth USB Microphone](#audiomoth-usb-microphone)         | 384     | ~$80 (+$30 case)                 | Micro-USB; optional splashproof USB mic case                                   |
+| [Dodotronic UltraMic 384K PRO](#dodotronic-ultramic-384k-pro) | 384     | ~€140 to €155                    | USB-C; audible + ultrasonic (~190 kHz); optional waterproof membrane           |
+| [Dodotronic Avicantus](#dodotronic-avicantus)                 | 192     | ~€69                             | USB; audible focus (ultrasonic unverified); 3.5 mm ext. mic input              |
+| [Vleermic 384kHz](#vleermic-384khz)                           | 384     | ~€53                             | USB-C (UAC2); 0.1 to 150 kHz; not rainproof                                    |
+| [Apodemus Pipistrelle Mini](#apodemus-pipistrelle-mini)       | 384     | ~€65                             | Micro-USB (16-bit USB mic mode); 10 to 110 kHz; open PCB, remove AAA batteries |
+| [Pippyg and Apodemus Pippyg2](#pippyg-and-apodemus-pippyg2)   | 384     | ~£15 to £20 DIY / ~€75 pre-built | Micro-USB (DIY) or USB-C (Pippyg2); 600 Hz to 110 kHz; bare PCB                |
+| [Griff and Griff Mini](#griff-and-griff-mini)                 | 384     | ~£5 to £10 (DIY)                 | Micro-USB; bare PCB; enclose outdoors                                          |
 
 ### XLR and Analog Microphones
 
@@ -115,18 +116,45 @@ Two practical caveats noted by the manufacturer:
 - **Not weatherproof:** It is not designed for rain and needs a dry, sheltered housing for outdoor deployments.
 - **RF sensitivity:** It can pick up radio interference from nearby cellular transmitters or smartphones, so keep it physically separated from cellular modems or high-power radios.
 
-### Pippyg
+### Apodemus Pipistrelle Mini
+
+- **Where to buy:** [Apodemus Pipistrelle Mini](https://www.apodemus.eu/en/Apodemus-Pipistrelle-Mini/00126) ([Apodemus Pipistrelle webshop](https://www.apodemus.eu/en/Webshop/Apodemus-Pipistrelle/), free shipping within EU mainland; also available through UK/EU ecological equipment resellers)
+- **Approx. price:** ~€65 incl. 21% VAT
+- **Max sample rate:** 384 kHz (16-bit USB microphone mode, supported since firmware v8.02)
+- **Frequency range:** 10 to 110 kHz (MEMS microphone)
+- **Connection:** Micro-USB (for USB microphone operation and firmware updates)
+- **Size and weight:** 70 x 56 x 23 mm, 30 g (excluding batteries)
+
+The Apodemus Pipistrelle Mini is a factory-assembled, commercially licensed handheld bat detector (with heterodyne tuning, 10x/16x real-time expansion, spectrum display, and a 3.5 mm headphone jack) based on the open Pipistrelle Mini project from `pippyg.com`. Since firmware **v8.02** (latest **v8.09**, available on the [Apodemus Pipistrelle Service page](https://www.apodemus.eu/en/Service/Pipistrelle/)), it also functions directly as a **384 kHz / 16-bit USB ultrasonic microphone**, making it an affordable dual-use option for both field walks and BirdNET-Go.
+
+**Important USB and outdoor caveats (per Apodemus manual):**
+
+- **Remove the 3x AAA batteries** whenever using the Pipistrelle Mini over USB as a USB microphone.
+- **Open PCB design:** It is not water-resistant; keep it dry and dust-free and house it in a weather-protected enclosure for outdoor 24/7 use.
+
+### Pippyg and Apodemus Pippyg2
 
 - **Where to buy:**
+  - **Pre-built (Apodemus Pippyg2):** [Apodemus Pippyg2](https://www.apodemus.eu/en/Apodemus-Pippyg2/00147) ([Apodemus Pipistrelle webshop](https://www.apodemus.eu/en/Webshop/Apodemus-Pipistrelle/), free shipping within EU mainland) and UK/EU ecological equipment retailers (such as Wildlife Services and NHBS)
+  - **Optional enclosure (for standalone battery use):** [Pippyg Bat Bag](https://www.apodemus.eu/en/Pippyg-Bat-Bag/00144) (~€65.50 incl. 21% VAT; IP64 recycled TPU housing with protective cone and water-repellent acoustic membrane)
   - **DIY self-build:** Project files, firmware, and parts links (PCBWay + DigiKey) on [pippyg.com](https://www.pippyg.com/pippyg.html)
-  - **Pre-built (Pippyg 2):** [Apodemus](https://www.apodemus.eu/en/pipistrelle) and UK/EU ecological equipment retailers (such as Wildlife Services and NHBS)
-- **Approx. price:** ~£15 to £20 in DIY parts, or ~€75 pre-built for the **Pippyg 2**
-- **Max sample rate:** 384 kHz (16-bit)
-- **Connection:** Micro-USB (for USB microphone mode and firmware flashing; USB-C on Apodemus Pippyg 2)
+- **Approx. price:** ~£15 to £20 in DIY parts, or **~€75** (incl. 21% VAT) factory-assembled for the **Apodemus Pippyg2**
+- **Max sample rate:** 384 kHz (16-bit; also supports 48 kHz in standalone bird mode)
+- **Frequency range:** 600 Hz to 110 kHz (MEMS microphone)
+- **Connection:** USB-C on Apodemus Pippyg2 (Micro-USB on DIY Pippyg and original Pippyg)
+- **Size and weight (Pippyg2):** 60 x 50 x 22 mm, 30 g (excluding batteries)
 
-Pippyg is a low-cost, Raspberry Pi Pico / RP2040-based static bat detector designed by Phil Atkin. By default it operates as a standalone microSD recorder, but flashing the **`pippyg_mic.uf2`** firmware switches it so that whenever it is powered via USB it boots as a **384 kHz / 16-bit USB ultrasonic microphone** (equivalent to a Griff). You can reflash it back to `pippyg.uf2` for battery-powered standalone field surveys at any time.
+Pippyg is a low-cost, Raspberry Pi Pico / RP2040-based static bat detector originally designed by Phil Atkin and exclusively licensed for commercial production to Apodemus. The **Apodemus Pippyg2** is the factory-assembled, tested successor to the original Pippyg, adding a **USB-C port** and improved audio electronics with a lower, constant noise floor without spectral peaks.
 
-To reflash, short the two "Reflash" pads while plugging in micro-USB so the board mounts as an `RPI-RP2` drive, then copy the `.uf2` file onto it. Keep moisture and dust out of the microphone hole and enclose the board for outdoor use.
+Both versions can run as a **384 kHz / 16-bit USB ultrasonic microphone** for BirdNET-Go:
+
+- **Apodemus Pippyg2 / Pippyg:** Official Apodemus firmware **v8.15.0** (available from the [Apodemus Pipistrelle Service page](https://www.apodemus.eu/en/Service/Pipistrelle/)) includes built-in USB microphone functionality alongside improved signal quality and sensitivity.
+- **DIY Pippyg (`pippyg.com`):** Flash **`pippyg_mic.uf2`** by shorting the two "Reflash" pads while plugging in Micro-USB (mounting `RPI-RP2`), so it boots as a 384 kHz USB microphone whenever powered via USB; reflash back to `pippyg.uf2` for standalone microSD recording.
+
+**Important USB and weatherproofing notes:**
+
+- **Remove the 3x AA batteries before connecting USB:** Per the Apodemus Pippyg2 manual, remove the AA batteries when powering or streaming over USB, and never connect a USB cable while batteries are installed and the power switch is ON.
+- **Bare PCB design:** Neither the DIY Pippyg nor the Apodemus Pippyg2 is water-resistant on its own. Keep moisture and dust out of the microphone port. Apodemus sells the IP64 [Pippyg Bat Bag](https://www.apodemus.eu/en/Pippyg-Bat-Bag/00144) (~€65.50, in two serial-number variants: `Pippyg Bat Bag` up to `PP2610250` and `Pippyg2 Bat Bag` from `PP2611001` onwards) with a cone and water-repellent acoustic membrane, though it is designed around battery-powered static recording; for continuous cabled USB use outdoors, shelter the unit and seal or drip-loop the USB cable entry.
 
 ### Griff and Griff Mini
 
