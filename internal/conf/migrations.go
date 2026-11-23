@@ -515,10 +515,13 @@ func readLegacyModelConsensus() (legacyModelConsensus, error) {
 // species makes a rule for those species; nothing else makes a rule. An unusable
 // minmodels becomes the default, as normalization did before. read supplies the old
 // keys. A read error aborts the conversion: it is recorded as a warning, no rule is
-// created and the version is not stamped, so nothing is persisted and the next start
-// retries with the old keys still in the file. Load carries on with the filter off,
-// since a removed setting must not stop the station from starting. Returns true when
-// the version was stamped.
+// created and the version is not stamped, so this step persists nothing and the next
+// start retries. Any later write of the config (another migration in the same Load or
+// a settings save) still drops the old keys, after which the retry finds none and
+// makes no rule. Load carries on with the filter off, since a removed setting must
+// not stop the station from starting. A config the previous release could load
+// decodes these keys without error, so the error path needs a hand edit. Returns
+// true when the version was stamped.
 func (s *Settings) migrateModelConsensusRules(read func() (legacyModelConsensus, error)) bool {
 	if s.ConfigVersion >= configVersionModelConsensusRules {
 		return false
