@@ -1258,7 +1258,7 @@ func TestNormalizeModelConsensus(t *testing.T) {
 		{"unknown alias kept with warning",
 			[]ModelConsensusRule{{Models: []string{"future_model", "PERCH_V2"}}},
 			[]ModelConsensusRule{{Models: []string{"future_model", "PERCH_V2"}}}, 1},
-		{"dropped rule does not shift later warnings",
+		{"a dropped rule still lets the later rule be repaired",
 			[]ModelConsensusRule{{Species: []string{" "}}, {MinModels: 0}},
 			[]ModelConsensusRule{{MinModels: DefaultModelConsensusMinModels}}, 2},
 	}
@@ -1285,6 +1285,15 @@ func TestNormalizeModelConsensus_WarningNamesRuleIndex(t *testing.T) {
 	s.normalizeModelConsensus()
 
 	assert.Contains(t, warningsText(s), "rules[1]")
+
+	// A dropped rule does not renumber the ones after it: the warning names the file position.
+	d := &Settings{}
+	d.Realtime.ModelConsensus.Rules = []ModelConsensusRule{{Species: []string{" "}}, {MinModels: 9}}
+
+	d.normalizeModelConsensus()
+
+	assert.Contains(t, warningsText(d), "rules[1] minmodels 9")
+	assert.NotContains(t, warningsText(d), "rules[0] minmodels")
 }
 
 // TestNormalizeIncompleteFeatures_ModelConsensusWired pins that the load-time
