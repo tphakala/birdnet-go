@@ -165,7 +165,7 @@ func TestStampConfigVersion(t *testing.T) {
 	assert.Contains(t, got, "configversion:")
 	assert.Greater(t, len(got), len("debug: false\n"), "the stamp is prefixed to the body")
 	// The stamp must reflect the newest version this build applies.
-	require.Equal(t, configVersionLogDeduplicationDefaults, currentConfigVersion)
+	require.Equal(t, configVersionModelConsensusRules, currentConfigVersion)
 }
 
 // TestMigrateModelsEnabledAuthoritative_ThroughLoad is test (g): Part A exercised through the

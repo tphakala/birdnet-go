@@ -95,23 +95,73 @@ func validModelConsensusMinModels(n int) bool {
 	return n >= MinModelConsensusMinModels && n <= MaxModelConsensusMinModels
 }
 
-// validateModelConsensusSettings rejects a minmodels value outside the accepted
-// range when the filter is enabled, and also when a non-zero value is saved while
-// it is off, so an unusable value is refused when it is sent and not only when a
-// later request switches the filter on. Zero means unset: it is accepted while the
-// filter is off and rejected once it is on. Load normalizes the value first, so
-// this only fires for settings saved through the API.
+// validateModelConsensusSettings rejects a rule whose fields contradict each other. A
+// rule with no models needs a minmodels from 2 to 4 (zero included, as an unusable
+// value is refused when it is sent); a rule that names models must leave minmodels and
+// alleligible unset, because they would read as a requirement on the named models.
+// Model aliases and species are not checked here: Load must keep booting with an
+// alias this build does not know, and the settings API checks aliases and species
+// itself. Load normalizes the rules first, so this only fires for settings saved
+// through the API.
 func validateModelConsensusSettings(settings *ModelConsensusSettings) error {
-	if !settings.Enabled() && settings.MinModels == 0 {
-		return nil
+	for i := range settings.Rules {
+		rule := &settings.Rules[i]
+		if len(rule.Models) > 0 {
+			if rule.MinModels != 0 || rule.AllEligible {
+				return errors.Newf("realtime.modelconsensus.rules[%d] names models, so minModels and allEligible do not apply; leave them unset", i).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "model-consensus-rule").
+					Context("rule_index", i).
+					Build()
+			}
+			continue
+		}
+		if !validModelConsensusMinModels(rule.MinModels) {
+			return errors.Newf("realtime.modelconsensus.rules[%d] minModels must be between %d and %d, got %d",
+				i, MinModelConsensusMinModels, MaxModelConsensusMinModels, rule.MinModels).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "model-consensus-rule").
+				Context("rule_index", i).
+				Context("min_models", rule.MinModels).
+				Build()
+		}
 	}
-	if !validModelConsensusMinModels(settings.MinModels) {
-		return errors.Newf("model consensus minModels must be between %d and %d, got %d",
-			MinModelConsensusMinModels, MaxModelConsensusMinModels, settings.MinModels).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "model-consensus-min-models").
-			Context("min_models", settings.MinModels).
-			Build()
+	return nil
+}
+
+// ValidateModelConsensusRuleModels rejects a blank model entry, and an entry that is
+// neither a known model alias nor already stored in current, in any rule of updated.
+// Only the PUT and PATCH settings handlers run it, so a request cannot introduce an
+// alias the build does not know; an alias already stored stays accepted, because
+// Load keeps unknown aliases (a newer build may have written them) and refusing them
+// would block every later save. Comparison is case-insensitive. It is not part of
+// ValidateSettings, which must not fail on a stale entry at load.
+func ValidateModelConsensusRuleModels(current, updated *ModelConsensusSettings) error {
+	stored := make(map[string]struct{})
+	for i := range current.Rules {
+		for _, alias := range current.Rules[i].Models {
+			stored[strings.ToLower(alias)] = struct{}{}
+		}
+	}
+	for i := range updated.Rules {
+		for _, alias := range updated.Rules[i].Models {
+			id := strings.ToLower(alias)
+			if strings.TrimSpace(alias) == "" {
+				return errors.Newf("realtime.modelconsensus.rules[%d] has a blank model entry", i).
+					Category(errors.CategoryValidation).
+					Context("validation_type", "model-consensus-rule-model").
+					Context("rule_index", i).
+					Build()
+			}
+			if _, ok := stored[id]; ok || ValidAudioModels[id] {
+				continue
+			}
+			return errors.Newf("realtime.modelconsensus.rules[%d] names unknown model %q", i, alias).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "model-consensus-rule-model").
+				Context("rule_index", i).
+				Build()
+		}
 	}
 	return nil
 }

@@ -17,6 +17,8 @@ package api
 
 import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
@@ -52,11 +54,31 @@ func (c *Controller) loadFoldedCommonNameMap() map[string]string {
 // canonicalizeExcludeList canonicalizes a species list (resolve each entry to its
 // scientific name, drop blanks, de-duplicate case-insensitively). It is a thin
 // facade wrapper over apicore.CanonicalizeExcludeList so the settings save flow
-// (the exclude list and the model consensus list) and the detection ignore/review
+// (the exclude list and the model consensus rules) and the detection ignore/review
 // handlers keep the stored lists in a single canonical form. Returns nil for an
 // empty/all-blank input.
 func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 	return apicore.CanonicalizeExcludeList(c.loadCommonToScientificMap(), exclude)
+}
+
+// canonicalizeConsensusRules canonicalizes the species list of every model consensus
+// rule in place, like canonicalizeExcludeList. An empty species list means every
+// species, so a list that held entries but canonicalizes to nothing (only blanks) is
+// rejected instead of silently widening the rule. The rules must belong to the
+// settings clone being saved (conf.CloneSettings deep-copies them), never to the
+// published settings.
+func (c *Controller) canonicalizeConsensusRules(rules []conf.ModelConsensusRule) error {
+	lookup := c.loadCommonToScientificMap()
+	for i := range rules {
+		had := len(rules[i].Species) > 0
+		rules[i].Species = apicore.CanonicalizeExcludeList(lookup, rules[i].Species)
+		if had && len(rules[i].Species) == 0 {
+			return errors.Newf("realtime.modelconsensus.rules[%d] lists only blank species; leave species empty to cover every species", i).
+				Category(errors.CategoryValidation).
+				Build()
+		}
+	}
+	return nil
 }
 
 // seedFallbackNames rebuilds the facade's own fallback name maps from the given

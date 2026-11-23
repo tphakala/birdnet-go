@@ -1220,44 +1220,93 @@ func TestNormalizeModelConsensus(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name         string
-		cfg          ModelConsensusSettings
-		wantMin      int
+		rules        []ModelConsensusRule
+		want         []ModelConsensusRule
 		wantWarnings int
 	}{
-		{"disabled zero defaulted silently", ModelConsensusSettings{MinModels: 0}, DefaultModelConsensusMinModels, 0},
-		{"enabled zero defaulted with warning", ModelConsensusSettings{AllSpecies: true, MinModels: 0}, DefaultModelConsensusMinModels, 1},
-		{"enabled below minimum defaulted with warning", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels - 1}, DefaultModelConsensusMinModels, 1},
-		{"enabled above maximum defaulted with warning", ModelConsensusSettings{ListedSpecies: true, MinModels: MaxModelConsensusMinModels + 1}, DefaultModelConsensusMinModels, 1},
-		{"disabled above maximum defaulted with warning", ModelConsensusSettings{MinModels: MaxModelConsensusMinModels + 1}, DefaultModelConsensusMinModels, 1},
-		{"enabled at minimum kept", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels}, MinModelConsensusMinModels, 0},
-		{"enabled at maximum kept", ModelConsensusSettings{AllSpecies: true, MinModels: MaxModelConsensusMinModels}, MaxModelConsensusMinModels, 0},
+		{"no rules untouched", nil, nil, 0},
+		{"any model zero defaulted with warning",
+			[]ModelConsensusRule{{}},
+			[]ModelConsensusRule{{MinModels: DefaultModelConsensusMinModels}}, 1},
+		{"any model below minimum defaulted with warning",
+			[]ModelConsensusRule{{MinModels: MinModelConsensusMinModels - 1}},
+			[]ModelConsensusRule{{MinModels: DefaultModelConsensusMinModels}}, 1},
+		{"any model above maximum defaulted with warning",
+			[]ModelConsensusRule{{MinModels: MaxModelConsensusMinModels + 1}},
+			[]ModelConsensusRule{{MinModels: DefaultModelConsensusMinModels}}, 1},
+		{"any model in range kept",
+			[]ModelConsensusRule{{MinModels: MaxModelConsensusMinModels, AllEligible: true}},
+			[]ModelConsensusRule{{MinModels: MaxModelConsensusMinModels, AllEligible: true}}, 0},
+		{"named rule minmodels and alleligible cleared with warning",
+			[]ModelConsensusRule{{Models: []string{"perch_v2"}, MinModels: 3, AllEligible: true}},
+			[]ModelConsensusRule{{Models: []string{"perch_v2"}}}, 1},
+		{"named rule alleligible alone cleared with warning",
+			[]ModelConsensusRule{{Models: []string{"perch_v2"}, AllEligible: true}},
+			[]ModelConsensusRule{{Models: []string{"perch_v2"}}}, 1},
+		{"whitespace-only species list drops the rule",
+			[]ModelConsensusRule{{Species: []string{" ", ""}, MinModels: 2}},
+			nil, 1},
+		{"blank species beside a real one are dropped",
+			[]ModelConsensusRule{{Species: []string{"", "Parus major", "  "}, MinModels: 2}},
+			[]ModelConsensusRule{{Species: []string{"Parus major"}, MinModels: 2}}, 0},
+		{"blank models are dropped",
+			[]ModelConsensusRule{{Models: []string{"", "perch_v2", " "}}},
+			[]ModelConsensusRule{{Models: []string{"perch_v2"}}}, 0},
+		{"all-blank models drops the rule instead of widening it to any model",
+			[]ModelConsensusRule{{Species: []string{"Parus major"}, Models: []string{" "}, MinModels: 2}},
+			nil, 1},
+		{"unknown alias kept with warning",
+			[]ModelConsensusRule{{Models: []string{"future_model", "PERCH_V2"}}},
+			[]ModelConsensusRule{{Models: []string{"future_model", "PERCH_V2"}}}, 1},
+		{"a dropped rule still lets the later rule be repaired",
+			[]ModelConsensusRule{{Species: []string{" "}}, {MinModels: 0}},
+			[]ModelConsensusRule{{MinModels: DefaultModelConsensusMinModels}}, 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			s := &Settings{}
-			s.Realtime.ModelConsensus = tt.cfg
+			s.Realtime.ModelConsensus.Rules = tt.rules
 
 			s.normalizeModelConsensus()
 
-			assert.Equal(t, tt.wantMin, s.Realtime.ModelConsensus.MinModels)
+			assert.Equal(t, tt.want, s.Realtime.ModelConsensus.Rules)
 			assert.Len(t, s.ValidationWarnings, tt.wantWarnings)
 			require.NoError(t, validateModelConsensusSettings(&s.Realtime.ModelConsensus))
 		})
 	}
 }
 
+func TestNormalizeModelConsensus_WarningNamesRuleIndex(t *testing.T) {
+	t.Parallel()
+	s := &Settings{}
+	s.Realtime.ModelConsensus.Rules = []ModelConsensusRule{{MinModels: 2}, {MinModels: 9}}
+
+	s.normalizeModelConsensus()
+
+	assert.Contains(t, warningsText(s), "rules[1]")
+
+	// A dropped rule does not renumber the ones after it: the warning names the file position.
+	d := &Settings{}
+	d.Realtime.ModelConsensus.Rules = []ModelConsensusRule{{Species: []string{" "}}, {MinModels: 9}}
+
+	d.normalizeModelConsensus()
+
+	assert.Contains(t, warningsText(d), "rules[1] minmodels 9")
+	assert.NotContains(t, warningsText(d), "rules[0] minmodels")
+}
+
 // TestNormalizeIncompleteFeatures_ModelConsensusWired pins that the load-time
-// normalization pass repairs the model consensus minimum, so a hand-edited value
-// cannot reach the fatal validation.
+// normalization pass repairs a rule's minimum, so a hand-edited value cannot reach
+// the fatal validation.
 func TestNormalizeIncompleteFeatures_ModelConsensusWired(t *testing.T) {
 	t.Parallel()
 	s := &Settings{}
-	s.Realtime.ModelConsensus = ModelConsensusSettings{AllSpecies: true, MinModels: MaxModelConsensusMinModels + 1}
+	s.Realtime.ModelConsensus = ModelConsensusSettings{Rules: []ModelConsensusRule{{MinModels: MaxModelConsensusMinModels + 1}}}
 
 	normalizeIncompleteFeatures(s)
 
-	assert.Equal(t, DefaultModelConsensusMinModels, s.Realtime.ModelConsensus.MinModels)
+	assert.Equal(t, DefaultModelConsensusMinModels, s.Realtime.ModelConsensus.Rules[0].MinModels)
 }
 
 // TestNormalizeOAuthProviders_KeepsUnknownProviderIDFailClosed pins that an entry

@@ -236,83 +236,166 @@ func TestUpdateSectionSettingsSkipsExcludeForUnrelatedSection(t *testing.T) {
 
 // TestUpdateSectionSettingsSkipsModelConsensusForUnrelatedSection verifies that
 // saving a section other than realtime leaves a legacy (non-canonical) model
-// consensus list entry untouched.
+// consensus rule species entry untouched.
 func TestUpdateSectionSettingsSkipsModelConsensusForUnrelatedSection(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 	installExcludeTestResolver(t, controller)
 
-	controller.Settings.Load().Realtime.ModelConsensus.Species = []string{testExcludeLocalizedName}
+	controller.Settings.Load().Realtime.ModelConsensus.Rules = []conf.ModelConsensusRule{
+		{Species: []string{testExcludeLocalizedName}, MinModels: 2},
+	}
 
 	patchSection(t, e, controller, SettingsSectionAudio, map[string]any{})
 
-	got := controller.Settings.Load().Realtime.ModelConsensus.Species
+	got := controller.Settings.Load().Realtime.ModelConsensus.Rules[0].Species
 	assert.Equal(t, []string{testExcludeLocalizedName}, got,
 		"unrelated section save must leave the legacy model consensus entry untouched")
 }
 
-// TestUpdateSectionSettingsCanonicalizesModelConsensusList verifies the PATCH
-// /api/v2/settings/realtime path stores the model consensus species list as
-// scientific names, de-duplicated and trimmed. The filter stays off so validation
-// does not involve the model count.
-func TestUpdateSectionSettingsCanonicalizesModelConsensusList(t *testing.T) {
+// TestUpdateSectionSettingsCanonicalizesModelConsensusRules verifies the PATCH
+// /api/v2/settings/realtime path stores each rule's species as scientific names,
+// de-duplicated and trimmed.
+func TestUpdateSectionSettingsCanonicalizesModelConsensusRules(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 	installExcludeTestResolver(t, controller)
 
 	patchSection(t, e, controller, SettingsSectionRealtime, map[string]any{
 		"modelConsensus": map[string]any{
-			"species": []string{testExcludeLocalizedName, testExcludeScientificName, "  American Crow  ", "  "},
+			"rules": []map[string]any{
+				{"species": []string{testExcludeLocalizedName, testExcludeScientificName, "  American Crow  ", "  "}, "minModels": 2},
+				{"species": []string{testExcludeLocalizedName}, "models": []string{"perch_v2"}, "minModels": 0},
+			},
 		},
 	})
 
-	got := controller.Settings.Load().Realtime.ModelConsensus.Species
-	assert.Equal(t, []string{testExcludeScientificName, "American Crow"}, got)
+	rules := controller.Settings.Load().Realtime.ModelConsensus.Rules
+	require.Len(t, rules, 2)
+	assert.Equal(t, []string{testExcludeScientificName, "American Crow"}, rules[0].Species)
+	assert.Equal(t, []string{testExcludeScientificName}, rules[1].Species)
 }
 
-// TestUpdateSettingsCanonicalizesModelConsensusList verifies the full-settings PUT
-// path canonicalizes the model consensus species list.
-func TestUpdateSettingsCanonicalizesModelConsensusList(t *testing.T) {
+// TestUpdateSettingsCanonicalizesModelConsensusRules verifies the full-settings PUT
+// path canonicalizes each rule's species.
+func TestUpdateSettingsCanonicalizesModelConsensusRules(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 	installExcludeTestResolver(t, controller)
 
 	s := conf.CloneSettings(controller.Settings.Load())
-	s.Realtime.ModelConsensus.Species = []string{testExcludeLocalizedName, "American Crow"}
+	s.Realtime.ModelConsensus.Rules = []conf.ModelConsensusRule{
+		{Species: []string{testExcludeLocalizedName, "American Crow"}, MinModels: 2},
+	}
 	putFullSettings(t, e, controller, s)
 
-	got := controller.Settings.Load().Realtime.ModelConsensus.Species
+	got := controller.Settings.Load().Realtime.ModelConsensus.Rules[0].Species
 	assert.Equal(t, []string{testExcludeScientificName, "American Crow"}, got)
 }
 
-// TestUpdateSectionSettingsEnablingConsensusNeedsAUsableMinimum verifies that a
-// realtime PATCH which only switches the model consensus filter on is refused with a
-// 400 while the stored minimum is unset, that the refused save leaves the stored
-// settings untouched, that a PATCH which does not enable the filter is accepted
-// against the same stored value, and that the same enabling request succeeds once it
-// carries a usable minimum.
-func TestUpdateSectionSettingsEnablingConsensusNeedsAUsableMinimum(t *testing.T) {
+// TestUpdateSectionSettingsModelConsensusRuleMinimums verifies the contract the
+// settings UI relies on: an any-model rule needs a usable minModels and is refused
+// without one (leaving the stored settings untouched), while a rule that names
+// models must leave minModels unset.
+func TestUpdateSectionSettingsModelConsensusRuleMinimums(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 	controller.Settings.Load().Realtime.ModelConsensus = conf.ModelConsensusSettings{}
 
-	// Control: not enabling the filter is accepted against the unset minimum.
-	patchSection(t, e, controller, SettingsSectionRealtime, map[string]any{
-		"modelConsensus": map[string]any{"debug": true},
-	})
-	require.True(t, controller.Settings.Load().Realtime.ModelConsensus.Debug)
+	patch := func(rule map[string]any) *httptest.ResponseRecorder {
+		return sendSectionPatch(t, e, controller, SettingsSectionRealtime, map[string]any{
+			"modelConsensus": map[string]any{"rules": []map[string]any{rule}},
+		})
+	}
 
 	before := controller.Settings.Load().Realtime.ModelConsensus
-	rec := sendSectionPatch(t, e, controller, SettingsSectionRealtime, map[string]any{
-		"modelConsensus": map[string]any{"allSpecies": true},
-	})
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	rec := patch(map[string]any{"species": []string{}, "minModels": 0})
+	assert.Equal(t, http.StatusBadRequest, rec.Code, "an any-model rule without minModels is refused")
 	assert.Equal(t, before, controller.Settings.Load().Realtime.ModelConsensus,
 		"a refused save must leave the stored consensus settings unchanged")
 
-	// Sending a usable minimum with the enabling request is accepted.
-	patchSection(t, e, controller, SettingsSectionRealtime, map[string]any{
-		"modelConsensus": map[string]any{"allSpecies": true, "minModels": 3},
+	assert.Equal(t, http.StatusOK, patch(map[string]any{"species": []string{}, "minModels": 3}).Code)
+	assert.Equal(t, 3, controller.Settings.Load().Realtime.ModelConsensus.Rules[0].MinModels)
+
+	assert.Equal(t, http.StatusOK,
+		patch(map[string]any{"species": []string{}, "models": []string{"perch_v2"}, "minModels": 0}).Code,
+		"a rule that names models is accepted without minModels")
+
+	assert.Equal(t, http.StatusBadRequest,
+		patch(map[string]any{"species": []string{}, "models": []string{"perch_v2"}, "minModels": 2}).Code,
+		"a rule that names models is refused with minModels")
+}
+
+// TestUpdateSectionSettingsRejectsBlankOnlyRuleSpecies verifies that a species list
+// holding only blanks is refused instead of canonicalizing to an empty list, which
+// would widen the rule to every species.
+func TestUpdateSectionSettingsRejectsBlankOnlyRuleSpecies(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Realtime.ModelConsensus = conf.ModelConsensusSettings{}
+	before := controller.Settings.Load().Realtime.ModelConsensus
+
+	rec := sendSectionPatch(t, e, controller, SettingsSectionRealtime, map[string]any{
+		"modelConsensus": map[string]any{
+			"rules": []map[string]any{{"species": []string{" ", ""}, "minModels": 2}},
+		},
 	})
-	got := controller.Settings.Load().Realtime.ModelConsensus
-	assert.True(t, got.AllSpecies)
-	assert.Equal(t, 3, got.MinModels)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "rules[0]")
+	assert.Equal(t, before, controller.Settings.Load().Realtime.ModelConsensus)
+}
+
+// TestUpdateSectionSettingsModelConsensusUnknownAlias verifies that a request cannot
+// introduce a model alias this build does not know, and that an unknown alias already
+// stored (written by a newer build) does not block saving another section.
+func TestUpdateSectionSettingsModelConsensusUnknownAlias(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Realtime.ModelConsensus = conf.ModelConsensusSettings{}
+
+	rec := sendSectionPatch(t, e, controller, SettingsSectionRealtime, map[string]any{
+		"modelConsensus": map[string]any{
+			"rules": []map[string]any{{"species": []string{}, "models": []string{"future_model"}, "minModels": 0}},
+		},
+	})
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "future_model")
+	assert.Empty(t, controller.Settings.Load().Realtime.ModelConsensus.Rules)
+
+	controller.Settings.Load().Realtime.ModelConsensus.Rules = []conf.ModelConsensusRule{
+		{Models: []string{"future_model"}},
+	}
+	patchSection(t, e, controller, SettingsSectionAudio, map[string]any{})
+	patchSection(t, e, controller, SettingsSectionRealtime, map[string]any{
+		"dogBarkFilter": map[string]any{"debug": true},
+	})
+	assert.Equal(t, []string{"future_model"}, controller.Settings.Load().Realtime.ModelConsensus.Rules[0].Models,
+		"a stored unknown alias is kept and never locks a save")
+}
+
+// TestUpdateSettingsRejectsInvalidModelConsensusRules verifies the full-settings PUT
+// path refuses a blank-only species list and a newly introduced unknown alias, and
+// leaves the stored rules unchanged.
+func TestUpdateSettingsRejectsInvalidModelConsensusRules(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Realtime.ModelConsensus = conf.ModelConsensusSettings{}
+	before := controller.Settings.Load().Realtime.ModelConsensus
+
+	tests := []struct {
+		name string
+		rule conf.ModelConsensusRule
+		want string
+	}{
+		{"blank-only species", conf.ModelConsensusRule{Species: []string{" ", ""}, MinModels: 2}, "rules[0]"},
+		{"unknown alias", conf.ModelConsensusRule{Models: []string{"future_model"}}, "future_model"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := conf.CloneSettings(controller.Settings.Load())
+			s.Realtime.ModelConsensus.Rules = []conf.ModelConsensusRule{tt.rule}
+
+			rec := sendFullSettings(t, e, controller, s)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.want)
+			assert.Equal(t, before, controller.Settings.Load().Realtime.ModelConsensus)
+		})
+	}
 }
 
 // TestUpdateSectionSettingsKeepsModelConsensusWhenKeyOmitted verifies that a realtime
@@ -321,7 +404,7 @@ func TestUpdateSectionSettingsEnablingConsensusNeedsAUsableMinimum(t *testing.T)
 func TestUpdateSectionSettingsKeepsModelConsensusWhenKeyOmitted(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 	stored := conf.ModelConsensusSettings{
-		ListedSpecies: true, Species: []string{testExcludeScientificName}, MinModels: 3, AllEligible: true,
+		Rules: []conf.ModelConsensusRule{{Species: []string{testExcludeScientificName}, MinModels: 3, AllEligible: true}},
 	}
 	controller.Settings.Load().Realtime.ModelConsensus = stored
 

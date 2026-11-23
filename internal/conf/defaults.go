@@ -334,11 +334,6 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dogbarkfilter.species", []string{})
 
 	// Model consensus filter configuration
-	viper.SetDefault("realtime.modelconsensus.allspecies", false)
-	viper.SetDefault("realtime.modelconsensus.listedspecies", false)
-	viper.SetDefault("realtime.modelconsensus.species", []string{})
-	viper.SetDefault("realtime.modelconsensus.minmodels", DefaultModelConsensusMinModels)
-	viper.SetDefault("realtime.modelconsensus.alleligible", false)
 	viper.SetDefault("realtime.modelconsensus.debug", false)
 
 	// Telemetry configuration

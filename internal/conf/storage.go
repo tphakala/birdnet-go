@@ -160,6 +160,14 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "log deduplication defaults")
 	}
 
+	// Convert the removed model consensus switch into a rule once, then stamp ConfigVersion 4.
+	// Runs after the version 1 to 3 steps, which gate on ConfigVersion and would be skipped by
+	// an earlier stamp. It reads viper, which no earlier step changes for these keys
+	// (SaveYAMLConfig does not touch viper); the write below drops the old keys from the file.
+	if settings.migrateModelConsensusRules(readLegacyModelConsensus) {
+		persistMigration(settings, "model consensus rules")
+	}
+
 	// Relocate stream URLs misconfigured under realtime.audio.sources (meant
 	// for local sound cards) into realtime.rtsp.streams so the runtime opens
 	// them with FFmpeg instead of failing to open them as ALSA devices.

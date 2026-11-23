@@ -396,8 +396,14 @@ const (
 	// MigrateLogDeduplicationDefaults restores the defaults once.
 	configVersionLogDeduplicationDefaults = 3
 
+	// configVersionModelConsensusRules: realtime.modelconsensus changed from the allspecies,
+	// listedspecies, species, minmodels and alleligible switch to a list of rules;
+	// migrateModelConsensusRules turns those keys into one rule once so no install changes
+	// which detections the filter discards.
+	configVersionModelConsensusRules = 4
+
 	// currentConfigVersion is the newest config version this build applies.
-	currentConfigVersion = configVersionLogDeduplicationDefaults
+	currentConfigVersion = configVersionModelConsensusRules
 )
 
 // MigrateSourceTargetDefaults writes ["birdnet"] into every source and stream whose
@@ -481,6 +487,81 @@ func (s *Settings) MigrateLogDeduplicationDefaults() bool {
 	}
 	s.ConfigVersion = configVersionLogDeduplicationDefaults
 	return true
+}
+
+// legacyModelConsensus holds the realtime.modelconsensus keys that version 4 removed.
+// The field names match the old keys case-insensitively, which is how viper decodes
+// them.
+type legacyModelConsensus struct {
+	AllSpecies, ListedSpecies bool
+	Species                   []string
+	MinModels                 int
+	AllEligible               bool
+}
+
+// readLegacyModelConsensus decodes the removed realtime.modelconsensus keys from viper
+// with the decode hook Load uses, so they decode exactly as the build that wrote them
+// decoded them.
+func readLegacyModelConsensus() (legacyModelConsensus, error) {
+	var l legacyModelConsensus
+	err := viper.UnmarshalKey("realtime.modelconsensus", &l, viper.DecodeHook(configDecodeHook()))
+	return l, err
+}
+
+// migrateModelConsensusRules converts the removed allspecies, listedspecies, species,
+// minmodels and alleligible keys into at most one rule, appended after any rules
+// already present, exactly once per config file, then stamps ConfigVersion. allspecies
+// makes an every-species rule, otherwise listedspecies with at least one non-blank
+// species makes a rule for those species; nothing else makes a rule. An unusable
+// minmodels becomes the default, as normalization did before. read supplies the old
+// keys. A read error aborts the conversion: it is recorded as a warning, no rule is
+// created and the version is not stamped, so this step persists nothing and the next
+// start retries. Any later write of the config (another migration in the same Load or
+// a settings save) still drops the old keys, after which the retry finds none and
+// makes no rule. Load carries on with the filter off, since a removed setting must
+// not stop the station from starting. A config the previous release could load
+// decodes these keys without error, so the error path needs a hand edit. Returns
+// true when the version was stamped.
+func (s *Settings) migrateModelConsensusRules(read func() (legacyModelConsensus, error)) bool {
+	if s.ConfigVersion >= configVersionModelConsensusRules {
+		return false
+	}
+	legacy, err := read()
+	if err != nil {
+		s.recordValidationWarning(warnComponentRealtime,
+			"the old model consensus settings could not be read; no consensus rule was created: %v", err)
+		return false
+	}
+	if rule, ok := legacy.rule(); ok {
+		m := &s.Realtime.ModelConsensus
+		m.Rules = append(m.Rules, rule)
+		GetLogger().Info("Converted the old model consensus settings to a rule",
+			logger.Int("species_count", len(rule.Species)),
+			logger.Int("min_models", rule.MinModels),
+			logger.Bool("all_eligible", rule.AllEligible))
+	}
+	s.ConfigVersion = configVersionModelConsensusRules
+	return true
+}
+
+// rule returns the rule the old settings stood for, and false when they stood for none.
+func (l legacyModelConsensus) rule() (ModelConsensusRule, bool) {
+	minModels := l.MinModels
+	if !validModelConsensusMinModels(minModels) {
+		minModels = DefaultModelConsensusMinModels
+	}
+	switch {
+	case l.AllSpecies:
+		return ModelConsensusRule{MinModels: minModels, AllEligible: l.AllEligible}, true
+	case l.ListedSpecies:
+		// Entries are kept as written so matching is unchanged; blank ones never matched.
+		kept := dropBlankEntries(l.Species)
+		if len(kept) == 0 {
+			return ModelConsensusRule{}, false
+		}
+		return ModelConsensusRule{Species: kept, MinModels: minModels, AllEligible: l.AllEligible}, true
+	}
+	return ModelConsensusRule{}, false
 }
 
 // isBirdNETV24ConfigID reports whether a models.enabled entry names the BirdNET v2.4 family
@@ -616,6 +697,14 @@ func (s *Settings) MigrateModelIDAliases() bool {
 		stream := &s.Realtime.RTSP.Streams[i]
 		if normalized, did := normalizeModelIDList(stream.Models); did {
 			stream.Models = normalized
+			changed = true
+		}
+	}
+
+	for i := range s.Realtime.ModelConsensus.Rules {
+		rule := &s.Realtime.ModelConsensus.Rules[i]
+		if normalized, did := normalizeModelIDList(rule.Models); did {
+			rule.Models = normalized
 			changed = true
 		}
 	}
