@@ -4,6 +4,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -79,8 +80,9 @@ func (c *Handler) liveSpeciesKnowledge() (speciesKnowledge, error) {
 // guard for a consensus rule per taxon group, because a detection is only compared
 // with models of its own group.
 //
-// Names are matched as scientific names, as consensus rules store them after a
-// save; common names are not resolved. It is auth-gated because rangeFilterPass is
+// At most maxCoverageSpecies names are accepted per request, counted after
+// trimming and dropping blanks; more is a 400. Names are matched as scientific
+// names, as consensus rules store them after a save; common names are not resolved. It is auth-gated because rangeFilterPass is
 // derived from the configured location. The first call after a model topology
 // change can wait for the snapshot to be rebuilt.
 //
@@ -101,6 +103,9 @@ func (c *Handler) GetSpeciesCoverage(ctx echo.Context) error {
 	}
 	if len(names) == 0 {
 		return c.HandleError(ctx, nil, "at least one species is required", http.StatusBadRequest)
+	}
+	if len(names) > maxCoverageSpecies {
+		return c.HandleError(ctx, nil, "at most "+strconv.Itoa(maxCoverageSpecies)+" species are accepted per request", http.StatusBadRequest)
 	}
 
 	source := c.speciesKnowledge

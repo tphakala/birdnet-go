@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -192,5 +193,20 @@ func TestGetSpeciesCoverage(t *testing.T) {
 			rec := getCoverage(t, enabled(conf.ModelIDPerchV2), fakeSpeciesKnowledge{}, q)
 			assert.Equal(t, http.StatusBadRequest, rec.Code, name)
 		}
+	})
+
+	t.Run("accepts the maximum species count and rejects one more", func(t *testing.T) {
+		species := func(n int) url.Values {
+			q := url.Values{}
+			for i := range n {
+				q.Add("species", "Species "+strconv.Itoa(i))
+			}
+			return q
+		}
+		atLimit := getCoverage(t, enabled(conf.ModelIDPerchV2), fakeSpeciesKnowledge{}, species(maxCoverageSpecies))
+		assert.Equal(t, http.StatusOK, atLimit.Code)
+		overLimit := getCoverage(t, enabled(conf.ModelIDPerchV2), fakeSpeciesKnowledge{}, species(maxCoverageSpecies+1))
+		assert.Equal(t, http.StatusBadRequest, overLimit.Code)
+		assert.Contains(t, overLimit.Body.String(), strconv.Itoa(maxCoverageSpecies))
 	})
 }
