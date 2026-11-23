@@ -74,7 +74,7 @@ Fill in the **Name** field for the source. Save stays disabled until the source 
 
 ### Which microphone should I use?
 
-See [Recommended Hardware](hardware.md). Popular community choices: a Clippy/Primo EM272 capsule on a cheap USB sound card for birds, and an AudioMoth (in USB-mic firmware) for bats and ultrasonic work. Keep the mic out of direct rain and protect it from insects; the AudioMoth case is splashproof, not waterproof.
+See [Recommended Hardware](hardware.md) for general setups and [Ultrasonic Microphones](ultrasonic-microphones.md) for bat detection options. Popular community choices: a Clippy/Primo EM272 capsule on a cheap USB sound card for birds, and an AudioMoth (in USB-mic firmware), Dodotronic UltraMic, Vleermic 384kHz, or a 192 kHz XLR setup for bats and ultrasonic work. Keep the mic out of direct rain and protect it from insects; the AudioMoth case is splashproof, not waterproof.
 
 ### Can I save recordings to an external USB drive?
 
@@ -170,7 +170,7 @@ birdnet:
 
 ### How do I do bat detection?
 
-Bats need an **ultrasonic-capable mic** (e.g. an AudioMoth) capturing at **96 kHz or higher** (192 kHz recommended for BattyBirdNET; 192 kHz minimum and 384 kHz recommended for BSG-BAT), and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model or BSG-BAT and assign it to that source. Bats only run at night by default, and clips with no bat-like ultrasonic activity (no ultrasonic energy, or only broadband clicks and rustling) are flagged **"Unlikely"**. Flagged detections are saved by default; turning on **Discard Unlikely Detections** in the bat settings drops them instead, and dropped detections cannot be recovered. Bat spectrograms render at the clip's own sample rate and show up to half of it (a 192 kHz clip shows 0 to 96 kHz, a 384 kHz clip 0 to 192 kHz), so you can check a call in the detection view. Bat clips above 48 kHz are always saved losslessly at their full sample rate using **FLAC** (default) or **WAV** (`realtime.audio.export.ultrasonictype`), since lossy formats cannot store ultrasonic content; see [Audio Formats](audio-formats.md). You can download a clip and open it in a tool like Audacity.
+Bats need an **ultrasonic-capable mic** (see [Ultrasonic Microphones](ultrasonic-microphones.md) for USB and XLR options) capturing at **96 kHz or higher** (192 kHz recommended for BattyBirdNET; 192 kHz minimum and 384 kHz recommended for BSG-BAT), and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model or BSG-BAT and assign it to that source. Bats only run at night by default, and clips with no bat-like ultrasonic activity (no ultrasonic energy, or only broadband clicks and rustling) are flagged **"Unlikely"**. Flagged detections are saved by default; turning on **Discard Unlikely Detections** in the bat settings drops them instead, and dropped detections cannot be recovered. Bat spectrograms render at the clip's own sample rate and show up to half of it (a 192 kHz clip shows 0 to 96 kHz, a 384 kHz clip 0 to 192 kHz), so you can check a call in the detection view. Bat clips above 48 kHz are always saved losslessly at their full sample rate using **FLAC** (default) or **WAV** (`realtime.audio.export.ultrasonictype`), since lossy formats cannot store ultrasonic content; see [Audio Formats](audio-formats.md). You can download a clip and open it in a tool like Audacity.
 
 ### Where did the Sensitivity and Overlap settings go?
 
