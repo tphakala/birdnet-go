@@ -12,6 +12,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
+const (
+	// speciesQueryParam is the repeatable query parameter that carries the species names.
+	speciesQueryParam = "species"
+	// maxCoverageSpecies is the most species names one request may carry, counted
+	// after trimming and dropping blanks. It matches the order of the detection
+	// batch limit, so a settings page can send a long rule list in one call.
+	maxCoverageSpecies = 500
+)
+
 // speciesKnowledge is the part of classifier.ModelSpecies the coverage endpoint
 // reads. *classifier.ModelSpecies satisfies it; tests inject a fixed fake because
 // the snapshot has no exported constructor.
@@ -25,7 +34,7 @@ type speciesKnowledge interface {
 
 // SpeciesCoverageModel is one loaded, enabled model that can classify a species.
 type SpeciesCoverageModel struct {
-	// ID is the config alias, as written in models.enabled and in consensus rules.
+	// ID is the config alias, as written in models.enabled.
 	ID string `json:"id"`
 	// RegistryID is the classifier registry ID the alias resolves to.
 	RegistryID string `json:"registryId"`
@@ -83,8 +92,9 @@ func (c *Handler) liveSpeciesKnowledge() (speciesKnowledge, error) {
 // @Success 200 {object} SpeciesCoverageResponse
 // @Router /api/v2/models/species-coverage [get]
 func (c *Handler) GetSpeciesCoverage(ctx echo.Context) error {
-	names := make([]string, 0, len(ctx.QueryParams()["species"]))
-	for _, raw := range ctx.QueryParams()["species"] {
+	raws := ctx.QueryParams()[speciesQueryParam]
+	names := make([]string, 0, len(raws))
+	for _, raw := range raws {
 		if name := strings.TrimSpace(raw); name != "" {
 			names = append(names, name)
 		}
