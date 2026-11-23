@@ -557,24 +557,35 @@ type DaylightFilterSettings struct {
 	Species []string `yaml:"species" json:"species"` // species, families, orders, or genera to filter during daylight
 }
 
-// ModelConsensusSettings configures the model consensus false positive filter. A
-// detection in scope is discarded unless enough distinct models of its taxon group
-// (bird or bat) detected it within the pending window. Only models that scored the
-// audio of the detection's hits, can classify the species and pass the range filter
-// for it are eligible, and the requirement is capped at the eligible count, so a
-// species that only one model can detect always passes.
-type ModelConsensusSettings struct {
-	AllSpecies    bool     `yaml:"allspecies" json:"allSpecies"`       // true to require consensus for every species; takes precedence over listedspecies
-	ListedSpecies bool     `yaml:"listedspecies" json:"listedSpecies"` // true to require consensus for the species in species
-	Species       []string `yaml:"species" json:"species"`             // species that need consensus when listedspecies is on; scientific names keep working after a locale change
-	MinModels     int      `yaml:"minmodels" json:"minModels"`         // agreeing models required, 2 to 4, capped at the number of eligible models
-	AllEligible   bool     `yaml:"alleligible" json:"allEligible"`     // true to require every eligible model instead of minmodels
-	Debug         bool     `yaml:"debug" json:"debug"`                 // true to log each consensus discard at info level, with the agreeing and eligible models
+// ModelConsensusRule is one model consensus rule. A rule with no models behaves as
+// the original all-model filter for the species it covers: the detection is
+// discarded unless MinModels distinct models (or every eligible model, with
+// AllEligible) detected it. A rule that names models discards a detection that only
+// the listed models heard, and only when an eligible model outside the list exists:
+// the rule needs a second model from outside the list. MinModels and AllEligible
+// apply only to a rule with no models.
+type ModelConsensusRule struct {
+	Species     []string `yaml:"species" json:"species"`         // species the rule covers, scientific names keep working after a locale change; empty covers every species
+	Models      []string `yaml:"models" json:"models"`           // config model IDs as in models.enabled; empty means any model
+	MinModels   int      `yaml:"minmodels" json:"minModels"`     // agreeing models required, 2 to 4, for a rule with no models; 0 for a rule that names models
+	AllEligible bool     `yaml:"alleligible" json:"allEligible"` // true to require every eligible model instead of minmodels, for a rule with no models
 }
 
-// Enabled reports whether the filter is switched on, for every species or for the
-// listed ones.
-func (m *ModelConsensusSettings) Enabled() bool { return m.AllSpecies || m.ListedSpecies }
+// ModelConsensusSettings configures the model consensus false positive filter as a
+// list of rules. A detection is checked against every rule that covers its species
+// and is discarded when any of them fails. Only models that scored the audio of the
+// detection's hits, can classify the species and pass the range filter for it are
+// eligible, and a detection is compared only with models of its taxon group (bird
+// or bat). A rule that cannot be satisfied because too few eligible models exist,
+// for example after a model is removed, disabled or unloaded, lets the detection
+// pass. Model names in rules are config IDs, as in models.enabled.
+type ModelConsensusSettings struct {
+	Rules []ModelConsensusRule `yaml:"rules" json:"rules"` // consensus rules; each has species (empty: every species), models (config IDs as in models.enabled; empty: any model, needing minmodels agreeing models or every eligible one with alleligible; non-empty: a detection heard only by these models needs a second model outside the list), and minmodels (2 to 4) and alleligible, which apply only when models is empty
+	Debug bool                 `yaml:"debug" json:"debug"` // true to log each consensus discard at info level, with the failed rule and the agreeing and eligible models
+}
+
+// Enabled reports whether the filter is switched on, which it is when any rule exists.
+func (m *ModelConsensusSettings) Enabled() bool { return len(m.Rules) > 0 }
 
 // RTSPHealthSettings contains settings for RTSP stream health monitoring.
 type RTSPHealthSettings struct {

@@ -1362,39 +1362,52 @@
       "type": "object",
       "description": "MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections"
     },
-    "ModelConsensusSettings": {
+    "ModelConsensusRule": {
       "properties": {
-        "allspecies": {
-          "type": "boolean",
-          "description": "true to require consensus for every species; takes precedence over listedspecies"
-        },
-        "listedspecies": {
-          "type": "boolean",
-          "description": "true to require consensus for the species in species"
-        },
         "species": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "species that need consensus when listedspecies is on; scientific names keep working after a locale change"
+          "description": "species the rule covers, scientific names keep working after a locale change; empty covers every species"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "config model IDs as in models.enabled; empty means any model"
         },
         "minmodels": {
           "type": "integer",
-          "description": "agreeing models required, 2 to 4, capped at the number of eligible models"
+          "description": "agreeing models required, 2 to 4, for a rule with no models; 0 for a rule that names models"
         },
         "alleligible": {
           "type": "boolean",
-          "description": "true to require every eligible model instead of minmodels"
-        },
-        "debug": {
-          "type": "boolean",
-          "description": "true to log each consensus discard at info level, with the agreeing and eligible models"
+          "description": "true to require every eligible model instead of minmodels, for a rule with no models"
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "ModelConsensusSettings configures the model consensus false positive filter."
+      "description": "ModelConsensusRule is one model consensus rule."
+    },
+    "ModelConsensusSettings": {
+      "properties": {
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/ModelConsensusRule"
+          },
+          "type": "array",
+          "description": "consensus rules; each has species (empty: every species), models (config IDs as in models.enabled; empty: any model, needing minmodels agreeing models or every eligible one with alleligible; non-empty: a detection heard only by these models needs a second model outside the list), and minmodels (2 to 4) and alleligible, which apply only when models is empty"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to log each consensus discard at info level, with the failed rule and the agreeing and eligible models"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ModelConsensusSettings configures the model consensus false positive filter as a list of rules."
     },
     "ModelsConfig": {
       "properties": {

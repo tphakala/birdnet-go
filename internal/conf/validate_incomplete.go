@@ -246,31 +246,90 @@ func (s *Settings) normalizeAlternateMinConfidence() {
 	}
 }
 
-// normalizeModelConsensus resets an unset or out-of-range
-// realtime.modelconsensus.minmodels to the default on load, recording a warning,
-// for the same reason as normalizeAlternateMinConfidence: ValidateSettings is
-// fatal on Load and the value is not editable in the web UI. It runs whether or not
-// the filter is on, because viper drops the nested default when the parent key is
-// present, and a later enable through the API must not fail on a field the operator
-// never saw. A zero value is unwritten, so it only warns when the filter is on. The
-// settings API path does not run this pass; it rejects the value via
-// validateModelConsensusSettings.
+// normalizeModelConsensus repairs the model consensus rules on load, recording a
+// warning for each repair, for the same reason as normalizeAlternateMinConfidence:
+// ValidateSettings is fatal on Load and the rules are not editable in the web UI yet.
+// Blank species and model entries are dropped, which changes no verdict because a
+// blank entry never matches; a rule whose non-empty list held only blanks is dropped,
+// never kept with an empty list, which would widen it to every species or any model.
+// Model aliases this build does not know are kept (inert), with a warning. A rule
+// that names models loses a minmodels and alleligible it cannot use; a rule with no
+// models gets the default minmodels when its value is unset or out of range. The
+// settings API path does not run this pass; it rejects these values via
+// validateModelConsensusSettings. Warnings name a rule by its 0-based position in
+// the file.
 func (s *Settings) normalizeModelConsensus() {
-	m := &s.Realtime.ModelConsensus
-	if m.MinModels == 0 {
-		if m.Enabled() {
-			s.recordValidationWarning(warnComponentRealtime,
-				"model consensus minmodels is not set; using the default %d", DefaultModelConsensusMinModels)
-		}
-		m.MinModels = DefaultModelConsensusMinModels
+	rules := s.Realtime.ModelConsensus.Rules
+	if len(rules) == 0 {
 		return
 	}
-	if !validModelConsensusMinModels(m.MinModels) {
-		s.recordValidationWarning(warnComponentRealtime,
-			"model consensus minmodels %d is outside %d to %d; using the default %d",
-			m.MinModels, MinModelConsensusMinModels, MaxModelConsensusMinModels, DefaultModelConsensusMinModels)
-		m.MinModels = DefaultModelConsensusMinModels
+	var kept []ModelConsensusRule
+	for i := range rules {
+		if rule, ok := s.normalizeModelConsensusRule(i, rules[i]); ok {
+			kept = append(kept, rule)
+		}
 	}
+	s.Realtime.ModelConsensus.Rules = kept
+}
+
+// normalizeModelConsensusRule repairs one rule at position i and reports whether to
+// keep it.
+func (s *Settings) normalizeModelConsensusRule(i int, rule ModelConsensusRule) (ModelConsensusRule, bool) {
+	species := dropBlankEntries(rule.Species)
+	if len(rule.Species) > 0 && len(species) == 0 {
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] lists only blank species; it matched nothing and is ignored", i)
+		return rule, false
+	}
+	models := dropBlankEntries(rule.Models)
+	if len(rule.Models) > 0 && len(models) == 0 {
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] lists only blank models; it is ignored", i)
+		return rule, false
+	}
+	rule.Species = species
+	rule.Models = models
+
+	for _, alias := range rule.Models {
+		if !ValidAudioModels[strings.ToLower(alias)] {
+			s.recordValidationWarning(warnComponentRealtime,
+				"model consensus rules[%d] model %q is not a known model ID; it is ignored", i, alias)
+		}
+	}
+
+	if len(rule.Models) > 0 {
+		if rule.MinModels != 0 || rule.AllEligible {
+			s.recordValidationWarning(warnComponentRealtime,
+				"model consensus rules[%d] names models, so minmodels and alleligible do not apply; they are cleared", i)
+			rule.MinModels = 0
+			rule.AllEligible = false
+		}
+		return rule, true
+	}
+	switch {
+	case rule.MinModels == 0:
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] minmodels is not set; using the default %d", i, DefaultModelConsensusMinModels)
+		rule.MinModels = DefaultModelConsensusMinModels
+	case !validModelConsensusMinModels(rule.MinModels):
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] minmodels %d is outside %d to %d; using the default %d",
+			i, rule.MinModels, MinModelConsensusMinModels, MaxModelConsensusMinModels, DefaultModelConsensusMinModels)
+		rule.MinModels = DefaultModelConsensusMinModels
+	}
+	return rule, true
+}
+
+// dropBlankEntries returns the entries of in that are not blank (empty or only
+// whitespace), as written. A nil, empty or all-blank in returns nil.
+func dropBlankEntries(in []string) []string {
+	var kept []string
+	for _, e := range in {
+		if strings.TrimSpace(e) != "" {
+			kept = append(kept, e)
+		}
+	}
+	return kept
 }
 
 // normalizeProfiling zeroes negative pprof sampling rates on load. A negative rate

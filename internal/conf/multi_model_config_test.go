@@ -239,6 +239,9 @@ func TestMigrateModelIDAliases_CanonicalizesCatalogIDs(t *testing.T) {
 	settings.Realtime.RTSP.Streams = []StreamConfig{
 		{URL: "rtsp://x", Models: []string{"perch-v2"}},
 	}
+	settings.Realtime.ModelConsensus.Rules = []ModelConsensusRule{
+		{Species: []string{"Parus major"}, Models: []string{"perch-v2", "PERCH_V2", "birdnet"}},
+	}
 
 	changed := settings.MigrateModelIDAliases()
 	require.True(t, changed, "catalog-style IDs should be normalized")
@@ -247,6 +250,7 @@ func TestMigrateModelIDAliases_CanonicalizesCatalogIDs(t *testing.T) {
 	assert.Equal(t, "perch_v2", settings.Realtime.Audio.Sources[0].Model)
 	assert.Equal(t, []string{"birdnet", "bsg", "bsg_bat"}, settings.Realtime.Audio.Sources[0].Models)
 	assert.Equal(t, []string{"perch_v2"}, settings.Realtime.RTSP.Streams[0].Models)
+	assert.Equal(t, []string{"perch_v2", "birdnet"}, settings.Realtime.ModelConsensus.Rules[0].Models, "catalog spelling is respelled and the case variant deduplicated")
 
 	// Idempotent: a second pass over already-canonical config changes nothing.
 	assert.False(t, settings.MigrateModelIDAliases(), "normalized config should be a no-op")

@@ -25,6 +25,47 @@ type consensusModels struct {
 	knows   func(modelID, key string) bool             // reports whether the model can classify the species with this canonical key
 	groupOf func(modelID string) classifier.TaxonGroup // taxon group of the model, empty when unknown
 	clipOf  func(modelID string) (time.Duration, bool) // audio length one window of the model scores, false when unknown
+
+	// registryIDOf resolves a config alias from a rule's models list to a registry model ID.
+	registryIDOf func(alias string) (string, bool)
+}
+
+// consensusRule is one compiled conf.ModelConsensusRule. Whether it names models is
+// decided by the configured list, never by the resolved set: a rule whose aliases all
+// fail to resolve stays a rule that names models and is inert, and must not turn into
+// a rule for any model.
+type consensusRule struct {
+	index       int                 // 0-based position in the configured rules, for logs
+	species     []string            // as configured; empty covers every species
+	models      []string            // as configured; empty means any model
+	listed      map[string]struct{} // registry IDs of the models entries that resolve
+	minModels   int                 // any-model rules only
+	allEligible bool                // any-model rules only
+}
+
+// namesModels reports whether the rule lists models, as configured.
+func (r *consensusRule) namesModels() bool { return len(r.models) > 0 }
+
+// compileConsensusRules resolves each rule's model aliases once per tick.
+func compileConsensusRules(rules []conf.ModelConsensusRule, registryIDOf func(string) (string, bool)) []consensusRule {
+	compiled := make([]consensusRule, len(rules))
+	for i := range rules {
+		r := &rules[i]
+		c := consensusRule{
+			index: i, species: r.Species, models: r.Models,
+			minModels: r.MinModels, allEligible: r.AllEligible,
+		}
+		if len(r.Models) > 0 {
+			c.listed = make(map[string]struct{}, len(r.Models))
+			for _, alias := range r.Models {
+				if id, ok := registryIDOf(alias); ok {
+					c.listed[id] = struct{}{}
+				}
+			}
+		}
+		compiled[i] = c
+	}
+	return compiled
 }
 
 // scoredRunKey identifies the windows one model scored on one audio source.
@@ -47,13 +88,16 @@ func (r scoredRun) covers(from, to time.Time) bool {
 type consensusTick struct {
 	models consensusModels
 	runs   map[scoredRunKey]scoredRun // copy of the scored runs taken at the start of the tick
+	rules  []consensusRule            // the settings' rules compiled for this tick
 }
 
 // consensusVerdict is the outcome of one consensus evaluation.
 type consensusVerdict struct {
 	discard            bool
-	agreeing, eligible []string // sorted model IDs, for the log
-	required           int
+	agreeing, eligible []string       // sorted model IDs, for the log
+	required           int            // models an any-model rule needed, when it failed
+	rule               *consensusRule // the first failing rule in config order, nil when none failed
+	outside            []string       // eligible models outside a failing rule's list, sorted
 }
 
 // recordScoredRun extends or restarts the scored run of the window's model on its
@@ -105,6 +149,7 @@ func (p *Processor) prepareModelConsensus(settings *conf.Settings) *consensusTic
 			groupOf: classifier.TaxonGroupFor,
 			clipOf:  registryClipLength,
 		}
+		models.registryIDOf = classifier.ResolveConfigModelID
 	default:
 		return nil
 	}
@@ -113,7 +158,11 @@ func (p *Processor) prepareModelConsensus(settings *conf.Settings) *consensusTic
 	runs := make(map[scoredRunKey]scoredRun, len(p.scoredRuns))
 	maps.Copy(runs, p.scoredRuns)
 	p.scoredRunsMu.Unlock()
-	return &consensusTick{models: models, runs: runs}
+	return &consensusTick{
+		models: models,
+		runs:   runs,
+		rules:  compileConsensusRules(settings.Realtime.ModelConsensus.Rules, models.registryIDOf),
+	}
 }
 
 // registryClipLength is the audio length one window of the registered model scores.
@@ -122,15 +171,15 @@ func registryClipLength(modelID string) (time.Duration, bool) {
 	return spec.ClipLength, ok && spec.ClipLength > 0
 }
 
-// needsConsensus reports whether the filter applies to the detection's species. It
-// is the one place that decides applicability. isSpeciesExcluded is a generic list
+// ruleCoversSpecies reports whether a rule's species list covers the detection's
+// species: an empty list covers every species. isSpeciesExcluded is a generic list
 // matcher by common or scientific name.
-func needsConsensus(item *PendingDetection, cfg *conf.ModelConsensusSettings) bool {
-	if cfg.AllSpecies {
+func ruleCoversSpecies(item *PendingDetection, species []string) bool {
+	if len(species) == 0 {
 		return true
 	}
-	species := &item.Detection.Result.Species
-	return cfg.ListedSpecies && isSpeciesExcluded(species.CommonName, species.ScientificName, cfg.Species)
+	sp := &item.Detection.Result.Species
+	return isSpeciesExcluded(sp.CommonName, sp.ScientificName, species)
 }
 
 // consensusRequired is the number of agreeing models a detection needs: every
@@ -142,7 +191,10 @@ func consensusRequired(minModels int, allEligible bool, eligible int) int {
 	return min(minModels, eligible)
 }
 
-// evaluate decides whether the pending detection has enough agreeing models.
+// evaluate decides whether the pending detection passes every rule that covers its
+// species. An any-model rule needs enough agreeing models. A rule that names models
+// applies only when every agreeing model is listed, and then needs a second model: it
+// fails when an eligible model outside the list exists, and passes when none does.
 // Agreeing models are the same-group models that hit it. Eligible models are those
 // plus same-group models that know the species, pass the range filter for it and
 // scored all the audio the agreeing models heard (from the start of the earliest
@@ -151,6 +203,16 @@ func consensusRequired(minModels int, allEligible bool, eligible int) int {
 // a clip length, or an earliest contributor without a scored run. It reads no
 // Processor state.
 func (t *consensusTick) evaluate(item *PendingDetection, settings *conf.Settings) consensusVerdict {
+	var covering []*consensusRule
+	for i := range t.rules {
+		if ruleCoversSpecies(item, t.rules[i].species) {
+			covering = append(covering, &t.rules[i])
+		}
+	}
+	if len(covering) == 0 {
+		return consensusVerdict{}
+	}
+
 	group := t.models.groupOf(item.BestModelID)
 	if group == "" {
 		return consensusVerdict{}
@@ -218,23 +280,55 @@ func (t *consensusTick) evaluate(item *PendingDetection, settings *conf.Settings
 	}
 	slices.Sort(eligible)
 
-	cfg := &settings.Realtime.ModelConsensus
-	required := consensusRequired(cfg.MinModels, cfg.AllEligible, len(eligible))
-	return consensusVerdict{
-		discard:  len(agreeing) < required,
-		agreeing: agreeing,
-		eligible: eligible,
-		required: required,
+	return checkRules(covering, agreeing, eligible)
+}
+
+// checkRules applies the covering rules in config order to the evidence and returns
+// the verdict, carrying the first failing rule. The verdict does not depend on rule
+// order beyond which failure is reported: agreeing and eligible are sorted, and
+// outside is filtered from the sorted eligible.
+func checkRules(covering []*consensusRule, agreeing, eligible []string) consensusVerdict {
+	v := consensusVerdict{agreeing: agreeing, eligible: eligible}
+	for _, r := range covering {
+		if !r.namesModels() {
+			required := consensusRequired(r.minModels, r.allEligible, len(eligible))
+			if len(agreeing) < required {
+				v.discard, v.rule, v.required = true, r, required
+				return v
+			}
+			continue
+		}
+		if !allListed(agreeing, r.listed) {
+			continue
+		}
+		var outside []string
+		for _, id := range eligible {
+			if _, in := r.listed[id]; !in {
+				outside = append(outside, id)
+			}
+		}
+		if len(outside) > 0 {
+			v.discard, v.rule, v.outside = true, r, outside
+			return v
+		}
 	}
+	return v
+}
+
+// allListed reports whether every model ID is in the set.
+func allListed(ids []string, set map[string]struct{}) bool {
+	for _, id := range ids {
+		if _, ok := set[id]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // discardForModelConsensus reports whether the detection should be discarded for
 // lacking model consensus, logging each discard.
 func (p *Processor) discardForModelConsensus(item *PendingDetection, settings *conf.Settings, t *consensusTick) bool {
 	cfg := &settings.Realtime.ModelConsensus
-	if !needsConsensus(item, cfg) {
-		return false
-	}
 	v := t.evaluate(item, settings)
 	if !v.discard {
 		return false
@@ -246,8 +340,14 @@ func (p *Processor) discardForModelConsensus(item *PendingDetection, settings *c
 		logger.String("best_model_id", item.BestModelID),
 		logger.Any("agreeing_models", v.agreeing),
 		logger.Any("eligible_models", v.eligible),
-		logger.Int("required", v.required),
+		logger.Int("rule_index", v.rule.index),
+		logger.Any("rule_models", v.rule.models),
 		logger.String("operation", modelConsensusDiscardOperation),
+	}
+	if v.rule.namesModels() {
+		fields = append(fields, logger.Any("outside_models", v.outside))
+	} else {
+		fields = append(fields, logger.Int("required", v.required))
 	}
 	if cfg.Debug {
 		GetLogger().Info("model consensus discarded detection", fields...)

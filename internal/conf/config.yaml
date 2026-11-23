@@ -342,12 +342,14 @@ realtime:
       - Strigiformes      # all owls (Strigidae + Tytonidae)
 
   modelconsensus:
-    allspecies: false     # true to require model consensus for every species
-    listedspecies: false  # true to require model consensus for the species listed below
-    species: []           # species that need consensus when listedspecies is on, scientific names recommended
-    minmodels: 2          # agreeing models required, 2 to 4 (capped at the number of eligible models)
-    alleligible: false    # true to require every eligible model instead of minmodels
-    debug: false          # true to log each discard at info level, with the agreeing and eligible models
+    debug: false          # true to log each discard at info level, with the failed rule and the agreeing and eligible models
+    rules: []             # consensus rules, none means the filter is off
+    # Example: discard a Perch-only detection of one species when another model could have heard it.
+    # rules:
+    #   - species: [Fulica atra]   # empty list covers every species
+    #     models: [perch_v2]       # config IDs as in models.enabled; empty list means any model
+    #   - species: []              # an every-species rule needing two agreeing models
+    #     minmodels: 2             # 2 to 4, only for a rule without models
 
   telemetry:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
