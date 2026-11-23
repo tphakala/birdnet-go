@@ -3164,21 +3164,19 @@ func (c *Handler) findExistingSpectrogram(relAudioPath string, requestedWidth in
 	spec := c.CurrentSettings().Realtime.Dashboard.Spectrogram
 	if freqSuffix == "" && raw == spec.Raw &&
 		buildStyleSuffix(style, dynamicRange) == buildStyleSuffix(spec.Style, spec.DynamicRange) {
-		bareWidth, err := spectrogram.SizeToPixels(spec.Size)
-		if err == nil {
-			barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
-			if statInfo, statErr := c.SFS.StatRel(barePath); statErr == nil && statInfo.Size() > 0 {
-				if pngWidth, ok := c.readPNGWidth(barePath); ok {
-					if raw {
-						if _, sizeErr := spectrogram.PixelsToSize(pngWidth); sizeErr != nil {
-							return "", false
-						}
-					}
-					bareWidth = pngWidth
+		barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
+		if statInfo, statErr := c.SFS.StatRel(barePath); statErr == nil && statInfo.Size() > 0 {
+			pngWidth, ok := c.readPNGWidth(barePath)
+			if !ok {
+				return "", false
+			}
+			if raw {
+				if _, sizeErr := spectrogram.PixelsToSize(pngWidth); sizeErr != nil {
+					return "", false
 				}
-				if bareWidth >= requestedWidth {
-					return barePath, true
-				}
+			}
+			if pngWidth >= requestedWidth {
+				return barePath, true
 			}
 		}
 	}

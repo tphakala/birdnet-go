@@ -24,7 +24,7 @@ describe('spectrogramDefaults', () => {
     expect(getSpectrogramDefaults()).toEqual({ size: 'lg', raw: false });
   });
 
-  it('prefers dashboardSettings once settingsDataLoaded is true', () => {
+  it('prefers savedDashboardSettings once settingsDataLoaded is true', () => {
     appState.spectrogramDefaults = { size: 'sm', raw: true };
     seedSavedRealtime({
       dashboard: {
@@ -35,6 +35,28 @@ describe('spectrogramDefaults', () => {
         },
       },
     });
+
+    // Unsaved edits to formData must not change detection card defaults.
+    settingsStore.update(
+      store =>
+        ({
+          ...store,
+          formData: {
+            ...store.formData,
+            realtime: {
+              ...store.formData.realtime,
+              dashboard: {
+                ...store.formData.realtime?.dashboard,
+                spectrogram: {
+                  ...DEFAULT_SPECTROGRAM_SETTINGS,
+                  size: 'sm',
+                  raw: true,
+                },
+              },
+            },
+          },
+        }) as unknown as typeof store
+    );
 
     expect(getSpectrogramDefaults()).toEqual({ size: 'xl', raw: false });
   });

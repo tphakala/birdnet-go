@@ -272,5 +272,30 @@ describe('DetectionCardMobile dynamic spectrogram defaults', () => {
       '/api/v2/spectrogram/655/status?size=lg&raw=false',
       '/api/v2/spectrogram/655/status?size=xl&raw=true',
     ]);
+
+    // Unsaved formData edits must not restart the loader.
+    settingsStore.update(
+      store =>
+        ({
+          ...store,
+          formData: {
+            ...store.formData,
+            realtime: {
+              ...store.formData.realtime,
+              dashboard: {
+                ...store.formData.realtime?.dashboard,
+                spectrogram: { ...DEFAULT_SPECTROGRAM_SETTINGS, size: 'sm', raw: false },
+              },
+            },
+          },
+        }) as unknown as typeof store
+    );
+    await tick();
+    await Promise.resolve();
+
+    expect(statusUrls).toEqual([
+      '/api/v2/spectrogram/655/status?size=lg&raw=false',
+      '/api/v2/spectrogram/655/status?size=xl&raw=true',
+    ]);
   });
 });

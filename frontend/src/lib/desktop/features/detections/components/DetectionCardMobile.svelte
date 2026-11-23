@@ -15,7 +15,7 @@
   import { downloadDetectionAudio } from '$lib/utils/audioDownload';
   import { getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
   import { appState } from '$lib/stores/appState.svelte';
-  import { dashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
+  import { savedDashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
   import {
     getSpectrogramDefaults,
     resolveSpectrogramDefaults,
@@ -105,7 +105,7 @@
   const spectrogramConfig = $derived(
     resolveSpectrogramDefaults(
       $settingsDataLoaded,
-      $dashboardSettings?.spectrogram,
+      $savedDashboardSettings?.spectrogram,
       appState.spectrogramDefaults
     )
   );

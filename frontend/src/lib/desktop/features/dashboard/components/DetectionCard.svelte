@@ -35,7 +35,7 @@
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { getPlaybackDefaults } from '$lib/utils/playbackDefaults';
   import { appState } from '$lib/stores/appState.svelte';
-  import { dashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
+  import { savedDashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
   import {
     getSpectrogramDefaults,
     resolveSpectrogramDefaults,
@@ -169,7 +169,7 @@
   const spectrogramConfig = $derived(
     resolveSpectrogramDefaults(
       $settingsDataLoaded,
-      $dashboardSettings?.spectrogram,
+      $savedDashboardSettings?.spectrogram,
       appState.spectrogramDefaults
     )
   );
@@ -277,13 +277,13 @@
         {/if}
       </div>
     {:else if detection.spectrogramOnly}
-      <!-- Retention removed the audio but kept the image: no loader, no polling. Same
-           size and raw flag as the list view's player so the same cached file is used. -->
+      <!-- Retention removed the audio but kept the image: no loader, no polling.
+           Request the configured card spectrogram defaults so kept images match. -->
       <div class="spectrogram-container">
         <SpectrogramImage
           detectionId={detection.id.toString()}
-          size="md"
-          raw={true}
+          size={spectrogramConfig.size}
+          raw={spectrogramConfig.raw}
           cover
           alt={t('components.audio.spectrogramForSpecies', { species: detection.commonName })}
         />

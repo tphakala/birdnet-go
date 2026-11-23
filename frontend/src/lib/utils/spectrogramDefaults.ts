@@ -2,7 +2,7 @@
  * spectrogramDefaults.ts
  *
  * Resolves detection-card spectrogram size and raw mode.
- * Reads saved dashboardSettings once authenticated settings have loaded;
+ * Reads savedDashboardSettings once authenticated settings have loaded;
  * otherwise reads /api/v2/app/config spectrogramDefaults so guests and initial
  * mounts request the configured size immediately without a fallback restart.
  */
@@ -10,8 +10,8 @@
 import { get } from 'svelte/store';
 import { appState } from '$lib/stores/appState.svelte';
 import {
-  dashboardSettings,
   DEFAULT_SPECTROGRAM_SETTINGS,
+  savedDashboardSettings,
   settingsDataLoaded,
   type SpectrogramPreRender,
   type SpectrogramSize,
@@ -51,7 +51,7 @@ export function resolveSpectrogramDefaults(
 export function getSpectrogramDefaults(): SpectrogramDefaultValues {
   return resolveSpectrogramDefaults(
     get(settingsDataLoaded),
-    get(dashboardSettings)?.spectrogram,
+    get(savedDashboardSettings)?.spectrogram,
     appState.spectrogramDefaults
   );
 }

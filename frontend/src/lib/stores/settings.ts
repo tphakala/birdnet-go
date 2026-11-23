@@ -1380,6 +1380,11 @@ export const dashboardSettings = derived(
   $store => $store.formData.realtime?.dashboard
 );
 
+export const savedDashboardSettings = derived(
+  settingsStore,
+  $store => $store.originalData.realtime?.dashboard
+);
+
 export const dashboardLayout = derived(
   settingsStore,
   $store => $store.formData.realtime?.dashboard?.layout

@@ -177,4 +177,10 @@ func TestFindExistingSpectrogramFallback(t *testing.T) {
 	controller.Settings.Store(specNonRaw)
 	_, existsMismatchedRaw := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeSm, true, "", "", "", 0)
 	assert.False(t, existsMismatchedRaw, "findExistingSpectrogram must reject non-raw bare .png for raw=true requests")
+
+	// A corrupt/unreadable bare .png must be treated as a miss even when configured size >= requestedWidth
+	controller.Settings.Store(specSettingsLg)
+	require.NoError(t, os.WriteFile(fullBare, []byte("NOT_A_PNG"), 0o600))
+	_, existsCorruptBare := controller.findExistingSpectrogram(relAudioBare, SpectrogramSizeSm, true, "", "", "", 0)
+	assert.False(t, existsCorruptBare, "findExistingSpectrogram must reject corrupt bare .png whose header fails to decode")
 }

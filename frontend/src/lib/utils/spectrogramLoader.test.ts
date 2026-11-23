@@ -1508,5 +1508,41 @@ describe('spectrogramLoader', () => {
       );
       loader.destroy();
     });
+
+    it('ignores a superseded status response whose json resolves after restart(sameId)', async () => {
+      let resolveOldJson!: (value: unknown) => void;
+      const oldJsonPromise = new Promise(resolve => {
+        resolveOldJson = resolve;
+      });
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: () => oldJsonPromise,
+        })
+        .mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+
+      const loader = makeLoader();
+      loader.start(42);
+      await flushAll();
+
+      // Restart with the same detection ID before the first cycle's response.json() settles
+      loader.restart(42, 'lg');
+      await flushAll();
+
+      expect(loader.state).toBe('polling');
+      expect(loader.isGenerating).toBe(true);
+      expect(loader.isQueued).toBe(false);
+
+      // Now settle the superseded cycle's json with not_started; it must not overwrite state or trigger generation
+      resolveOldJson({ data: { status: 'not_started' } });
+      await flushAll();
+
+      expect(loader.state).toBe('polling');
+      expect(loader.isGenerating).toBe(true);
+      expect(loader.isQueued).toBe(false);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls.some(call => String(call[0]).includes('/generate'))).toBe(false);
+    });
   });
 });

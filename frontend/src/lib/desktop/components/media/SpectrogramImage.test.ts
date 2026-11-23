@@ -15,6 +15,7 @@ describe('SpectrogramImage', () => {
   });
 
   it.each([
+    ['sm', true, '/api/v2/spectrogram/42?size=sm&raw=true'],
     ['md', true, '/api/v2/spectrogram/42?size=md&raw=true'],
     ['lg', false, '/api/v2/spectrogram/42?size=lg&raw=false'],
     ['xl', true, '/api/v2/spectrogram/42?size=xl&raw=true'],

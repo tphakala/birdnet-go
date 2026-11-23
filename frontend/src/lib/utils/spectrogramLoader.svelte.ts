@@ -480,6 +480,10 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     return destroyed || currentDetectionId !== forDetectionId;
   }
 
+  function isStaleCycle(forDetectionId: number, expectedLifecycle: number): boolean {
+    return isStale(forDetectionId) || expectedLifecycle !== lifecycle;
+  }
+
   // --- State machine transitions ---
 
   async function checkStatus(detectionId: number): Promise<void> {
@@ -505,13 +509,15 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
           STATUS_SLOW_THROTTLE_KEY
         );
 
-        if (isStale(detectionId)) return;
+        if (isStaleCycle(detectionId, myLifecycle)) return;
 
         if (!response.ok) {
           throw new Error(`Status check failed: ${String(response.status)}`);
         }
 
-        const parsed = parseSpectrogramStatus(await response.json());
+        const body: unknown = await response.json();
+        if (isStaleCycle(detectionId, myLifecycle)) return;
+        const parsed = parseSpectrogramStatus(body);
         if (!parsed) throw new Error('Status check returned no status');
         const status = parsed.status;
         serverStatus = isSpectrogramStatus(status) ? status : undefined;
@@ -550,7 +556,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         }
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        if (isStale(detectionId)) return;
+        if (isStaleCycle(detectionId, myLifecycle)) return;
 
         fetchRetries++;
         if (fetchRetries > config.maxFetchRetries) {
@@ -561,7 +567,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
           return;
         }
         await new Promise(resolve => setTimeout(resolve, 500 * fetchRetries));
-        if (isStale(detectionId) || myLifecycle !== lifecycle) return;
+        if (isStaleCycle(detectionId, myLifecycle)) return;
       }
     }
   }
@@ -585,6 +591,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
       generateRequests++;
     }
 
+    const myLifecycle = lifecycle;
     state = 'triggering';
     abortController = new AbortController();
 
@@ -610,10 +617,12 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         GENERATE_SLOW_THROTTLE_KEY
       );
 
-      if (isStale(detectionId)) return;
+      if (isStaleCycle(detectionId, myLifecycle)) return;
 
       if (response.ok || response.status === 202) {
-        const answer = parseSpectrogramStatus(await response.json());
+        const body: unknown = await response.json();
+        if (isStaleCycle(detectionId, myLifecycle)) return;
+        const answer = parseSpectrogramStatus(body);
         const status = answer?.status;
         serverStatus = status !== undefined && isSpectrogramStatus(status) ? status : undefined;
 
@@ -675,6 +684,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     if (!spendPollAttempt(detectionId)) return;
 
+    const myLifecycle = lifecycle;
     abortController = new AbortController();
 
     try {
@@ -691,10 +701,12 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         STATUS_SLOW_THROTTLE_KEY
       );
 
-      if (isStale(detectionId)) return;
+      if (isStaleCycle(detectionId, myLifecycle)) return;
 
       if (response.ok) {
-        const parsed = parseSpectrogramStatus(await response.json());
+        const body: unknown = await response.json();
+        if (isStaleCycle(detectionId, myLifecycle)) return;
+        const parsed = parseSpectrogramStatus(body);
         if (!parsed) throw new Error('Status poll returned no status');
         const status = parsed.status;
         serverStatus = isSpectrogramStatus(status) ? status : undefined;
