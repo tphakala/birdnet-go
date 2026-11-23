@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // Stub model IDs that are not in the model registry, so the consensus rows prove
@@ -452,7 +454,7 @@ func TestConsensusTick_EvaluateRules(t *testing.T) {
 		{name: "named rule with two listed models agreeing, the outside model cannot know the species",
 			rules: []conf.ModelConsensusRule{named(a, b)}, contrib: []string{a, b}, knowing: []string{a, b}},
 		{name: "named rule whose only entry does not resolve stays inert",
-			rules: []conf.ModelConsensusRule{named(unknown)}, contrib: []string{a}},
+			rules: []conf.ModelConsensusRule{{Species: []string{consensusTestSci}, Models: []string{unknown}, MinModels: 2}}, contrib: []string{a}},
 		{name: "an unknown entry does not disable the known one",
 			rules: []conf.ModelConsensusRule{named(a, unknown)}, contrib: []string{a}, wantDiscard: true, wantOutside: []string{b, c}},
 		{name: "first of two named rules fails",
@@ -896,6 +898,43 @@ func TestFlushPendingDetections_ModelConsensusRules(t *testing.T) {
 		warm(rig)
 		assert.True(t, rig.scenario(t, perch), "no other model scored this audio: Perch alone passes")
 	})
+}
+
+// TestDiscardForModelConsensus_LogNamesFailedRule pins the fields an operator reads
+// with debug on to see which rule discarded a detection, for both rule kinds.
+func TestDiscardForModelConsensus_LogNamesFailedRule(t *testing.T) {
+	const (
+		a = consensusStubBirdA
+		b = consensusStubBirdB
+	)
+	runs := runsFor(map[string]scoredRun{a: runCovering(), b: runCovering()})
+	tests := []struct {
+		name  string
+		rules []conf.ModelConsensusRule
+		want  []string
+		not   string
+	}{
+		{"any-model rule", []conf.ModelConsensusRule{{Species: []string{"Corvus corax"}, Models: []string{b}}, {MinModels: 2}},
+			[]string{"rule_index=1", "required=2"}, "outside_models"},
+		{"named rule", []conf.ModelConsensusRule{{Models: []string{a}}},
+			[]string{"rule_index=0", "rule_models", "outside_models"}, "required="},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logs := logtest.CaptureBufferAt(t, slog.LevelInfo)
+			settings := rulesSettings(tt.rules...)
+			settings.Realtime.ModelConsensus.Debug = true
+			tick := newConsensusTick(stubConsensusModels(a, b), runs, settings)
+
+			require.True(t, (&Processor{}).discardForModelConsensus(consensusItem(a), settings, tick))
+
+			out := logs.String()
+			for _, w := range tt.want {
+				assert.Contains(t, out, w)
+			}
+			assert.NotContains(t, out, tt.not)
+		})
+	}
 }
 
 // TestPrepareModelConsensus_ResolvesRuleModels pins the production branch: without an
