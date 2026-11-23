@@ -1117,7 +1117,7 @@ realtime:
 ```
 
 - Each rule has `species`, `models`, and, for rules without `models`, `minmodels` and `alleligible`. A detection is checked against every rule that covers its species and is discarded when any of them fails. No rules means the filter is off
-- An empty `species` list (including `species: ""`) covers every species. An empty `models` list means any model
+- Leaving `species` out, or writing `species: []`, covers every species. An empty `models` list means any model
 - A rule without `models` discards a detection unless at least `minmodels` distinct models of its taxon group detected it within the detection window. `alleligible` requires every eligible model to agree, whatever `minmodels` is. Bird and bat models are counted separately, and BirdNET 2.4 and 3.0 count as separate models
 - A rule with `models` discards a detection that was heard only by the listed models, when an eligible model outside the list exists. It needs a second model from outside the list. Leave `minmodels` and `alleligible` unset on such a rule
 - Model names are the config IDs used in `models.enabled`, such as `perch_v2` or `birdnet`
