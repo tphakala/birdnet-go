@@ -203,7 +203,11 @@ func TestGetSpeciesCoverage(t *testing.T) {
 			}
 			return q
 		}
-		atLimit := getCoverage(t, enabled(conf.ModelIDPerchV2), fakeSpeciesKnowledge{}, species(maxCoverageSpecies))
+		// Blank values do not count toward the limit.
+		padded := species(maxCoverageSpecies)
+		padded.Add("species", "")
+		padded.Add("species", "   ")
+		atLimit := getCoverage(t, enabled(conf.ModelIDPerchV2), fakeSpeciesKnowledge{}, padded)
 		assert.Equal(t, http.StatusOK, atLimit.Code)
 		overLimit := getCoverage(t, enabled(conf.ModelIDPerchV2), fakeSpeciesKnowledge{}, species(maxCoverageSpecies+1))
 		assert.Equal(t, http.StatusBadRequest, overLimit.Code)
