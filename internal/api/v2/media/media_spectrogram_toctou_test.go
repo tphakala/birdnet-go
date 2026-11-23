@@ -112,10 +112,15 @@ func TestFindExistingSpectrogramFallback(t *testing.T) {
 	_, existsOverlay := controller.findExistingSpectrogram(relAudioPath, SpectrogramSizeSm, true, "", "", "", 48000)
 	assert.False(t, existsOverlay, "findExistingSpectrogram must skip fallback when overlayRate is positive")
 
-	// 4. generateSpectrogramFromRel with requested width=sm should return the existing larger md path without generating
-	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "clip.wav", "", SpectrogramSizeSm, true, "", "", "", 0)
+	// 4. generateSpectrogramFromRel with requested width=sm should return the existing larger md path
+	// and clear any queued status entry placed by GenerateSpectrogramByID before the worker ran.
+	queuedKey := buildSpectrogramQueueKey("999", SpectrogramSizeSm, true, "", "")
+	controller.initializeQueueStatus(queuedKey)
+	got, err := controller.generateSpectrogramFromRel(ctx, relAudioPath, "clip.wav", queuedKey, SpectrogramSizeSm, true, "", "", "", 0)
 	require.NoError(t, err)
 	assert.Equal(t, mdSpectrogramPath, got)
+	_, stillQueued := spectrogramQueue.Load(queuedKey)
+	assert.False(t, stillQueued, "generateSpectrogramFromRel must clean up queued status on fallback hit")
 
 	// 5. Test legacy/pre-rendered <basename>.png fallback
 	writePNG := func(path string, w, h int) {

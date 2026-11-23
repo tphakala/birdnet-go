@@ -3884,10 +3884,12 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 		return "", err
 	}
 	if exists {
+		c.cleanupQueueStatus(queueKey)
 		return relSpectrogramPath, nil
 	}
 	// Fallback: check if another standard-size spectrogram already exists on disk before running SoX
 	if fallbackPath, exists := c.findExistingSpectrogram(relAudioPath, width, raw, style, dynamicRange, freqSuffix, overlayRate); exists {
+		c.cleanupQueueStatus(queueKey)
 		getSpectrogramLogger().Debug("Fast path HIT via size fallback: existing spectrogram found",
 			logger.String("queue_key", queueKey),
 			logger.String("fallback_path", fallbackPath))
