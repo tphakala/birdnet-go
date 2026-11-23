@@ -15,21 +15,30 @@ This guide compares ultrasonic-capable USB microphones, XLR analog microphones, 
 
 ## Quick Comparison
 
-_Prices are approximate retail estimates (excluding shipping) and vary by retailer, VAT/taxes, exchange rates, and stock. XLR microphones also require a 192 kHz audio interface (~$100 to $220)._
+_Prices are approximate retail estimates (excluding shipping) and vary by retailer, VAT/taxes, exchange rates, and stock._
 
-| Option                                                             | Connection                           | Max Sample Rate                     | Approx. Price                               | Frequency Response                                                  | Bird + Bat                | Weather Protection                |
-| ------------------------------------------------------------------ | ------------------------------------ | ----------------------------------- | ------------------------------------------- | ------------------------------------------------------------------- | ------------------------- | --------------------------------- |
-| [AudioMoth](#audiomoth)                                            | Micro-USB (USB-mic firmware)         | 384 kHz                             | ~$100 USD (~€95 to €105)                    | Audible + ultrasonic (MEMS)                                         | Yes                       | Standard case has no USB opening  |
-| [AudioMoth USB Microphone](#audiomoth-usb-microphone)              | Micro-USB                            | 384 kHz                             | ~$80 USD (~€75 to €85; case ~$30 extra)     | Audible + ultrasonic (MEMS)                                         | Yes                       | Optional splashproof USB mic case |
-| [Dodotronic UltraMic 384K PRO](#dodotronic-ultramic-384k-pro)      | USB-C (UAC 1.1)                      | 384 kHz                             | ~€140 to €155                               | Flat audible + up to ~190 kHz                                       | Yes                       | Optional waterproof membrane      |
-| [Dodotronic Avicantus](#dodotronic-avicantus)                      | USB (UAC)                            | 192 kHz                             | ~€69                                        | Audible focus (ultrasonic unverified)                               | Audible focus (see notes) | None                              |
-| [Vleermic 384kHz](#vleermic-384khz)                                | USB-C (UAC2)                         | 384 kHz                             | ~€53 (incl. VAT)                            | 0.1 to 150 kHz (192 kHz max)                                        | Yes                       | None (not rainproof)              |
-| [Pippyg](#pippyg)                                                  | Micro-USB (`pippyg_mic.uf2`)         | 384 kHz                             | ~£15 to £20 DIY / ~€75 pre-built (Pippyg 2) | Ultrasonic (MEMS)                                                   | Bat-focused               | None (protect mic port)           |
-| [Griff and Griff Mini](#griff-and-griff-mini)                      | Micro-USB                            | 384 kHz                             | ~£5 to £10 per unit (DIY batch)             | Ultrasonic (MEMS)                                                   | Bat-focused               | None (bare PCB)                   |
-| [Clippy Ultra XLR](#clippy-ultra-xlr)                              | XLR (12 to 48 V phantom)             | Interface-limited (192 kHz typical) | ~£70 / ~€92 (single)                        | 20 Hz to 110 kHz                                                    | Yes                       | Shelter outdoors                  |
-| [Sonorous Objects SO.104](#sonorous-objects-so104-ultrasonic-omni) | XLR (48 V phantom)                   | Interface-limited (192 kHz typical) | ~$90 USD (single)                           | 20 Hz to 70 kHz                                                     | Yes                       | Shelter outdoors                  |
-| [Sonorous Objects SO.4](#sonorous-objects-so4-ultrasonic-omni)     | 3.5 mm PIP or proprietary XLR (48 V) | Interface-limited (192 kHz typical) | ~$110 USD (single)                          | 20 Hz to 70 kHz                                                     | Yes                       | Shelter outdoors                  |
-| [Rode NT5 (cardioid)](#rode-nt5-studio-microphone)                 | XLR (48 V phantom)                   | Interface-limited (192 kHz typical) | ~$229 USD / ~€189 (single)                  | 20 Hz to 20 kHz rated; tested up to 96 kHz (at 192 kHz sample rate) | Yes                       | Indoor / sheltered only           |
+### USB Microphones
+
+| Microphone                                                    | Max Rate | Approx. Price                    | Highlights / Caveats                                                 |
+| ------------------------------------------------------------- | -------- | -------------------------------- | -------------------------------------------------------------------- |
+| [AudioMoth](#audiomoth)                                       | 384 kHz  | ~$100                            | Micro-USB (USB-mic firmware); standard case has no USB opening       |
+| [AudioMoth USB Microphone](#audiomoth-usb-microphone)         | 384 kHz  | ~$80 (+$30 case)                 | Micro-USB; optional splashproof USB mic case                         |
+| [Dodotronic UltraMic 384K PRO](#dodotronic-ultramic-384k-pro) | 384 kHz  | ~€140 to €155                    | USB-C; audible + ultrasonic (~190 kHz); optional waterproof membrane |
+| [Dodotronic Avicantus](#dodotronic-avicantus)                 | 192 kHz  | ~€69                             | USB; audible focus (ultrasonic unverified); 3.5 mm ext. mic input    |
+| [Vleermic 384kHz](#vleermic-384khz)                           | 384 kHz  | ~€53                             | USB-C (UAC2); 0.1 to 150 kHz; not rainproof                          |
+| [Pippyg](#pippyg)                                             | 384 kHz  | ~£15 to £20 DIY / ~€75 pre-built | Micro-USB (`pippyg_mic.uf2`); enclose outdoors                       |
+| [Griff and Griff Mini](#griff-and-griff-mini)                 | 384 kHz  | ~£5 to £10 (DIY)                 | Micro-USB; bare PCB; enclose outdoors                                |
+
+### XLR and Analog Microphones
+
+_Require a 192 kHz audio interface such as a [Focusrite Scarlett Solo or 2i2](#focusrite-scarlett-solo-and-2i2-3rd-and-4th-gen) (~$100 to $220). All support combined bird + bat capture._
+
+| Microphone                                                         | Frequency Range                          | Approx. Price | Highlights / Caveats                                           |
+| ------------------------------------------------------------------ | ---------------------------------------- | ------------- | -------------------------------------------------------------- |
+| [Clippy Ultra XLR](#clippy-ultra-xlr)                              | 20 Hz to 110 kHz                         | ~£70 / ~€92   | 12 to 48 V phantom; proven bird + bat; shelter outdoors        |
+| [Sonorous Objects SO.104](#sonorous-objects-so104-ultrasonic-omni) | 20 Hz to 70 kHz                          | ~$90          | Standard 48 V XLR, Primo EM258; shelter outdoors               |
+| [Sonorous Objects SO.4](#sonorous-objects-so4-ultrasonic-omni)     | 20 Hz to 70 kHz                          | ~$110         | 3.5 mm PIP or proprietary 48 V XLR cable; shelter outdoors     |
+| [Rode NT5 (cardioid)](#rode-nt5-studio-microphone)                 | 20 Hz to 20 kHz rated (tested to 96 kHz) | ~$229 / ~€189 | 48 V XLR studio mic; narrow ultrasonic pattern; sheltered only |
 
 ## USB Ultrasonic Microphones
 
