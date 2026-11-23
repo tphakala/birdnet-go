@@ -162,16 +162,6 @@ task wiki-export        # writes ./.wiki-staging
 task wiki-export OUT=/tmp/wiki-preview
 ```
 
-The `.github/workflows/wiki-sync.yml` workflow runs the same tool on every push to `main` that touches `doc/wiki/**` (and can be triggered manually from the Actions tab). It copies the generated pages over the wiki additively, so any hand-written wiki page that the tool does not produce is left untouched.
+The `.github/workflows/wiki-sync.yml` workflow runs the same tool on every push to `main` that touches `doc/wiki/**` (and can be triggered manually from the Actions tab). It authenticates to the companion `*.wiki.git` repository with the built-in `GITHUB_TOKEN` (`contents: write`), requiring no extra secrets or deploy keys, and copies the generated pages over the wiki additively so any hand-written wiki page that the tool does not produce is left untouched.
 
-**One-time maintainer setup (required to enable pushes):** the default `GITHUB_TOKEN` cannot authenticate to the separate `*.wiki.git` repository, so the workflow uses a dedicated SSH deploy key. Until the key is configured the workflow runs but skips the push (it logs a note in the job summary). To enable it:
-
-1. Generate a key pair (no passphrase):
-   ```bash
-   ssh-keygen -t ed25519 -f wiki_deploy_key -N "" -C "birdnet-go wiki sync"
-   ```
-2. Add the **public** key (`wiki_deploy_key.pub`) under the repository's **Settings -> Deploy keys** with **Allow write access** enabled. A deploy key with write access also covers the repository's wiki.
-3. Add the **private** key (`wiki_deploy_key`) as a repository **Actions secret** named `WIKI_SSH_DEPLOY_KEY`.
-4. The wiki must contain at least one page before the first push (GitHub only creates the wiki repository after a page exists). The current wiki already satisfies this.
-
-Delete the local key files afterward.
+The only prerequisite on a fresh repository is that the GitHub wiki must contain at least one page before the first push (GitHub only creates the underlying `*.wiki.git` repository after a page exists). The current wiki already satisfies this.
