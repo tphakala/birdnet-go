@@ -91,8 +91,6 @@ See the [hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/h
 
 - Sound card capture and RTSP / RTSPS streams, including multiple sources in parallel with independent model assignment
 - Sample rates up to 384 kHz for ultrasonic bat detection
-- Audio liveness watchdog with tiered recovery for flaky streams
-- Stream sample-rate probing and per-model recommendation banners in the UI
 - Audio equalizer, clip denoising (on save or on the fly during playback/download), station-wide playback defaults, per-source quiet hours, daylight filter, and extended capture mode
 
 ### Interface
@@ -101,9 +99,7 @@ See the [hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/h
 - Single-page Detection Details view showing per-classifier match results and confidence values, 24-hour activity and weather context, species correction with alternate predictions, and keyboard shortcuts
 - Onboarding wizard for first-run setup
 - Live spectrogram visualization for active streams ([live audio streaming](https://github.com/tphakala/birdnet-go/wiki/BirdNET-Go-Guide#live-audio-streaming))
-- Detection heatmaps with ONNX-accelerated rendering
 - Customizable dashboard layout, color schemes, and a "Currently Hearing" card
-- Multiselect and bulk actions on the detections list
 - Browser terminal (xterm.js over WebSocket PTY) for in-app administration
 - UI languages: English, German, French, Spanish, Portuguese, Dutch, Polish, Italian, Czech, Slovak, Hungarian, Finnish, Swedish, Danish, Norwegian (Bokmål), Latvian
 - Species names in 40+ languages
@@ -120,7 +116,7 @@ See the [hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/h
 
 ### Storage and data
 
-- SQLite (default) or MySQL/MariaDB with retry-aware write paths for contention; only tested LTS releases are supported (MySQL 8.4 and 9.7; MariaDB 10.11, 11.4, 11.8, or 12.3), and MySQL Innovation releases are not supported
+- SQLite (default) or MySQL/MariaDB (LTS releases)
 - Automatic backups with real-time status polling
 - Pure Go clip export and native spectrogram rendering (no SoX required; AAC or Opus recommended for compressed clips, lossless FLAC/WAV for ultrasonic bat clips; MP3 supported but discouraged) ([audio formats](https://github.com/tphakala/birdnet-go/wiki/audio-formats))
 - Embedded eBird/Clements taxonomy (2,374 genera, 254 families, 11,145 species) for fast offline lookups
@@ -130,10 +126,7 @@ See the [hardware recommendations](https://github.com/tphakala/birdnet-go/wiki/h
 - System Health diagnostics page covering audio pipeline, models and inference, network, and the datastore
 - Database Doctor for diagnosis and schema repair
 - Help & Support page with guided bug reporting and one-click support dumps
-- Server-side sessions with "Remember this browser" alongside OIDC / SSO (Google, GitHub, and generic providers, including RP-Initiated Logout)
 - TLS certificate management UI with transactional writes and backup/restore
-- Hot-reload for settings, model installs, and per-source model assignments (no restart)
-- Optional, opt-in Sentry telemetry with strict privacy filtering
 
 ### Platform
 
@@ -194,6 +187,7 @@ Join the [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 
 - [birda](https://github.com/tphakala/birda): fast CLI for offline bird species detection on existing audio files, using BirdNET and Perch AI models
 - [birda-gui](https://github.com/tphakala/birda-gui): desktop GUI for birda (Electron + Svelte 5) for audio analysis, detection browsing, and species visualization
+- [birdnet-go-remote-mic](https://github.com/tphakala/birdnet-go-remote-mic): pure-Go remote microphone appliance that captures local audio and streams it over the LAN as RTSP/RTP with mDNS discovery (no FFmpeg or media server needed)
 - [birdnet-go-mcp](https://github.com/zax0rz/birdnet-go-mcp): read-only MCP server and CLI for querying BirdNET-Go detections, health metrics, and audio clips from AI assistants or the terminal
 
 ### Home Assistant and displays
@@ -258,4 +252,8 @@ A growing list of community contributors keeps the project moving forward. The c
 
 The BirdNET AI model is by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology in collaboration with Chemnitz University of Technology (Stefan Kahl, Connor Wood, Maximilian Eibl, Holger Klinck).
 
-Google Perch v2 ONNX conversion by [Justin Chuby](https://huggingface.co/justinchuby/BirdNET-onnx). BattyBirdNET bat classifier models by [R.D. Zinck](https://github.com/rdz-oss/BattyBirdNET-Analyzer). BSG-BAT European bat classifier by the [bsg-bat team](https://doi.org/10.5281/zenodo.15495676). BirdNET label translations by Patrick Levin for the BirdNET-Pi project by Patrick McGuire.
+The [BattyBirdNET](https://github.com/rdz-oss/BattyBirdNET-Analyzer) bat classifier models are by Richard D. Zinck (R.D. Zinck).
+
+The [BSG-BAT](https://doi.org/10.5281/zenodo.15495676) European bat classifier is by Katarina Meramo, Panu Somervuo, Meeri Rannisto, Patrik Lauha, Adrià López-Baucells, Fabrizio Gili, Tomas Roslin, Thomas M. Lilley, and Otso Ovaskainen ([Methods in Ecology and Evolution, 2026](https://doi.org/10.1111/2041-210x.70220)).
+
+Google Perch v2 ONNX conversion by [Justin Chuby](https://huggingface.co/justinchuby/BirdNET-onnx). BirdNET label translations by Patrick Levin for the BirdNET-Pi project by Patrick McGuire.
