@@ -30,6 +30,7 @@ func TestModelsRouteRegistration(t *testing.T) {
 		"GET /api/v2/models",
 		"GET /api/v2/models/catalog",
 		"GET /api/v2/models/regions",
+		"GET /api/v2/models/species-coverage",
 		"GET /api/v2/models/regions/:slug/map",
 		"GET /api/v2/models/documents/:sha256",
 		"GET /api/v2/models/installed",

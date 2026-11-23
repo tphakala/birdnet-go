@@ -1069,7 +1069,7 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		// species passes the range filter. This is independent of whether the
 		// detection is saved below (saved detections also clear this bar).
 		if result.Confidence > baseThreshold {
-			inRange := passesRangeFilter(item.ModelID, settings, result.Species)
+			inRange := classifier.PassesRangeFilter(item.ModelID, settings, result.Species)
 			p.updateLastDetection(item.ModelID, commonName, scientificName, float64(result.Confidence), feedTime, inRange, feedThrottle)
 		}
 
@@ -1253,33 +1253,6 @@ func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result data
 	return
 }
 
-// shouldApplyRangeFilter returns true if the given model should have its
-// detections filtered by the geographic range filter. The decision is a registry
-// capability, not a display-name check: BirdNET (any version) and Perch participate
-// (their label spaces are range-filter compatible), while Bat and BSG classify their
-// own label spaces and never participate. An unknown or custom model ID does NOT
-// participate: its label space is arbitrary, and unregistered IDs never reach a live
-// detection anyway (LoadModel rejects them), so this only pins the intended semantics.
-// Perch returns scientific-name labels, and the included-species set stores
-// scientific names for O(1) lookup, so the normal range list applies even when the
-// active range model is the embedded BirdNET geomodel rather than v3.
-func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
-	if settings == nil || !settings.BirdNET.LocationConfigured {
-		return false
-	}
-	return classifier.ParticipatesInRangeFilter(modelID)
-}
-
-// passesRangeFilter reports whether rawLabel survives the range filter for the
-// given model under the given settings snapshot: always true when the filter
-// does not apply (see shouldApplyRangeFilter), otherwise true when the species
-// is on the included list. The Last-heard feed, the primary gate in
-// shouldFilterDetection and the stored alternates all use it, so they agree on
-// one chunk.
-func passesRangeFilter(modelID string, settings *conf.Settings, rawLabel string) bool {
-	return !shouldApplyRangeFilter(modelID, settings) || settings.IsSpeciesIncluded(rawLabel)
-}
-
 // isRangeExemptLabel reports whether rawLabel is a sound-event, human or dog
 // class. Stored alternates of these classes are never range-filtered: they are
 // not geographic species, so an included list built from species ranges says
@@ -1380,7 +1353,7 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		return true, confidenceThreshold
 	}
 
-	if !passesRangeFilter(modelID, settings, result.Species) {
+	if !classifier.PassesRangeFilter(modelID, settings, result.Species) {
 		if settings.Debug {
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
@@ -1417,7 +1390,7 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 // createDetection creates a detection object with all necessary information.
 // Every finite alternate prediction is carried on the returned Detections, so no
 // pipeline stage sees a trimmed list. Alternates that fail the range filter under
-// the given settings snapshot (see passesRangeFilter; sound-event, human and dog
+// the given settings snapshot (see classifier.PassesRangeFilter; sound-event, human and dog
 // classes are exempt) are tagged OutOfRange. The save step (storedAlternates)
 // drops tagged rows and rows below BirdNET.AlternateMinConfidence; the primary
 // detection and the privacy and dog filters, which read the classifier results,
@@ -1467,7 +1440,7 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// and tag alternates that fail the same range rule as the primary, judged
 	// against this chunk's settings snapshot, so the save step can drop them.
 	keep := func(rawLabel string) bool {
-		return passesRangeFilter(item.ModelID, settings, rawLabel) || isRangeExemptLabel(rawLabel)
+		return classifier.PassesRangeFilter(item.ModelID, settings, rawLabel) || isRangeExemptLabel(rawLabel)
 	}
 	additionalResults := convertToAdditionalResults(item.Results, scientificName, keep)
 
