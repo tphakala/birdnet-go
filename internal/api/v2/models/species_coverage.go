@@ -33,7 +33,7 @@ type speciesKnowledge interface {
 
 // SpeciesCoverageModel is one loaded, enabled model that can classify a species.
 type SpeciesCoverageModel struct {
-	// ID is the config alias, as written in models.enabled.
+	// ID is the canonical config alias, the form models.enabled uses after load.
 	ID string `json:"id"`
 	// RegistryID is the classifier registry ID the alias resolves to.
 	RegistryID string `json:"registryId"`

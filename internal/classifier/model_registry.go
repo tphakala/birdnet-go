@@ -715,9 +715,9 @@ func ShouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 // PassesRangeFilter reports whether rawLabel survives the range filter for the
 // given model under the given settings snapshot: always true when the filter
 // does not apply (see ShouldApplyRangeFilter), otherwise true when the species
-// is on the included list. The Last-heard feed, the detection gate in
-// shouldFilterDetection and the stored alternates all use it, so they agree on
-// one chunk.
+// is on the included list. The processor's Last-heard feed, detection gate and
+// stored alternates, model consensus eligibility and the species coverage API
+// all use it, so they agree on one chunk.
 func PassesRangeFilter(modelID string, settings *conf.Settings, rawLabel string) bool {
 	return !ShouldApplyRangeFilter(modelID, settings) || settings.IsSpeciesIncluded(rawLabel)
 }
