@@ -58,7 +58,7 @@ func TestMigrateModelConsensusRules(t *testing.T) {
 			s := &Settings{ConfigVersion: tt.version}
 			s.Realtime.ModelConsensus.Rules = tt.rules
 
-			changed := s.MigrateModelConsensusRules(func() (legacyModelConsensus, error) { return tt.legacy, nil })
+			changed := s.migrateModelConsensusRules(func() (legacyModelConsensus, error) { return tt.legacy, nil })
 
 			assert.True(t, changed)
 			assert.Equal(t, tt.want, s.Realtime.ModelConsensus.Rules)
@@ -69,7 +69,7 @@ func TestMigrateModelConsensusRules(t *testing.T) {
 	t.Run("version 4 is untouched and does not read", func(t *testing.T) {
 		t.Parallel()
 		s := &Settings{ConfigVersion: configVersionModelConsensusRules}
-		changed := s.MigrateModelConsensusRules(func() (legacyModelConsensus, error) {
+		changed := s.migrateModelConsensusRules(func() (legacyModelConsensus, error) {
 			t.Error("read must not be called at the current version")
 			return legacyModelConsensus{AllSpecies: true}, nil
 		})
@@ -80,7 +80,7 @@ func TestMigrateModelConsensusRules(t *testing.T) {
 	t.Run("a read error makes no rule, warns and still stamps", func(t *testing.T) {
 		t.Parallel()
 		s := &Settings{ConfigVersion: 3}
-		changed := s.MigrateModelConsensusRules(func() (legacyModelConsensus, error) {
+		changed := s.migrateModelConsensusRules(func() (legacyModelConsensus, error) {
 			return legacyModelConsensus{}, errors.NewStd("decode failed")
 		})
 		assert.True(t, changed)

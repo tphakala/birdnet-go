@@ -164,7 +164,7 @@ func Load() (*Settings, error) {
 	// Runs after the version 1 to 3 steps, which gate on ConfigVersion and would be skipped by
 	// an earlier stamp. It reads viper, which no earlier step changes for these keys
 	// (SaveYAMLConfig does not touch viper); the write below drops the old keys from the file.
-	if settings.MigrateModelConsensusRules(readLegacyModelConsensus) {
+	if settings.migrateModelConsensusRules(readLegacyModelConsensus) {
 		persistMigration(settings, "model consensus rules")
 	}
 

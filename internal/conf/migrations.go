@@ -398,7 +398,7 @@ const (
 
 	// configVersionModelConsensusRules: realtime.modelconsensus changed from the allspecies,
 	// listedspecies, species, minmodels and alleligible switch to a list of rules;
-	// MigrateModelConsensusRules turns those keys into one rule once so no install changes
+	// migrateModelConsensusRules turns those keys into one rule once so no install changes
 	// which detections the filter discards.
 	configVersionModelConsensusRules = 4
 
@@ -508,7 +508,7 @@ func readLegacyModelConsensus() (legacyModelConsensus, error) {
 	return l, err
 }
 
-// MigrateModelConsensusRules converts the removed allspecies, listedspecies, species,
+// migrateModelConsensusRules converts the removed allspecies, listedspecies, species,
 // minmodels and alleligible keys into at most one rule, appended after any rules
 // already present, exactly once per config file, then stamps ConfigVersion. allspecies
 // makes an every-species rule, otherwise listedspecies with at least one non-blank
@@ -516,7 +516,7 @@ func readLegacyModelConsensus() (legacyModelConsensus, error) {
 // minmodels becomes the default, as normalization did before. read supplies the old
 // keys; a read error creates no rule and is recorded as a warning. Returns true when
 // the version was stamped.
-func (s *Settings) MigrateModelConsensusRules(read func() (legacyModelConsensus, error)) bool {
+func (s *Settings) migrateModelConsensusRules(read func() (legacyModelConsensus, error)) bool {
 	if s.ConfigVersion >= configVersionModelConsensusRules {
 		return false
 	}

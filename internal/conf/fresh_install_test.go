@@ -45,7 +45,7 @@ func TestFreshInstall_DefaultsToBirdNET(t *testing.T) {
 	assert.False(t, s.MigrateSourceTargetDefaults(), "M1 must not run on a freshly stamped config")
 	assert.False(t, s.MigrateModelsEnabledAuthoritative(), "M2 must not run on a freshly stamped config")
 	assert.False(t, s.MigrateLogDeduplicationDefaults(), "M3 must not run on a freshly stamped config")
-	assert.False(t, s.MigrateModelConsensusRules(func() (legacyModelConsensus, error) {
+	assert.False(t, s.migrateModelConsensusRules(func() (legacyModelConsensus, error) {
 		return legacyModelConsensus{AllSpecies: true}, nil
 	}), "M4 must not run on a freshly stamped config")
 	assert.Empty(t, s.Realtime.ModelConsensus.Rules, "M4 must not create a rule on a freshly stamped config")
