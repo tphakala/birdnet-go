@@ -368,6 +368,36 @@ func TestUpdateSectionSettingsModelConsensusUnknownAlias(t *testing.T) {
 		"a stored unknown alias is kept and never locks a save")
 }
 
+// TestUpdateSettingsRejectsInvalidModelConsensusRules verifies the full-settings PUT
+// path refuses a blank-only species list and a newly introduced unknown alias, and
+// leaves the stored rules unchanged.
+func TestUpdateSettingsRejectsInvalidModelConsensusRules(t *testing.T) {
+	e, _, controller := setupTestEnvironment(t)
+	controller.Settings.Load().Realtime.ModelConsensus = conf.ModelConsensusSettings{}
+	before := controller.Settings.Load().Realtime.ModelConsensus
+
+	tests := []struct {
+		name string
+		rule conf.ModelConsensusRule
+		want string
+	}{
+		{"blank-only species", conf.ModelConsensusRule{Species: []string{" ", ""}, MinModels: 2}, "rules[0]"},
+		{"unknown alias", conf.ModelConsensusRule{Models: []string{"future_model"}}, "future_model"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := conf.CloneSettings(controller.Settings.Load())
+			s.Realtime.ModelConsensus.Rules = []conf.ModelConsensusRule{tt.rule}
+
+			rec := sendFullSettings(t, e, controller, s)
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			assert.Contains(t, rec.Body.String(), tt.want)
+			assert.Equal(t, before, controller.Settings.Load().Realtime.ModelConsensus)
+		})
+	}
+}
+
 // TestUpdateSectionSettingsKeepsModelConsensusWhenKeyOmitted verifies that a realtime
 // PATCH from a client that does not know the model consensus key leaves the stored
 // settings alone.
