@@ -32,7 +32,10 @@ type LabelRepository interface {
 	GetByScientificNamesAndModel(ctx context.Context, names []string, modelID uint) ([]*entities.Label, error)
 
 	// BatchGetOrCreate retrieves or creates multiple labels in optimized batches.
-	// Returns a map of scientificName -> Label for all requested names.
+	// Returns a map of scientificName -> Label with a key for every requested
+	// (trimmed, non-empty) name. On MySQL and MariaDB a key can hold the row
+	// stored under a different case or accent spelling, which the server's
+	// collation treats as the same name.
 	// Uses bulk operations to minimize database round-trips.
 	BatchGetOrCreate(ctx context.Context, scientificNames []string, modelID, labelTypeID uint, taxonomicClassID *uint) (map[string]*entities.Label, error)
 

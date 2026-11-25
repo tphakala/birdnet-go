@@ -459,3 +459,29 @@ func TestBatchSaveDynamicThresholds_RepeatAfterLostCommit_MySQL(t *testing.T) {
 		assert.Equal(t, len(species), countRows(species...))
 	})
 }
+
+// TestSave_PredictionNameDifferingInCaseFromStoredLabel_MySQL proves that a save
+// whose prediction names a stored label in another case succeeds on MySQL. The
+// server's default collation ignores case, so the lookup finds the stored row and
+// the unique (scientific_name, model_id) key rejects a second one.
+func TestSave_PredictionNameDifferingInCaseFromStoredLabel_MySQL(t *testing.T) {
+	containers.SkipIfContainerRuntimeUnavailable(t)
+
+	ds, _, direct := newFaultProxyStore(t)
+	ctx := t.Context()
+	save := func(clip, predicted string) error {
+		return ds.Save(&datastore.Note{
+			Date: "2024-01-15", Time: "12:30:00",
+			ScientificName: "Passer domesticus", CommonName: "House Sparrow",
+			Confidence: 0.85, ClipName: clip,
+		}, []datastore.Results{{Species: predicted, Confidence: 0.4}})
+	}
+
+	require.NoError(t, save("stored.wav", "Homo Sapiens"))
+	require.NoError(t, save("variant.wav", "Homo sapiens"), "the case variant must resolve to the stored label")
+
+	var n int
+	require.NoError(t, direct.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM labels WHERE scientific_name = ?", "Homo sapiens").Scan(&n))
+	assert.Equal(t, 1, n, "one label row serves both spellings")
+}

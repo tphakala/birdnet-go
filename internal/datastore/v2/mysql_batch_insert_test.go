@@ -145,3 +145,49 @@ func TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement(t *testing.T) {
 		assert.Equal(t, int64(2), count)
 	})
 }
+
+// TestMySQL_LabelBatchGetOrCreate_MapsNamesTheServerTreatsAsEqual proves that
+// BatchGetOrCreate returns every requested name as a key. The v2 tables use the
+// server's default collation, which is case-insensitive, so a request for "X y"
+// matches a stored "X Y" row: the map must hold the requested spelling, and no
+// second row may be created.
+func TestMySQL_LabelBatchGetOrCreate_MapsNamesTheServerTreatsAsEqual(t *testing.T) {
+	dropAllTables(t, coexTestDB, coexTestDBName)
+
+	mgr := newTestMySQLManager(t, true)
+	require.NoError(t, mgr.Initialize())
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	ctx := t.Context()
+	db := mgr.DB()
+
+	labelType := entities.LabelType{Name: "collation_species"}
+	require.NoError(t, db.Create(&labelType).Error)
+	model := entities.AIModel{Name: "Collation", Version: "1", ModelType: entities.ModelTypeBird}
+	require.NoError(t, db.Create(&model).Error)
+	stored := entities.Label{ScientificName: "Homo Sapiens", ModelID: model.ID, LabelTypeID: labelType.ID}
+	require.NoError(t, db.Create(&stored).Error)
+
+	labelRepo := repository.NewLabelRepository(db, nil, true, true)
+
+	got, err := labelRepo.BatchGetOrCreate(ctx, []string{"Homo sapiens", "Homo Sapiens", "Homo sapiéns", "Turdus merula"}, model.ID, labelType.ID, nil)
+	require.NoError(t, err)
+	require.Contains(t, got, "Homo sapiens", "the requested spelling must be a key")
+	require.Contains(t, got, "Homo Sapiens")
+	require.Contains(t, got, "Homo sapiéns", "MySQL 8.4's default collation also ignores accents")
+	require.Contains(t, got, "Turdus merula")
+	assert.Equal(t, stored.ID, got["Homo sapiens"].ID)
+	assert.Equal(t, stored.ID, got["Homo Sapiens"].ID)
+	assert.Equal(t, stored.ID, got["Homo sapiéns"].ID)
+
+	var count int64
+	require.NoError(t, db.Table("v2_labels").Where("model_id = ?", model.ID).Count(&count).Error)
+	assert.Equal(t, int64(2), count, "the case variant must not create a second row")
+
+	// Two spellings of a new name in one call: one row is created, both resolve after the re-fetch.
+	got, err = labelRepo.BatchGetOrCreate(ctx, []string{"Picus Canus", "Picus canus"}, model.ID, labelType.ID, nil)
+	require.NoError(t, err)
+	require.Contains(t, got, "Picus Canus")
+	require.Contains(t, got, "Picus canus")
+	assert.Equal(t, got["Picus Canus"].ID, got["Picus canus"].ID)
+}
