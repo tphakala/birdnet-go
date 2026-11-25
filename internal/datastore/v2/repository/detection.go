@@ -332,17 +332,20 @@ type DetectionRepository interface {
 	// original_label_id and later changes keep it, also when the species is
 	// changed back. The detection is marked reviewed as correct in the same
 	// transaction. The new label is the detection's own model's label for the
-	// species, matched by name or by a taxonomic alias of it; when only other
-	// models have a label of that name, one is created for the detection's model
-	// with their label type and taxonomic class; that label is made before the
-	// guarded update and stays, as a valid label of the model, if the detection is
-	// locked or deleted in between. A request for the species the detection's
-	// current label already stands for is a no-op that writes nothing, whatever
-	// the spelling requested and whichever of the model's labels of the species
-	// the detection holds. Returns ErrDetectionNotFound if id does not exist,
-	// ErrDetectionLocked if it is locked, and ErrLabelNotFound if the name is
-	// empty or has no species part, or no model has a label for the species.
-	ChangeSpecies(ctx context.Context, id uint, scientificName string) error
+	// species, matched by name or by a taxonomic alias of it. Otherwise, when
+	// offer is non-nil, a label is created for the detection's model: named as
+	// the model itself spells the species when it knows it (else as a loaded model
+	// does, else as requested), canonicalized, with the label type of the
+	// sound-event registry and a taxonomic class that follows the model type; the
+	// label is made before the guarded update and stays, as a valid label of the
+	// model, if the detection is locked or deleted in between. A request for the
+	// species the detection's current label already stands for is a no-op that
+	// writes nothing, whatever the spelling requested and whichever of the model's
+	// labels of the species the detection holds. Returns ErrDetectionNotFound if
+	// id does not exist, ErrDetectionLocked if it is locked, and ErrLabelNotFound
+	// if the name is empty or has no species part, or no label of the model
+	// matches and the species is not offered.
+	ChangeSpecies(ctx context.Context, id uint, scientificName string, offer *SpeciesOffer) error
 
 	// GetNeighborIDs returns the nearest lower and higher detection ID overall
 	// and among detections of the same species, for stepping through detections

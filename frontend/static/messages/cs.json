@@ -917,7 +917,7 @@
         "changed": "Druh změněn na {species}",
         "changeFailed": "Druh se nepodařilo změnit. Zkuste to prosím znovu.",
         "conflict": "Druh nyní nelze změnit: detekce je ponechána (uzamčena), nebo se používá starý formát databáze.",
-        "notKnownHere": "Druh {species} nebyl na této stanici nikdy detekován ani předpovězen, takže jej zatím nelze vybrat.",
+        "unknownSpecies": "Druh {species} už není na seznamu druhů, takže jej nelze vybrat. Zavřete toto okno a zkuste to znovu.",
         "predictionsTitle": "Další předpovědi",
         "noPredictions": "Model pro tuto nahrávku neuložil žádné další předpovědi.",
         "allSpecies": "Všechny druhy",

@@ -872,7 +872,7 @@ func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
 	at := func(minute int) time.Time { return time.Date(2026, 6, 1, 12, minute, 0, 0, time.UTC) }
 	changed := seedDetection(t, ds, originalSci, at(0))
 	untouched := seedDetection(t, ds, currentSci, at(10))
-	require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci))
+	require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci, nil))
 
 	want := detection.Species{ScientificName: originalSci, CommonName: originalCommon, Code: originalCode}
 	find := func(results []*detection.Result, id uint) *detection.Result {
@@ -916,7 +916,7 @@ func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
 	})
 
 	t.Run("after a change back", func(t *testing.T) {
-		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, originalSci))
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, originalSci, nil))
 
 		got, err := repo.Get(ctx, idString(changed.ID))
 		require.NoError(t, err)
@@ -928,7 +928,7 @@ func TestDetectionRepository_ReadsCarryOriginalSpecies(t *testing.T) {
 
 	t.Run("original label row deleted", func(t *testing.T) {
 		ghost := seedDetection(t, ds, ghostSci, at(20))
-		require.NoError(t, ds.detection.ChangeSpecies(ctx, ghost.ID, currentSci))
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, ghost.ID, currentSci, nil))
 		ghostLabel, err := ds.label.GetOrCreate(ctx, ghostSci, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
 		require.NoError(t, err)
 		require.NoError(t, ds.label.Delete(ctx, ghostLabel.ID))
@@ -980,7 +980,7 @@ func TestDetectionRepository_OriginalSpeciesCommonNameFallback(t *testing.T) {
 	}
 	for i, tt := range tests {
 		changed := seedDetection(t, ds, tt.sci, time.Date(2026, 6, 1, 12, i, 0, 0, time.UTC))
-		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci), tt.name)
+		require.NoError(t, ds.detection.ChangeSpecies(ctx, changed.ID, currentSci, nil), tt.name)
 
 		got, err := repo.Get(ctx, strconv.FormatUint(uint64(changed.ID), 10))
 		require.NoError(t, err, tt.name)

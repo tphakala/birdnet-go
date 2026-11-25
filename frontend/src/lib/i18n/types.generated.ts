@@ -727,7 +727,7 @@ export type TranslationKey =
   | 'detections.detail.species.changed' // params: species
   | 'detections.detail.species.changeFailed'
   | 'detections.detail.species.conflict'
-  | 'detections.detail.species.notKnownHere' // params: species
+  | 'detections.detail.species.unknownSpecies' // params: species
   | 'detections.detail.species.predictionsTitle'
   | 'detections.detail.species.noPredictions'
   | 'detections.detail.species.allSpecies'
@@ -4931,7 +4931,7 @@ export type TranslationParams = {
   'detections.titles.allDetections': { date: string | number };
   'detections.detail.species.confirm': { species: string | number };
   'detections.detail.species.changed': { species: string | number };
-  'detections.detail.species.notKnownHere': { species: string | number };
+  'detections.detail.species.unknownSpecies': { species: string | number };
   'detections.detail.species.searchHintRange': { count: string | number };
   'detections.detail.species.searchHintAll': { count: string | number };
   'detections.detail.aria.confidence': { confidence: string | number };

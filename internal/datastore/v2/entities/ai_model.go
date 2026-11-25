@@ -11,6 +11,20 @@ const (
 	ModelTypeMulti ModelType = "multi"
 )
 
+// TaxonomicClass returns the name of the taxonomic class the save path gives a
+// species label of a model of this type: Chiroptera for bat models, none ("")
+// for multi-taxa models and Aves for everything else (bird and unknown types).
+func (t ModelType) TaxonomicClass() string {
+	switch t {
+	case ModelTypeBat:
+		return TaxonomicClassChiroptera
+	case ModelTypeMulti:
+		return ""
+	default:
+		return TaxonomicClassAves
+	}
+}
+
 // AIModel represents an AI detection model (BirdNET, Perch, BatNET, etc.).
 type AIModel struct {
 	ID             uint      `gorm:"primaryKey"`

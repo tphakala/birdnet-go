@@ -15,11 +15,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 const speciesChangeTestBody = `{"scientificName":"` + predTestMallard + `"}`
@@ -28,6 +32,7 @@ const speciesChangeTestBody = `{"scientificName":"` + predTestMallard + `"}`
 type speciesChangeCall struct {
 	id             uint
 	scientificName string
+	offer          *repository.SpeciesOffer
 }
 
 // fakeSpeciesChanger is a speciesChanger with a canned result. It records the calls
@@ -37,8 +42,8 @@ type fakeSpeciesChanger struct {
 	calls []speciesChangeCall
 }
 
-func (f *fakeSpeciesChanger) ChangeSpecies(_ context.Context, id uint, scientificName string) error {
-	f.calls = append(f.calls, speciesChangeCall{id: id, scientificName: scientificName})
+func (f *fakeSpeciesChanger) ChangeSpecies(_ context.Context, id uint, scientificName string, offer *repository.SpeciesOffer) error {
+	f.calls = append(f.calls, speciesChangeCall{id: id, scientificName: scientificName, offer: offer})
 	return f.err
 }
 
@@ -121,6 +126,9 @@ func TestChangeDetectionSpecies_StatusMapping(t *testing.T) {
 			code, body := putSpecies(t.Context(), t, e, h, predTestID, speciesChangeTestBody)
 			assert.Equal(t, tc.code, code)
 			assert.Contains(t, body, tc.message)
+			if errors.Is(tc.err, repository.ErrLabelNotFound) {
+				assert.Contains(t, body, `"error_key":"`+speciesChangeUnknownKey+`"`)
+			}
 		})
 	}
 
@@ -149,10 +157,11 @@ func TestChangeDetectionSpecies_BadRequest(t *testing.T) {
 	}
 
 	for name, tc := range map[string]struct{ body, message string }{
-		"a body that is not JSON":  {`{"scientificName":`, speciesChangeInvalidMessage},
-		"no scientific name":       {`{}`, speciesChangeMissingMessage},
-		"a blank scientific name":  {`{"scientificName":"  "}`, speciesChangeMissingMessage},
-		"a name of the wrong type": {`{"scientificName":5}`, speciesChangeInvalidMessage},
+		"a body that is not JSON":       {`{"scientificName":`, speciesChangeInvalidMessage},
+		"no scientific name":            {`{}`, speciesChangeMissingMessage},
+		"a blank scientific name":       {`{"scientificName":"  "}`, speciesChangeMissingMessage},
+		"a name without a species part": {`{"scientificName":"_Blackbird"}`, speciesChangeNoSpeciesMessage},
+		"a name of the wrong type":      {`{"scientificName":5}`, speciesChangeInvalidMessage},
 	} {
 		t.Run(name, func(t *testing.T) {
 			changer := &fakeSpeciesChanger{}
@@ -160,6 +169,7 @@ func TestChangeDetectionSpecies_BadRequest(t *testing.T) {
 			code, body := putSpecies(t.Context(), t, e, h, predTestID, tc.body)
 			assert.Equal(t, http.StatusBadRequest, code)
 			assert.Contains(t, body, tc.message)
+			assert.NotContains(t, body, "error_key", "a plain 400 carries no key")
 			assert.Empty(t, changer.calls)
 		})
 	}
@@ -197,10 +207,14 @@ func TestChangeDetectionSpecies_WiredToV2Repository(t *testing.T) {
 	db := f.mgr.DB()
 	var original entities.Label
 	require.NoError(t, db.First(&original, "scientific_name = ?", contribTestSpeciesID).Error)
-	target := entities.Label{ScientificName: predTestRaven, ModelID: original.ModelID, LabelTypeID: original.LabelTypeID}
-	require.NoError(t, db.Create(&target).Error)
 
 	e, _, h := setupTestEnvironment(t)
+	// The species has no label yet: the name map offers it and the default model,
+	// the registry's BirdNET v2.4, knows it.
+	h.loadCommonNameMap = func() map[string]string { return map[string]string{predTestRaven: "Common Raven"} }
+	h.speciesKnowledge = func() speciesKnowledge {
+		return fakeSpeciesKnowledge{classifier.RegistryIDBirdNETV24: {speciesindex.CanonicalKey(predTestRaven): predTestRaven}}
+	}
 	h.V2Manager = f.mgr
 	h.AuthMiddleware = func(next echo.HandlerFunc) echo.HandlerFunc { return next }
 	datastoreV2.SetEnhancedDatabaseMode()
@@ -208,7 +222,7 @@ func TestChangeDetectionSpecies_WiredToV2Repository(t *testing.T) {
 	h.RegisterDetectionRoutes(h.Group)
 
 	req := httptest.NewRequest(http.MethodPut, "/api/v2/detections/"+strconv.FormatUint(uint64(f.detectionID), 10)+"/species",
-		strings.NewReader(`{"scientificName":"`+predTestRaven+`"}`))
+		strings.NewReader(`{"scientificName":"corvus corax"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
@@ -216,7 +230,108 @@ func TestChangeDetectionSpecies_WiredToV2Repository(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var stored entities.Detection
 	require.NoError(t, db.First(&stored, f.detectionID).Error)
-	assert.Equal(t, target.ID, stored.LabelID)
+	var created entities.Label
+	require.NoError(t, db.First(&created, stored.LabelID).Error)
+	assert.Equal(t, predTestRaven, created.ScientificName)
+	assert.Equal(t, original.ModelID, created.ModelID, "the label belongs to the detection's model")
+	var labelType entities.LabelType
+	require.NoError(t, db.First(&labelType, created.LabelTypeID).Error)
+	assert.Equal(t, entities.LabelTypeSpecies, labelType.Name)
+	require.NotNil(t, created.TaxonomicClassID)
+	var class entities.TaxonomicClass
+	require.NoError(t, db.First(&class, *created.TaxonomicClassID).Error)
+	assert.Equal(t, entities.TaxonomicClassAves, class.Name)
 	require.NotNil(t, stored.OriginalLabelID)
 	assert.Equal(t, original.ID, *stored.OriginalLabelID)
+}
+
+// fakeSpeciesKnowledge is a speciesKnowledge over a fixed registry ID to canonical
+// key to scientific name table.
+type fakeSpeciesKnowledge map[string]map[string]string
+
+func (f fakeSpeciesKnowledge) ScientificName(modelID, key string) (string, bool) {
+	name, ok := f[modelID][key]
+	return name, ok
+}
+
+// TestChangeDetectionSpecies_Offer verifies the offer the handler passes to the
+// repository: which sources make a species offered, and what the models say.
+func TestChangeDetectionSpecies_Offer(t *testing.T) {
+	const (
+		blackbird       = "Turdus merula"
+		blackbirdLabel  = "Turdus merula_Common Blackbird"
+		perchSpelling   = "Turdus merula (Perch)"
+		dove            = "Spilopelia senegalensis"
+		doveOldSpelling = "Streptopelia senegalensis"
+	)
+	v24 := classifier.RegistryIDBirdNETV24
+	perch := classifier.RegistryIDPerchV2
+	tests := []struct {
+		name     string
+		request  string
+		nameMap  map[string]string
+		included []string
+		labels   []string
+		know     fakeSpeciesKnowledge
+		want     *repository.SpeciesOffer
+	}{
+		{
+			name: "known by two models and in the name map", request: blackbird,
+			nameMap: map[string]string{blackbird: "Common Blackbird"},
+			know: fakeSpeciesKnowledge{
+				perch: {speciesindex.CanonicalKey(blackbird): perchSpelling},
+				v24:   {speciesindex.CanonicalKey(blackbird): blackbird},
+			},
+			want: &repository.SpeciesOffer{Models: []repository.OfferedModel{
+				{Model: classifier.DetectionModelInfoForID(v24), ScientificName: blackbird},
+				{Model: classifier.DetectionModelInfoForID(perch), ScientificName: perchSpelling},
+			}},
+		},
+		{
+			name: "only in the name map", request: blackbird,
+			nameMap: map[string]string{blackbird: "Common Blackbird"},
+			want:    &repository.SpeciesOffer{},
+		},
+		{
+			name: "only in the range list, under an alias spelling", request: doveOldSpelling,
+			nameMap: map[string]string{"Other species": "Other"}, included: []string{dove + "_African Collared Dove"},
+			want: &repository.SpeciesOffer{},
+		},
+		{
+			name: "a prefix of an included label", request: "Turdus",
+			nameMap: map[string]string{"Other species": "Other"}, included: []string{blackbirdLabel},
+		},
+		{
+			name: "nowhere", request: "Corvus corax",
+			nameMap: map[string]string{"Other species": "Other"}, included: []string{blackbirdLabel},
+		},
+		{
+			name: "startup fallback with an empty name map", request: blackbird,
+			labels: []string{blackbirdLabel}, want: &repository.SpeciesOffer{},
+		},
+		{
+			name: "no fallback once the name map is built", request: blackbird,
+			nameMap: map[string]string{"Other species": "Other"}, labels: []string{blackbirdLabel},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			changer := &fakeSpeciesChanger{}
+			e, _, h := setupTestEnvironment(t, apitest.WithSettingsFunc(func(s *conf.Settings) {
+				s.BirdNET.RangeFilter.Species = tt.included
+				s.BirdNET.Labels = tt.labels
+			}))
+			h.speciesChanger = changer
+			datastoreV2.SetEnhancedDatabaseMode()
+			t.Cleanup(datastoreV2.ResetDatabaseMode)
+			h.loadCommonNameMap = func() map[string]string { return tt.nameMap }
+			h.speciesKnowledge = func() speciesKnowledge { return tt.know }
+
+			code, body := putSpecies(t.Context(), t, e, h, predTestID, `{"scientificName":"`+tt.request+`"}`)
+
+			require.Equal(t, http.StatusOK, code, body)
+			require.Len(t, changer.calls, 1)
+			assert.Equal(t, tt.want, changer.calls[0].offer)
+		})
+	}
 }

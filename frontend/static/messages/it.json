@@ -917,7 +917,7 @@
         "changed": "Specie cambiata in {species}",
         "changeFailed": "Impossibile cambiare la specie. Riprova.",
         "conflict": "La specie non può essere cambiata ora: il rilevamento è conservato (bloccato) oppure è in uso il vecchio formato di database.",
-        "notKnownHere": "La specie {species} non è mai stata rilevata né prevista in questa stazione, quindi non può ancora essere selezionata.",
+        "unknownSpecies": "La specie {species} non è più nell'elenco delle specie, quindi non può essere scelta. Chiudi questa finestra e riprova.",
         "predictionsTitle": "Altre previsioni",
         "noPredictions": "Il modello non ha salvato altre previsioni per questa registrazione.",
         "allSpecies": "Tutte le specie",

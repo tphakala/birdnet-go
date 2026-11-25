@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
@@ -413,4 +414,47 @@ func TestSave_MultipleNonBirdCategories(t *testing.T) {
 		})
 	}
 
+}
+
+// TestSave_SpeciesLabelClassFollowsModelType pins the taxonomic class the save path
+// stores with a species label by model type: Aves for a bird model, Chiroptera for a
+// bat model and none for a multi-taxa model. The change-species path mirrors this
+// rule through entities.ModelType.TaxonomicClass.
+func TestSave_SpeciesLabelClassFollowsModelType(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     detection.ModelInfo
+		modelType string
+		wantClass func(ds *Datastore) *uint
+	}{
+		{"bird model", detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"}, "bird", func(ds *Datastore) *uint { return ds.avesClassID }},
+		{"bat model", detection.ModelInfo{Name: detection.ModelNameBSGBat, Version: "1", Variant: "default"}, "bat", func(ds *Datastore) *uint { return ds.chiropteraClassID }},
+		{"multi-taxa model", detection.ModelInfo{Name: "Perch", Version: "2", Variant: "default"}, "multi", func(*Datastore) *uint { return nil }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ds, cleanup := setupTestDatastore(t)
+			defer cleanup()
+
+			require.NoError(t, ds.Save(&datastore.Note{
+				Date: "2024-06-01", Time: "10:00:00", ScientificName: "Pipistrellus pipistrellus",
+				CommonName: "Common Pipistrelle", Confidence: 0.9, Model: tt.model,
+				RawLabel: "Pipistrellus pipistrellus_Common Pipistrelle",
+			}, nil))
+
+			ctx := t.Context()
+			model, err := ds.model.GetOrCreate(ctx, tt.model.Name, tt.model.Version, tt.model.Variant, entities.ModelType(tt.modelType), nil)
+			require.NoError(t, err)
+			label, err := ds.label.GetByScientificNameAndModel(ctx, "Pipistrellus pipistrellus", model.ID)
+			require.NoError(t, err)
+
+			want := tt.wantClass(ds)
+			if want == nil {
+				assert.Nil(t, label.TaxonomicClassID)
+				return
+			}
+			require.NotNil(t, label.TaxonomicClassID)
+			assert.Equal(t, *want, *label.TaxonomicClassID)
+		})
+	}
 }

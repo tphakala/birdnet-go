@@ -917,7 +917,7 @@
         "changed": "Soort gewijzigd naar {species}",
         "changeFailed": "De soort kon niet worden gewijzigd. Probeer het opnieuw.",
         "conflict": "De soort kan nu niet worden gewijzigd: de detectie is bewaard (vergrendeld), of het oude databaseformaat is in gebruik.",
-        "notKnownHere": "{species} is op dit station nog nooit gedetecteerd of voorspeld en kan daarom nog niet worden gekozen.",
+        "unknownSpecies": "{species} staat niet meer op de soortenlijst en kan daarom niet worden gekozen. Sluit dit dialoogvenster en probeer het opnieuw.",
         "predictionsTitle": "Overige voorspellingen",
         "noPredictions": "Het model heeft geen andere voorspellingen voor deze opname opgeslagen.",
         "allSpecies": "Alle soorten",

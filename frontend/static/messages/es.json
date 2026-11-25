@@ -917,7 +917,7 @@
         "changed": "Especie cambiada a {species}",
         "changeFailed": "No se pudo cambiar la especie. Por favor, inténtalo de nuevo.",
         "conflict": "No se puede cambiar la especie ahora: la detección está conservada (bloqueada) o se está usando el formato de base de datos antiguo.",
-        "notKnownHere": "{species} nunca se ha detectado ni predicho en esta estación, por lo que aún no se puede elegir.",
+        "unknownSpecies": "{species} ya no está en la lista de especies, por lo que no se puede elegir. Cierra este cuadro de diálogo e inténtalo de nuevo.",
         "predictionsTitle": "Otras predicciones",
         "noPredictions": "El modelo no guardó otras predicciones para esta grabación.",
         "allSpecies": "Todas las especies",

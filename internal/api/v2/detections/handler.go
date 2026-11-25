@@ -95,6 +95,11 @@ type Handler struct {
 	// enhanced v2 database is active; see RegisterDetectionRoutes.
 	speciesChanger speciesChanger
 
+	// speciesKnowledge reads which loaded models know a species. Nil means the live
+	// orchestrator's ModelSpecies snapshot, read per request; tests inject a fixed
+	// one.
+	speciesKnowledge func() speciesKnowledge
+
 	// neighbors finds the detections next to a detection. It is nil unless the
 	// enhanced v2 database is active; see RegisterDetectionRoutes.
 	neighbors neighborReader

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"gorm.io/gorm"
 )
 
@@ -106,7 +107,7 @@ func TestMySQL_ChangeSpecies(t *testing.T) {
 			// A to B to A keeps A as the original, with a prediction row for A present.
 			for _, label := range []*entities.Label{f.mallard, f.teal, f.mallard} {
 				species := label.ScientificName
-				require.NoError(t, f.repo.ChangeSpecies(ctx, f.det.ID, species))
+				require.NoError(t, f.repo.ChangeSpecies(ctx, f.det.ID, species, nil))
 				got, err := f.repo.Get(ctx, f.det.ID)
 				require.NoError(t, err)
 				assert.Equal(t, label.ID, got.LabelID, "the label is the requested species %s", species)
@@ -125,7 +126,7 @@ func TestMySQL_ChangeSpecies(t *testing.T) {
 				LabelID: f.teal.ID, ModelID: f.det.ModelID, Confidence: speciesChangeConfidence, DetectedAt: speciesChangeDetectedAt,
 			}
 			require.NoError(t, f.mgr.DB().Create(unreviewed).Error)
-			require.NoError(t, f.repo.ChangeSpecies(ctx, unreviewed.ID, speciesChangeMallardName))
+			require.NoError(t, f.repo.ChangeSpecies(ctx, unreviewed.ID, speciesChangeMallardName, nil))
 			review, err = f.repo.GetReview(ctx, unreviewed.ID)
 			require.NoError(t, err)
 			assert.Equal(t, entities.VerificationCorrect, review.Verified)
@@ -136,14 +137,41 @@ func TestMySQL_ChangeSpecies(t *testing.T) {
 			}
 			require.NoError(t, f.mgr.DB().Create(locked).Error)
 			require.NoError(t, f.repo.Lock(ctx, locked.ID))
-			require.ErrorIs(t, f.repo.ChangeSpecies(ctx, locked.ID, speciesChangeMallardName), repository.ErrDetectionLocked)
+			require.ErrorIs(t, f.repo.ChangeSpecies(ctx, locked.ID, speciesChangeMallardName, nil), repository.ErrDetectionLocked)
 			got, err = f.repo.Get(ctx, locked.ID)
 			require.NoError(t, err)
 			assert.Equal(t, f.teal.ID, got.LabelID)
 			assert.Nil(t, got.OriginalLabelID)
 
 			const missingID = uint(999999)
-			require.ErrorIs(t, f.repo.ChangeSpecies(ctx, missingID, speciesChangeMallardName), repository.ErrDetectionNotFound)
+			require.ErrorIs(t, f.repo.ChangeSpecies(ctx, missingID, speciesChangeMallardName, nil), repository.ErrDetectionNotFound)
+
+			// A never-seen species requested in lower case gets a label with the
+			// model's own spelling, the species type and Aves. The label type,
+			// taxonomic class and model tables are each chosen by the prefix flag, so
+			// a wrong flag would fail here.
+			const gadwall = "Mareca strepera"
+			fresh := &entities.Detection{
+				LabelID: f.teal.ID, ModelID: f.det.ModelID, Confidence: speciesChangeConfidence, DetectedAt: speciesChangeDetectedAt,
+			}
+			require.NoError(t, f.mgr.DB().Create(fresh).Error)
+			offer := &repository.SpeciesOffer{Models: []repository.OfferedModel{
+				{Model: detection.ModelInfo{Name: "SpeciesChange", Version: "1"}, ScientificName: gadwall},
+			}}
+			require.NoError(t, f.repo.ChangeSpecies(ctx, fresh.ID, strings.ToLower(gadwall), offer))
+			got, err = f.repo.Get(ctx, fresh.ID)
+			require.NoError(t, err)
+			var created entities.Label
+			require.NoError(t, f.mgr.DB().First(&created, got.LabelID).Error)
+			assert.Equal(t, gadwall, created.ScientificName)
+			assert.Equal(t, f.det.ModelID, created.ModelID)
+			var labelType entities.LabelType
+			require.NoError(t, f.mgr.DB().First(&labelType, created.LabelTypeID).Error)
+			assert.Equal(t, entities.LabelTypeSpecies, labelType.Name)
+			require.NotNil(t, created.TaxonomicClassID)
+			var class entities.TaxonomicClass
+			require.NoError(t, f.mgr.DB().First(&class, *created.TaxonomicClassID).Error)
+			assert.Equal(t, entities.TaxonomicClassAves, class.Name)
 		})
 	}
 }
@@ -163,7 +191,7 @@ func TestMySQL_ChangeSpecies_LockOrDeleteFromAnotherConnection(t *testing.T) {
 					require.NoError(t, db.Create(&entities.DetectionLock{DetectionID: f.det.ID}).Error)
 				})
 
-				require.ErrorIs(t, f.repo.ChangeSpecies(ctx, f.det.ID, speciesChangeMallardName), repository.ErrDetectionLocked)
+				require.ErrorIs(t, f.repo.ChangeSpecies(ctx, f.det.ID, speciesChangeMallardName, nil), repository.ErrDetectionLocked)
 
 				got, err := f.repo.Get(ctx, f.det.ID)
 				require.NoError(t, err)
@@ -180,7 +208,7 @@ func TestMySQL_ChangeSpecies_LockOrDeleteFromAnotherConnection(t *testing.T) {
 					require.NoError(t, db.Delete(&entities.Detection{}, f.det.ID).Error)
 				})
 
-				require.ErrorIs(t, f.repo.ChangeSpecies(t.Context(), f.det.ID, speciesChangeMallardName), repository.ErrDetectionNotFound)
+				require.ErrorIs(t, f.repo.ChangeSpecies(t.Context(), f.det.ID, speciesChangeMallardName, nil), repository.ErrDetectionNotFound)
 			})
 		})
 	}
