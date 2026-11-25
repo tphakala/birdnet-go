@@ -206,3 +206,55 @@ func TestOVGPUDeviceNamesAgree(t *testing.T) {
 		assert.Equalf(t, wantIndexed, conf.IsOVGPUDeviceName(name), "name %q", name)
 	}
 }
+
+// TestPlanOpenVINODevice_GPUFailed covers the planner while the process-wide
+// OpenVINO GPU fault latch is set: the GPU is never planned and never probed,
+// the CPU stays plannable where it was.
+func TestPlanOpenVINODevice_GPUFailed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		goarch       string
+		nativeF16    bool
+		ortAvailable bool
+		backendPref  string
+		devicePref   string
+		wantDevice   string
+		wantOK       bool
+		wantReason   string
+	}{
+		{"amd64 auto/auto with a GPU present declines", goarchAMD64, false, true, conf.BackendPrefAuto, conf.OVDeviceAuto, "", false, ovReasonGPUFailed},
+		{"amd64 explicit gpu declines", goarchAMD64, false, true, conf.BackendPrefAuto, conf.OVDeviceGPU, "", false, ovReasonGPUFailed},
+		{"amd64 concrete GPU.1 declines", goarchAMD64, false, true, conf.BackendPrefAuto, "GPU.1", "", false, ovReasonGPUFailed},
+		{"amd64 explicit cpu still plans the CPU", goarchAMD64, false, true, conf.BackendPrefAuto, conf.OVDeviceCPU, inference.OVDeviceCPU, true, ""},
+		{"arm64 A76 auto with ORT missing plans the CPU", goarchARM64, true, false, conf.BackendPrefAuto, conf.OVDeviceAuto, inference.OVDeviceCPU, true, ""},
+		{"onnx backend keeps its own reason", goarchAMD64, false, true, conf.BackendPrefONNX, conf.OVDeviceGPU, "", false, ovReasonBackendONNX},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			host, probes := fakeOVHost(tt.goarch, tt.nativeF16, tt.ortAvailable, true)
+			host.gpuFailed = true
+			device, name, ok, reason := planOpenVINODevice(tt.backendPref, tt.devicePref, host)
+			assert.Equal(t, tt.wantDevice, device)
+			assert.Empty(t, name)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantReason, reason)
+			assert.Zero(t, *probes, "a latched GPU must not be probed")
+		})
+	}
+}
+
+// TestLiveOVHostFactsReflectsGPUFault pins the wiring from the OpenVINO latch to
+// the planner facts. Not parallel: it replaces the ovGPUFault seam.
+func TestLiveOVHostFactsReflectsGPUFault(t *testing.T) {
+	orig := ovGPUFault
+	t.Cleanup(func() { ovGPUFault = orig })
+
+	ovGPUFault = func() (bool, error) { return false, nil }
+	assert.False(t, liveOVHostFacts("", true).gpuFailed)
+
+	ovGPUFault = func() (bool, error) { return true, assert.AnError }
+	assert.True(t, liveOVHostFacts("", true).gpuFailed)
+}

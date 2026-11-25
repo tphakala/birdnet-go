@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // finiteSampleCount is how many leading output logits each round-trip test spot-
@@ -170,4 +172,83 @@ func TestScrubLibraryPaths_LongestFirst(t *testing.T) {
 	got := scrubLibraryPaths("cannot load "+resolved, configured, resolved)
 	assert.Equal(t, "cannot load <path>", got)
 	assert.NotContains(t, got, "someone")
+}
+
+// resetGPUFaultForTest clears the process-wide latch. Production code has no
+// reset path (only a restart clears it); this exists for tests that trip it.
+func resetGPUFaultForTest() {
+	gpuFault.tripped.Store(false)
+	gpuFault.cause.Store(nil)
+	gpuFault.streak.Store(0)
+}
+
+// TestGPUFaultLatch_RealDevice is a hardware-gated check of the glue between the
+// GPU fault latch and the native backend. It needs OV_TEST_MODEL (BirdNET v2.4
+// FP32 ONNX), OV_TEST_LIB optionally, and a GPU; it is skipped without a GPU. It
+// trips the latch directly (a real device fault cannot be provoked on demand),
+// then asserts that GPU calls fail fast with the sentinel, that the CPU device
+// keeps working, and that Close and DestroyOV return nil and leave no core
+// loaded. Whether they skip the native frees is not observable here (a known gap).
+// Not parallel: the latch is process-wide.
+func TestGPUFaultLatch_RealDevice(t *testing.T) {
+	model := os.Getenv("OV_TEST_MODEL")
+	if model == "" {
+		t.Skip("set OV_TEST_MODEL to a BirdNET v2.4 FP32 ONNX to run the GPU fault latch test")
+	}
+	// Registered first so it runs last: the DestroyOV cleanup below must still
+	// see the latch set when an assertion fails before the explicit DestroyOV.
+	t.Cleanup(resetGPUFaultForTest)
+	require.NoError(t, InitOV(os.Getenv("OV_TEST_LIB")))
+	t.Cleanup(func() { _ = DestroyOV() })
+	devs, err := AvailableDevices()
+	require.NoError(t, err)
+	if !slices.ContainsFunc(devs, IsGPUDevice) {
+		t.Skipf("no GPU device enumerated (have %v)", devs)
+	}
+
+	gpuClassifier, err := NewClassifier(model, Options{PrecisionHint: DefaultPrecisionHint, Device: DeviceGPU})
+	require.NoError(t, err)
+	silence := make([]float32, birdNETInputSamples)
+	_, err = gpuClassifier.PredictRaw(silence)
+	require.NoError(t, err, "the GPU classifier works before the latch trips")
+
+	// Unlatched Close frees and clears every field, and a second Close is a no-op.
+	spare, err := NewClassifier(model, Options{PrecisionHint: DefaultPrecisionHint, Device: DeviceGPU})
+	require.NoError(t, err)
+	require.NoError(t, spare.Close())
+	require.NoError(t, spare.Close())
+	spareImpl, ok := spare.(*classifier)
+	require.True(t, ok)
+	assert.Nil(t, spareImpl.req)
+	assert.Nil(t, spareImpl.compiled)
+	assert.Nil(t, spareImpl.inBuf)
+
+	tripErr := gpuFault.trip(errors.NewStd("simulated CL_OUT_OF_RESOURCES"))
+	require.ErrorIs(t, tripErr, ErrGPUDeviceFault)
+
+	_, err = gpuClassifier.PredictRaw(silence)
+	require.ErrorIs(t, err, ErrGPUDeviceFault, "GPU inference fails fast once latched")
+
+	_, err = NewClassifier(model, Options{PrecisionHint: DefaultPrecisionHint, Device: DeviceGPU})
+	require.ErrorIs(t, err, ErrGPUDeviceFault, "a GPU compile is refused once latched")
+
+	cpuClassifier, err := NewClassifier(model, Options{PrecisionHint: DefaultPrecisionHint, Device: DeviceCPU})
+	require.NoError(t, err, "the CPU device keeps working after a GPU trip")
+	out, err := cpuClassifier.PredictRaw(silence)
+	require.NoError(t, err)
+	assert.Len(t, out, birdNETOutputClasses)
+	require.NoError(t, cpuClassifier.Close())
+
+	require.NoError(t, gpuClassifier.Close(), "Close abandons the GPU objects and returns nil")
+	gpuImpl, ok := gpuClassifier.(*classifier)
+	require.True(t, ok)
+	assert.Nil(t, gpuImpl.req, "an abandoned classifier holds no native handle")
+	assert.Nil(t, gpuImpl.compiled)
+	assert.Nil(t, gpuImpl.inBuf)
+
+	require.NoError(t, DestroyOV(), "DestroyOV abandons the core and returns nil")
+	ovMu.Lock()
+	assert.Nil(t, ovCore)
+	assert.False(t, ovLoaded)
+	ovMu.Unlock()
 }

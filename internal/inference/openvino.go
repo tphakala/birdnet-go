@@ -49,6 +49,35 @@ const (
 // the bare "GPU" or a concrete "GPU.<n>".
 func OpenVINOIsGPUDevice(name string) bool { return ov.IsGPUDevice(name) }
 
+// OpenVINOGPUFault reports whether the process-wide OpenVINO GPU fault latch is
+// set and, if so, the error that tripped it. The latch is set by a fatal OpenCL
+// error or a streak of GPU inference failures, is never cleared, and makes every
+// call on a GPU classifier fail fast with an error wrapping ov.ErrGPUDeviceFault.
+// Only a process restart clears it. Without the openvino build tag it is always
+// false.
+func OpenVINOGPUFault() (faulted bool, cause error) { return ov.GPUFault() }
+
+// ovGPUFaultLogged makes the GPU fault ERROR log fire once per process.
+var ovGPUFaultLogged atomic.Bool
+
+// logOVGPUFaultOnce logs one ERROR the first time an OpenVINO classifier call
+// returns an error wrapping ov.ErrGPUDeviceFault, and returns err unchanged.
+// Later failures of the models still on the GPU are reported by the existing
+// inference failure accounting, not logged again here.
+func logOVGPUFaultOnce(err error) error {
+	if err == nil || !errors.Is(err, ov.ErrGPUDeviceFault) {
+		return err
+	}
+	if !ovGPUFaultLogged.CompareAndSwap(false, true) {
+		return err
+	}
+	_, cause := ov.GPUFault()
+	logger.Global().Module("inference").Error(
+		"OpenVINO GPU failed; GPU inference is stopped until restart, and models on the OpenVINO GPU fail until BirdNET-Go restarts or the OpenVINO device is set to CPU",
+		logger.Error(cause))
+	return err
+}
+
 // OVPrecisionF32 is the INFERENCE_PRECISION_HINT for full f32 inference, used to
 // override the f16 default where the GPU plugin miscompiles a model at f16.
 const OVPrecisionF32 = ov.PrecisionF32
@@ -87,7 +116,7 @@ func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Cl
 		OutputIndex:   opts.OutputIndex,
 	})
 	if err != nil {
-		return nil, err
+		return nil, logOVGPUFaultOnce(err)
 	}
 	// Validate the model's real output dimension against the label count. The OV
 	// backend reports NumClasses from the compiled model (not the label list), so
@@ -179,7 +208,8 @@ func (c *openvinoClassifier) Predict(samples []float32) ([]float32, error) {
 	if c.c == nil {
 		return nil, ov.ErrOpenVINOUnavailable
 	}
-	return c.c.PredictRaw(samples)
+	out, err := c.c.PredictRaw(samples)
+	return out, logOVGPUFaultOnce(err)
 }
 
 func (c *openvinoClassifier) NumSpecies() int { return c.numSpecies }
@@ -240,7 +270,7 @@ func NewOpenVINOEmbeddingExtractor(modelPath string, opts OpenVINOEmbeddingExtra
 		OutputIndex:   opts.OutputIndex,
 	})
 	if err != nil {
-		return nil, err
+		return nil, logOVGPUFaultOnce(err)
 	}
 	// Validate the compiled embedding port dimension against the consumer's expected
 	// embedding size (the bat classifier's input dim). The OV backend reports
@@ -276,7 +306,7 @@ func (e *openvinoEmbeddingExtractor) PredictWithEmbeddings(samples []float32) (l
 	}
 	emb, err := e.c.PredictRaw(samples)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, logOVGPUFaultOnce(err)
 	}
 	return nil, emb, nil
 }

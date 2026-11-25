@@ -60,14 +60,18 @@ var ErrOpenVINOUnavailable = errors.NewStd("openvino: backend unavailable")
 // goroutine-safe; callers must serialize access (BirdNET.mu serializes the full
 // native call; this implementation has no internal mutex).
 type Classifier interface {
-	// PredictRaw runs one inference and returns raw logits in label order.
+	// PredictRaw runs one inference and returns raw logits in label order. On a
+	// GPU classifier it fails fast with an error wrapping ErrGPUDeviceFault, and
+	// makes no native call, once the process-wide GPU fault latch is set.
 	PredictRaw(samples []float32) ([]float32, error)
 	// NumClasses reports the element count of the model's selected logits output,
 	// read from the compiled model (not derived from the label list). Callers use
 	// it to validate the model output against the label count.
 	NumClasses() int
 	// Close releases the compiled model and infer request. It does not touch
-	// the process-global core (see DestroyOV).
+	// the process-global core (see DestroyOV). After a GPU fault (see GPUFault)
+	// Close on a GPU classifier abandons the native objects instead of freeing
+	// them, and returns nil.
 	Close() error
 }
 
