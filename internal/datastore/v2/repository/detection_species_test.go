@@ -854,13 +854,27 @@ func TestDetectionRepository_ChangeSpecies_CustomVariantMatchesOwnModel(t *testi
 		{
 			// Using ModelTypeMulti ensures an unstamped own.modelType on the
 			// fallback-to-exact-variant upgrade path fails (zero value yields Aves).
-			name:      "exact variant wins over another variant of the same name and version",
+			name:      "exact variant wins when listed after another variant of the same name and version",
 			model:     customPerch,
 			modelType: entities.ModelTypeMulti,
 			request:   speciesTestMallard,
 			offer: []OfferedModel{
 				speciesTestKnownBy(speciesTestModelPerch, strings.ToLower(speciesTestMallard)),
 				speciesTestKnownBy(customPerch, speciesTestMallard),
+			},
+			wantName:  speciesTestMallard,
+			wantClass: "",
+		},
+		{
+			// Exact variant listed first must not be overwritten by a later non-exact
+			// variant of the same Name and Version.
+			name:      "exact variant wins when listed before another variant of the same name and version",
+			model:     customPerch,
+			modelType: entities.ModelTypeMulti,
+			request:   speciesTestMallard,
+			offer: []OfferedModel{
+				speciesTestKnownBy(customPerch, speciesTestMallard),
+				speciesTestKnownBy(speciesTestModelPerch, strings.ToLower(speciesTestMallard)),
 			},
 			wantName:  speciesTestMallard,
 			wantClass: "",
