@@ -32,8 +32,9 @@
     <div class="flex items-center gap-1.5">
       <stat.icon class="size-3.5 {stat.iconClass ?? 'text-[var(--color-base-content)]/40'}" />
       <span class="text-[var(--color-base-content)]/60">
-        <span class="font-semibold text-[var(--color-base-content)] tabular-nums">{stat.count}</span
-        >
+        <span class="font-semibold text-[var(--color-base-content)] tabular-nums">
+          {stat.count}
+        </span>
         {stat.label}
       </span>
     </div>

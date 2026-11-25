@@ -20,6 +20,7 @@ vi.mock('$lib/stores/appState.svelte', () => ({
 }));
 
 import { getCsrfToken, fetchWithCSRF, api, resetRedirectGuard, ApiError } from './api';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 describe('API utilities', () => {
   beforeEach(() => {
@@ -95,6 +96,30 @@ describe('API utilities', () => {
 
       expect(result).toEqual({ data: 'test' });
     });
+
+    it.each([
+      { rejection: new TypeError('Failed to fetch'), isNetworkError: true },
+      { rejection: new TypeError('Load failed'), isNetworkError: true },
+      {
+        rejection: new TypeError('NetworkError when attempting to fetch resource.'),
+        isNetworkError: true,
+      },
+      { rejection: new TypeError('Some other failure'), isNetworkError: false },
+      // The Safari text only counts on a TypeError.
+      { rejection: new Error('Load failed'), isNetworkError: false },
+    ])(
+      'maps a fetch rejection "$rejection" to isNetworkError=$isNetworkError',
+      async ({ rejection, isNetworkError }) => {
+        mockFetch.mockRejectedValueOnce(rejection);
+
+        const err = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(ApiError);
+        if (!(err instanceof ApiError)) return;
+        expect(err.status).toBe(0);
+        expect(err.isNetworkError).toBe(isNetworkError);
+      }
+    );
 
     it('includes CSRF token in headers', async () => {
       // Set a specific test token via mock
@@ -208,7 +233,7 @@ describe('API utilities', () => {
       });
     });
 
-    it('exposes the error_key on ApiError', async () => {
+    it('exposes the error_key and error_params on ApiError', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 409,
@@ -225,6 +250,7 @@ describe('API utilities', () => {
       await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
         status: 409,
         errorKey: 'analysis.gallery.errors.operationInProgress',
+        errorParams: { name: 'Geomodel' },
       });
 
       mockFetch.mockResolvedValueOnce({
@@ -238,6 +264,21 @@ describe('API utilities', () => {
       const err = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).errorKey).toBeUndefined();
+      expect(err).toHaveProperty('errorParams', undefined);
+
+      // A key without params carries no params either.
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        headers: new Headers(),
+        json: () => Promise.resolve({ error_key: 'analysis.gallery.errors.operationInProgress' }),
+      });
+
+      const keyOnly = await fetchWithCSRF('/api/test').catch((e: unknown) => e);
+      expect(keyOnly).toBeInstanceOf(ApiError);
+      expect(keyOnly).toMatchObject({ errorKey: 'analysis.gallery.errors.operationInProgress' });
+      expect(keyOnly).toHaveProperty('errorParams', undefined);
     });
 
     it('returns null for empty responses', async () => {
@@ -448,6 +489,29 @@ describe('API utilities', () => {
 
       expect(result).toBe('pending');
       expect(window.location.href).toBe('/ui/');
+    });
+
+    it('does not let the unsaved-changes prompt hold the redirect to login', async () => {
+      // A cancelled unload would leave the redirect flag set and hang every later request.
+      const unregister = unsavedChanges.register({ isDirty: () => true });
+      try {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: new Headers(),
+        });
+        void fetchWithCSRF('/api/test');
+        await vi.waitFor(() => expect(window.location.href).toBe('/ui/'));
+
+        const unload = new Event('beforeunload', { cancelable: true });
+        window.dispatchEvent(unload);
+
+        expect(unload.defaultPrevented).toBe(false);
+      } finally {
+        unregister();
+        unsavedChanges.resetForTesting();
+      }
     });
 
     it('does not call onHeaders for a 401 that redirects to login', async () => {

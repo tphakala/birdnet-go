@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 
@@ -379,6 +380,21 @@ func TestIsReadOnlyMount(t *testing.T) {
 	}
 }
 
+// TestIsFileMount covers the single-file bind mounts that container runtimes
+// add (Docker's /etc/hosts, the NVIDIA toolkit's driver files), which must not
+// be listed as disks.
+func TestIsFileMount(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "hosts")
+	require.NoError(t, os.WriteFile(file, []byte("127.0.0.1 localhost\n"), 0o600))
+
+	assert.True(t, isFileMount(file), "a regular file mount point is a file mount")
+	assert.False(t, isFileMount(dir), "a directory mount point is a disk")
+	assert.False(t, isFileMount(filepath.Join(dir, "missing")), "a mount point that cannot be inspected is kept")
+}
+
 // TestSkipFilesystem tests the skipFilesystem helper function
 func TestSkipFilesystem(t *testing.T) {
 	t.Parallel()
@@ -439,35 +455,30 @@ func TestSkipFilesystem(t *testing.T) {
 	}
 }
 
-// TestMapProcessStatus tests the mapProcessStatus helper function
-func TestMapProcessStatus(t *testing.T) {
+// TestNormalizeProcessStatus tests the normalizeProcessStatus helper function
+func TestNormalizeProcessStatus(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "system")
 	t.Attr("type", "unit")
 	t.Attr("feature", "process-status")
 
 	tests := []struct {
-		name       string
-		statusCode string
-		expected   string
+		name   string
+		status string
+		want   string
 	}{
-		{name: "Running", statusCode: "R", expected: "running"},
-		{name: "Sleeping", statusCode: "S", expected: "sleeping"},
-		{name: "Disk Sleep", statusCode: "D", expected: "disk sleep"},
-		{name: "Zombie", statusCode: "Z", expected: "zombie"},
-		{name: "Stopped", statusCode: "T", expected: "stopped"},
-		{name: "Paging", statusCode: "W", expected: "paging"},
-		{name: "Idle", statusCode: "I", expected: "idle"},
-		{name: "Unknown code", statusCode: "X", expected: "x"},
-		{name: "Empty", statusCode: "", expected: ""},
-		{name: "Multi-char", statusCode: "RS", expected: "rs"},
+		{name: "running", status: "running", want: "running"},
+		{name: "sleep", status: "sleep", want: "sleep"},
+		{name: "idle", status: "idle", want: "idle"},
+		{name: "zombie", status: "zombie", want: "zombie"},
+		{name: "empty reports unknown", status: "", want: "unknown"},
+		{name: "mixed case is lowercased", status: "Sleep", want: "sleep"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := mapProcessStatus(tt.statusCode)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.want, normalizeProcessStatus(tt.status))
 		})
 	}
 }

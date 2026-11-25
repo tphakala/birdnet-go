@@ -1,1 +1,1 @@
-openfauna@eed01f8 2026-06-28
+openfauna@ea8b271 2026-11-15

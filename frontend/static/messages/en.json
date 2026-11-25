@@ -34,7 +34,6 @@
     "internalServerError": "Internal Server Error",
     "actions": {
       "download": "Download",
-      "review": "Review",
       "play": "Play",
       "view": "View"
     },
@@ -141,20 +140,26 @@
       "visitEbirdLink": "Open eBird.org in a new tab",
       "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab",
       "resizeHandle": "Drag to resize",
-      "imageCredit": "Image credit: {name}"
+      "imageCredit": "Image credit: {name}",
+      "opensInNewTab": "opens in a new tab"
     },
     "labels": {
       "confidence": "Confidence",
       "github": "GitHub"
     },
     "values": {
-      "yes": "Yes",
       "no": "No",
       "unknown": "Unknown"
     },
     "modal": {
       "confirmAction": "Confirm Action",
       "confirmMessage": "Are you sure you want to perform this action?"
+    },
+    "unsavedChanges": {
+      "title": "Leave this page?",
+      "message": "You have unsaved changes. If you leave, they will be lost.",
+      "leave": "Leave page",
+      "stay": "Stay"
     },
     "review": {
       "modalTitle": "Review Detection: {species}",
@@ -181,12 +186,6 @@
         "hideComment": "Hide Comment",
         "commentPlaceholder": "Add a comment about this detection...",
         "commentCount": "({chars} chars)",
-        "chars": "chars",
-        "commentsLabel": "Comments",
-        "currentStatusTitle": "Current Status",
-        "detectionStatusTitle": "Detection Status",
-        "lockLabel": "Lock Status",
-        "reviewLabel": "Review Status",
         "saveReview": "Save Review"
       },
       "errors": {
@@ -207,7 +206,6 @@
     "hoursShort": "h"
   },
   "pageTitle": {
-    "settings": "Settings - BirdNET-Go",
     "pageNotFound": "404 - Page Not Found",
     "serverError": "500 - Internal Server Error",
     "componentError": "Component Load Error",
@@ -227,7 +225,8 @@
     "dashboard": "Dashboard",
     "liveAudio": "Live Audio",
     "settingsMenu": "Settings menu",
-    "theme": "Theme",
+    "switchToDarkTheme": "Switch to dark theme",
+    "switchToLightTheme": "Switch to light theme",
     "github": "GitHub",
     "detections": "Detections",
     "search": "Search",
@@ -427,7 +426,7 @@
         "recalculatingThresholds": "Recalculating dynamic thresholds for new base value",
         "reconfiguringDynamicThresholds": "Reconfiguring dynamic thresholds...",
         "webserverRestartRequired": "Web server settings changed. Restart required.",
-        "oauthRestartRequired": "Authentication provider settings changed. Restart required.",
+        "reconfiguringOauthProviders": "Updating authentication providers...",
         "databaseRestartRequired": "Database settings changed. Restart required.",
         "loggingRestartRequired": "Logging settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
@@ -501,9 +500,23 @@
         "loadFailedTitle": "Acoustic model failed to load",
         "loadFailedMessage": "An enabled acoustic model failed to load, so audio is captured but not analyzed. Check the model on the System > AI Models page."
       },
+      "geomodel": {
+        "notInstalledTitle": "Geomodel not installed",
+        "notInstalledMessage": "BirdNET Geomodel v3.0 is needed to filter detections by location for: {models}. Install BirdNET Geomodel v3.0 from the model gallery in Settings > Analysis > Models.",
+        "loadFailedTitle": "Geomodel failed to load",
+        "loadFailedMessage": "BirdNET Geomodel v3.0 could not be loaded, so location filtering is off for: {models}. Check the application log, then install or reinstall BirdNET Geomodel v3.0 from the model gallery in Settings > Analysis > Models."
+      },
       "modelOptimize": {
         "title": "{count, plural, one {# model has a better build for this system} other {# models have better builds for this system}}",
         "message": "A build better matched to this system's hardware or location is available for: {models}. Open Settings > Analysis > Models and choose Optimize to switch."
+      },
+      "modelSuperseded": {
+        "title": "{count, plural, one {An installed model has a newer release} other {# installed models have newer releases}}",
+        "message": "An installed model is a preview version, and its final release is now available: {models}. Open Settings > Analysis > Models, install the final release and remove the preview."
+      },
+      "modelUpdate": {
+        "title": "{count, plural, one {An installed model has a newer build} other {# installed models have newer builds}}",
+        "message": "A newer build replaces the installed one for: {models}. The installed build keeps working until you switch. Open Settings > Analysis > Models and choose Update."
       },
       "alert": {
         "firedTitle": "{rule_name}",
@@ -890,23 +903,190 @@
       "allDetections": "All Detections for {date}"
     },
     "detail": {
-      "species": "Species",
-      "observation": "Observation",
+      "species": {
+        "dialogTitle": "Change species",
+        "current": "Currently identified as",
+        "fromPredictions": "The model's other predictions",
+        "search": "Search species",
+        "loadingList": "Loading the species list...",
+        "listFailed": "The species list could not be loaded. Close this dialog and try again.",
+        "noMatches": "No species match.",
+        "effect": "The detection is marked as correct, and the model's own pick stays on record.",
+        "pickFirst": "Pick a species first.",
+        "confirm": "Change to {species}",
+        "confirmEmpty": "Change species",
+        "changed": "Species changed to {species}",
+        "changeFailed": "The species could not be changed. Please try again.",
+        "conflict": "The species cannot be changed now: the detection is kept (locked), or the legacy database format is in use.",
+        "notKnownHere": "{species} has never been detected or predicted at this station, so it cannot be chosen yet.",
+        "predictionsTitle": "Other predictions",
+        "noPredictions": "The model stored no other predictions for this recording.",
+        "allSpecies": "All species",
+        "searchRangePlaceholder": "A species expected at this location",
+        "searchAllPlaceholder": "Any species the models know",
+        "searchHintRange": "Searching the {count} species the range filter expects here. Turn on All species to search everything.",
+        "searchHintAll": "Searching all {count} species the models know.",
+        "noMatchesInRange": "No match among the species expected here. Turn on All species to search everything.",
+        "modelPick": "model's pick"
+      },
       "aria": {
-        "downloadAudioClip": "Download audio clip for {name} detection",
-        "audioRecordingFor": "Audio recording and spectrogram for {name}",
         "scientificName": "Scientific name",
         "classificationBadges": "Species classification badges",
         "confidence": "Detection confidence {confidence}%",
-        "metadata": "Detection metadata",
-        "weatherConditions": "Weather conditions at time of detection",
-        "comments": "Detection comments",
-        "commentText": "Comment text",
-        "commentTimestamp": "Comment timestamp",
-        "mainRegion": "Detection details",
-        "tabsHeading": "Detection information tabs",
-        "tabList": "Detection details tabs",
         "speciesHeadingSuffix": "detection details"
+      },
+      "nav": {
+        "label": "Detection navigation",
+        "back": "Detections",
+        "allGroup": "All detections",
+        "older": "Older detection",
+        "noOlder": "This is the oldest detection",
+        "newer": "Newer detection",
+        "noNewer": "This is the newest detection",
+        "speciesGroup": "Detections of {species}",
+        "olderSpecies": "Older detection of {species}",
+        "noOlderSpecies": "No older detection of {species}",
+        "newerSpecies": "Newer detection of {species}",
+        "noNewerSpecies": "No newer detection of {species}",
+        "stepLoading": "{label}: checking for neighbouring detections",
+        "stepFailed": "{label}: could not check for neighbouring detections"
+      },
+      "identity": {
+        "date": "Date",
+        "time": "Time",
+        "beforeSunrise": "{hours} h {minutes} min before sunrise",
+        "afterSunrise": "{hours} h {minutes} min after sunrise",
+        "beforeSunset": "{hours} h {minutes} min before sunset",
+        "afterSunset": "{hours} h {minutes} min after sunset",
+        "setByReviewer": "Species set by reviewer",
+        "timeOfDay": "Time of day",
+        "minutesBeforeSunrise": "{minutes} min before sunrise",
+        "minutesAfterSunrise": "{minutes} min after sunrise",
+        "minutesBeforeSunset": "{minutes} min before sunset",
+        "minutesAfterSunset": "{minutes} min after sunset",
+        "predictionsUnknown": "Other predictions",
+        "predictionsNone": "No other predictions",
+        "predictionsCount": "{count, plural, one {# other prediction} other {# other predictions}}"
+      },
+      "conditions": {
+        "title": "Time & conditions",
+        "skyLabel": "Day timeline: detected at {time}, sunrise {sunrise}, sunset {sunset}",
+        "activityLabel": "Detections of {species} by hour of day",
+        "sunrise": "Sunrise",
+        "sunset": "Sunset",
+        "activityLegend": "{species} activity by hour, all time",
+        "feelsLike": "Feels like",
+        "moonLit": "{percent}% lit",
+        "windFrom": "Wind from {direction}",
+        "cloudCover": "Cloud Cover",
+        "precipitation": "Precipitation",
+        "precipitationTypes": {
+          "rain": "rain",
+          "snow": "snow",
+          "sleet": "sleet"
+        },
+        "observedAt": "Weather observation from {time}",
+        "notObserved": "No weather observation for this time"
+      },
+      "compass": {
+        "n": "N",
+        "nne": "NNE",
+        "ne": "NE",
+        "ene": "ENE",
+        "e": "E",
+        "ese": "ESE",
+        "se": "SE",
+        "sse": "SSE",
+        "s": "S",
+        "ssw": "SSW",
+        "sw": "SW",
+        "wsw": "WSW",
+        "w": "W",
+        "wnw": "WNW",
+        "nw": "NW",
+        "nnw": "NNW"
+      },
+      "review": {
+        "title": "Review",
+        "autosave": "Saved as soon as you choose",
+        "question": "Is this {species}?",
+        "correct": "Correct",
+        "falsePositive": "False positive",
+        "saving": "Saving...",
+        "savedCorrect": "Marked as correct",
+        "savedFalsePositive": "Marked as false positive",
+        "loginRequired": "Log in to review this detection.",
+        "lockedHelp": "Kept detections cannot change. Turn off Keep this recording first.",
+        "keep": "Keep this recording",
+        "keepHelp": "Kept detections are never removed by cleanup.",
+        "reloadFailed": "Saved, but the detection could not be reloaded. Refresh the page to see the change.",
+        "ignoredSpecies": "{species} is now ignored",
+        "wrongSpecies": "Wrong species...",
+        "legacyHelp": "Changing the species needs the current database format.",
+        "databaseChecking": "Checking whether the species can be changed.",
+        "databaseUnknown": "The species cannot be changed until the database format is known.",
+        "ignoreShort": "Ignore species",
+        "ignoredShort": "Species ignored"
+      },
+      "models": {
+        "title": "Models",
+        "summary": "{hit} of {total} detected it",
+        "empty": "No per-model record for this detection. Model participation is stored for newer detections only.",
+        "hits": "{count, plural, one {# hit} other {# hits}}",
+        "mean": "mean {value}",
+        "noHit": "Ran on this audio, no hit"
+      },
+      "stats": {
+        "title": "Species at this station",
+        "rangeScore": "Range filter score",
+        "rangeScoreNote": "Likelihood at this location for {date}",
+        "rangeScoreNoteToday": "Likelihood at this location today",
+        "total": "Detections, all time",
+        "windowTotal": "Detections, last {days} days",
+        "firstHeard": "First heard",
+        "lastHeard": "Last heard",
+        "avgConfidence": "Average confidence",
+        "maxConfidence": "Highest confidence",
+        "dailyTitle": "Detections per day, {days} days up to this detection",
+        "dailyLabel": "{count} detections in the {days} days up to this detection",
+        "allThisDay": "All {species} detections on this day",
+        "reviewsTitle": "Reviewed by people",
+        "reviewsCount": "{count, plural, one {# review} other {# reviews}}",
+        "reviewsCorrect": "{count} correct",
+        "reviewsFalse": "{count, plural, one {# false positive} other {# false positives}}",
+        "oftenRejected": "Often rejected here: {percent}% of reviews were false positives",
+        "reviewsNone": "No detection of this species has been reviewed yet."
+      },
+      "clip": {
+        "window": "Capture window",
+        "length": "Length",
+        "seconds": "{count} s",
+        "format": "Format",
+        "denoised": "Noise reduced when saved",
+        "denoisedYes": "Yes",
+        "denoisedNo": "No",
+        "file": "File",
+        "audioRemoved": "The audio was removed by retention; the spectrogram image was kept.",
+        "noClip": "No recording was saved for this detection."
+      },
+      "log": {
+        "title": "Activity log",
+        "subtitle": "What has happened to this detection",
+        "detected": "Detected {species} at {confidence}% confidence",
+        "captureWindow": "Capture window {begin}-{end}",
+        "clipSaved": "Recording saved",
+        "clipSavedDenoised": "Recording saved, noise reduced",
+        "firstReviewed": "First reviewed",
+        "reviewed": "Marked as {status}",
+        "locked": "Kept (locked)",
+        "noteAdded": "Note added",
+        "noteEdited": "Edited {time}",
+        "timeUnknown": "Time not recorded",
+        "addNote": "Add a note",
+        "saveNote": "Add note",
+        "lockedHelp": "Notes cannot be added while the detection is kept (locked).",
+        "noteEmpty": "Write a note before adding it.",
+        "speciesChanged": "Species changed from {from} to {to}"
       }
     },
     "headers": {
@@ -1042,12 +1222,6 @@
       "title": "Recording & Spectrogram",
       "clipHint": "Click and drag on the spectrogram to select a range for clip export"
     },
-    "tabs": {
-      "overview": "Overview",
-      "taxonomy": "Taxonomy",
-      "history": "History",
-      "notes": "Notes"
-    },
     "environmental": {
       "title": "Environmental Conditions"
     },
@@ -1058,18 +1232,9 @@
       "status": "Status",
       "locked": "Locked"
     },
-    "history": {
-      "title": "Detection History",
-      "comingSoon": "History tracking coming soon..."
-    },
-    "notes": {
-      "title": "Notes & Comments",
-      "noComments": "No comments or notes for this detection."
-    },
     "aria": {
       "loading": "Loading detection details...",
       "loaded": "Detection details loaded for {species}",
-      "error": "Error loading detection: {error}",
       "loadingResults": "Loading {count} results...",
       "thumbnailLoading": "Loading {species} thumbnail...",
       "thumbnailLoaded": "{species} thumbnail loaded",
@@ -1087,9 +1252,7 @@
   },
   "species": {
     "rarity": {
-      "title": "Species Rarity",
       "score": "Score",
-      "basedOnLocation": "Based on location: {latitude}, {longitude}",
       "statuses": {
         "very_common": "Very Common",
         "common": "Common",
@@ -1101,7 +1264,6 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomic Classification",
-      "subspecies": "Subspecies",
       "noData": "No taxonomy data available.",
       "labels": {
         "kingdom": "Kingdom",
@@ -1127,11 +1289,9 @@
       }
     },
     "tracking": {
-      "title": "Species Tracking",
       "newSpecies": "New species",
       "newThisYear": "First this year",
-      "newThisSeason": "First this season",
-      "daysSinceFirst": "Days since first seen"
+      "newThisSeason": "First this season"
     }
   },
   "spectrogram": {
@@ -1184,13 +1344,6 @@
     },
     "systemInfo": {
       "title": "System Information",
-      "os": "Operating System",
-      "hostname": "Hostname",
-      "uptime": "Uptime",
-      "cpus": "CPUs",
-      "model": "System Model",
-      "timezone": "Time Zone",
-      "temperature": "CPU Temperature",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperature data unavailable",
       "cpuCores": "CPU cores",
@@ -1229,16 +1382,7 @@
         "uptime": "Uptime",
         "process": "Process"
       },
-      "showAll": "Show All Processes",
-      "showBirdnetOnly": "Show BirdNET Only",
-      "table": {
-        "process": "Process",
-        "status": "Status",
-        "cpu": "CPU",
-        "memory": "Memory",
-        "uptime": "Uptime",
-        "showAllProcesses": "Show all processes"
-      }
+      "showAll": "Show All Processes"
     },
     "errors": {
       "systemInfo": "Failed to load system information: {error}",
@@ -1962,7 +2106,8 @@
     "detach": "Open in new window",
     "detached": "Terminal is detached",
     "detachedDescription": "The terminal is running in a separate window. Close that window to return it here.",
-    "reattach": "Reattach"
+    "reattach": "Reattach",
+    "keyboardExitHint": "Press Esc, then Tab to leave the terminal"
   },
   "analytics": {
     "hub": {
@@ -2413,11 +2558,19 @@
       "validationBlocked": "Some fields need attention before you can save.",
       "noChangesToSave": "No changes to save."
     },
+    "autoSave": {
+      "saved": "Saved",
+      "failed": "Not saved. The previous value was restored.",
+      "changedElsewhere": "This setting was changed elsewhere. The current value is shown; make your change again.",
+      "tabNote": "Changes on this tab are saved as you make them.",
+      "failuresSummary": "{count, plural, one {# change was not saved} other {# changes were not saved}}",
+      "dismiss": "Dismiss",
+      "otherTabsUnsaved": "Other tabs have unsaved changes. Open one to save or reset them:"
+    },
     "errors": {
       "loadFailed": "Failed to load settings",
       "saveFailed": "Failed to save settings",
       "changedElsewhere": "Settings were changed elsewhere. Review them and save again.",
-      "databaseStatsFailed": "Failed to load database statistics",
       "csvDownloadFailed": "Failed to download CSV"
     },
     "card": {
@@ -2468,12 +2621,12 @@
           "title": "Dynamic Threshold",
           "description": "Automatically adjust detection sensitivity based on prior observations",
           "enable": {
-            "label": "Enable Dynamic Threshold (BirdNET-Go specific feature)",
-            "helpText": "Enables dynamic confidence threshold feature for more adaptive bird call detection."
+            "label": "Enable dynamic threshold",
+            "helpText": "Lowers the confidence threshold for a species after it has been detected with high confidence."
           },
           "trigger": {
             "label": "Trigger Threshold",
-            "helpText": "The confidence level at which the dynamic threshold is activated. If a bird call is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent calls."
+            "helpText": "The confidence level at which the dynamic threshold is activated. If a species is detected with confidence over this value, the threshold for positive matches of that species will be lowered for subsequent detections."
           },
           "minimum": {
             "label": "Minimum Dynamic Threshold",
@@ -2522,7 +2675,7 @@
           "overloadedNoticeTitle": "This device cannot keep up with analysis",
           "overloadedNotice": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap. Analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant.",
           "unknownLatency": "Processing time could not be measured for {models}, so it is not counted when the overlap is limited. Analysis may still fall behind.",
-          "cpuNote": "A higher strength analyzes overlapping audio more often, which costs CPU time for every enabled model and audio source. BirdNET-Go limits the overlap automatically to what this device can process."
+          "cpuNote": "A higher strength analyzes overlapping audio more often, which costs CPU time for every enabled classifier this filter applies to and for every audio source. BirdNET-Go limits the overlap automatically to what this device can process."
         },
         "rangeFilter": {
           "title": "Range Filter",
@@ -2624,26 +2777,15 @@
               "helpText": "MySQL database name"
             }
           },
-          "stats": {
-            "title": "Database Statistics",
-            "description": "Runtime information about your database",
-            "loading": "Loading database statistics...",
-            "retry": "Retry",
-            "refresh": "Refresh",
-            "noData": "No database statistics available.",
-            "type": "Type",
-            "status": "Status",
-            "size": "Size",
-            "totalDetections": "Total Detections",
-            "location": "Location",
-            "connected": "Connected",
-            "disconnected": "Disconnected"
-          },
           "errors": {
             "backupStartFailed": "Failed to start backup",
             "backupStatusFailed": "Failed to get backup status",
             "backupFailed": "Backup failed",
             "backupDownloadFailed": "Failed to download backup"
+          },
+          "statsMoved": {
+            "text": "Database statistics have moved to the System section.",
+            "link": "Open System > Database"
           }
         },
         "interface": {
@@ -3633,7 +3775,7 @@
         "sampleRateExclusive": "Rates above 48 kHz use exclusive device access on Linux, preventing other applications from sharing the sound card",
         "modelLabel": "Detection Models",
         "modelHelp": "Select which AI models to run on this audio source",
-        "deleteConfirm": "Remove this sound card source?",
+        "deleteConfirm": "Remove sound card source \"{name}\"?",
         "emptyState": {
           "title": "No Sound Card Sources Configured",
           "description": "Add a sound card source to start capturing audio for bird detection.",
@@ -3660,11 +3802,12 @@
           "minSampleRate": "Requires at least {rate}kHz capture rate",
           "recommendedSampleRate": "{rate}kHz recommended for best results",
           "atLeastOneModel": "At least one model must be selected"
-        }
+        },
+        "captureTitle": "Capture",
+        "levelTitle": "Input level"
       },
       "audioCapture": {
         "title": "Sound Card Configuration",
-        "description": "Select the audio input device for bird sound detection. Changes require application restart.",
         "soundCardSource": "Sound Card Source",
         "audioSourceLabel": "Audio Source (requires application restart to take effect)",
         "audioSourceHelp": "Select the audio input device for bird sound detection. Changes require application restart to take effect.",
@@ -3679,7 +3822,8 @@
         "deviceSelected": "Sound card selected and ready for capture",
         "availableDevices": "Available Audio Devices",
         "active": "Active",
-        "streamsConfigured": "{count} stream(s) configured"
+        "streamsConfigured": "{count} stream(s) configured",
+        "description": "Sound cards BirdNET-Go listens to. A device or sample rate change restarts capture on that source when you save."
       },
       "quietHours": {
         "title": "Quiet Hours",
@@ -3698,12 +3842,13 @@
         "fixedHint": "Capture pauses between start and end times daily. Overnight windows (e.g., 22:00 to 06:00) are supported.",
         "solarHint": "Times are calculated from sunrise/sunset at your configured location. Use negative offsets for before the event, positive for after.",
         "badge": "Quiet",
-        "enabledBadge": "Quiet hours enabled for this stream"
+        "enabledBadge": "Quiet hours enabled for this stream",
+        "enableLabel": "Pause capture during quiet hours"
       },
       "rtspStreams": {
         "title": "Audio Stream Configuration",
-        "description": "Configure network audio streams for remote audio capture. Supports RTSP, HTTP, HLS, RTMP, and UDP protocols.",
-        "noStreamsConfigured": "No streams configured"
+        "noStreamsConfigured": "No streams configured",
+        "description": "Configure network audio streams for remote audio capture. Supports RTSP, HTTP, HLS, RTMP, and UDP protocols. A connection change reconnects the stream when you save."
       },
       "streams": {
         "streamLabel": "Stream",
@@ -3731,7 +3876,7 @@
         "refresh": "Refresh",
         "addStream": "Add Stream",
         "testRequired": "Run a successful stream test before saving",
-        "deleteConfirm": "Remove this stream?",
+        "deleteConfirm": "Remove stream \"{name}\"?",
         "restartCount": "Restarted {count} time(s)",
         "healthLoadError": "Failed to load stream health status",
         "status": {
@@ -3755,6 +3900,7 @@
         "errors": {
           "nameRequired": "Stream name is required",
           "duplicateName": "A stream with this name already exists",
+          "nameTooLong": "Stream name is too long (at most {max} bytes)",
           "urlRequired": "Stream URL is required",
           "invalidUrl": "Invalid stream URL format",
           "duplicate": "This stream URL already exists"
@@ -3771,12 +3917,12 @@
           "eventAt": "Event at {time}"
         },
         "diagnostics": {
-          "toggleDiagnostics": "Toggle diagnostics",
           "processState": "Process State",
           "lastData": "Last Data",
           "restartCount": "Restart Count",
           "connection": "Connection",
-          "stateErrorHistory": "State & Error History"
+          "stateErrorHistory": "State & Error History",
+          "title": "Diagnostics"
         },
         "connectionStatus": {
           "stable": "Stable",
@@ -3823,8 +3969,14 @@
         },
         "stereoWarning": {
           "message": "Stereo stream detected. Downmixing multiple channels can reduce detection accuracy due to phase differences between channels. Select a specific channel (left/right) or use the channel detector for best results.",
-          "short": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel.",
-          "tooltip": "Stereo downmix active. Detection accuracy may be reduced. Edit to select a specific channel."
+          "short": "Stereo downmix active. Detection accuracy may be reduced. Select a specific channel under Connection."
+        },
+        "connectionTitle": "Connection",
+        "statsLine": "Total: {total} · Rate: {rate} · Last: {last}",
+        "ago": {
+          "seconds": "{count}s ago",
+          "minutes": "{count}m ago",
+          "hours": "{count}h ago"
         }
       },
       "audioFilters": {
@@ -4043,9 +4195,30 @@
         "noneAvailable": "No detection models are enabled on this server.",
         "loadFailedWarning": "A detection model failed to load, so this source is not being analyzed until it recovers.",
         "loadFailedLink": "View AI Models status",
+        "state": {
+          "pending": "Loading",
+          "failed": "Failed to load",
+          "missing": "Not installed"
+        },
+        "notLoadedHelp": "This model is not loaded, so it cannot be selected.",
         "defaultBadge": "{models} (default)",
         "defaultPendingBadge": "Default models",
-        "noneBadge": "No model loaded"
+        "noneBadge": "No model loaded",
+        "missingHelp": "This model is no longer installed. This source ignores it.",
+        "removeMissing": "Remove",
+        "removeMissingAria": "Remove {model} from {source}",
+        "lastSelectedHelp": "At least one classifier stays selected.",
+        "followsDefaults": "This source follows the default models.",
+        "listFailed": "The model list could not be loaded.",
+        "warningBadge": "Check classifiers"
+      },
+      "validation": {
+        "soundCards": "Fix the sound cards on the {tab} tab before saving: {names}",
+        "unnamedSource": "source {position} (no name)",
+        "needsAttention": "Needs attention",
+        "streams": "Fix the streams on the {tab} tab before saving: {names}",
+        "streamsUntested": "Test the new stream URL on the {tab} tab before saving: {names}",
+        "unnamedStream": "stream {position} (no name)"
       }
     },
     "security": {
@@ -4116,7 +4289,7 @@
         "clientSecretLabel": "Client Secret",
         "clientSecretHelpText": "The OAuth 2.0 Client Secret from your provider's developer console",
         "userIdLabel": "Allowed Users",
-        "userIdHelpText": "Comma-separated emails or user IDs allowed to sign in with this provider. If left empty, no one can log in.",
+        "userIdHelpText": "Comma-separated emails or user IDs allowed to sign in with this provider. A user ID is recommended, since an email address can change. If left empty, no one can log in.",
         "allowedUsersEmptyWarning": "This provider has no allowed users, so every login attempt will be denied. Add at least one email or user ID to allow access.",
         "allowedUsersMissingBadge": "No allowed users set - login will fail",
         "google": {
@@ -4185,13 +4358,16 @@
           "clientSecretHelpText": "The client secret from your OIDC identity provider",
           "userIdLabel": "Allowed User (email or sub claim)",
           "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "issuerUrlHelpText": "Base URL of your OpenID Connect provider. BirdNET-Go adds /.well-known/openid-configuration itself, so leave that part out. Examples: https://auth.example.com/application/o/birdnet-go/ (Authentik), https://auth.example.com/realms/myrealm (Keycloak).",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Issuer URL is required for OIDC providers",
           "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
           "scopesLabel": "Scopes",
           "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
-          "scopesPlaceholder": "openid, profile, email"
+          "scopesPlaceholder": "openid, profile, email",
+          "postLogoutRedirectLabel": "Return to BirdNET-Go after sign-out at the identity provider",
+          "postLogoutRedirectHelpText": "After sign-out the browser is sent back to {url}. Register this URL as a post-logout redirect URI at your identity provider first, or the provider may show an error.",
+          "postLogoutRedirectNoBaseUrl": "Set the Base URL or Host first. The return URL is built from it."
         }
       },
       "bypassAuthentication": {
@@ -4414,7 +4590,24 @@
           "mappedZero": {
             "title": "Range filter matched no species",
             "description": "The geomodel range filter did not match any of the active model's species, so every detection would be filtered out. Check that the range filter labels file matches the active model."
-          }
+          },
+          "geomodelNotInstalled": {
+            "title": "BirdNET Geomodel is not installed",
+            "description": "These models need the BirdNET Geomodel to filter detections by location: {models}. Install BirdNET Geomodel v3.0 from the Models tab in Analysis settings."
+          },
+          "geomodelNotSelected": {
+            "title": "BirdNET Geomodel is not in use",
+            "description": "The BirdNET Geomodel is installed, but the range filter is configured to use another model, so these models are not filtered by location: {models}. Remove birdnet.rangefilter.model and birdnet.rangefilter.modelpath from the configuration file or environment to use it."
+          },
+          "geomodelLoadFailed": {
+            "title": "BirdNET Geomodel could not be loaded",
+            "description": "The BirdNET Geomodel could not be loaded, so these models are not filtered by location: {models}. Check the application log, and install or reinstall BirdNET Geomodel v3.0 from the Models tab in Analysis settings."
+          },
+          "reloadFailed": {
+            "title": "Range filter reload failed",
+            "description": "The last range filter reload failed, so the previously loaded range filter is still in use. Check the application log and restart BirdNET-Go to retry."
+          },
+          "openModels": "Open Models"
         },
         "columns": {
           "commonName": "Common Name",
@@ -4965,8 +5158,8 @@
       "audioPlayback": {
         "title": "Audio Playback",
         "description": "Default settings for playing bird recordings.",
-        "defaultGain": "Default Volume Boost",
-        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "defaultGain": "Default Gain",
+        "defaultGainHelpText": "Gain every clip starts with. Bird sounds are often quiet, so 6 to 12 dB is a good start; a negative value makes clips quieter.",
         "defaultGainUnit": "dB",
         "denoiseLabel": "Denoise clips when played",
         "denoiseHelpText": "Plays and downloads a denoised copy of every clip. Stored clips stay unchanged. Downloads become WAV files and are larger. The audio settings of a clip can pick another strength or turn denoising off.",
@@ -4975,7 +5168,11 @@
         "denoiseStrengthDisabledHelp": "Turn on playback denoising above to choose a strength.",
         "denoiseExportPrecedence": "Not applied while Denoise Saved Clips is on (Audio settings, Processing tab). Those clips are already denoised.",
         "denoiseRedenoiseNote": "Clips saved while Denoise Saved Clips was on are denoised again when played. Choose Off in the audio settings of a clip to hear it as saved.",
-        "denoiseLossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets."
+        "denoiseLossyNote": "Denoising works best on FLAC or WAV clips. Below {minBitrate} kbps, codec artefacts limit how clean the result gets.",
+        "highPassLabel": "Default High-Pass Filter",
+        "highPassHelpText": "Removes sound below this frequency while a clip plays, such as wind and traffic rumble. It is applied in the browser, so stored, downloaded and exported clips are not filtered.",
+        "highPassUnit": "Hz",
+        "highPassOff": "Off"
       },
       "speciesGuide": {
         "title": "Species Guide",
@@ -5034,6 +5231,8 @@
     "passwordPlaceholder": "Enter your password",
     "enterPassword": "Enter your password",
     "continue": "Continue",
+    "rememberBrowser": "Remember this browser",
+    "rememberBrowserHelp": "Stay signed in on this browser. Leave unticked on a shared computer.",
     "or": "or",
     "loginWithGoogle": "Login with Google",
     "loginWithGithub": "Login with GitHub",
@@ -5062,7 +5261,8 @@
       "noData": "No data available",
       "loading": "Loading data...",
       "error": "Failed to load data",
-      "sortBy": "Sort by {column}",
+      "sortedAscending": "Sorted by {column}, ascending",
+      "sortedDescending": "Sorted by {column}, descending",
       "rowsPerPage": "Rows per page",
       "pageInfo": "Showing {from} to {to} of {total} results"
     },
@@ -5329,6 +5529,18 @@
         "generationFailedStatus": "Generation failed with status {status}",
         "spectrogramFailed": "Failed to generate spectrogram"
       },
+      "defaults": {
+        "open": "Playback defaults",
+        "title": "Playback defaults",
+        "description": "Every clip starts with these values. They are saved on this station and apply to everyone who uses it.",
+        "useCurrent": "Use current values",
+        "useCurrentHelp": "Copies the gain, denoise and high-pass filter this player is set to into the fields below. Nothing is saved until you choose Save Changes.",
+        "useCurrentHelpNoDenoise": "Copies the gain and high-pass filter this player is set to into the fields below. Nothing is saved until you choose Save Changes.",
+        "copied": "Current values copied. Choose Save Changes to keep them.",
+        "saved": "Playback defaults saved",
+        "saveFailed": "The playback defaults were not saved. Nothing was changed.",
+        "unavailable": "Settings could not be loaded, so the defaults cannot be changed here."
+      },
       "clipExtraction": {
         "selectRange": "Click and drag to select a range",
         "playSelection": "Play selected range",
@@ -5577,6 +5789,7 @@
       "reloadPage": "Reload page"
     },
     "skip": "Skip",
+    "notNow": "Not now",
     "back": "Back",
     "next": "Next",
     "done": "Done",
@@ -5695,29 +5908,53 @@
         "citizenPoint3": "Use AI detections as a starting point for your own observations",
         "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
         "acknowledge": "I understand"
+      },
+      "enableOnSources": {
+        "title": "Enable on audio sources",
+        "intro": "{name} is installed. Choose the audio sources that should analyze with it.",
+        "saveHint": "Your choice is saved when you select Done. Not now closes this without saving.",
+        "allSources": "All audio sources",
+        "soundCardsHeading": "Sound cards",
+        "streamsHeading": "Streams",
+        "alreadyOn": "Already analyzes with {name}.",
+        "followsDefaultsRuns": "Follows the default models, which include {name}.",
+        "followsDefaultsAdd": "Follows the default models. Turning this on keeps them and adds {name}.",
+        "followsDefaultsUnknown": "Follows the default models, which could not be read. Turn {name} on for this source in the audio settings.",
+        "batStreamWarning": "Bat models need a stream with a lossless codec (PCM) and a sample rate of at least 96 kHz; BSG-BAT needs at least 192 kHz. A typical camera stream is not ultrasonic, so test the stream in the audio settings before relying on it.",
+        "allRunning": "Every audio source already analyzes with {name}. There is nothing to change.",
+        "notListed": "{name} is not in the list of enabled models, so it cannot be turned on for an audio source here.",
+        "notLoadedPending": "{name} is still loading, so it cannot be turned on for an audio source yet. Once it has loaded, turn it on in the audio source settings.",
+        "notLoadedFailed": "{name} failed to load, so it cannot be turned on for an audio source.",
+        "noSources": "No audio source is configured yet. Add a sound card or a stream in the audio settings, then turn on {name} there.",
+        "openAudioSettings": "Open audio settings",
+        "enabledToast": "{name} turned on for {count, plural, one {# audio source} other {# audio sources}}"
+      }
+    },
+    "modelNextSteps": {
+      "title": "Next steps for {name}",
+      "errors": {
+        "saveFailed": "Could not save. Check the connection and try again, or choose Not now and turn the model on for your sources later in Settings > Audio.",
+        "saveRejected": "The change was not accepted. Try again, or choose Not now and turn the model on for your sources later in Settings > Audio."
       }
     }
   },
   "analysis": {
     "title": "Analysis",
     "tabs": {
-      "settings": "Settings",
-      "models": "Models"
+      "models": "Models",
+      "detection": "Detection",
+      "bats": "Bats",
+      "inference": "Inference",
+      "filters": "Filters"
     },
     "detection": {
       "title": "Detection Settings",
       "description": "Configure confidence thresholds and language for species classification.",
-      "confidenceThreshold": {
-        "label": "Confidence Threshold",
-        "helpText": "Minimum confidence score (0.0 - 1.0) required for a detection to be recorded."
-      },
       "batThreshold": {
-        "label": "Bat Detection Threshold (BattyBirdNET)",
-        "helpText": "Minimum confidence score for BattyBirdNET bat species detections. BSG-BAT has its own threshold."
+        "label": "Bat Detection Threshold (BattyBirdNET)"
       },
       "bsgBatThreshold": {
         "label": "Bat Detection Threshold (BSG-BAT)",
-        "helpText": "Minimum confidence score for BSG-BAT bat species detections.",
         "sampleRateWarning": "Captures at 192 kHz work, but species that call above 96 kHz cannot be identified and scores are less reliable. A capture rate of 384 kHz is recommended."
       },
       "bsgBatStep": {
@@ -5739,6 +5976,10 @@
         "label": "Post Detection Validation",
         "helpText": "When enabled, bat detections are validated by analyzing ultrasonic energy patterns in the source audio. Detections that lack bat echolocation characteristics are tagged as unlikely."
       },
+      "batDiscardUnlikely": {
+        "label": "Discard Unlikely Detections",
+        "helpText": "When enabled, bat detections that post detection validation tags as unlikely are discarded: they are not saved, get no audio clip or notification, and cannot be recovered. When disabled (the default), they are saved and tagged as unlikely. Detections already saved are not changed."
+      },
       "batFalsePositiveFilter": {
         "label": "Bat False Positive Filter",
         "helpText": "Requires multiple confirmations of a bat detection within a sliding window before accepting it. Higher levels require more confirmations, reducing false positives. The bat model uses a fixed 50% overlap, so no overlap adjustment is needed.",
@@ -5754,24 +5995,9 @@
       "locale": {
         "label": "Species Language",
         "helpText": "Language used for species common names in the interface."
-      },
-      "secondaryThresholdOverride": {
-        "label": "Override confidence threshold",
-        "helpText": "When enabled, this model uses its own confidence threshold. When disabled, it follows the main BirdNET confidence threshold."
-      },
-      "secondaryThreshold": {
-        "helpText": "Minimum confidence score (0.01 - 0.99) required for a detection from this model to be recorded.",
-        "followsBirdnet": "Enable the override to set a custom value. This model currently follows the main BirdNET confidence threshold."
-      },
-      "perchThreshold": {
-        "label": "Perch v2 Confidence Threshold"
-      },
-      "birdnetv3Threshold": {
-        "label": "BirdNET v3.0 Confidence Threshold"
       }
     },
     "rangeFilter": {
-      "birdOnlyNote": "Range filter applies to bird classifiers only. Bat models use their own species lists.",
       "status": {
         "title": "Range Filter Overview",
         "geomodelInfo": "BirdNET Geomodel {version} - {species} known species",
@@ -5786,13 +6012,13 @@
         "noFilter": "No range filter active",
         "passUnmapped": {
           "label": "Allow species without range data",
-          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out."
+          "helpText": "Allow detections of species the geomodel has no geographic data for. When disabled, these species are always filtered out. This affects only the classifiers the range filter applies to."
         }
       }
     },
     "advanced": {
       "title": "Advanced",
-      "description": "Processing and custom model configuration."
+      "description": "Custom model and label files."
     },
     "downloadSource": {
       "title": "Download Source",
@@ -5806,7 +6032,7 @@
     },
     "gallery": {
       "title": "Model Gallery",
-      "description": "Manage classifier models for bird and bat detection.",
+      "description": "Manage the classifier models.",
       "region": {
         "title": "Model region",
         "modeAuto": "Automatic",
@@ -5858,11 +6084,14 @@
         "filterPlaceholder": "Filter regions",
         "filterAria": "Filter region-tuned builds",
         "filterNoMatch": "No regions match \"{query}\"",
-        "latency": "~{ms} ms",
         "precisionInfo": "About precision and variants",
         "precisionHelp": "Precision (FP32, FP16, INT8) trades accuracy for size and speed: FP32 is most accurate, INT8 is smallest and fastest. Recommended is the best match for your detected hardware; Default is the model's standard build."
       },
       "actionInProgress": "Wait for the current model install, reinstall, or remove to finish",
+      "installSuccess": "Installed {name}",
+      "cancelling": "Cancelling...",
+      "cancelled": "Download of {name} cancelled.",
+      "installedEnableOnSources": "{name} is installed. To use it, turn it on for your sources in Settings > Audio.",
       "removeSuccess": "Removed {name}",
       "reasons": {
         "backendRecommended": "Runs on {backend}, the recommended backend for your hardware",
@@ -5882,7 +6111,8 @@
       },
       "tabs": {
         "installed": "Installed",
-        "available": "Available"
+        "available": "Available",
+        "navigationAria": "Model gallery tabs"
       },
       "loading": "Loading models...",
       "retry": "Retry",
@@ -5908,7 +6138,8 @@
         "verifying": "Verifying...",
         "loading": "Loading...",
         "complete": "Installed successfully",
-        "failed": "Failed"
+        "failed": "Failed",
+        "cancelled": "Cancelled"
       },
       "license": {
         "title": "License Agreement",
@@ -5922,7 +6153,9 @@
         "commercialUseAllowed": "Commercial use allowed",
         "nonCommercialOnly": "Non-commercial use only",
         "nonCommercialWarning": "This model is licensed for non-commercial use only. By installing, you agree to comply with the license terms.",
-        "acceptAndInstall": "Accept & Install"
+        "acceptAndInstall": "Accept & Install",
+        "continue": "Continue",
+        "agreementNext": "This model has terms you need to agree to. They are shown on the next step."
       },
       "removeDialog": {
         "title": "Remove {name}?",
@@ -5934,12 +6167,15 @@
         "removeFailed": "Failed to remove model",
         "removeHasDependents": "{name} is needed by {models}. Remove those models first.",
         "operationInProgress": "A model install, reinstall, or remove is already in progress ({name}). Try again when it finishes.",
+        "cancelUnavailable": "The download of {name} can no longer be cancelled.",
         "actionFailed": "There was a problem with {name}",
         "downloadSourceHint": "If huggingface.co is blocked or slow on your network, set a mirror in the Download Source section below.",
         "goToDownloadSource": "Go to Download Source",
         "dismiss": "Dismiss",
         "details": "Details",
-        "removeRetryHint": "To try again, use the Remove button on the model's card."
+        "removeRetryHint": "To try again, use the Remove button on the model's card.",
+        "agreementRequired": "{name} needs your agreement to its terms before it can be installed.",
+        "documentUnavailable": "The document text could not be loaded and verified. Check that BirdNET-Go can reach the model download source, then try again."
       },
       "regionLabel": "Region",
       "speciesLabel": "Species",
@@ -5947,11 +6183,33 @@
       "reinstalling": "Reinstalling...",
       "reinstallComplete": "Files verified successfully",
       "geomodelBadge": "Includes BirdNET v3.0 geomodel",
+      "newBadge": "New",
       "preview": {
         "badge": "Preview",
         "buildLabel": "{version} · {build}",
-        "cardNotice": "Developer preview, not the final release. This is an early build for testing; results may change before the stable version.",
         "dialogNotice": "You are installing a developer preview ({build}). Fine for trying it out, but not recommended as your only classifier yet."
+      },
+      "experimental": {
+        "badge": "Experimental",
+        "cardNotice": "Experimental in BirdNET-Go. The model is published, but its performance in BirdNET-Go is not proven yet, so results may be less reliable.",
+        "dialogNotice": "You are installing a model that is experimental in BirdNET-Go. Its performance is not proven yet, so check its detections before relying on it."
+      },
+      "superseded": {
+        "cardNotice": "Superseded by {name}. Use the newer model instead.",
+        "dialogNotice": "This model has been superseded by {name}. Consider installing {name} instead."
+      },
+      "update": {
+        "cardNotice": "A newer build ({to}) replaces the installed {from} build.",
+        "cardNoticeBuild": "Build {to} of version {version} replaces the installed build {from}.",
+        "action": "Update",
+        "applying": "Updating..."
+      },
+      "buildNotes": {
+        "heading": "What's new in build {build} of version {version}",
+        "released": "Released {date}",
+        "buildLabel": "Build number",
+        "buildValue": "{build}, released {date}",
+        "disclosure": "What's new in this build"
       },
       "entryIncompatible": "This model is not available on this system.",
       "regionGlobal": "Global",
@@ -5980,26 +6238,122 @@
         "applyFailed": "Failed to apply",
         "upToDate": "All your models are already optimized for this hardware.",
         "licenseNote": "Swapping stays within the same model, so its license does not change."
+      },
+      "documents": {
+        "heading": "Documents",
+        "kinds": {
+          "license": "License",
+          "acceptable_use": "Acceptable use policy"
+        },
+        "genericKind": "Model terms",
+        "source": "From {repo}",
+        "textRegion": "{document} text",
+        "loading": "Loading document text",
+        "view": "View {document}",
+        "hide": "Hide {document}"
+      },
+      "agreement": {
+        "title": "Review and agree",
+        "intro": "Before {name} can be installed, read and agree to the terms below.",
+        "agree": "I have read and agree to: {document}",
+        "agreeAndContinue": "Agree and continue",
+        "tickEach": "Tick the box under each document to continue.",
+        "waitForText": "You can agree once every document has loaded.",
+        "unavailableBlocked": "A document could not be loaded, so you cannot agree to it yet. Use Retry to load it again."
       }
-    },
-    "bird": {
-      "title": "Bird Detection",
-      "description": "Configure confidence threshold, species language, and false positive filtering for bird classifiers."
     },
     "bat": {
       "title": "Bat Detection",
-      "description": "Configure threshold, scheduling, and false positive filtering for bat classifiers."
-    },
-    "dynamicThreshold": {
-      "birdOnlyNote": "Dynamic threshold applies to bird classifiers only."
+      "description": "Scheduling, validation and false positive filtering for bat classifiers."
     },
     "perch": {
-      "title": "Perch v2 Detection",
-      "description": "Set a dedicated confidence threshold for Google Perch v2 detections, independent of the BirdNET threshold."
+      "title": "Perch v2 Detection"
     },
     "birdnetv3": {
-      "title": "BirdNET v3.0 Detection",
-      "description": "Set a dedicated confidence threshold for BirdNET v3.0 detections, independent of the main BirdNET threshold."
+      "title": "BirdNET v3.0 Detection"
+    },
+    "birdnetplus": {
+      "title": "BirdNET+ v3.0 Detection"
+    },
+    "thresholds": {
+      "title": "Detection thresholds",
+      "description": "Minimum confidence a detection needs before it is recorded, for each enabled classifier.",
+      "category": {
+        "bat": "Bat"
+      },
+      "state": {
+        "pending": "Loading",
+        "failed": "Failed to load"
+      },
+      "empty": "No classifiers are enabled.",
+      "shared": {
+        "label": "Shared threshold",
+        "usedBy": "Used by every classifier without a custom threshold: {models}.",
+        "unused": "Used by every classifier without a custom threshold. No enabled classifier uses it right now."
+      },
+      "customSwitch": "Custom threshold",
+      "usesShared": "Uses the shared threshold"
+    },
+    "speciesNames": {
+      "title": "Species names",
+      "description": "How detected species are named in the interface."
+    },
+    "inference": {
+      "runtime": {
+        "title": "Inference runtime",
+        "description": "Which runtime and device run the classifiers, and how many CPU threads they use."
+      },
+      "backend": {
+        "label": "Backend",
+        "helpText": "Auto picks the fastest runtime this device supports for each model.",
+        "options": {
+          "auto": "Auto (recommended)",
+          "onnx": "ONNX Runtime",
+          "openvino": "OpenVINO"
+        }
+      },
+      "device": {
+        "label": "OpenVINO device",
+        "helpText": "Used for models that run on OpenVINO.",
+        "helpTextMultipleGpus": "Used for models that run on OpenVINO. This device has more than one GPU, so pick the one the models run on.",
+        "notDetectedHint": "The selected GPU is not detected. Models run on ONNX Runtime until another device is chosen.",
+        "options": {
+          "auto": "Auto",
+          "cpu": "CPU",
+          "gpu": "GPU",
+          "gpuDefault": "OpenVINO default: {name}",
+          "gpuNamed": "{name} ({type})",
+          "notDetected": "{id} (not detected)"
+        },
+        "gpuTypes": {
+          "integrated": "integrated",
+          "discrete": "discrete"
+        }
+      },
+      "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
+      "backendsLoading": "Checking which runtimes this device supports.",
+      "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "running": {
+        "title": "Running now",
+        "description": "The runtime and precision each enabled classifier runs with.",
+        "unknown": "Not reported"
+      }
+    },
+    "scope": {
+      "dynamicThreshold": "Applies to all classifiers, bat classifiers included. A species with its own custom threshold is not adjusted.",
+      "speciesNames": "Applies to all classifiers. A species with no name in the chosen language keeps the name from its classifier.",
+      "falsePositiveFilter": "Applies to all classifiers except bat classifiers, which have their own false positive filter.",
+      "falsePositiveFilterBatTab": "Applies to all classifiers except bat classifiers, which have their own false positive filter on the Bats tab.",
+      "rangeFilter": {
+        "appliesTo": "Applies to {models}.",
+        "notApplied": "Not range filtered: {models}.",
+        "generic": "Applies to the classifiers the range model supports. Bat classifiers are never range filtered.",
+        "needsLocation": "Works only when the station location is set."
+      },
+      "bat": "Applies to bat classifiers only."
+    },
+    "dynamicThreshold": {
+      "minAboveTrigger": "The minimum must not be higher than the trigger."
     }
   },
   "restart": {
@@ -6015,7 +6369,6 @@
     "restartFailed": "Failed to initiate restart",
     "reasons": {
       "webserver": "Web server / network settings",
-      "oauth": "Authentication provider settings",
       "database": "Database settings",
       "logging": "Logging settings",
       "tlsCertificate": "TLS certificate"
@@ -6101,6 +6454,7 @@
     },
     "metricFooter": {
       "allPassing": "All passing",
+      "healthyOfTotal": "{healthy} of {total}",
       "needsAttention": "Needs attention",
       "failing": "Failing",
       "allClear": "All clear",
@@ -6171,6 +6525,52 @@
       "patternNone": "None",
       "patternTransient": "Transient",
       "patternSustained": "Sustained"
+    }
+  },
+  "shortcuts": {
+    "menuItem": "Keyboard shortcuts",
+    "modal": {
+      "title": "Keyboard shortcuts",
+      "enable": "Enable keyboard shortcuts",
+      "enableHelp": "Turn this off if single-key shortcuts get in the way of a screen reader, voice control or an assistive keyboard.",
+      "offNote": "Keyboard shortcuts are off. The keys below do nothing until you turn them on.",
+      "or": "or"
+    },
+    "scopes": {
+      "global": "All pages"
+    },
+    "groups": {
+      "navigation": "Navigation",
+      "review": "Review",
+      "audio": "Audio",
+      "general": "General"
+    },
+    "keys": {
+      "shift": "Shift",
+      "space": "Space",
+      "arrowLeft": "Left arrow",
+      "arrowRight": "Right arrow",
+      "comma": "Comma",
+      "period": "Period",
+      "questionMark": "Question mark",
+      "combination": "{first} plus {second}"
+    },
+    "withKey": "{label} ({keys})",
+    "detectionDetail": {
+      "olderSpecies": "Older detection of the same species",
+      "newerSpecies": "Newer detection of the same species",
+      "correct": "Mark as correct",
+      "falsePositive": "Mark as false positive",
+      "wrongSpecies": "Change the species",
+      "keep": "Keep or release this recording",
+      "playPause": "Play or pause",
+      "seekBack": "Back one second",
+      "seekForward": "Forward one second",
+      "focusReview": "Go to the review buttons",
+      "backToList": "Back to detections"
+    },
+    "global": {
+      "help": "Show or hide keyboard shortcuts"
     }
   }
 }

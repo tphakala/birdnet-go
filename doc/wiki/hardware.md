@@ -46,7 +46,7 @@ Different AI classifiers have different resource demands:
 
 - **Recommended:** Raspberry Pi OS Lite (64-bit) based on Debian Bookworm (Debian 12)
   - **Rationale:**
-    - 64-bit OS is **required** (not optional) because TensorFlow Lite requires a 64-bit system
+    - 64-bit OS is **required** (not optional) because TensorFlow Lite and ONNX Runtime require a 64-bit system
     - "Lite" version avoids unnecessary desktop components, saving resources
     - Bookworm provides current package support for dependencies
 
@@ -68,8 +68,8 @@ Different AI classifiers have different resource demands:
     - Creative Sound Blaster Play! 3
     - U-Green USB sound card (multiple models)
 
-- **For bat detection (or combined bird + bat):** A higher-end USB audio interface capable of high sample rates is required. See [Bat Detection Audio Requirements](#bat-detection-audio-requirements) below.
-  - **Recommended:** Focusrite Scarlett series (Solo, 2i2, etc.) - supports up to 192kHz sample rate, low noise, works well for both bird and bat detection when paired with an appropriate microphone
+- **For bat detection (or combined bird + bat):** A higher-end USB audio interface capable of high sample rates is required. See [Bat Detection Audio Requirements](#bat-detection-audio-requirements) below and the dedicated [Ultrasonic Microphones](ultrasonic-microphones.md) guide.
+  - **Recommended:** Focusrite Scarlett Solo or 2i2 (3rd and 4th Gen) - proven reliable with Raspberry Pi and PC hosts, supports up to 192kHz sample rate, +48V phantom power, low noise, works well for both bird and bat detection when paired with an appropriate microphone
 
 ### Microphones
 
@@ -108,6 +108,8 @@ Bat echolocation calls are ultrasonic, typically ranging from 20kHz to over 120k
 - **Perfect:** 256kHz or higher sample rate - captures the full range of bat echolocation frequencies with room to spare
 
 #### Recommended Bat Detection Setups
+
+For a full comparison of USB and XLR ultrasonic microphones (including AudioMoth, Dodotronic UltraMic 384K PRO and Avicantus, Vleermic 384kHz, Pippyg, Griff/Griff Mini, Clippy Ultra XLR, Sonorous Objects SO.104/SO.4, and Rode NT5), see [Ultrasonic Microphones](ultrasonic-microphones.md).
 
 - **Best for bat-only detection:** AudioMoth USB Microphone
   - Purpose-built for wildlife monitoring with an ultrasonic-capable microphone
@@ -210,7 +212,7 @@ Bat echolocation calls are ultrasonic, typically ranging from 20kHz to over 120k
 
 - **Limited Memory Resources:**
   - Disable thumbnail generation in the web interface
-  - Use WAV format for audio exports (requires less processing)
+  - Use WAV format for audio exports to avoid compression overhead (largest files; see [Audio Formats](audio-formats.md))
   - Implement aggressive retention policies for audio clips
 
 ## Additional Resources

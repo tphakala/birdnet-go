@@ -42,8 +42,8 @@ const (
 	MsgSettingsReconfiguringSpeciesGuide      = "notifications.content.settings.reconfiguringSpeciesGuide"
 	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
 	MsgSettingsReconfiguringDynamicThresholds = "notifications.content.settings.reconfiguringDynamicThresholds"
+	MsgSettingsReconfiguringOauthProviders    = "notifications.content.settings.reconfiguringOauthProviders"
 	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
-	MsgSettingsOauthRestart                   = "notifications.content.settings.oauthRestartRequired"
 	MsgSettingsDatabaseRestart                = "notifications.content.settings.databaseRestartRequired"
 	MsgSettingsLoggingRestart                 = "notifications.content.settings.loggingRestartRequired"
 
@@ -252,10 +252,29 @@ const (
 	MsgAcousticModelsLoadFailedTitle   = "notifications.content.acousticModels.loadFailedTitle"
 	MsgAcousticModelsLoadFailedMessage = "notifications.content.acousticModels.loadFailedMessage"
 
+	// BirdNET Geomodel notifications (Perch v2, BirdNET v3.0 or BirdNET+ v3.0 is loaded
+	// but the BirdNET Geomodel v3.0 does not filter it by location). The two states carry
+	// different remedies: not_installed asks to install the geomodel from the model
+	// gallery, load_failed asks to check the log and install or reinstall it.
+	MsgGeomodelNotInstalledTitle   = "notifications.content.geomodel.notInstalledTitle"
+	MsgGeomodelNotInstalledMessage = "notifications.content.geomodel.notInstalledMessage"
+	MsgGeomodelLoadFailedTitle     = "notifications.content.geomodel.loadFailedTitle"
+	MsgGeomodelLoadFailedMessage   = "notifications.content.geomodel.loadFailedMessage"
+
 	// Model optimize notifications (an installed model has a better build for this
 	// host in the model gallery; recommend-only, never swaps a model by itself)
 	MsgModelOptimizeTitle   = "notifications.content.modelOptimize.title"
 	MsgModelOptimizeMessage = "notifications.content.modelOptimize.message"
+
+	// Model superseded notifications (an installed model has a successor in the
+	// model gallery; recommend-only, never swaps a model by itself)
+	MsgModelSupersededTitle   = "notifications.content.modelSuperseded.title"
+	MsgModelSupersededMessage = "notifications.content.modelSuperseded.message"
+
+	// Model update notifications (an installed build of a model has a newer release
+	// or build in the model gallery; recommend-only, never swaps a model by itself)
+	MsgModelUpdateTitle   = "notifications.content.modelUpdate.title"
+	MsgModelUpdateMessage = "notifications.content.modelUpdate.message"
 
 	// Inference failure notice: a loaded model failed its last analyses in a row.
 	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"

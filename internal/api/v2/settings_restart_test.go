@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/markbates/goth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -101,9 +102,10 @@ func TestRestartDetectors(t *testing.T) {
 }
 
 // TestOAuthProvidersChanged verifies the OAuth provider registration detector.
-// Registration fields (client credentials, callback URI, issuer, scopes, and the
-// enabled/added/removed set) are restart-required; the per-provider UserID
-// allowlist is excluded because it is read live by the auth check.
+// Registration fields (client credentials, callback URI, issuer, scopes, the
+// enabled/added/removed set, and Host or BaseURL while a provider is enabled)
+// trigger re-registration; the per-provider UserID allowlist is excluded because
+// it is read live by the auth check.
 func TestOAuthProvidersChanged(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +124,8 @@ func TestOAuthProvidersChanged(t *testing.T) {
 		old     []conf.OAuthProviderConfig
 		current []conf.OAuthProviderConfig
 		changed bool
+		// mutate adjusts the Security section of the new snapshot; may be nil.
+		mutate func(sec *conf.Security)
 	}{
 		{
 			name:    "no providers, no change",
@@ -130,49 +134,61 @@ func TestOAuthProvidersChanged(t *testing.T) {
 			changed: false,
 		},
 		{
-			name:    "provider added requires restart",
+			name:    "provider added re-registers",
 			old:     nil,
 			current: []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", true)},
 			changed: true,
 		},
 		{
-			name:    "provider removed requires restart",
+			name:    "provider removed re-registers",
 			old:     []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", true)},
 			current: nil,
 			changed: true,
 		},
 		{
-			name:    "client id change requires restart",
+			name:    "client id change re-registers",
 			old:     []conf.OAuthProviderConfig{provider("google", "old", "user@example.com", true)},
 			current: []conf.OAuthProviderConfig{provider("google", "new", "user@example.com", true)},
 			changed: true,
 		},
 		{
-			name:    "client secret change requires restart",
+			name:    "client secret change re-registers",
 			old:     []conf.OAuthProviderConfig{{Provider: "google", Enabled: true, ClientID: "cid", ClientSecret: "old-secret"}},
 			current: []conf.OAuthProviderConfig{{Provider: "google", Enabled: true, ClientID: "cid", ClientSecret: "new-secret"}},
 			changed: true,
 		},
 		{
-			name:    "redirect uri change requires restart",
+			name:    "redirect uri change re-registers",
 			old:     []conf.OAuthProviderConfig{{Provider: "google", Enabled: true, ClientID: "cid", ClientSecret: "s"}},
 			current: []conf.OAuthProviderConfig{{Provider: "google", Enabled: true, ClientID: "cid", ClientSecret: "s", RedirectURI: "https://birds.example.com/auth/google/callback"}},
 			changed: true,
 		},
 		{
-			name:    "oidc issuer url change requires restart",
+			name:    "oidc issuer url change re-registers",
 			old:     []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", IssuerURL: "https://idp-a.example.com"}},
 			current: []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", IssuerURL: "https://idp-b.example.com"}},
 			changed: true,
 		},
 		{
-			name:    "enabled toggle requires restart",
+			name: "providers reordered, no re-registration",
+			old: []conf.OAuthProviderConfig{
+				provider("google", "cid", "user@example.com", true),
+				provider("github", "gid", "user@example.com", true),
+			},
+			current: []conf.OAuthProviderConfig{
+				provider("github", "gid", "user@example.com", true),
+				provider("google", "cid", "user@example.com", true),
+			},
+			changed: false,
+		},
+		{
+			name:    "enabled toggle re-registers",
 			old:     []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", false)},
 			current: []conf.OAuthProviderConfig{provider("google", "cid", "user@example.com", true)},
 			changed: true,
 		},
 		{
-			name:    "allowlist-only change hot-reloads (no restart)",
+			name:    "allowlist-only change needs no re-registration",
 			old:     []conf.OAuthProviderConfig{provider("google", "cid", "old@example.com", true)},
 			current: []conf.OAuthProviderConfig{provider("google", "cid", "new@example.com", true)},
 			changed: false,
@@ -190,10 +206,42 @@ func TestOAuthProvidersChanged(t *testing.T) {
 			changed: false,
 		},
 		{
-			name:    "oidc scopes change requires restart",
+			name:    "oidc scopes change re-registers",
 			old:     []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", Scopes: []string{"openid"}}},
 			current: []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", Scopes: []string{"openid", "email"}}},
 			changed: true,
+		},
+		{
+			name:    "post-logout return toggle is read live and needs no re-registration",
+			old:     []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", IssuerURL: "https://idp.example.test"}},
+			current: []conf.OAuthProviderConfig{{Provider: "oidc", Enabled: true, ClientID: "cid", ClientSecret: "s", IssuerURL: "https://idp.example.test", PostLogoutRedirect: true}},
+			changed: false,
+		},
+		{
+			name:    "base url change with an enabled provider re-registers",
+			old:     []conf.OAuthProviderConfig{provider("google", "cid", "", true)},
+			current: []conf.OAuthProviderConfig{provider("google", "cid", "", true)},
+			mutate:  func(sec *conf.Security) { sec.BaseURL = "https://birds.example.com" },
+			changed: true,
+		},
+		{
+			name:    "host change with an enabled provider re-registers",
+			old:     []conf.OAuthProviderConfig{provider("google", "cid", "", true)},
+			current: []conf.OAuthProviderConfig{provider("google", "cid", "", true)},
+			mutate:  func(sec *conf.Security) { sec.Host = "birds.example.com" },
+			changed: true,
+		},
+		{
+			name:    "base url change with only disabled providers is not a change",
+			old:     []conf.OAuthProviderConfig{provider("google", "cid", "", false)},
+			current: []conf.OAuthProviderConfig{provider("google", "cid", "", false)},
+			mutate:  func(sec *conf.Security) { sec.BaseURL = "https://birds.example.com" },
+			changed: false,
+		},
+		{
+			name:    "host change without providers is not a change",
+			mutate:  func(sec *conf.Security) { sec.Host = "birds.example.com" },
+			changed: false,
 		},
 	}
 
@@ -205,6 +253,9 @@ func TestOAuthProvidersChanged(t *testing.T) {
 			oldSettings.Security.OAuthProviders = tt.old
 			newSettings := conf.CloneSettings(base)
 			newSettings.Security.OAuthProviders = tt.current
+			if tt.mutate != nil {
+				tt.mutate(&newSettings.Security)
+			}
 
 			assert.Equal(t, tt.changed, oauthProvidersChanged(oldSettings, newSettings),
 				"detector result mismatch for %q", tt.name)
@@ -232,26 +283,52 @@ func TestHandleSettingsChangesMarksRestart(t *testing.T) {
 	assert.Contains(t, restart.GetRestartReasons(), reasonWebserverRestart)
 }
 
-// TestHandleSettingsChangesMarksOAuthRestart verifies that adding an OAuth provider
-// marks the global restart flag with the OAuth reason key. Serial because it
-// inspects the process-global restart state.
-func TestHandleSettingsChangesMarksOAuthRestart(t *testing.T) {
-	restart.Reset()
-	t.Cleanup(restart.Reset)
+// TestHandleSettingsChangesReloadsOAuthProviders verifies that a provider change
+// is registered with goth by the time handleSettingsChanges returns, without a
+// restart mark, and only for the controller that owns the global snapshot. Serial
+// because it inspects process-global restart and goth state.
+func TestHandleSettingsChangesReloadsOAuthProviders(t *testing.T) {
+	addGoogle := func(updated *conf.Settings) {
+		updated.Security.OAuthProviders = append(updated.Security.OAuthProviders, conf.OAuthProviderConfig{
+			Provider:     "google",
+			Enabled:      true,
+			ClientID:     "cid",
+			ClientSecret: "secret",
+		})
+	}
 
-	c := createTestController(t)
-	base := apitest.NewValidTestSettings()
-	updated := conf.CloneSettings(base)
-	updated.Security.OAuthProviders = append(updated.Security.OAuthProviders, conf.OAuthProviderConfig{
-		Provider:     "google",
-		Enabled:      true,
-		ClientID:     "cid",
-		ClientSecret: "secret",
-	})
+	tests := []struct {
+		name         string
+		globalOwner  bool
+		wantRegister bool
+	}{
+		{name: "global owner registers the provider", globalOwner: true, wantRegister: true},
+		{name: "standalone controller leaves the registry alone", globalOwner: false, wantRegister: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			restart.Reset()
+			t.Cleanup(restart.Reset)
+			goth.ClearProviders()
+			t.Cleanup(goth.ClearProviders)
 
-	require.NoError(t, c.handleSettingsChanges(base, updated))
-	assert.True(t, restart.IsRestartRequired(), "expected restart to be marked after adding an OAuth provider")
-	assert.Contains(t, restart.GetRestartReasons(), reasonOAuthRestart)
+			c := createTestController(t)
+			c.isGlobalOwner = tt.globalOwner
+			base := apitest.NewValidTestSettings()
+			updated := conf.CloneSettings(base)
+			addGoogle(updated)
+
+			require.NoError(t, c.handleSettingsChanges(base, updated))
+
+			_, err := goth.GetProvider("google")
+			if tt.wantRegister {
+				require.NoError(t, err, "the added provider must be registered when handleSettingsChanges returns")
+			} else {
+				require.Error(t, err)
+			}
+			assert.False(t, restart.IsRestartRequired(), "a provider change must not mark a restart")
+		})
+	}
 }
 
 // TestHandleSettingsChangesNoRestartForHotReloadField verifies that changing a
@@ -309,6 +386,7 @@ func TestHotReloadRestartFieldsCovered(t *testing.T) {
 		"Models.Directory":        "models directory resolved once at startup (ResolveModelsDir/NewModelManager); Models.Enabled hot-reloads via reconcile_models",
 		"Perch":                   "perch model path; not wired",
 		"BirdNETV3":               "BirdNET v3.0 model path; not wired",
+		"BirdNETPlus":             "BirdNET+ v3.0 model path; not wired (same as BirdNET v3.0)",
 		"BSGBat":                  "BSG-BAT model path; not wired (same as Perch)",
 		"BSG":                     "BSG model path; not wired",
 		"Realtime.Audio.Watchdog": "no UI controls (project decision)",

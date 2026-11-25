@@ -15,95 +15,32 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
+	gothGoogle "github.com/markbates/goth/providers/google"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
-// TestIsUserAuthenticatedValidAccessToken tests the IsUserAuthenticated function with a valid access token
+// TestIsUserAuthenticatedValidAccessToken tests IsUserAuthenticated with a live password session
 func TestIsUserAuthenticatedValidAccessToken(t *testing.T) {
 	settings := conftest.NewTestSettings().Apply()
 	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
+	settings.Security.BasicAuth.Enabled = true
 
-	s := NewOAuth2Server(t.Context(), false)
-
-	// Initialize gothic exactly as in production
+	s := newOAuth2ServerForTesting(t, settings)
+	prevStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = prevStore })
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	token := seedSession(t, s, &AccessToken{})
+	c, _ := sessionContext(sessionRequest(token))
 
-	// Store token using gothic's method
-	_ = gothic.StoreInSession("access_token", "valid_token", req, rec) // Test setup, error not relevant
-
-	// Add cookie to request
-	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-	// Add token to OAuth2Server's valid tokens
-	s.accessTokens["valid_token"] = AccessToken{
-		Token:     "valid_token",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}
-
-	isAuthenticated := s.IsUserAuthenticated(c)
-	assert.True(t, isAuthenticated, "expected IsUserAuthenticated to return true")
-}
-
-// TestIsUserAuthenticatedTableDriven tests the IsUserAuthenticated function with a table-driven approach
-func TestIsUserAuthenticatedTableDriven(t *testing.T) {
-	tests := []struct {
-		name    string
-		token   string
-		expires time.Duration
-		want    bool
-	}{
-		{
-			name:    "valid token",
-			token:   "valid_token",
-			expires: time.Hour,
-			want:    true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			settings := &conf.Settings{
-				Security: conf.Security{
-					SessionSecret: "test-secret",
-				},
-			}
-
-			s := NewOAuth2Server(t.Context(), false)
-
-			// Initialize gothic exactly as in production
-			gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
-
-			e := echo.New()
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Store token using gothic's method
-			_ = gothic.StoreInSession("access_token", tt.token, req, rec) // Test setup, error not relevant
-
-			// Add cookie to request
-			req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-			// Add token to OAuth2Server's valid tokens
-			s.accessTokens[tt.token] = AccessToken{
-				Token:     tt.token,
-				ExpiresAt: time.Now().Add(tt.expires),
-			}
-
-			got := s.IsUserAuthenticated(c)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	assert.True(t, s.IsUserAuthenticated(c), "expected IsUserAuthenticated to return true")
 }
 
 func TestOAuth2Server(t *testing.T) {
@@ -132,7 +69,8 @@ func TestOAuth2Server(t *testing.T) {
 				conftest.SetTestSettings(s.settings)
 
 				// Generate and immediately use the auth code
-				code := s.GenerateAuthCode()
+				code, err := s.GenerateAuthCode(s.settings, false)
+				require.NoError(t, err)
 
 				// Pass test context to ExchangeAuthCode
 				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -162,7 +100,7 @@ func TestOAuth2Server(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := NewOAuth2Server(t.Context(), false)
+			s := newOAuth2ServerForTesting(t, &conf.Settings{})
 			tt.test(t, s)
 		})
 	}
@@ -192,37 +130,25 @@ func TestNewOAuth2ServerForTesting(t *testing.T) {
 	assert.NotNil(t, server.throttledMessages)
 }
 
-// TestIsUserAuthenticatedExpiredToken tests with an expired access token
+// TestIsUserAuthenticatedExpiredToken tests with an expired session record
 func TestIsUserAuthenticatedExpiredToken(t *testing.T) {
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
+			BasicAuth:     conf.BasicAuth{Enabled: true},
 		},
 	}
 
 	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	token := seedSession(t, server, &AccessToken{ExpiresAt: time.Now().Add(-time.Hour)})
+	c, _ := sessionContext(sessionRequest(token))
 
-	// Store token using gothic's method
-	_ = gothic.StoreInSession("access_token", "expired_token", req, rec)
-	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-	// Add expired token to OAuth2Server
-	server.accessTokens["expired_token"] = AccessToken{
-		Token:     "expired_token",
-		ExpiresAt: time.Now().Add(-time.Hour), // Expired
-	}
-
-	isAuthenticated := server.IsUserAuthenticated(c)
-	assert.False(t, isAuthenticated, "expired token should not authenticate")
+	assert.False(t, server.IsUserAuthenticated(c), "expired session should not authenticate")
 }
 
-// TestIsUserAuthenticatedNoToken tests with no access token
+// TestIsUserAuthenticatedNoToken tests with no session cookie
 func TestIsUserAuthenticatedNoToken(t *testing.T) {
 	settings := &conf.Settings{
 		Security: conf.Security{
@@ -233,14 +159,8 @@ func TestIsUserAuthenticatedNoToken(t *testing.T) {
 	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// No token stored
-	isAuthenticated := server.IsUserAuthenticated(c)
-	assert.False(t, isAuthenticated, "no token should not authenticate")
+	c, _ := sessionContext(sessionRequest(""))
+	assert.False(t, server.IsUserAuthenticated(c), "no cookie should not authenticate")
 }
 
 // TestIsUserAuthenticatedGoogleAuth tests Google authentication path
@@ -350,11 +270,12 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 }
 
 // TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled verifies that
-// disabling subnet bypass does NOT break token-based authentication.
+// disabling subnet bypass does NOT break session-based authentication.
 func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T) {
 	settings := &conf.Settings{
 		Security: conf.Security{
 			SessionSecret: "test-secret-32-bytes-minimum-len",
+			BasicAuth:     conf.BasicAuth{Enabled: true},
 			AllowSubnetBypass: conf.AllowSubnetBypass{
 				Enabled: false, // Subnet bypass disabled
 			},
@@ -364,23 +285,10 @@ func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T)
 	server := newOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	token := seedSession(t, server, &AccessToken{})
+	c, _ := sessionContext(sessionRequest(token))
 
-	// Store token using gothic's method
-	_ = gothic.StoreInSession("access_token", "valid_token", req, rec)
-	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-
-	// Add valid token to OAuth2Server
-	server.accessTokens["valid_token"] = AccessToken{
-		Token:     "valid_token",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}
-
-	result := server.IsUserAuthenticated(c)
-	assert.True(t, result, "token auth must work even when subnet bypass is disabled")
+	assert.True(t, server.IsUserAuthenticated(c), "session auth must work even when subnet bypass is disabled")
 }
 
 // TestIsValidUserId tests the isValidUserId helper function
@@ -451,22 +359,17 @@ func TestIsValidUserId(t *testing.T) {
 
 // TestValidateAccessToken tests the ValidateAccessToken method
 func TestValidateAccessToken(t *testing.T) {
+	settings := &conf.Settings{Security: conf.Security{BasicAuth: conf.BasicAuth{Enabled: true}}}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
 	server := &OAuth2Server{
-		settings:     &conf.Settings{},
+		settings:     settings,
 		accessTokens: make(map[string]AccessToken),
 	}
 
-	// Add a valid token
-	server.accessTokens["valid_token"] = AccessToken{
-		Token:     "valid_token",
-		ExpiresAt: time.Now().Add(time.Hour),
-	}
-
-	// Add an expired token
-	server.accessTokens["expired_token"] = AccessToken{
-		Token:     "expired_token",
-		ExpiresAt: time.Now().Add(-time.Hour),
-	}
+	validToken := seedSession(t, server, &AccessToken{})
+	expiredToken := seedSession(t, server, &AccessToken{ExpiresAt: time.Now().Add(-time.Hour)})
+	socialToken := seedSession(t, server, &AccessToken{Provider: ProviderGoogle, UserID: "user@example.com"})
 
 	tests := []struct {
 		name        string
@@ -475,17 +378,22 @@ func TestValidateAccessToken(t *testing.T) {
 	}{
 		{
 			name:        "valid token",
-			token:       "valid_token",
+			token:       validToken,
 			expectedErr: nil,
 		},
 		{
 			name:        "expired token",
-			token:       "expired_token",
+			token:       expiredToken,
 			expectedErr: ErrTokenExpired,
 		},
 		{
 			name:        "non-existent token",
 			token:       "nonexistent",
+			expectedErr: ErrTokenNotFound,
+		},
+		{
+			name:        "social session is not a bearer token",
+			token:       socialToken,
 			expectedErr: ErrTokenNotFound,
 		},
 	}
@@ -500,6 +408,16 @@ func TestValidateAccessToken(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("password session is rejected once basic authentication is disabled", func(t *testing.T) {
+		require.NoError(t, server.ValidateAccessToken(validToken))
+
+		disabled := conf.CloneSettings(settings)
+		disabled.Security.BasicAuth.Enabled = false
+		conftest.SetTestSettings(disabled)
+
+		assert.ErrorIs(t, server.ValidateAccessToken(validToken), ErrTokenNotFound)
+	})
 }
 
 // TestGenerateAuthCode tests the GenerateAuthCode method
@@ -520,7 +438,8 @@ func TestGenerateAuthCode(t *testing.T) {
 		accessTokens: make(map[string]AccessToken),
 	}
 
-	code := server.GenerateAuthCode()
+	code, err := server.GenerateAuthCode(settings, false)
+	require.NoError(t, err)
 	assert.NotEmpty(t, code)
 
 	// Verify code was stored
@@ -558,6 +477,7 @@ func TestExchangeAuthCode(t *testing.T) {
 		Code:      "expired_code",
 		ExpiresAt: time.Now().Add(-time.Minute),
 	}
+	settleCredentials(server)
 
 	tests := []struct {
 		name        string
@@ -598,7 +518,7 @@ func TestExchangeAuthCode(t *testing.T) {
 				assert.False(t, exists, "auth code should be deleted after exchange")
 
 				// Verify access token was created
-				assert.Contains(t, server.accessTokens, token)
+				assert.Contains(t, server.accessTokens, sessionTokenKey(token))
 			}
 		})
 	}
@@ -622,6 +542,7 @@ func TestExchangeAuthCodeContextCancellation(t *testing.T) {
 		Code:      "valid_code",
 		ExpiresAt: time.Now().Add(time.Minute),
 	}
+	settleCredentials(server)
 
 	// Create a cancelled context
 	ctx, cancel := context.WithCancel(t.Context())
@@ -968,432 +889,12 @@ func (testLogger) WithContext(_ context.Context) logger.Logger        { return t
 func (testLogger) Log(_ logger.LogLevel, _ string, _ ...logger.Field) {}
 func (testLogger) Flush() error                                       { return nil }
 
-// TestCheckBasicAuthToken tests the basic auth token validation helper
-func TestCheckBasicAuthToken(t *testing.T) {
-	tests := []struct {
-		name           string
-		setupServer    func(*OAuth2Server)
-		setupSession   func(*http.Request, *httptest.ResponseRecorder)
-		expectedResult bool
-	}{
-		{
-			name: "valid token returns true",
-			setupServer: func(s *OAuth2Server) {
-				s.accessTokens["valid_token"] = AccessToken{
-					Token:     "valid_token",
-					ExpiresAt: time.Now().Add(time.Hour),
-				}
-			},
-			setupSession: func(req *http.Request, rec *httptest.ResponseRecorder) {
-				_ = gothic.StoreInSession("access_token", "valid_token", req, rec)
-				req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-			},
-			expectedResult: true,
-		},
-		{
-			name:        "no token in session returns false",
-			setupServer: func(_ *OAuth2Server) {},
-			setupSession: func(_ *http.Request, _ *httptest.ResponseRecorder) {
-				// No session setup
-			},
-			expectedResult: false,
-		},
-		{
-			name: "expired token returns false",
-			setupServer: func(s *OAuth2Server) {
-				s.accessTokens["expired_token"] = AccessToken{
-					Token:     "expired_token",
-					ExpiresAt: time.Now().Add(-time.Hour),
-				}
-			},
-			setupSession: func(req *http.Request, rec *httptest.ResponseRecorder) {
-				_ = gothic.StoreInSession("access_token", "expired_token", req, rec)
-				req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-			},
-			expectedResult: false,
-		},
-		{
-			name:        "non-existent token returns false",
-			setupServer: func(_ *OAuth2Server) {},
-			setupSession: func(req *http.Request, rec *httptest.ResponseRecorder) {
-				_ = gothic.StoreInSession("access_token", "nonexistent", req, rec)
-				req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-			},
-			expectedResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Setup Gothic store
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			server := &OAuth2Server{
-				settings:     &conf.Settings{},
-				accessTokens: make(map[string]AccessToken),
-			}
-			tt.setupServer(server)
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			rec := httptest.NewRecorder()
-			tt.setupSession(req, rec)
-
-			result := server.checkBasicAuthToken(req, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// TestCheckSocialAuthSessions tests the social auth sessions validation helper.
-// It verifies that checkSocialAuthSessions iterates over configured OAuth providers.
-func TestCheckSocialAuthSessions(t *testing.T) {
-	tests := []struct {
-		name           string
-		providers      []conf.OAuthProviderConfig
-		expectedResult bool
-	}{
-		{
-			name:           "no providers configured returns false",
-			providers:      nil,
-			expectedResult: false,
-		},
-		{
-			name: "google enabled but no session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-		{
-			name: "github enabled but no session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-		{
-			name: "multiple providers enabled but no session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
-				{Provider: ConfigMicrosoft, Enabled: true, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-		{
-			name: "provider disabled returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: false, UserID: "user@example.com"},
-			},
-			expectedResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			server := &OAuth2Server{
-				settings: &conf.Settings{
-					Security: conf.Security{
-						OAuthProviders: tt.providers,
-					},
-				},
-			}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			result := server.checkSocialAuthSessions(req, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// storeMultipleInSession stores multiple key-value pairs in the same Gothic session.
-// Each StoreInSession call requires the request cookie to be updated before the next call
-// so all values end up in the same session. Returns the final request with all cookies set.
-func storeMultipleInSession(t *testing.T, req *http.Request, pairs ...string) *http.Request {
-	t.Helper()
-	if len(pairs)%2 != 0 {
-		t.Fatal("storeMultipleInSession requires an even number of arguments (key-value pairs)")
-	}
-	for i := 0; i < len(pairs); i += 2 {
-		rec := httptest.NewRecorder()
-		_ = gothic.StoreInSession(pairs[i], pairs[i+1], req, rec)
-		req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
-	}
-	return req
-}
-
-// TestCheckSocialAuthDirect tests the direct auth_provider session key lookup path.
-func TestCheckSocialAuthDirect(t *testing.T) {
-	tests := []struct {
-		name           string
-		providers      []conf.OAuthProviderConfig
-		setupSession   func(*testing.T, *http.Request) *http.Request
-		expectedResult bool
-	}{
-		{
-			name: "no auth_provider key in session returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession:   func(_ *testing.T, req *http.Request) *http.Request { return req },
-			expectedResult: false,
-		},
-		{
-			name: "auth_provider points to valid enabled provider with matching session",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderGoogle,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-		{
-			name: "auth_provider points to disabled provider returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: false, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderGoogle,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: false,
-		},
-		{
-			name: "auth_provider points to unconfigured provider returns false",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				// Session says google, but only github is configured
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderGoogle,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: false,
-		},
-		{
-			name: "auth_provider key with microsoft provider (different config name)",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigMicrosoft, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderMicrosoft,
-					"userId", "user@example.com",
-					ProviderMicrosoft, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-		{
-			name: "auth_provider key with OIDC provider (different config name)",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigOIDC, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				return storeMultipleInSession(t, req,
-					SessionKeyAuthProvider, ProviderOIDC,
-					"userId", "user@example.com",
-					ProviderOIDC, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			settings := &conf.Settings{
-				Security: conf.Security{
-					OAuthProviders: tt.providers,
-				},
-			}
-			conftest.SetTestSettings(settings)
-			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
-
-			server := &OAuth2Server{settings: settings}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			req = tt.setupSession(t, req)
-
-			userId, _ := gothic.GetFromSession("userId", req)
-			result := server.checkSocialAuthDirect(req, userId, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// TestCheckSocialAuthFallback tests the fallback path that iterates all providers.
-func TestCheckSocialAuthFallback(t *testing.T) {
-	tests := []struct {
-		name           string
-		providers      []conf.OAuthProviderConfig
-		setupSession   func(*testing.T, *http.Request) *http.Request
-		expectedResult bool
-	}{
-		{
-			name:           "no providers returns false",
-			providers:      nil,
-			setupSession:   func(_ *testing.T, req *http.Request) *http.Request { return req },
-			expectedResult: false,
-		},
-		{
-			name: "provider session without auth_provider key still works via fallback",
-			providers: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-			setupSession: func(t *testing.T, req *http.Request) *http.Request {
-				t.Helper()
-				// No auth_provider key - simulating old session format
-				return storeMultipleInSession(t, req,
-					"userId", "user@example.com",
-					ProviderGoogle, "12345",
-				)
-			},
-			expectedResult: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			settings := &conf.Settings{
-				Security: conf.Security{
-					OAuthProviders: tt.providers,
-				},
-			}
-			conftest.SetTestSettings(settings)
-			t.Cleanup(func() { conftest.NewTestSettings().Apply() })
-
-			server := &OAuth2Server{settings: settings}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			req = tt.setupSession(t, req)
-
-			userId, _ := gothic.GetFromSession("userId", req)
-			result := server.checkSocialAuthFallback(req, userId, testLogger{})
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
-// TestCheckSocialAuthSessionsWithAuthProviderKey tests the full checkSocialAuthSessions
-// path with the auth_provider key set (new sessions).
-func TestCheckSocialAuthSessionsWithAuthProviderKey(t *testing.T) {
-	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-	settings := &conf.Settings{
-		Security: conf.Security{
-			OAuthProviders: []conf.OAuthProviderConfig{
-				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-			},
-		},
-	}
-	conftest.SetTestSettings(settings)
-	t.Cleanup(func() { conftest.NewTestSettings().Apply() })
-
-	server := &OAuth2Server{settings: settings}
-
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req = storeMultipleInSession(t, req,
-		SessionKeyAuthProvider, ProviderGoogle,
-		"userId", "user@example.com",
-		ProviderGoogle, "12345",
-	)
-
-	result := server.checkSocialAuthSessions(req, testLogger{})
-	assert.True(t, result, "checkSocialAuthSessions should succeed with auth_provider key in session")
-}
-
-// TestCheckProviderAuth tests the generic provider auth validation function
-func TestCheckProviderAuth(t *testing.T) {
-	tests := []struct {
-		name           string
-		config         providerAuthConfig
-		userId         string
-		expectedResult bool
-	}{
-		{
-			name: "disabled provider returns false",
-			config: providerAuthConfig{
-				providerName:   ProviderGoogle,
-				enabled:        false,
-				allowedUserIds: "user@example.com",
-			},
-			userId:         "user@example.com",
-			expectedResult: false,
-		},
-		{
-			name: "enabled but no session returns false",
-			config: providerAuthConfig{
-				providerName:   ProviderGoogle,
-				enabled:        true,
-				allowedUserIds: "user@example.com",
-			},
-			userId:         "",
-			expectedResult: false,
-		},
-		{
-			name: "works with github provider",
-			config: providerAuthConfig{
-				providerName:   ProviderGitHub,
-				enabled:        false,
-				allowedUserIds: "user@example.com",
-			},
-			userId:         "user@example.com",
-			expectedResult: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
-
-			server := &OAuth2Server{
-				settings: &conf.Settings{},
-			}
-
-			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-			result := server.checkProviderAuth(req, tt.userId, testLogger{}, tt.config)
-			assert.Equal(t, tt.expectedResult, result)
-		})
-	}
-}
-
 // mockOIDCDiscovery creates an httptest server that serves a minimal OIDC discovery document.
 func mockOIDCDiscovery(t *testing.T) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/.well-known/openid-configuration" {
-			w.Header().Set("Content-Type", "application/json")
-			baseURL := "http://" + r.Host
-			_, _ = w.Write([]byte(`{
-				"issuer": "` + baseURL + `",
-				"authorization_endpoint": "` + baseURL + `/authorize",
-				"token_endpoint": "` + baseURL + `/token",
-				"userinfo_endpoint": "` + baseURL + `/userinfo",
-				"jwks_uri": "` + baseURL + `/jwks"
-			}`))
+			writeOIDCDiscovery(w, r)
 			return
 		}
 		http.NotFound(w, r)
@@ -1402,10 +903,27 @@ func mockOIDCDiscovery(t *testing.T) *httptest.Server {
 	return server
 }
 
+// writeOIDCDiscovery writes a minimal OIDC discovery document for the request host.
+func writeOIDCDiscovery(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	baseURL := "http://" + r.Host
+	_, _ = w.Write([]byte(`{
+		"issuer": "` + baseURL + `",
+		"authorization_endpoint": "` + baseURL + `/authorize",
+		"token_endpoint": "` + baseURL + `/token",
+		"userinfo_endpoint": "` + baseURL + `/userinfo",
+		"jwks_uri": "` + baseURL + `/jwks"
+	}`))
+}
+
 func TestInitializeProviders_OIDC_Success(t *testing.T) {
 	discovery := mockOIDCDiscovery(t)
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
+	// A failure recorded by an earlier discovery attempt must not outlive a
+	// successful registration.
+	recordOIDCDiscoveryFailure(discovery.URL, errors.NewStd("earlier failure"))
+	t.Cleanup(clearOIDCDiscoveryFailure)
 
 	settings := &conf.Settings{
 		Security: conf.Security{
@@ -1425,32 +943,58 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 		},
 	}
 
-	initializeProviders(settings)
+	<-registerProviders(t, settings)
 
 	providers := goth.GetProviders()
 	provider, ok := providers[ProviderOIDC]
 	require.True(t, ok, "OIDC provider should be registered with goth")
 	assert.IsType(t, &pkceOIDCProvider{}, provider, "OIDC provider should be wrapped with PKCE support")
+
+	goth.ClearProviders()
+	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+		"a successful registration must clear the recorded discovery failure")
 }
 
-// cancelAllOIDCRetries cancels and forgets every in-flight OIDC discovery retry.
-// Test-only helper for resetting OIDC retry state between tests. Production reaps
-// these on shutdown via cancelAllOIDCRetriesLocked (shutdownOIDCRetries); there is
-// no settings-reload path that rebuilds providers at runtime, so this wrapper lives
-// with the tests rather than in the production binary.
-func cancelAllOIDCRetries() {
-	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
-	cancelAllOIDCRetriesLocked()
+// shutdownOIDCRetries shuts down discovery for the current server instance, as
+// its shutdown watcher does when the server context ends.
+func shutdownOIDCRetries() {
+	oidcMu.Lock()
+	epoch := oidcEnableEpoch
+	oidcMu.Unlock()
+	shutdownOIDCRetriesFor(epoch)
+}
+
+// registerProviders runs a registration pass for settings and returns the done
+// channel of its OIDC discovery goroutine (nil when none started). Its cleanup
+// supersedes the pass with an empty one, waits for the goroutine and resets the
+// process-global registry and failure slot, so no goroutine outlives its test.
+func registerProviders(t *testing.T, settings *conf.Settings) <-chan struct{} {
+	t.Helper()
+	// A prior test's server shutdown may have disabled discovery.
+	enableOIDCRetries()
+	done := initializeProviders(settings)
+	t.Cleanup(func() { resetProviders(t, done) })
+	return done
+}
+
+// resetProviders supersedes the current registration with an empty one and waits
+// for the given discovery goroutine to exit.
+func resetProviders(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	initializeProviders(&conf.Settings{})
+	if done != nil {
+		testutil.WaitForChannel(t, done, testutil.DefaultTestTimeout, "OIDC discovery goroutine did not exit after it was superseded")
+	}
+	// Every discovery goroutine, not only the one handed in, must be gone before
+	// the logger and the registry are reset.
+	oidcDiscoveryGoroutines.Wait()
+	goth.ClearProviders()
+	clearOIDCDiscoveryFailure()
 }
 
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
-	// A prior test's server shutdown may have disabled retries; re-enable so the
-	// discovery-failure path actually starts a background retry.
-	enableOIDCRetries()
-	t.Cleanup(cancelAllOIDCRetries)
 
 	settings := &conf.Settings{
 		Security: conf.Security{
@@ -1470,12 +1014,13 @@ func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 		},
 	}
 
-	// Should not panic; just log error and skip
-	initializeProviders(settings)
+	// Discovery runs in the background; the retry window outlasts the test, so
+	// the channel is not awaited here.
+	registerProviders(t, settings)
 
-	providers := goth.GetProviders()
-	_, ok := providers[ProviderOIDC]
-	assert.False(t, ok, "OIDC provider should not be registered when discovery fails")
+	requireOIDCFailureRecorded(t)
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.Error(t, err, "OIDC provider should not be registered when discovery fails")
 }
 
 func TestInitializeProviders_OIDC_DefaultScopes(t *testing.T) {
@@ -1501,7 +1046,7 @@ func TestInitializeProviders_OIDC_DefaultScopes(t *testing.T) {
 		},
 	}
 
-	initializeProviders(settings)
+	<-registerProviders(t, settings)
 
 	providers := goth.GetProviders()
 	_, ok := providers[ProviderOIDC]
@@ -1532,7 +1077,7 @@ func TestInitializeProviders_OIDC_CustomScopesWithoutOpenID(t *testing.T) {
 		},
 	}
 
-	initializeProviders(settings)
+	<-registerProviders(t, settings)
 
 	providers := goth.GetProviders()
 	_, ok := providers[ProviderOIDC]
@@ -1567,204 +1112,186 @@ func TestInitializeProviders_OIDC_Disabled(t *testing.T) {
 	assert.False(t, ok, "Disabled OIDC provider should not be registered")
 }
 
-func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
-	goth.ClearProviders()
-	t.Cleanup(goth.ClearProviders)
+// testOIDCPolicy is a retry policy fast enough for tests.
+var testOIDCPolicy = oidcRetryPolicy{
+	initialBackoff: 20 * time.Millisecond,
+	maxBackoff:     50 * time.Millisecond,
+	maxDuration:    30 * time.Second,
+}
 
-	// Start a server that fails the first discovery request, then succeeds.
-	// Use a sync.Once to ensure exactly the first /.well-known request fails.
-	// The doneCh channel is closed after goth.UseProviders is called by the retry goroutine,
-	// providing a proper synchronization point for reading the goth providers map.
-	var failOnce sync.Once
-	var firstRequestFailed atomic.Bool
+// beginDiscoveryForTest starts a registration generation with no providers and
+// returns the context and generation of its discovery goroutine, so a test can
+// drive startOIDCDiscovery directly. Its cleanup supersedes the generation.
+func beginDiscoveryForTest(t *testing.T) (ctx context.Context, gen uint64) {
+	t.Helper()
+	enableOIDCRetries()
+	ctx, gen, start := beginProviderRegistration(nil, testOIDCRegistration("http://begin.test"))
+	require.True(t, start, "discovery should be allowed to start")
+	t.Cleanup(func() { resetProviders(t, nil) })
+	return ctx, gen
+}
 
-	// Patch: wrap the success path to signal completion after UseProviders runs.
-	// We detect success by counting successful discovery responses from the server.
-	var successCount atomic.Int32
+func testOIDCRegistration(issuerURL string) *oidcRegistration {
+	return &oidcRegistration{
+		issuerURL:    issuerURL,
+		discoveryURL: oidcDiscoveryURL(issuerURL),
+		clientID:     "test-client",
+		clientSecret: "test-secret",
+		redirectURI:  "http://localhost/auth/openid-connect/callback",
+		scopes:       []string{"openid", "profile", "email"},
+	}
+}
 
+func TestStartOIDCDiscovery_SucceedsOnRetry(t *testing.T) {
+	logs := useSplitLogFiles(t)
+
+	// A server that fails the first discovery request, then succeeds.
+	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			shouldFail := false
-			failOnce.Do(func() {
-				shouldFail = true
-				firstRequestFailed.Store(true)
-			})
-			if shouldFail {
-				http.Error(w, "not ready", http.StatusServiceUnavailable)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			baseURL := "http://" + r.Host
-			_, _ = w.Write([]byte(`{
-				"issuer": "` + baseURL + `",
-				"authorization_endpoint": "` + baseURL + `/authorize",
-				"token_endpoint": "` + baseURL + `/token",
-				"userinfo_endpoint": "` + baseURL + `/userinfo",
-				"jwks_uri": "` + baseURL + `/jwks"
-			}`))
-			successCount.Add(1)
+		if r.URL.Path != "/.well-known/openid-configuration" {
+			http.NotFound(w, r)
 			return
 		}
-		http.NotFound(w, r)
+		if requests.Add(1) == 1 {
+			http.Error(w, "not ready", http.StatusServiceUnavailable)
+			return
+		}
+		writeOIDCDiscovery(w, r)
 	}))
 	t.Cleanup(server.Close)
 
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, gen := beginDiscoveryForTest(t)
+	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(server.URL), testOIDCPolicy)
+
+	testutil.WaitForChannel(t, done, testutil.LongTestTimeout, "OIDC discovery goroutine did not exit after registering the provider")
+	assert.GreaterOrEqual(t, requests.Load(), int32(2), "the first discovery request failed, so a retry must have run")
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.NoError(t, err, "the retry must register the provider")
+	assert.Nil(t, lastOIDCDiscoveryErr.Load(), "a successful retry must clear the recorded discovery failure")
+	// The late registration must reach the console and main log, not only the security log.
+	assert.Contains(t, logs.main(), "OIDC provider registered after background retry")
+	assert.Contains(t, logs.main(), "security.oidc")
+	assert.Contains(t, logs.main(), server.URL+"/.well-known/openid-configuration", "the event must carry the discovery URL")
+	assert.Contains(t, logs.security(), "OIDC provider registered after background retry")
+}
+
+func TestStartOIDCDiscovery_CanceledByContext(t *testing.T) {
+	// The first attempt is held in flight while the context is cancelled, then
+	// answered with a failure that must not be recorded.
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseRequest := func() { releaseOnce.Do(func() { close(release) }) }
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		entered <- struct{}{}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(releaseRequest)
+
+	ctx, gen := beginDiscoveryForTest(t)
+	ctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
+	done := startOIDCDiscovery(ctx, gen, testOIDCRegistration(server.URL), testOIDCPolicy)
 
-	config := conf.OAuthProviderConfig{
-		Provider:     "oidc",
-		Enabled:      true,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		IssuerURL:    server.URL,
-		UserID:       "user@example.com",
-	}
-
-	startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"})
-
-	// Wait for the server to have served a successful discovery response.
-	// We verify via the server-side counter rather than reading goth's providers map
-	// directly, since goth's global map is not concurrency-safe and would trigger
-	// the race detector. The successful response proves openidConnect.New() succeeded
-	// and goth.UseProviders() was called.
-	require.Eventually(t, func() bool {
-		return successCount.Load() > 0
-	}, 25*time.Second, 500*time.Millisecond, "OIDC discovery retry should eventually succeed")
-
-	assert.True(t, firstRequestFailed.Load(), "first discovery request should have failed to verify retry behavior")
-}
-
-func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
-	goth.ClearProviders()
-	t.Cleanup(goth.ClearProviders)
-
-	ctx, cancel := context.WithCancel(t.Context())
-
-	config := conf.OAuthProviderConfig{
-		Provider:     "oidc",
-		Enabled:      true,
-		ClientID:     "test-client",
-		ClientSecret: "test-secret",
-		IssuerURL:    "http://unreachable.invalid:1",
-		UserID:       "user@example.com",
-	}
-
-	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"})
-
-	// Cancel immediately; goroutine is waiting in time.After(5s) and will
-	// see ctx.Done() on the next select iteration without ever attempting discovery
+	testutil.WaitForChannel(t, entered, testutil.DefaultTestTimeout, "the first discovery attempt did not start")
 	cancel()
+	releaseRequest()
 
-	// Wait deterministically for the goroutine to exit
-	select {
-	case <-done:
-		// Goroutine exited; safe to read goth's map without races
-	case <-time.After(5 * time.Second):
-		t.Fatal("OIDC retry goroutine did not exit after context cancellation")
+	testutil.WaitForChannel(t, done, testutil.DefaultTestTimeout, "OIDC discovery goroutine did not exit after context cancellation")
+
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.Error(t, err, "OIDC provider should not be registered after cancel")
+	assert.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+		"a cancelled attempt is not a discovery failure")
+}
+
+// TestOIDCDiscovery_ShutdownSupersedesInFlightAttempt pins the outcome of a
+// shutdown while an attempt is in flight: whether the attempt succeeds or fails
+// after shutdown, nothing is registered and no failure is recorded. The goroutine
+// stops at the cancelled context before it commits; the generation check inside
+// the commit is pinned separately by TestFinishOIDCDiscovery_StaleGenerationWritesNothing.
+func TestOIDCDiscovery_ShutdownSupersedesInFlightAttempt(t *testing.T) {
+	tests := []struct {
+		name         string
+		lateSucceeds bool
+	}{
+		{name: "late success", lateSucceeds: true},
+		{name: "late failure", lateSucceeds: false},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(func() { enableOIDCRetries() })
+			idp := newGatedIDP(t, tt.lateSucceeds)
+			done := idp.registerProviders(t, oidcSettings(idp.URL))
+			idp.waitEntered(t)
 
-	providers := goth.GetProviders()
-	_, ok := providers[ProviderOIDC]
-	assert.False(t, ok, "OIDC provider should not be registered after cancel")
-}
+			shutdownOIDCRetries()
+			idp.release()
+			waitDone(t, done)
 
-func TestCancelOIDCRetry(t *testing.T) {
-	// The retry map and disabled flag are package-global shared state; start
-	// enabled (a prior test's server shutdown may have disabled retries) and
-	// clean up afterwards.
-	enableOIDCRetries()
-	t.Cleanup(cancelAllOIDCRetries)
-
-	// cancelAllOIDCRetries must be safe to call when no retry is running.
-	cancelAllOIDCRetries()
-
-	// Set a cancel function for an issuer and verify cancelAllOIDCRetries calls it.
-	const issuer = "https://issuer.example/single"
-	ctx, cancel := context.WithCancel(t.Context())
-	require.True(t, setOIDCRetryCancel(issuer, cancel), "retry should register while enabled")
-
-	cancelAllOIDCRetries()
-
-	select {
-	case <-ctx.Done():
-		// Expected
-	default:
-		t.Error("expected context to be canceled")
+			_, err := goth.GetProvider(ProviderOIDC)
+			require.Error(t, err, "an attempt that finishes after shutdown must not register the provider")
+			require.ErrorIs(t, ProviderRegistrationError(ProviderOIDC), errProviderNotRegistered,
+				"an attempt that finishes after shutdown must not record a failure")
+		})
 	}
 }
 
-// TestOIDCRetryCancel_PerIssuer is the regression test for the per-issuer OIDC
-// retry fix: with a single
-// package-global cancel func, initializing a second OIDC provider cancelled the
-// first provider's retry. Per-issuer keying must keep each provider's retry
-// independent, and cancelAllOIDCRetries must cancel every outstanding retry.
-func TestOIDCRetryCancel_PerIssuer(t *testing.T) {
-	// Start from a clean slate; earlier tests may have left entries behind or
-	// disabled retries via a server shutdown.
-	enableOIDCRetries()
-	t.Cleanup(cancelAllOIDCRetries)
-	cancelAllOIDCRetries()
+// TestOIDCDiscovery_ShutdownForgetsActiveRegistration pins that shutdown forgets
+// the OIDC registration of the current generation: after a new server instance
+// re-enables discovery, a pass with the same OIDC settings starts discovery
+// instead of treating the shut down attempt as still running.
+func TestOIDCDiscovery_ShutdownForgetsActiveRegistration(t *testing.T) {
+	t.Cleanup(func() { enableOIDCRetries() })
+	idp := newGatedIDP(t, true)
+	settings := oidcSettings(idp.URL)
+	done := idp.registerProviders(t, settings)
+	idp.waitEntered(t)
 
-	const issuerA = "https://issuer-a.example"
-	const issuerB = "https://issuer-b.example"
-
-	ctxA, cancelA := context.WithCancel(t.Context())
-	ctxB, cancelB := context.WithCancel(t.Context())
-
-	// Register the first provider's retry, then the second's. Under the old
-	// single-global design, registering B cancelled A. It must not now.
-	require.True(t, setOIDCRetryCancel(issuerA, cancelA), "issuer A retry should register")
-	require.True(t, setOIDCRetryCancel(issuerB, cancelB), "issuer B retry should register")
-
-	require.NoError(t, ctxA.Err(), "issuer A retry must survive issuer B registration")
-	require.NoError(t, ctxB.Err(), "issuer B retry must be active")
-
-	// Re-registering the same issuer cancels and replaces only that issuer's
-	// prior retry, leaving the other issuer untouched.
-	ctxB2, cancelB2 := context.WithCancel(t.Context())
-	require.True(t, setOIDCRetryCancel(issuerB, cancelB2), "issuer B retry should re-register")
-	require.Error(t, ctxB.Err(), "prior issuer B retry must be cancelled when replaced")
-	require.NoError(t, ctxB2.Err(), "replacement issuer B retry must be active")
-	require.NoError(t, ctxA.Err(), "issuer A must remain active when issuer B is replaced")
-
-	// cancelAllOIDCRetries cancels every remaining retry.
-	cancelAllOIDCRetries()
-	require.Error(t, ctxA.Err(), "cancelAllOIDCRetries must cancel issuer A")
-	assert.Error(t, ctxB2.Err(), "cancelAllOIDCRetries must cancel the replacement retry")
-}
-
-// TestOIDCRetry_DisabledAfterShutdown verifies that once shutdown has begun no
-// new OIDC discovery retry can start, closing the race where a late provider
-// (re)initialization would spawn a goroutine that outlives the server.
-func TestOIDCRetry_DisabledAfterShutdown(t *testing.T) {
-	// Restore enabled state for any later tests sharing this package-global.
-	t.Cleanup(enableOIDCRetries)
-	t.Cleanup(cancelAllOIDCRetries)
-	enableOIDCRetries()
-
-	const issuer = "https://issuer.example/shutdown"
-
-	// While enabled, a retry registers and stays active.
-	ctx1, cancel1 := context.WithCancel(t.Context())
-	require.True(t, setOIDCRetryCancel(issuer, cancel1), "retry should register while enabled")
-	require.NoError(t, ctx1.Err(), "registered retry must stay active")
-
-	// Shutdown cancels in-flight retries and blocks new ones.
 	shutdownOIDCRetries()
-	require.Error(t, ctx1.Err(), "shutdown must cancel the in-flight retry")
+	idp.release()
+	waitDone(t, done)
 
-	// A registration after shutdown is refused and its context is cancelled,
-	// so initializeOIDCProvider will not start the goroutine.
-	ctx2, cancel2 := context.WithCancel(t.Context())
-	require.False(t, setOIDCRetryCancel(issuer, cancel2), "retry must be refused after shutdown")
-	require.Error(t, ctx2.Err(), "refused retry's context must be cancelled")
-
-	// A fresh server instance re-enables retries.
 	enableOIDCRetries()
-	_, cancel3 := context.WithCancel(t.Context())
-	t.Cleanup(cancel3)
-	require.True(t, setOIDCRetryCancel(issuer, cancel3), "retry should register again after re-enable")
+	restarted := initializeProviders(settings)
+	require.NotNil(t, restarted, "the same OIDC settings after a restart must start discovery")
+	waitDone(t, restarted)
+	_, err := goth.GetProvider(ProviderOIDC)
+	require.NoError(t, err, "the restarted discovery must register the provider")
+}
+
+// TestOIDCDiscovery_DisabledAfterShutdown verifies that once shutdown has begun
+// no new OIDC discovery can start, closing the race where a late provider
+// (re)registration would spawn a goroutine that outlives the server.
+func TestOIDCDiscovery_DisabledAfterShutdown(t *testing.T) {
+	t.Cleanup(func() { enableOIDCRetries() })
+	idp := mockOIDCDiscovery(t)
+	settings := &conf.Settings{Security: conf.Security{
+		Host: "localhost",
+		OAuthProviders: []conf.OAuthProviderConfig{{
+			Provider: ConfigOIDC, Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: idp.URL,
+		}},
+	}}
+
+	// While enabled, a pass starts discovery.
+	done := registerProviders(t, settings)
+	require.NotNil(t, done, "a pass must start discovery while enabled")
+	<-done
+
+	// Shutdown blocks new discovery.
+	shutdownOIDCRetries()
+	assert.Nil(t, initializeProviders(settings), "a pass after shutdown must not start discovery")
+
+	// A fresh server instance re-enables discovery.
+	enableOIDCRetries()
+	done = initializeProviders(settings)
+	require.NotNil(t, done, "a pass after re-enable must start discovery")
+	<-done
 }
 
 // TestIsUserAuthenticatedSubnetBypassIgnoresForgedHeader verifies the automatic
@@ -2303,4 +1830,128 @@ func TestListedProxyNoticeSkipsUnlistedPeers(t *testing.T) {
 	_, noted := server.throttledMessages[listedProxyUnverifiedLogKey]
 	server.mutex.RUnlock()
 	assert.False(t, noted, "an unlisted peer must not be reported as a trusted proxy")
+}
+
+// providerSettings builds settings with the given OAuth providers and base URL.
+func providerSettings(baseURL string, providers ...conf.OAuthProviderConfig) *conf.Settings {
+	return &conf.Settings{Security: conf.Security{BaseURL: baseURL, OAuthProviders: providers}}
+}
+
+func TestReloadOAuthProviders_RegistryFollowsSettings(t *testing.T) {
+	google := func(secret string, enabled bool) conf.OAuthProviderConfig {
+		return conf.OAuthProviderConfig{Provider: ConfigGoogle, Enabled: enabled, ClientID: "g-id", ClientSecret: secret}
+	}
+	githubCfg := conf.OAuthProviderConfig{Provider: ConfigGitHub, Enabled: true, ClientID: "h-id", ClientSecret: "h-secret"}
+	// A bare host with TLS off still gets an https callback: identity providers
+	// have the https URL registered, unlike the http link notifications use.
+	bareHostSettings := providerSettings("", google("s2", true), githubCfg)
+	bareHostSettings.Security.Host = "d.example"
+	bareHostSettings.Security.TLSMode = conf.TLSModeNone
+
+	type want struct {
+		google, github bool
+		googleSecret   string
+		googleCallback string
+	}
+	steps := []struct {
+		name     string
+		settings *conf.Settings
+		want     want
+	}{
+		{name: "enable Google after an empty start", settings: providerSettings("https://a.example", google("s1", true)),
+			want: want{google: true, googleSecret: "s1", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "change the client secret", settings: providerSettings("https://a.example", google("s2", true)),
+			want: want{google: true, googleSecret: "s2", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "add GitHub", settings: providerSettings("https://a.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "disable Google", settings: providerSettings("https://a.example", google("s2", false), githubCfg),
+			want: want{github: true}},
+		{name: "re-enable Google", settings: providerSettings("https://a.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://a.example/auth/google/callback"}},
+		{name: "remove Google, GitHub stays", settings: providerSettings("https://a.example", githubCfg),
+			want: want{github: true}},
+		{name: "change the base URL", settings: providerSettings("https://b.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://b.example/auth/google/callback"}},
+		{name: "the same settings twice", settings: providerSettings("https://b.example", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://b.example/auth/google/callback"}},
+		{name: "a padded base URL is trimmed for the callback", settings: providerSettings(" https://c.example/ ", google("s2", true), githubCfg),
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://c.example/auth/google/callback"}},
+		{name: "a bare host gets an https callback whatever the TLS mode", settings: bareHostSettings,
+			want: want{google: true, github: true, googleSecret: "s2", googleCallback: "https://d.example/auth/google/callback"}},
+	}
+
+	enableOIDCRetries()
+	t.Cleanup(func() { resetProviders(t, nil) })
+	for _, step := range steps {
+		ReloadOAuthProviders(step.settings)
+
+		gp, err := goth.GetProvider(ProviderGoogle)
+		if !step.want.google {
+			require.Error(t, err, "%s: Google must not stay registered", step.name)
+		} else {
+			require.NoError(t, err, step.name)
+			g, ok := gp.(*gothGoogle.Provider)
+			require.True(t, ok, step.name)
+			assert.Equal(t, step.want.googleSecret, g.Secret, step.name)
+			assert.Equal(t, step.want.googleCallback, g.CallbackURL, step.name)
+		}
+		_, err = goth.GetProvider(ProviderGitHub)
+		if step.want.github {
+			require.NoError(t, err, step.name)
+		} else {
+			require.Error(t, err, "%s: GitHub must not be registered", step.name)
+		}
+	}
+}
+
+func TestReloadOAuthProviders_NilSettings(t *testing.T) {
+	assert.NotPanics(t, func() { ReloadOAuthProviders(nil) })
+}
+
+func TestReloadOAuthProviders_OIDCIssuerChange(t *testing.T) {
+	issuerA := mockOIDCDiscovery(t)
+	issuerC := mockOIDCDiscovery(t)
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(failing.Close)
+
+	oidc := func(issuer string) *conf.Settings {
+		return providerSettings("https://bng.example", conf.OAuthProviderConfig{
+			Provider: ConfigOIDC, Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: issuer,
+		})
+	}
+	authEndpoint := func(t *testing.T) string {
+		t.Helper()
+		p, err := goth.GetProvider(ProviderOIDC)
+		require.NoError(t, err)
+		return p.(*pkceOIDCProvider).OpenIDConfig.AuthEndpoint
+	}
+
+	// Identity provider A registers.
+	waitDone(t, registerProviders(t, oidc(issuerA.URL)))
+	require.Equal(t, issuerA.URL+"/authorize", authEndpoint(t))
+
+	// The provider uses the shared bounded client for token exchange and userinfo.
+	registered, err := goth.GetProvider(ProviderOIDC)
+	require.NoError(t, err)
+	pkce, ok := registered.(*pkceOIDCProvider)
+	require.True(t, ok, "the registered provider must be the PKCE wrapper")
+	client := pkce.HTTPClient
+	require.Same(t, oidcHTTPClient, client)
+	assert.Equal(t, OIDCHTTPTimeout, client.Timeout)
+
+	// Issuer B answers 503: A's registration is gone at once and the failure names B.
+	done := registerProviders(t, oidc(failing.URL))
+	_, err = goth.GetProvider(ProviderOIDC)
+	require.Error(t, err, "the registration of the old issuer must be gone right after the pass")
+	require.Error(t, ProviderRegistrationError(ProviderOIDC))
+	requireOIDCFailureRecorded(t)
+	assert.Contains(t, ProviderRegistrationError(ProviderOIDC).Error(), failing.URL+"/.well-known/openid-configuration")
+
+	// A working issuer C replaces B, and the recorded failure of B is reset.
+	waitDone(t, registerProviders(t, oidc(issuerC.URL)))
+	waitDone(t, done)
+	assert.Equal(t, issuerC.URL+"/authorize", authEndpoint(t))
+	require.NoError(t, ProviderRegistrationError(ProviderOIDC))
 }

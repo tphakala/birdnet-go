@@ -6,11 +6,15 @@ import (
 	"math"
 	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ultrasonic"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -245,4 +249,117 @@ func TestApplyUltrasonicFilter_UnknownModelIsNotFiltered(t *testing.T) {
 
 	assert.False(t, runUltrasonicFilterForModel(p, settings, "", pcm), "an empty model ID must not filter")
 	assert.False(t, runUltrasonicFilterForModel(p, settings, "NoSuchModel", pcm), "an unknown model must not filter")
+}
+
+// TestFlushPendingDetections_DiscardUnlikely pins the optional discard of a bat
+// detection still tagged unlikely at flush: it needs the filter, the setting and
+// the tag. Each step publishes its settings after the item is already pending, so
+// a change applies to pending items. The steps run in order on one processor.
+func TestFlushPendingDetections_DiscardUnlikely(t *testing.T) {
+	p := mergeTestProcessor(t)
+	// An approved detection enqueues its actions; the queue is never started, so it
+	// rejects them and none run.
+	p.JobQueue = jobqueue.NewJobQueue()
+
+	steps := []struct {
+		name            string
+		filterEnabled   bool
+		discardUnlikely bool
+		unlikely        bool
+		wantFlushed     int
+	}{
+		{"gate on, tagged", true, true, true, 0},
+		{"gate off, tagged", true, false, true, 1},
+		{"gate on, not tagged", true, true, false, 1},
+		{"filter off, gate on, tagged", false, true, true, 1},
+		{"gate on again, tagged", true, true, true, 0},
+	}
+	for _, step := range steps {
+		now := time.Now()
+		item := PendingDetection{
+			Source:        mergeTestSource,
+			Count:         1,
+			FirstDetected: now.Add(-10 * time.Second),
+			FlushDeadline: now.Add(-time.Second),
+		}
+		item.Detection.Result.Species = detection.Species{ScientificName: mergeTestScientific, CommonName: mergeTestCommon}
+		item.Detection.Result.Unlikely = step.unlikely
+		p.pendingDetections[pendingDetectionKey(mergeTestSource, "great tit")] = item
+
+		// Published after the item is pending: the flush must follow the new settings.
+		conf.StoreSettings(&conf.Settings{Bat: conf.BatConfig{UltrasonicFilter: conf.UltrasonicFilterConfig{
+			Enabled:         step.filterEnabled,
+			DiscardUnlikely: step.discardUnlikely,
+		}}})
+
+		pending, flushed := p.flushPendingDetections()
+		assert.Equal(t, 1, pending, step.name)
+		assert.Equal(t, step.wantFlushed, flushed, step.name)
+		assert.Empty(t, p.pendingDetections, step.name)
+	}
+}
+
+const (
+	// The click train of TestApplyUltrasonicFilter_BroadbandClicksAreTagged:
+	// 1.5 ms Hann-shaped white noise clicks every 60 ms over a low noise floor,
+	// in PCM16 LSB.
+	ultrasonicClickNoiseAmp  = 66.0
+	ultrasonicClickAmp       = 655.0
+	ultrasonicClickSeconds   = 0.0015
+	ultrasonicClickEverySec  = 0.060
+	ultrasonicClickSeed      = 21
+	ultrasonicClickNoiseSeed = 11
+)
+
+// clickTrainS16LE returns a Bat window of broadband clicks over noise.
+func clickTrainS16LE() []byte {
+	noise := rand.New(rand.NewPCG(ultrasonicClickNoiseSeed, ultrasonicClickNoiseSeed)) //nolint:gosec // G404: deterministic test noise
+	clicks := rand.New(rand.NewPCG(ultrasonicClickSeed, ultrasonicClickSeed+1))        //nolint:gosec // G404: deterministic test noise
+	v := make([]float64, ultrasonicTestSamples)
+	for i := range v {
+		v[i] = ultrasonicClickNoiseAmp * noise.NormFloat64()
+	}
+	clickLen := int(ultrasonicClickSeconds * ultrasonicTestRate)
+	step := int(ultrasonicClickEverySec * ultrasonicTestRate)
+	for start := step / 2; start+clickLen < len(v); start += step {
+		for i := range clickLen {
+			env := 0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(clickLen-1)))
+			v[start+i] += ultrasonicClickAmp * env * clicks.NormFloat64()
+		}
+	}
+	pcm := make([]byte, len(v)*bytesPerPCM16Sample)
+	for i, x := range v {
+		binary.LittleEndian.PutUint16(pcm[i*bytesPerPCM16Sample:], uint16(int16(math.Round(x)))) //nolint:gosec // G115: intentional int16 to uint16 bit reinterpretation for PCM
+	}
+	return pcm
+}
+
+// TestApplyUltrasonicFilter_BroadbandClicksAreTagged pins the call site of the
+// broadband step: a click train passes the plain CV check, is tagged once the
+// broadband share is removed, and the lowered CV is the one stored.
+func TestApplyUltrasonicFilter_BroadbandClicksAreTagged(t *testing.T) {
+	p, settings := newUltrasonicFilterFixture(t)
+	pcm := clickTrainS16LE()
+	cfg := settings.Bat.UltrasonicFilter
+
+	samples := make([]float32, len(pcm)/bytesPerPCM16Sample)
+	_, err := dsppcm.BytesToFloat32(samples, pcm)
+	require.NoError(t, err)
+	rawCV, ok := ultrasonic.ComputeUSFrameCV(samples, ultrasonicTestRate, cfg)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, rawCV, cfg.CVThreshold, "the click train must pass the plain CV check")
+
+	item := classifier.Results{
+		PCMdata: pcm,
+		ModelID: classifier.RegistryIDBat,
+		Source:  datastore.AudioSource{ID: ultrasonicTestConnection},
+	}
+	detections := []Detections{{Result: detection.Result{}}}
+	p.applyUltrasonicFilter(settings, item, detections)
+
+	got := detections[0].Result
+	assert.True(t, got.Unlikely)
+	assert.Equal(t, detection.UnlikelySourceUltrasonicCV, got.UnlikelySources)
+	assert.Less(t, got.UltrasonicCV, cfg.CVThreshold)
+	assert.InDelta(t, cfg.CVThreshold, got.UltrasonicCVThreshold, 0)
 }

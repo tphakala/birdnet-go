@@ -754,27 +754,41 @@ func TestValidateSpeciesConfig_NaNThresholdRejected(t *testing.T) {
 
 func TestValidateModelConsensusSettings(t *testing.T) {
 	t.Parallel()
+	anyModel := func(minModels int, allEligible bool) ModelConsensusSettings {
+		return ModelConsensusSettings{Rules: []ModelConsensusRule{{MinModels: minModels, AllEligible: allEligible}}}
+	}
+	named := func(minModels int, allEligible bool) ModelConsensusSettings {
+		return ModelConsensusSettings{Rules: []ModelConsensusRule{
+			{Species: []string{"Parus major"}, Models: []string{"perch_v2"}, MinModels: minModels, AllEligible: allEligible},
+		}}
+	}
 	tests := []struct {
 		name      string
 		cfg       ModelConsensusSettings
 		wantError bool
 	}{
-		{"disabled zero accepted", ModelConsensusSettings{MinModels: 0}, false},
-		{"disabled in range accepted", ModelConsensusSettings{MinModels: MaxModelConsensusMinModels}, false},
-		{"disabled below minimum rejected", ModelConsensusSettings{MinModels: MinModelConsensusMinModels - 1}, true},
-		{"disabled above maximum rejected", ModelConsensusSettings{MinModels: MaxModelConsensusMinModels + 1}, true},
-		{"all species zero rejected", ModelConsensusSettings{AllSpecies: true, MinModels: 0}, true},
-		{"all species below minimum rejected", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels - 1}, true},
-		{"listed species above maximum rejected", ModelConsensusSettings{ListedSpecies: true, MinModels: MaxModelConsensusMinModels + 1}, true},
-		{"enabled minimum accepted", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels}, false},
-		{"enabled maximum accepted", ModelConsensusSettings{ListedSpecies: true, MinModels: MaxModelConsensusMinModels}, false},
+		{"no rules accepted", ModelConsensusSettings{}, false},
+		{"any model zero rejected", anyModel(0, false), true},
+		{"any model below minimum rejected", anyModel(MinModelConsensusMinModels-1, false), true},
+		{"any model above maximum rejected", anyModel(MaxModelConsensusMinModels+1, false), true},
+		{"any model minimum accepted", anyModel(MinModelConsensusMinModels, false), false},
+		{"any model maximum accepted", anyModel(MaxModelConsensusMinModels, true), false},
+		{"named rule with minModels rejected", named(MinModelConsensusMinModels, false), true},
+		{"named rule with allEligible rejected", named(0, true), true},
+		{"named rule with neither accepted", named(0, false), false},
+		{"unknown alias accepted, membership is API only", ModelConsensusSettings{Rules: []ModelConsensusRule{
+			{Models: []string{"future_model"}},
+		}}, false},
+		{"second rule is checked", ModelConsensusSettings{Rules: []ModelConsensusRule{
+			{MinModels: MinModelConsensusMinModels}, {MinModels: 9},
+		}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			err := validateModelConsensusSettings(&tt.cfg)
 			if tt.wantError {
-				assertValidationError(t, err, "model-consensus-min-models")
+				assertValidationError(t, err, "model-consensus-rule")
 			} else {
 				assert.NoError(t, err)
 			}
@@ -784,7 +798,7 @@ func TestValidateModelConsensusSettings(t *testing.T) {
 
 // TestValidateRealtimeSettings_ModelConsensusWired pins that the realtime
 // validator, which the settings API runs on every save, rejects an enabled model
-// consensus filter with an unusable minimum.
+// consensus rule with an unusable minimum.
 func TestValidateRealtimeSettings_ModelConsensusWired(t *testing.T) {
 	t.Parallel()
 	settings := &RealtimeSettings{
@@ -793,11 +807,11 @@ func TestValidateRealtimeSettings_ModelConsensusWired(t *testing.T) {
 			Sources: []AudioSourceConfig{{Name: "test", Device: testAudioDeviceSysdefault, Model: "birdnet"}},
 			Export:  ExportSettings{Type: AudioExportTypeWAV},
 		},
-		ModelConsensus: ModelConsensusSettings{AllSpecies: true, MinModels: 9},
+		ModelConsensus: ModelConsensusSettings{Rules: []ModelConsensusRule{{MinModels: 9}}},
 	}
 
-	assertValidationError(t, validateRealtimeSettings(settings), "model-consensus-min-models")
+	assertValidationError(t, validateRealtimeSettings(settings), "model-consensus-rule")
 
-	settings.ModelConsensus.MinModels = MinModelConsensusMinModels
+	settings.ModelConsensus.Rules[0].MinModels = MinModelConsensusMinModels
 	assert.NoError(t, validateRealtimeSettings(settings))
 }

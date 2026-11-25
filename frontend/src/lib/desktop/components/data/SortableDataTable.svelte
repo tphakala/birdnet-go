@@ -10,9 +10,20 @@
   - SortableHeader.svelte  for sortable column headers
   - ResizableContainer.svelte for the sticky-header scroll body
   - EmptyState.svelte      for the empty state
+  - LoadingSpinner.svelte  for the loading state
 
-  Unlike the controlled DataTable.svelte (which delegates sorting to the parent),
-  this component sorts and filters internally. Consumers declare columns with a
+  Body modes: the default is a resizable box (ResizableContainer). With
+  `resizable={false}` the table takes its natural height, and `bodyMaxHeight`
+  caps it so a long list scrolls under a sticky header while a short list
+  stays compact. A body without a sortable column is a tab stop so the arrow
+  keys can scroll it; with a `title` it is also a region named by it. The `notice` snippet
+  renders between the header bar and the body in every state (an error above
+  rows that are still shown), and the `empty` snippet replaces the default empty state.
+  While `loading` is true the body shows a spinner and a visible label
+  (`loadingLabel`, default "Loading"), announced through a status region that
+  stays in the document.
+
+  This component sorts and filters internally. Consumers declare columns with a
   `sortValue` accessor, a `searchAccessor`, and a `renderCell` snippet for custom
   cell content (bars, badges, buttons).
 
@@ -26,15 +37,20 @@
   import { Search } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import type { Column } from './DataTable.types';
+  import { createFocusReturn } from '$lib/utils/focusReturn';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
+  import { textAlignClass, type Column } from './DataTable.types';
   import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import EmptyState from '$lib/desktop/components/ui/EmptyState.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
 
   interface Props {
     columns: Column<T>[];
     data: T[];
     loading?: boolean;
+    /** Text shown, and announced, while `loading` is true; defaults to the generic loading label. */
+    loadingLabel?: string;
 
     // Header bar
     title?: string;
@@ -55,6 +71,10 @@
     defaultSortKey?: string;
 
     // States
+    /** Rendered between the header bar and the body in every state, e.g. an ErrorAlert. */
+    notice?: Snippet;
+    /** Replaces the default EmptyState when `data` is empty; may render nothing. */
+    empty?: Snippet;
     emptyTitle?: string;
     emptyDescription?: string;
     emptyIcon?: Snippet;
@@ -65,6 +85,11 @@
     defaultHeight?: number;
     minHeight?: number;
     maxHeight?: number;
+    /**
+     * CSS length that caps the body height when `resizable` is false, e.g.
+     * `min(70vh, 40rem)`. The body then scrolls under the sticky header.
+     */
+    bodyMaxHeight?: string;
 
     // Rows
     keyFn?: (_item: T, _index: number) => string | number;
@@ -77,6 +102,7 @@
     columns = [],
     data = [],
     loading = false,
+    loadingLabel,
     title,
     description,
     count,
@@ -86,6 +112,8 @@
     searchPlaceholder,
     searchAccessor,
     defaultSortKey,
+    notice,
+    empty,
     emptyTitle,
     emptyDescription,
     emptyIcon,
@@ -94,6 +122,7 @@
     defaultHeight = 512,
     minHeight = 200,
     maxHeight = 800,
+    bodyMaxHeight,
     keyFn,
     rowClass,
     renderCell,
@@ -110,6 +139,14 @@
   let sortDirection = $state<'asc' | 'desc'>(initialDirection(defaultSortKey));
   let searchQuery = $state('');
 
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
+  // The table is replaced by the loading state while it holds focus (a sort button or the
+  // scroll body), so focus moves to the title instead of dropping to the page body.
+  let titleElement = $state<HTMLElement>();
+  const { track } = createFocusReturn(() => [titleElement]);
+
   function handleSort(field: string): void {
     if (sortColumn === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -117,6 +154,10 @@
       sortColumn = field;
       sortDirection = initialDirection(field);
     }
+    const column = columns.find(c => c.key === field);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && sortedData.length > 0)
+      sortStatus = sortAnnouncement(column.header, sortDirection);
   }
 
   let filteredData = $derived.by(() => {
@@ -129,8 +170,10 @@
 
   let sortedData = $derived.by(() => {
     const col = columns.find(c => c.key === sortColumn);
-    if (!col?.sortValue) return filteredData;
-    const sortValue = col.sortValue;
+    if (!col) return filteredData;
+    // A column without a sortValue sorts by its raw field value, so a sortable
+    // header sorts by the field it is keyed on.
+    const sortValue = col.sortValue ?? ((item: T) => sortKey(fieldValue(item, col)));
     const direction = sortDirection === 'asc' ? 1 : -1;
     return [...filteredData].sort((a, b) => {
       const av = sortValue(a);
@@ -145,7 +188,19 @@
     });
   });
 
+  // Clear the sort message when no rows are shown (loading, no data, a search with no matches)
+  // so a later reload or refill does not announce a sort the user did not just make.
+  $effect(() => {
+    if (loading || sortedData.length === 0) sortStatus = '';
+  });
+
   let displayCount = $derived(count ?? filteredData.length);
+
+  // The body scrolls sideways whenever the table is wider than the card, and vertically when
+  // capped, so without a sort button inside it to hold focus it needs a tab stop of its own
+  let bodyNeedsFocus = $derived(!columns.some(c => c.sortable));
+  // A focusable body with a title is announced as a region named by it
+  let scrollRegionLabel = $derived(bodyNeedsFocus && title ? title : undefined);
 
   // Fall back to the item reference (not the array index) so that re-sorting or
   // filtering reorders existing rows by identity instead of recreating DOM nodes.
@@ -153,21 +208,29 @@
     return keyFn ? keyFn(item, index) : item;
   }
 
-  function cellValue(column: Column<T>, item: T, index: number): string | number {
-    if (column.render) return column.render(item, index);
-    const value = (item as Record<string, unknown>)[column.key];
+  /** The item's own field for a column, or undefined when the item is not an object. */
+  function fieldValue(item: T, column: Column<T>): unknown {
+    return typeof item === 'object' && item !== null ? Reflect.get(item, column.key) : undefined;
+  }
+
+  /** Display form of a field: numbers kept, null shown as ''. */
+  function displayValue(value: unknown): string | number {
+    if (typeof value === 'number') return value;
     return value == null ? '' : String(value);
   }
 
-  function alignClass(align?: string): string {
-    switch (align) {
-      case 'center':
-        return 'text-center';
-      case 'right':
-        return 'text-right';
-      default:
-        return 'text-left';
+  /** Sort form of a field: dates by time, an invalid date or NaN as '', the rest as displayed. */
+  function sortKey(value: unknown): string | number {
+    if (value instanceof Date) {
+      const time = value.getTime();
+      return Number.isNaN(time) ? '' : time;
     }
+    const shown = displayValue(value);
+    return typeof shown === 'number' && Number.isNaN(shown) ? '' : shown;
+  }
+
+  function cellValue(column: Column<T>, item: T, index: number): string | number {
+    return column.render ? column.render(item, index) : displayValue(fieldValue(item, column));
   }
 
   const headerCellClass = 'py-2 px-3 text-xs font-medium text-muted';
@@ -186,7 +249,11 @@
           {/if}
           {#if title}
             <div class="min-w-0">
-              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted truncate">
+              <h3
+                bind:this={titleElement}
+                tabindex="-1"
+                class="text-xs font-semibold uppercase tracking-wider text-muted truncate focus-ring"
+              >
                 {title}
               </h3>
               {#if description}
@@ -197,7 +264,7 @@
         </div>
       {/if}
       <span
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted shrink-0"
+        class="badge-status-neutral inline-flex items-center px-2 py-0.5 rounded-full text-[0.6875rem] font-medium tabular-nums shrink-0"
       >
         {displayCount}
       </span>
@@ -219,7 +286,7 @@
             data-1p-ignore
             data-lpignore="true"
             data-form-type="other"
-            class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
           />
         </div>
       {/if}
@@ -229,17 +296,34 @@
     </div>
   </div>
 
-  <!-- Body -->
-  {#if loading}
-    <div class="flex items-center justify-center py-12">
-      <div
-        class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-        role="status"
-        aria-label={t('common.loading')}
-      ></div>
+  {#if notice}
+    <div class="px-4 has-[*]:py-3">
+      {@render notice()}
     </div>
+  {/if}
+
+  <!-- Body -->
+  <!-- The status region stays in the document so a screen reader announces the label when
+       loading starts; only its content appears and goes. -->
+  <div
+    role="status"
+    class={cn(loading && 'flex items-center justify-center gap-3 py-12 text-sm text-muted')}
+  >
+    {#if loading}
+      <LoadingSpinner size="md" aria-hidden="true" />
+      <span>{loadingLabel ?? t('common.loading')}</span>
+    {:else if sortStatus}
+      <span class="sr-only">{sortStatus}</span>
+    {/if}
+  </div>
+  {#if loading}
+    <!-- The loading state above replaces the rows -->
   {:else if data.length === 0}
-    <EmptyState title={emptyTitle} description={emptyDescription} icon={emptyIcon} />
+    {#if empty}
+      {@render empty()}
+    {:else}
+      <EmptyState title={emptyTitle} description={emptyDescription} icon={emptyIcon} />
+    {/if}
   {:else if sortedData.length === 0}
     <div class="text-center py-8 text-muted">
       <p class="text-sm">{noResultsMessage ?? t('dataDisplay.table.noData')}</p>
@@ -247,8 +331,11 @@
   {:else}
     {#snippet tableMarkup()}
       <table class="w-full text-sm">
+        {#if title}
+          <caption class="sr-only">{title}</caption>
+        {/if}
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
-          <tr class="border-b border-[var(--border-100)]">
+          <tr>
             {#each columns as column (column.key)}
               {#if column.sortable}
                 <SortableHeader
@@ -257,13 +344,14 @@
                   activeField={sortColumn}
                   direction={sortDirection}
                   onSort={handleSort}
-                  className={cn(headerCellClass, alignClass(column.align), column.className)}
+                  align={column.align}
+                  className={cn(headerCellClass, column.className)}
                   width={column.width}
                 />
               {:else}
                 <th
                   scope="col"
-                  class={cn(headerCellClass, alignClass(column.align), column.className)}
+                  class={cn(headerCellClass, textAlignClass(column.align), column.className)}
                   style:width={column.width}
                 >
                   {column.header}
@@ -276,12 +364,19 @@
           {#each sortedData as item, index (rowKey(item, index))}
             <tr
               class={cn(
-                'border-b last:border-b-0 border-[var(--border-100)]/50 transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]',
+                'border-b last:border-b-0 border-[var(--border-100)]/50 transition-colors hover:bg-[var(--hover-overlay)]',
                 rowClass?.(item)
               )}
             >
               {#each columns as column (column.key)}
-                <td class={cn('py-2 px-3', alignClass(column.align), column.className)}>
+                <td
+                  class={cn(
+                    'py-2 px-3',
+                    textAlignClass(column.align),
+                    column.align === 'right' && 'tabular-nums',
+                    column.className
+                  )}
+                >
                   {#if renderCell}
                     {@render renderCell({ column, item, index })}
                   {:else}
@@ -295,14 +390,49 @@
       </table>
     {/snippet}
 
-    {#if resizable}
-      <ResizableContainer {defaultHeight} {minHeight} {maxHeight}>
-        {@render tableMarkup()}
-      </ResizableContainer>
-    {:else}
-      <div class="overflow-x-auto">
-        {@render tableMarkup()}
-      </div>
-    {/if}
+    <div use:track>
+      {#if resizable}
+        <ResizableContainer
+          {defaultHeight}
+          {minHeight}
+          {maxHeight}
+          scrollTabStop={bodyNeedsFocus}
+          scrollLabel={scrollRegionLabel}
+        >
+          {@render tableMarkup()}
+        </ResizableContainer>
+      {:else}
+        <!-- The body can scroll, so it needs a tab stop for the arrow keys unless a sort
+             button inside it can already hold focus. -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+        <div
+          class={cn(
+            'overflow-x-auto',
+            bodyMaxHeight &&
+              'max-h-(--table-body-max-height) overflow-y-auto rounded-b-xl scroll-shadow-y'
+          )}
+          style:--table-body-max-height={bodyMaxHeight}
+          tabindex={bodyNeedsFocus ? 0 : undefined}
+          role={scrollRegionLabel ? 'region' : undefined}
+          aria-label={scrollRegionLabel}
+        >
+          {@render tableMarkup()}
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
+
+<style>
+  /* A collapsed table border belongs to the table, not to the sticky header
+     cells, so it scrolls away with the rows. An inset shadow on each header cell
+     travels with the cell instead. :global reaches the th elements that
+     SortableHeader renders, which a scoped th rule would miss. The rule is in the
+     components layer, below Tailwind's utilities, so a shadow or ring utility in
+     column.className replaces it; unlayered component CSS would beat every utility. */
+  @layer components {
+    thead :global(th) {
+      box-shadow: inset 0 -1px 0 var(--border-100);
+    }
+  }
+</style>

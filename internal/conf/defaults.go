@@ -101,11 +101,16 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnetv3.overridethreshold", false)
 	viper.SetDefault("birdnetv3.threshold", 0.5)
 
+	// BirdNET+ v3.0 model configuration (same override semantics as Perch).
+	viper.SetDefault("birdnetplus.overridethreshold", false)
+	viper.SetDefault("birdnetplus.threshold", 0.5)
+
 	// Bat detection configuration
 	viper.SetDefault("bat.threshold", 0.5)
 	viper.SetDefault("bat.nighttimeonly", true)
 	viper.SetDefault("bat.falsepositivefilter.level", 2)
 	viper.SetDefault("bat.ultrasonicfilter.enabled", true)
+	viper.SetDefault("bat.ultrasonicfilter.discardunlikely", false)
 	viper.SetDefault("bat.ultrasonicfilter.cvthreshold", 0.15)
 	viper.SetDefault("bat.ultrasonicfilter.fftsize", DefaultUltrasonicFFTSize)
 	viper.SetDefault("bat.ultrasonicfilter.hopsize", DefaultUltrasonicHopSize)
@@ -196,6 +201,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.livespectrogram", false)                         // Auto-start live spectrogram on dashboard
 	viper.SetDefault("realtime.dashboard.playbackdenoise.enabled", false)                 // Playback denoise off by default
 	viper.SetDefault("realtime.dashboard.playbackdenoise.strength", DefaultDenoisePreset) // Strength used when it is switched on
+	viper.SetDefault("realtime.dashboard.playback.highpasshz", 0)                         // Default playback high-pass cutoff in Hz (0 is off)
 
 	// Species guide configuration (disabled by default). Taxonomy/common names/links
 	// come from the offline OpenFauna dataset; online Wikipedia descriptions are
@@ -344,11 +350,6 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dogbarkfilter.species", []string{})
 
 	// Model consensus filter configuration
-	viper.SetDefault("realtime.modelconsensus.allspecies", false)
-	viper.SetDefault("realtime.modelconsensus.listedspecies", false)
-	viper.SetDefault("realtime.modelconsensus.species", []string{})
-	viper.SetDefault("realtime.modelconsensus.minmodels", DefaultModelConsensusMinModels)
-	viper.SetDefault("realtime.modelconsensus.alleligible", false)
 	viper.SetDefault("realtime.modelconsensus.debug", false)
 
 	// Telemetry configuration

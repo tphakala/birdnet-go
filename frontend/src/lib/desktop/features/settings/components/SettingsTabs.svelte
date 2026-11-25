@@ -11,7 +11,9 @@
   - Full keyboard navigation (Arrow keys, Home, End)
   - ARIA compliance for screen readers
   - Lazy content rendering (only active tab content is mounted)
-  - Integrated save/reset actions bar
+  - Integrated save/reset actions bar, replaced on a tab with saveMode 'immediate' by a
+    note, the auto-save state of the tab's own fields (autoSaveScope) and the names of
+    other tabs with unsaved changes, each opening its tab
 
   Props:
   - tabs: Array of tab definitions
@@ -21,6 +23,7 @@
   - onTabChange: Callback when tab changes
   - onReset: Callback after all settings are reset
   - showActions: Whether to show the save/reset actions bar (default: true)
+  - ariaLabel: Accessible name of the tablist (default: the shared settings tabs label)
   - class: Additional CSS classes
 
   @component
@@ -28,17 +31,28 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Snippet, Component } from 'svelte';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import type { LucideProps } from '@lucide/svelte';
+  import { CircleAlert, type LucideProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
+  import { autoSaveBusy, autoSaveFailures } from '$lib/stores/settingsAutoSave.svelte';
 
   export interface TabDefinition {
     id: string;
     label: string;
     icon?: Component<LucideProps>;
     hasChanges?: boolean;
+    /**
+     * How the tab saves: 'manual' (default) uses the page save bar, 'immediate' saves
+     * each change as it is made and replaces the bar with a note.
+     */
+    saveMode?: 'manual' | 'immediate';
+    /**
+     * Immediate tabs: the field key prefix of the tab's controls, so its save state
+     * counts only its own fields. Without it every field counts.
+     */
+    autoSaveScope?: string;
     content: Snippet;
   }
 
@@ -50,6 +64,7 @@
     onTabChange?: (_tabId: string) => void;
     onReset?: () => void;
     showActions?: boolean;
+    ariaLabel?: string;
     class?: string;
   }
 
@@ -61,6 +76,7 @@
     onTabChange,
     onReset,
     showActions = true,
+    ariaLabel,
     class: className,
   }: Props = $props();
 
@@ -77,18 +93,41 @@
     );
   });
 
+  const currentTab = $derived(tabs.find(tab => tab.id === selectedTab));
+  const immediateSave = $derived(currentTab?.saveMode === 'immediate');
+  const saveScope = $derived(currentTab?.autoSaveScope ?? '');
+  const failedSaves = $derived(immediateSave ? autoSaveFailures(saveScope) : 0);
+  // Unsaved edits on manual tabs are saved there; an immediate tab only points at them.
+  const otherUnsavedTabs = $derived(
+    immediateSave ? tabs.filter(tab => tab.id !== selectedTab && tab.hasChanges) : []
+  );
+
   // Parents use the binding for tab-specific work (e.g. mounting the location map).
   $effect(() => {
     activeTab = selectedTab;
   });
 
   // Only explicit selection writes history; restoring a URL must not push entries.
-  function selectTab(tabId: string) {
+  // Compares against the resolved tab, so the already-selected tab on a URL without the
+  // parameter pushes nothing (and cannot prompt for a change that is not one). Resolves true
+  // once the tab is selected, false when a guard held the move and the user chose to stay.
+  function selectTab(tabId: string): Promise<boolean> {
+    if (selectedTab === tabId) return Promise.resolve(true);
     const url = new URL(window.location.href);
-    if (url.searchParams.get(queryParam) === tabId) return;
     url.searchParams.set(queryParam, tabId);
-    navigation.navigate(url.pathname + url.search + url.hash);
-    onTabChange?.(tabId);
+    const applied = navigation.navigate(url.pathname + url.search + url.hash);
+    void applied.then(selected => {
+      if (selected) onTabChange?.(tabId);
+    });
+    return applied;
+  }
+
+  // Opening a tab from the unsaved-changes note removes the focused link with the
+  // note, so focus moves to the opened tab instead of falling back to the page.
+  async function openTabFromNote(tabId: string) {
+    if (!(await selectTab(tabId))) return;
+    await tick();
+    document.getElementById(`settings-tab-${tabId}`)?.focus();
   }
 
   // Safe array access using Array.prototype.at() to avoid object injection warnings
@@ -137,10 +176,17 @@
     // Focus and select the new tab
     const newTab = getTabAt(newIndex);
     if (newTab) {
-      selectTab(newTab.id);
-      // Focus the tab button
-      const tabButton = document.getElementById(`settings-tab-${newTab.id}`);
-      tabButton?.focus();
+      const focusNewTab = () => document.getElementById(`settings-tab-${newTab.id}`)?.focus();
+      const selected = selectTab(newTab.id);
+      if (selectedTab === newTab.id) {
+        // The move applied at once (nothing held it): focus now.
+        focusNewTab();
+      } else {
+        // A guard asked first: focus the new tab only after Leave. On Stay focus stays put.
+        void selected.then(applied => {
+          if (applied) focusNewTab();
+        });
+      }
     }
   }
 </script>
@@ -150,7 +196,7 @@
   <div
     class="tabs border-b border-[var(--color-base-300)] mb-6"
     role="tablist"
-    aria-label={t('settings.tabs.navigation')}
+    aria-label={ariaLabel?.trim() || t('settings.tabs.navigation')}
   >
     {#each tabs as tab, index (tab.id)}
       {@const isActive = selectedTab === tab.id}
@@ -161,10 +207,7 @@
         aria-label={tab.label}
         class={cn(
           'tab gap-2 transition-all duration-200 font-medium -mb-px',
-          'hover:text-[color:var(--color-primary)]',
-          isActive
-            ? 'tab-active text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
-            : 'text-[var(--color-base-content)]/75 hover:text-[var(--color-base-content)]'
+          isActive && 'tab-active'
         )}
         aria-selected={isActive}
         aria-controls="settings-tabpanel-{tab.id}"
@@ -189,9 +232,9 @@
             data-testid="tab-change-dot"
             aria-hidden="true"
           ></span>
-          <span id="settings-tab-{tab.id}-changes" class="sr-only"
-            >{t('settings.tabs.hasChanges')}</span
-          >
+          <span id="settings-tab-{tab.id}-changes" class="sr-only">
+            {t('settings.tabs.hasChanges')}
+          </span>
         {/if}
       </button>
     {/each}
@@ -216,7 +259,46 @@
 
   <!-- Integrated Save/Reset Actions -->
   {#if showActions}
-    <SettingsPageActions {onReset} />
+    {#if immediateSave}
+      {#if otherUnsavedTabs.length > 0}
+        <div
+          class="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] px-3 py-2 text-sm text-[var(--color-base-content)]"
+        >
+          <CircleAlert class="size-4 shrink-0 text-[var(--text-warning)]" aria-hidden="true" />
+          <p>{t('settings.autoSave.otherTabsUnsaved')}</p>
+          <ul class="flex flex-wrap gap-x-3 gap-y-1">
+            {#each otherUnsavedTabs as tab (tab.id)}
+              <li>
+                <button
+                  type="button"
+                  class="font-medium text-[var(--text-primary)] underline underline-offset-2 hover:no-underline"
+                  onclick={() => openTabFromNote(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+      <div
+        class={cn(
+          'flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--text-subtle)]',
+          otherUnsavedTabs.length > 0 ? 'mt-3' : 'mt-6'
+        )}
+      >
+        <p>{t('settings.autoSave.tabNote')}</p>
+        <p role="status" class={failedSaves > 0 ? 'text-[var(--text-error)]' : undefined}>
+          {#if failedSaves > 0}
+            {t('settings.autoSave.failuresSummary', { count: failedSaves })}
+          {:else if autoSaveBusy(saveScope)}
+            {t('settings.actions.saving')}
+          {/if}
+        </p>
+      </div>
+    {:else}
+      <SettingsPageActions {onReset} />
+    {/if}
   {/if}
 </div>
 
@@ -241,7 +323,7 @@
     }
   }
 
-  /* Keyframes must be at top level — lightningcss (Vite 8 default CSS minifier)
+  /* Keyframes must be at top level: lightningcss (Vite 8 default CSS minifier)
      does not support @keyframes nested inside selector rule blocks */
   @keyframes fadeIn {
     from {

@@ -151,7 +151,7 @@ function editEntries(list: string[], saved: string[], edit: (entries: string[]) 
   return recombineTrustedProxies(edit(entries), hasCloudflare, saved);
 }
 
-/** Flip the Cloudflare checkbox the way the Reverse Proxy card does. */
+/** Flip the Cloudflare switch the way the Reverse Proxy card does. */
 function toggleCloudflare(list: readonly string[], enabled: boolean, saved: readonly string[]) {
   return recombineTrustedProxies(partitionTrustedProxies(list).entries, enabled, saved);
 }

@@ -158,7 +158,7 @@
     <Icon
       class={cn(
         'size-6 shrink-0',
-        isError ? 'text-[var(--color-error)]' : 'text-[var(--color-warning)]'
+        isError ? 'text-[var(--text-error)]' : 'text-[var(--text-warning)]'
       )}
       aria-hidden="true"
     />

@@ -617,21 +617,20 @@
 
       document.addEventListener('visibilitychange', handleVisibilityChange);
 
-      // Handle page unload
-      const handleUnload = () => {
+      // Handle the page going away. pagehide, not beforeunload: the leave prompt can be
+      // cancelled, and playback must keep its heartbeat then.
+      const handlePageHide = () => {
         if (isPlaying && playingSource) {
           stopHeartbeat();
         }
       };
 
-      window.addEventListener('beforeunload', handleUnload);
-      window.addEventListener('unload', handleUnload);
+      window.addEventListener('pagehide', handlePageHide);
 
       return () => {
         document.removeEventListener('click', handleClickOutside);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('beforeunload', handleUnload);
-        window.removeEventListener('unload', handleUnload);
+        window.removeEventListener('pagehide', handlePageHide);
 
         cleanupEventSource();
         stopHeartbeat();
@@ -662,7 +661,7 @@
   <button
     bind:this={buttonRef}
     onclick={() => (dropdownOpen = !dropdownOpen)}
-    class="w-full h-full relative focus:outline-hidden group"
+    class="w-full h-full relative rounded-full group focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
     aria-expanded={dropdownOpen}
     aria-haspopup="true"
     aria-label={selectedSource
@@ -753,7 +752,7 @@
                         'w-8 h-8 rounded-full flex items-center justify-center',
                         isInactive(source)
                           ? 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/60'
-                          : 'bg-[var(--color-success)]/20 text-[var(--color-success)]'
+                          : 'bg-[var(--color-success)]/20 text-[var(--text-success)]'
                       )}
                     >
                       <Mic class="size-4" />
@@ -777,19 +776,19 @@
                           isInactive(source)
                             ? 'text-[var(--color-base-content)]/60'
                             : 'text-[var(--color-base-content)]',
-                          selectedSource === source && 'text-[var(--color-primary)]'
+                          selectedSource === source && 'text-[var(--text-primary)]'
                         )}
                       >
                         {getSourceDisplayName(source)}
                       </span>
                       {#if selectedSource === source}
-                        <Check class="size-4 text-[var(--color-primary)] shrink-0" />
+                        <Check class="size-4 text-[var(--text-primary)] shrink-0" />
                       {/if}
                     </div>
                     {#if isInactive(source)}
-                      <span class="text-xs text-[var(--color-base-content)]/60"
-                        >{t('media.audio.silent')}</span
-                      >
+                      <span class="text-xs text-[var(--color-base-content)]/60">
+                        {t('media.audio.silent')}
+                      </span>
                     {/if}
                   </button>
 
@@ -802,8 +801,8 @@
                     class={cn(
                       'inline-flex items-center justify-center size-8 rounded-full shrink-0 transition-colors hover:bg-[var(--color-base-content)]/10',
                       playingSource === source
-                        ? 'text-[var(--color-error)]'
-                        : 'text-[var(--color-success)]'
+                        ? 'text-[var(--text-error)]'
+                        : 'text-[var(--text-success)]'
                     )}
                     aria-label={playingSource === source
                       ? t('media.audio.stopPlayback')

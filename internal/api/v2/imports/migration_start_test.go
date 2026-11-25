@@ -30,6 +30,11 @@ const (
 	freshResultAge    = time.Minute
 	prereqTagKey      = "migration_prereq"
 	blockingCheckName = "Disk Space"
+
+	// expiredPreflightLimit is a preflight limit whose deadline has passed before
+	// the checks start, so the context is cancelled synchronously and the outcome
+	// does not depend on timer granularity.
+	expiredPreflightLimit = -time.Second
 )
 
 // reusedCheckIDs returns the IDs of the critical checks a start takes from a stored run.
@@ -198,11 +203,11 @@ func TestStartMigration_PrerequisiteGate(t *testing.T) {
 			wantState: "idle",
 		},
 		{
-			name: "the re-run checks outlast the preflight limit",
+			name: "the preflight limit expired before the re-run checks",
 			prepare: func(t *testing.T, c *Handler) {
 				t.Helper()
 				seedPassingResult(t, c)
-				c.startPreflightLimit = time.Nanosecond
+				c.startPreflightLimit = expiredPreflightLimit
 			},
 			wantCode:  http.StatusGatewayTimeout,
 			wantKey:   notification.MsgErrMigrationStartFailed,

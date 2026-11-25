@@ -15,6 +15,17 @@ const STRENGTH_LABEL = 'settings.audio.exportDenoise.strengthLabel';
 const STRENGTH_HELP = 'settings.audio.exportDenoise.strengthHelp';
 const STRENGTH_DISABLED_HELP = 'settings.audio.exportDenoise.strengthDisabledHelp';
 const REQUIRES_RECORDING = 'settings.audio.exportDenoise.requiresRecording';
+const TARGET_LUFS_LABEL = 'settings.audio.audioNormalization.targetLUFSLabel';
+const NORMALIZATION_ENABLE_LABEL = 'settings.audio.audioNormalization.enable';
+
+/** Number of ancestors of `el` that fade it with `opacity-50`. */
+function dimmedAncestors(el: Element): number {
+  let count = 0;
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    if (node.classList.contains('opacity-50')) count++;
+  }
+  return count;
+}
 
 // Text of every element an aria-describedby attribute points at.
 function describedText(control: HTMLElement): string {
@@ -60,10 +71,16 @@ vi.mock('$lib/stores/settings', async () => {
     settingsActions,
     hasUnsavedChanges: writable(false),
     defaultQuietHoursConfig: {},
+    setValidationIssues: vi.fn(),
   };
 });
 
-type ExportOverrides = { enabled?: boolean; type?: string; denoise?: unknown };
+type ExportOverrides = {
+  enabled?: boolean;
+  type?: string;
+  denoise?: unknown;
+  normalization?: unknown;
+};
 
 async function renderProcessingTab(exportOverrides: ExportOverrides) {
   // The module is mocked above with writable stores; the real types are readable.
@@ -192,18 +209,18 @@ describe('AudioSettingsPage clip denoise', () => {
   it('links the recording-required reason to both disabled controls while recording is off', async () => {
     await renderProcessingTab({ enabled: false });
 
-    const checkbox = await screen.findByLabelText(ENABLE_LABEL);
+    const toggle = await screen.findByLabelText(ENABLE_LABEL);
     const strength = await screen.findByLabelText(STRENGTH_LABEL);
-    expect(describedText(checkbox)).toContain(REQUIRES_RECORDING);
+    expect(describedText(toggle)).toContain(REQUIRES_RECORDING);
     expect(describedText(strength)).toContain(REQUIRES_RECORDING);
   });
 
   it('keeps the regular help descriptions while recording is on', async () => {
     await renderProcessingTab({});
 
-    const checkbox = await screen.findByLabelText(ENABLE_LABEL);
+    const toggle = await screen.findByLabelText(ENABLE_LABEL);
     const strength = await screen.findByLabelText(STRENGTH_LABEL);
-    expect(describedText(checkbox)).not.toContain(REQUIRES_RECORDING);
+    expect(describedText(toggle)).not.toContain(REQUIRES_RECORDING);
     expect(describedText(strength)).toContain(STRENGTH_DISABLED_HELP);
     expect(describedText(strength)).not.toContain(REQUIRES_RECORDING);
   });
@@ -229,10 +246,75 @@ describe('AudioSettingsPage clip denoise', () => {
     ['denoise off', { denoise: { enabled: false, strength: 'light-medium' } }, true],
     ['denoise on', { denoise: { enabled: true, strength: 'light-medium' } }, false],
     ['recording off', { enabled: false, denoise: { enabled: true, strength: 'light' } }, true],
-  ])('strength dropdown disabled state with %s', async (_name, overrides, disabled) => {
-    await renderProcessingTab(overrides);
+    [
+      'recording and denoise off',
+      { enabled: false, denoise: { enabled: false, strength: 'light' } },
+      true,
+    ],
+  ])(
+    'strength dropdown dims exactly when it is disabled, with %s',
+    async (_name, overrides, disabled) => {
+      await renderProcessingTab(overrides);
 
-    const control = await screen.findByLabelText(STRENGTH_LABEL);
-    expect((control as HTMLButtonElement).disabled).toBe(disabled);
-  });
+      const control = await screen.findByLabelText(STRENGTH_LABEL);
+      expect((control as HTMLButtonElement).disabled).toBe(disabled);
+      // The whole field fades once, label included, not only the trigger button:
+      // a fade of its own must not stack on the recording-off fade around it.
+      const label = document.getElementById(`${control.id}-label`);
+      if (!label) throw new Error('strength dropdown has no label element');
+      expect(dimmedAncestors(label)).toBe(disabled ? 1 : 0);
+    }
+  );
+
+  it.each([
+    ['normalization off', { normalization: { enabled: false } }, true],
+    ['normalization on', { normalization: { enabled: true } }, false],
+    ['recording off', { enabled: false, normalization: { enabled: true } }, true],
+    [
+      'recording and normalization off',
+      { enabled: false, normalization: { enabled: false } },
+      true,
+    ],
+  ])(
+    'normalization fields fade once when disabled, with %s',
+    async (_name, overrides, disabled) => {
+      const { normalization, ...rest } = overrides;
+      await renderProcessingTab({
+        ...rest,
+        normalization: { targetLUFS: -23, loudnessRange: 7, truePeak: -2, ...normalization },
+      });
+
+      const input = await screen.findByLabelText(TARGET_LUFS_LABEL);
+      expect(dimmedAncestors(input)).toBe(disabled ? 1 : 0);
+    }
+  );
+
+  it.each([
+    ['on', false, true],
+    ['off', true, false],
+  ])(
+    'writes the toggled value to normalization when the switch is turned %s',
+    async (_name, was, now) => {
+      const updateSection = await renderProcessingTab({
+        normalization: { enabled: was, targetLUFS: -20, loudnessRange: 7, truePeak: -2 },
+      });
+
+      await fireEvent.click(await screen.findByLabelText(NORMALIZATION_ENABLE_LABEL));
+
+      await waitFor(() => expect(updateSection).toHaveBeenCalled());
+      const [section, data] = updateSection.mock.calls[0] as [
+        string,
+        { audio: { export: { normalization: unknown; type: string } } },
+      ];
+      expect(section).toBe('realtime');
+      // The other normalization fields and the rest of the export object travel with it.
+      expect(data.audio.export.normalization).toEqual({
+        enabled: now,
+        targetLUFS: -20,
+        loudnessRange: 7,
+        truePeak: -2,
+      });
+      expect(data.audio.export.type).toBe('wav');
+    }
+  );
 });

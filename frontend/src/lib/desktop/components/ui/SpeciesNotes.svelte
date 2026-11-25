@@ -314,9 +314,9 @@
           {:else}
             <p class="text-sm whitespace-pre-line">{note.entry}</p>
             <div class="mt-1 flex items-center justify-between gap-2">
-              <span class="text-xs text-[var(--color-base-content)]/50"
-                >{formatDate(note.updated_at)}</span
-              >
+              <span class="text-xs text-[var(--color-base-content)]/50">
+                {formatDate(note.updated_at)}
+              </span>
               {#if $isAuthenticated}
                 {#if confirmingDeleteId === note.id}
                   <div class="flex items-center gap-2">
@@ -350,7 +350,7 @@
                     </button>
                     <button
                       type="button"
-                      class="btn btn-ghost btn-xs text-[var(--color-error)]"
+                      class="btn btn-ghost btn-xs text-[var(--text-error)]"
                       aria-label={t('analytics.species.notes.deleteConfirm')}
                       onclick={() => (confirmingDeleteId = note.id)}
                     >

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { t } from '$lib/i18n';
@@ -8,7 +8,7 @@ import type {
   PrerequisiteCheck,
   PrerequisitesResponse,
 } from '$lib/types/migration';
-import type { DatabaseOverviewResponse } from '$lib/types/database';
+import type { DatabaseOverviewResponse, MySQLDetails, SQLiteDetails } from '$lib/types/database';
 import type { LegacyStatus } from '$lib/types/legacy';
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
@@ -21,17 +21,25 @@ vi.mock('$lib/utils/api', async importOriginal => ({
   api: { get: apiGet, post: apiPost },
 }));
 
+// The URL of each stream opened; the mock constructor reads it only after the module loaded.
+const streamUrls: string[] = [];
+
 vi.mock('$lib/utils/ReconnectingEventSource', () => ({
   ReconnectingEventSource: class {
     addEventListener = vi.fn();
     close = vi.fn();
+    constructor(url: string) {
+      streamUrls.push(url);
+    }
   },
 }));
 
 import { ApiError } from '$lib/utils/api';
 import { connectionState } from '$lib/stores/connectionState.svelte';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 import DatabaseDashboard from './DatabaseDashboard.svelte';
 import { renderTyped } from '../../../../test/render-helpers';
+import { deferred } from '../../../../test/async-helpers';
 
 const STATUS_URL = '/api/v2/system/database/migration/status';
 const PREREQUISITES_URL = '/api/v2/system/database/migration/prerequisites';
@@ -46,6 +54,8 @@ const CLEANUP_URL = '/api/v2/system/database/legacy/cleanup';
 const STATUS_POLL_INTERVAL_MS = 2000;
 const PREREQUISITES_POLL_INTERVAL_MS = 2000;
 const NOT_CONFIGURED = 'Migration is not configured';
+const SKELETON_TEST_ID = 'database-skeleton';
+const OVERVIEW_REFRESH_INTERVAL_MS = 30_000;
 
 const idleStatus = {
   state: 'idle',
@@ -195,6 +205,11 @@ describe('DatabaseDashboard migration errors', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(t('system.database.migration.errors.fetchFailed'));
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
+    // The alert sits above the views, so it alone does not prove the skeleton went away
+    await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+    expect(
+      screen.getByRole('heading', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
   });
 
   it('shows a translated message when the status request fails without an API error', async () => {
@@ -631,7 +646,9 @@ describe('DatabaseDashboard migration errors', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
     // Backups come from their own endpoint and stay; the state cards would claim "Idle"
-    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(t('system.database.migration.strip.readyToMigrate'))
     ).not.toBeInTheDocument();
@@ -674,7 +691,9 @@ describe('DatabaseDashboard migration errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Status unavailable');
-    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: t('common.retry') })).toBeInTheDocument();
   });
 
@@ -745,7 +764,7 @@ describe('DatabaseDashboard migration errors', () => {
     serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
     finish(idleStatus);
 
-    await screen.findByText(t('system.database.backup.history.title'));
+    await screen.findByRole('heading', { name: t('system.database.backup.history.title') });
   });
 });
 
@@ -1358,5 +1377,383 @@ describe('DatabaseDashboard data errors', () => {
     await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
 
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+});
+
+const sqliteDetails = {
+  engine_version: '3.45.0',
+  journal_mode: 'wal',
+  page_size: 4096,
+  integrity_check: 'ok',
+  last_vacuum_at: null,
+  wal_size_bytes: 0,
+  wal_checkpoints: 0,
+  freelist_pages: 0,
+  cache_size_bytes: 0,
+  busy_timeouts: 0,
+} satisfies SQLiteDetails;
+
+const mysqlDetails = {
+  active_connections: 2,
+  idle_connections: 3,
+  max_connections: 100,
+  threads_idle: 0,
+  total_created: 10,
+  connection_errors: 0,
+  threads_running: 1,
+  threads_cached: 1,
+  buffer_pool_hit_rate: 99,
+  buffer_pool_size_bytes: 1024,
+  lock_waits: 0,
+  deadlocks: 0,
+  avg_lock_wait_ms: 0,
+  table_locks_waited: 0,
+  table_locks_immediate: 0,
+} satisfies MySQLDetails;
+
+const hourlyCounts = [
+  { hour: '2026-02-24T10:00:00Z', count: 4 },
+  { hour: '2026-02-24T11:00:00Z', count: 8 },
+  { hour: '2026-02-24T12:00:00Z', count: 6 },
+];
+
+const MYSQL_LOCATION = 'db.example.lan:3306/birdnet';
+const SQLITE_OVERVIEW_LOCATION = 'sqlite-overview.example.lan:3306/ignored';
+
+const sqliteOverview = {
+  ...overview,
+  location: SQLITE_OVERVIEW_LOCATION,
+  sqlite: sqliteDetails,
+  detection_rate_24h: hourlyCounts,
+} satisfies DatabaseOverviewResponse;
+
+const mysqlOverview = {
+  ...overview,
+  engine: 'mysql',
+  location: MYSQL_LOCATION,
+  mysql: mysqlDetails,
+  detection_rate_24h: hourlyCounts,
+} satisfies DatabaseOverviewResponse;
+
+/** True when `later` comes after `earlier` in document order. */
+function follows(earlier: HTMLElement, later: HTMLElement): boolean {
+  return Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+const rateTitle = () => t('system.database.dashboard.detectionRate.title');
+const chartLabel = () => t('system.database.dashboard.detectionRate.chartLabel');
+const tablesTitle = () => t('system.database.dashboard.tables.title');
+
+describe('DatabaseDashboard v2-only overview layout', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+  });
+
+  it('shows the detection rate card after the SQLite cards and before the table breakdown', async () => {
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: sqliteOverview });
+
+    renderTyped(DatabaseDashboard);
+
+    const rate = await screen.findByRole('heading', { name: rateTitle() });
+    const engineCard = screen.getByRole('heading', {
+      name: t('system.database.dashboard.details.title'),
+    });
+    expect(follows(engineCard, rate)).toBe(true);
+    expect(follows(rate, screen.getByRole('heading', { name: tablesTitle() }))).toBe(true);
+    expect(screen.getByRole('img', { name: chartLabel() })).toBeInTheDocument();
+    expect(screen.queryByText(SQLITE_OVERVIEW_LOCATION)).not.toBeInTheDocument();
+  });
+
+  it('shows the MySQL location in the detection rate card after the MySQL cards', async () => {
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: mysqlOverview });
+
+    renderTyped(DatabaseDashboard);
+
+    const rate = await screen.findByRole('heading', { name: rateTitle() });
+    const engineCard = screen.getByRole('heading', {
+      name: t('system.database.dashboard.connectionPool.title'),
+    });
+    expect(follows(engineCard, rate)).toBe(true);
+    expect(follows(rate, screen.getByRole('heading', { name: tablesTitle() }))).toBe(true);
+    expect(screen.getByText(MYSQL_LOCATION)).toBeInTheDocument();
+  });
+
+  it('renders no empty engine row when the overview has no engine details', async () => {
+    serve({
+      [STATUS_URL]: v2OnlyStatus,
+      [OVERVIEW_URL]: { ...overview, detection_rate_24h: hourlyCounts },
+    });
+
+    const { container } = renderTyped(DatabaseDashboard);
+
+    await screen.findByRole('heading', { name: rateTitle() });
+    const emptyGrid = Array.from(container.querySelectorAll('div.grid')).find(
+      grid => grid.children.length === 0
+    );
+    expect(emptyGrid).toBeUndefined();
+  });
+
+  it.each([
+    {
+      name: 'MySQL overview with only SQLite details',
+      payload: { ...sqliteOverview, engine: 'mysql', location: MYSQL_LOCATION },
+      wrongCard: () => t('system.database.dashboard.details.title'),
+    },
+    {
+      name: 'SQLite overview with only MySQL details',
+      payload: { ...mysqlOverview, engine: 'sqlite' },
+      wrongCard: () => t('system.database.dashboard.connectionPool.title'),
+    },
+  ])('shows no engine cards for a $name', async ({ payload, wrongCard }) => {
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: payload });
+
+    const { container } = renderTyped(DatabaseDashboard);
+
+    await screen.findByRole('heading', { name: rateTitle() });
+    expect(screen.queryByRole('heading', { name: wrongCard() })).not.toBeInTheDocument();
+    const emptyGrid = Array.from(container.querySelectorAll('div.grid')).find(
+      grid => grid.children.length === 0
+    );
+    expect(emptyGrid).toBeUndefined();
+  });
+});
+
+describe('DatabaseDashboard initial load', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+  });
+
+  /** Lets pending promise callbacks and the renders they cause run. */
+  const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+
+  it.each([
+    { last: 'overview', first: 'legacy status' },
+    { last: 'legacy status', first: 'overview' },
+  ])(
+    'keeps one skeleton until the status, overview and legacy status of the v2-only view answered, with the $last last',
+    async ({ last }) => {
+      const status = deferred<unknown>();
+      const overviewRequest = deferred<unknown>();
+      const legacy = deferred<unknown>();
+      serve({
+        [STATUS_URL]: status.promise,
+        [OVERVIEW_URL]: overviewRequest.promise,
+        [LEGACY_STATUS_URL]: legacy.promise,
+      });
+      const answerOverview = () => overviewRequest.resolve(overview);
+      const answerLegacy = () => legacy.resolve(cleanableLegacy);
+      const [answerFirst, answerLast] =
+        last === 'overview' ? [answerLegacy, answerOverview] : [answerOverview, answerLegacy];
+
+      renderTyped(DatabaseDashboard);
+
+      const skeleton = screen.getByTestId(SKELETON_TEST_ID);
+      expect(within(skeleton).getByRole('status')).toHaveTextContent(
+        t('system.database.dashboard.loading')
+      );
+
+      status.resolve(v2OnlyStatus);
+      // The legacy status is only requested once the status says the install is v2-only
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
+
+      answerFirst();
+      await settle();
+      // One request is still pending, so the page keeps the same skeleton
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBe(skeleton);
+
+      answerLast();
+      await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+      // The cleanup card arrives with the rest of the page, not after it
+      expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: t('system.database.legacy.cleanup.title') })
+      ).toBeInTheDocument();
+    }
+  );
+
+  it('keeps the skeleton until the migration status answers, even after the other requests', async () => {
+    const status = deferred<unknown>();
+    serve({ [STATUS_URL]: status.promise });
+
+    renderTyped(DatabaseDashboard);
+    // Every other first request answers while the status is still pending
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(BACKUP_JOBS_URL));
+    await settle();
+    await settle();
+    expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument();
+    expect(screen.queryByText(t('system.database.stats.connected'))).not.toBeInTheDocument();
+
+    status.resolve(v2OnlyStatus);
+    await screen.findByRole('heading', { name: tablesTitle() });
+    expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { request: 'legacy stats', url: LEGACY_STATS_URL, value: databaseStats },
+    { request: 'v2 stats', url: V2_STATS_URL, value: databaseStats },
+    { request: 'backup jobs', url: BACKUP_JOBS_URL, value: { jobs: [] } },
+  ])(
+    'shows no disconnected database or missing backups while the migration view waits for the $request',
+    async ({ url, value }) => {
+      const pending = deferred<unknown>();
+      serve({ [STATUS_URL]: idleStatus, [url]: pending.promise });
+
+      renderTyped(DatabaseDashboard);
+
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(STATUS_URL));
+      await settle();
+      expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument();
+      expect(screen.queryByText(t('system.database.stats.disconnected'))).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(t('system.database.backup.history.noBackups'))
+      ).not.toBeInTheDocument();
+
+      pending.resolve(value);
+
+      await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+      expect(screen.getAllByText(t('system.database.stats.connected')).length).toBeGreaterThan(0);
+    }
+  );
+
+  it('does not bring the skeleton back when the overview refreshes', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      serve({ [STATUS_URL]: v2OnlyStatus });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('heading', { name: tablesTitle() });
+
+      const refresh = deferred<unknown>();
+      serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: refresh.promise });
+      const overviewRequests = () => apiGet.mock.calls.filter(([url]) => url === OVERVIEW_URL);
+      const before = overviewRequests().length;
+      await vi.advanceTimersByTimeAsync(OVERVIEW_REFRESH_INTERVAL_MS);
+
+      expect(overviewRequests().length).toBeGreaterThan(before);
+      expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not bring the skeleton back when a polled migration switches to the v2-only view', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      serve({ [STATUS_URL]: migratingStatus });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('button', { name: t('system.database.migration.actions.pause') });
+
+      // The poll reports the cutover; the v2-only view then waits for the legacy status
+      const legacy = deferred<unknown>();
+      serve({ [STATUS_URL]: v2OnlyStatus, [LEGACY_STATUS_URL]: legacy.promise });
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+
+      await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+      expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: tablesTitle() })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows the overview error without waiting for the legacy status', async () => {
+    const legacy = deferred<unknown>();
+    serve({
+      [STATUS_URL]: v2OnlyStatus,
+      [OVERVIEW_URL]: apiError('overview failed', 500),
+      [LEGACY_STATUS_URL]: legacy.promise,
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    // The legacy status is still pending; the failed overview must not hide behind the skeleton
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(LEGACY_STATUS_URL));
+    await waitFor(() => expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument());
+    expect(screen.getByRole('alert')).toHaveTextContent(t('system.database.dashboard.fetchFailed'));
+  });
+
+  it('shows the skeleton, not an error, when the view switches to v2-only before the overview answers', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // The migration view does not wait for the overview, so the page loads while it is pending
+      const overviewRequest = deferred<unknown>();
+      serve({ [STATUS_URL]: migratingStatus, [OVERVIEW_URL]: overviewRequest.promise });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('button', { name: t('system.database.migration.actions.pause') });
+
+      serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: overviewRequest.promise });
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+
+      await waitFor(() => expect(screen.getByTestId(SKELETON_TEST_ID)).toBeInTheDocument());
+      expect(
+        screen.queryByText(t('system.database.dashboard.fetchFailed'))
+      ).not.toBeInTheDocument();
+
+      overviewRequest.resolve(overview);
+      await screen.findByRole('heading', { name: tablesTitle() });
+      expect(screen.queryByTestId(SKELETON_TEST_ID)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the cleanup card content on screen while the cleanup polls the legacy status', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const cleaning = { ...v2OnlyStatus, cleanup_state: 'in_progress' } satisfies MigrationStatus;
+      serve({ [STATUS_URL]: cleaning });
+
+      renderTyped(DatabaseDashboard);
+      // The card body: what the legacy database holds and why deleting it is safe
+      const details = () => screen.queryByText(t('system.database.legacy.cleanup.recommendation'));
+      await waitFor(() => expect(details()).toBeInTheDocument());
+
+      const legacy = deferred<unknown>();
+      serve({ [STATUS_URL]: cleaning, [LEGACY_STATUS_URL]: legacy.promise });
+      const legacyRequests = () => apiGet.mock.calls.filter(([url]) => url === LEGACY_STATUS_URL);
+      const before = legacyRequests().length;
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+
+      // The poll is in flight; the card must not swap its content for a spinner every 2 s
+      expect(legacyRequests().length).toBeGreaterThan(before);
+      expect(details()).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('DatabaseDashboard metrics stream', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+    streamUrls.length = 0;
+  });
+
+  afterEach(() => {
+    resetBasePath();
+  });
+
+  it('opens the live metrics stream under the reverse proxy prefix', async () => {
+    // BirdNET-Go served by a proxy at /birdnet, which does not rewrite response bodies.
+    setBasePath('/birdnet');
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: overview });
+
+    renderTyped(DatabaseDashboard);
+
+    await waitFor(() =>
+      expect(streamUrls).toEqual([
+        '/birdnet/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec',
+      ])
+    );
   });
 });

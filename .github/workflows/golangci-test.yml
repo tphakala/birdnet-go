@@ -14,6 +14,9 @@ on:
       - '.github/scripts/go-test-cache.sh'
       - '.github/actions/setup-tensorflow/**'
       - '.github/actions/setup-onnxruntime/**'
+      - '.github/actions/setup-go/**'
+      - 'scripts/fetch-onnxruntime.sh'
+      - 'scripts/onnxruntime-pins.sha256'
   pull_request:
     paths:
       - '**/*.go'
@@ -25,6 +28,9 @@ on:
       - '.github/scripts/go-test-cache.sh'
       - '.github/actions/setup-tensorflow/**'
       - '.github/actions/setup-onnxruntime/**'
+      - '.github/actions/setup-go/**'
+      - 'scripts/fetch-onnxruntime.sh'
+      - 'scripts/onnxruntime-pins.sha256'
 
 permissions:
   contents: read
@@ -125,10 +131,7 @@ jobs:
           - 1883:1883
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
       - run: go version
 
       - name: Setup TensorFlow Lite
@@ -147,7 +150,7 @@ jobs:
         if: env.GO_TEST_CACHE == 'true'
         env:
           SHARD: ${{ matrix.shard }}
-          CI_FILES_HASH: ${{ hashFiles('.github/workflows/golangci-test.yml', '.github/scripts/go-test-cache.sh', '.github/actions/setup-tensorflow/action.yml', '.github/actions/setup-onnxruntime/action.yml') }}
+          CI_FILES_HASH: ${{ hashFiles('.github/workflows/golangci-test.yml', '.github/scripts/go-test-cache.sh', '.github/actions/setup-tensorflow/action.yml', '.github/actions/setup-onnxruntime/action.yml', 'scripts/fetch-onnxruntime.sh', 'scripts/onnxruntime-pins.sha256') }}
         run: |
           .github/scripts/go-test-cache.sh key "$SHARD" >> "$GITHUB_OUTPUT"
           rm -rf "$(go env GOCACHE)"
@@ -326,10 +329,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow
@@ -417,10 +417,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       - name: Set up gotestsum
         run: |
@@ -495,10 +492,7 @@ jobs:
       MYSQL_TEST_IMAGE: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+      - uses: ./.github/actions/setup-go
 
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow

@@ -145,6 +145,10 @@ var protectedReadRoutes = map[string]bool{
 	// Registered in the privacy domain's protected group (privacy/privacy.go, RegisterRoutes).
 	"GET /api/v2/privacy-filter/activity": true,
 	"GET /api/v2/privacy-filter/discards": true,
+	// Registered with AuthMiddleware in the models domain (models/models.go, RegisterRoutes).
+	"GET /api/v2/models/documents/:sha256": true,
+	// Registered with AuthMiddleware in the models domain (models/models.go, RegisterRoutes).
+	"GET /api/v2/models/species-coverage": true,
 }
 
 // authGate stands in for the real auth middleware. It records the matched

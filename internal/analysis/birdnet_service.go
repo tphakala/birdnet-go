@@ -176,11 +176,16 @@ func (a *BirdNETAnalyzer) initModelManager(bn *classifier.Orchestrator, configDi
 	// failover in memory only. Construction reads at most one small local file and
 	// does no network I/O, so it is safe here on the startup path.
 	if resolveErr != nil {
-		log.Warn("could not resolve config directory; HuggingFace mirror failover will not persist across restarts",
+		log.Warn("could not resolve config directory; HuggingFace mirror failover and model agreements will not persist across restarts",
 			logger.String("service", birdNETAnalyzerName),
 			logger.Error(resolveErr))
 	}
 	a.modelManager.SetEndpointResolver(conf.NewHFEndpointResolver(configDir))
+	// Recorded model agreements and the verified document text live under the
+	// same directory; an unresolved one keeps them in memory only.
+	if resolveErr == nil {
+		a.modelManager.Documents().SetStateDir(configDir)
+	}
 
 	a.modelManager.ScanInstalled()
 

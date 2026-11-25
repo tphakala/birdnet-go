@@ -72,6 +72,7 @@ func TestValidateModelThresholds(t *testing.T) {
 		s.Bat.Threshold = 0.5
 		s.Perch.Threshold = 0.5
 		s.BirdNETV3.Threshold = 0.5
+		s.BirdNETPlus.Threshold = 0.5
 		s.BSGBat.Threshold = 0.5
 		return s
 	}
@@ -107,6 +108,12 @@ func TestValidateModelThresholds(t *testing.T) {
 			mutate:      func(s *Settings) { s.BirdNETV3.Threshold = 1.5 },
 			wantErr:     true,
 			errContains: "birdnetv3.threshold must be between",
+		},
+		{
+			name:        "birdnetplus threshold above 1 rejected",
+			mutate:      func(s *Settings) { s.BirdNETPlus.Threshold = 1.5 },
+			wantErr:     true,
+			errContains: "birdnetplus.threshold must be between",
 		},
 		{
 			name:        "bsgbat threshold above 1 rejected",
@@ -202,13 +209,15 @@ func TestNormalizeModelThresholds(t *testing.T) {
 		s.Bat.Threshold = 1.5  // above range
 		s.Perch.Threshold = -1 // below range
 		s.BirdNETV3.Threshold = math.NaN()
+		s.BirdNETPlus.Threshold = math.Inf(1)
 
 		s.normalizeModelThresholds()
 
 		assert.InEpsilon(t, defaultModelThreshold, s.Bat.Threshold, 1e-9)
 		assert.InEpsilon(t, defaultModelThreshold, s.Perch.Threshold, 1e-9)
 		assert.InEpsilon(t, defaultModelThreshold, s.BirdNETV3.Threshold, 1e-9)
-		assert.Len(t, s.ValidationWarnings, 3)
+		assert.InEpsilon(t, defaultModelThreshold, s.BirdNETPlus.Threshold, 1e-9)
+		assert.Len(t, s.ValidationWarnings, 4)
 
 		// The strict validator must now pass, i.e. an aged config would boot.
 		require.NoError(t, validateModelThresholds(s))

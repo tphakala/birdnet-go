@@ -1,8 +1,11 @@
 <script lang="ts">
-  import { Download, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from '@lucide/svelte';
+  import { Download, Clock, Loader2 } from '@lucide/svelte';
+  import { buildAppUrl, isRelativePath } from '$lib/utils/urlHelpers';
   import { formatBytesCompact, formatDateTime } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
 
   interface BackupJob {
     job_id: string;
@@ -89,12 +92,26 @@
     });
   });
 
+  // Clear the sort message when the list is empty or failed to load, so a refill does not
+  // announce a sort the user did not just make
+  $effect(() => {
+    if (safeBackups.length === 0 || loadError) sortStatus = '';
+  });
+
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
   function toggleSort(col: string): void {
     if (sortColumn === col) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = col;
       sortDirection = col === 'type' ? 'asc' : 'desc';
+    }
+    const column = columns.find(c => c.key === col);
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (column && safeBackups.length > 0) {
+      sortStatus = sortAnnouncement(t(column.labelKey), sortDirection);
     }
   }
 
@@ -160,6 +177,8 @@
     </button>
   </div>
 
+  <p role="status" class="sr-only">{sortStatus}</p>
+
   {#if createError}
     <ErrorAlert
       className="mb-3"
@@ -187,39 +206,18 @@
   {:else if safeBackups.length > 0}
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
+        <caption class="sr-only">{t('system.database.backup.history.title')}</caption>
         <thead>
           <tr class="border-b border-[var(--border-100)]">
             {#each columns as col (col.key)}
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                scope="col"
-                tabindex="0"
-                aria-sort={sortColumn === col.key
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => toggleSort(col.key)}
-                onkeydown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    toggleSort(col.key);
-                  }
-                }}
-              >
-                <div class="flex items-center gap-1">
-                  {t(col.labelKey)}
-                  {#if sortColumn === col.key}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
+              <SortableHeader
+                label={t(col.labelKey)}
+                field={col.key}
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={toggleSort}
+                className="py-2 px-3 text-xs font-medium select-none text-muted"
+              />
             {/each}
             <th scope="col" class="text-right py-2 px-3 text-xs font-medium text-muted">
               {t('system.database.backup.history.columns.actions')}
@@ -241,27 +239,31 @@
                 <span
                   class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] {dbTypeClasses(
                     backup.db_type
-                  )}">{backup.db_type}</span
+                  )}"
                 >
+                  {backup.db_type}
+                </span>
               </td>
               <td class="py-2 px-3">
-                <span class="font-mono tabular-nums text-xs font-medium"
-                  >{formatBytesCompact(backup.bytes_written)}</span
-                >
+                <span class="font-mono tabular-nums text-xs font-medium">
+                  {formatBytesCompact(backup.bytes_written)}
+                </span>
               </td>
               <td class="py-2 px-3">
                 <span
                   class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] {statusClasses(
                     backup.status
-                  )}">{statusLabel(backup.status)}</span
+                  )}"
                 >
+                  {statusLabel(backup.status)}
+                </span>
               </td>
               <td class="py-2 px-3">
                 <div class="flex justify-end">
-                  {#if backup.status === 'completed' && backup.download_url}
+                  {#if backup.status === 'completed' && backup.download_url && isRelativePath(backup.download_url)}
                     <a
-                      href={backup.download_url}
-                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-info)]"
+                      href={buildAppUrl(backup.download_url)}
+                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--text-info)]"
                       download
                     >
                       <Download class="w-3 h-3" />
@@ -269,13 +271,13 @@
                     </a>
                   {:else if backup.status === 'in_progress'}
                     <span
-                      class="inline-flex items-center gap-1 text-xs tabular-nums text-[var(--color-info)]"
+                      class="inline-flex items-center gap-1 text-xs tabular-nums text-[var(--text-info)]"
                     >
                       <Loader2 class="w-3 h-3 animate-spin" />
                       {backup.progress}%
                     </span>
                   {:else if backup.status === 'failed'}
-                    <span class="text-xs text-[var(--color-error)]" title={backup.error ?? ''}>
+                    <span class="text-xs text-[var(--text-error)]" title={backup.error ?? ''}>
                       {t('system.database.backup.history.failed')}
                     </span>
                   {:else}

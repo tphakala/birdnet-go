@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { TranslationKey } from '$lib/i18n';
-import type { WizardStep } from './types';
+import type { InstalledModelContext, WizardStep } from './types';
 import { deferred, type Deferred } from '../../../../test/async-helpers';
 
 // Mock the API module before importing wizardState
@@ -108,7 +108,8 @@ describe('wizardState - state machine', () => {
     it('does not activate when getStepsForFlow returns empty array', () => {
       vi.mocked(getStepsForFlow).mockReturnValue([]);
 
-      wizardState.launch('onboarding');
+      // The gallery shows its install toast instead when no flow opened
+      expect(wizardState.launch('onboarding')).toBe(false);
 
       expect(wizardState.isActive).toBe(false);
       expect(wizardState.flow).toBeNull();
@@ -118,7 +119,7 @@ describe('wizardState - state machine', () => {
       const steps = createTestSteps(3);
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
 
-      wizardState.launch('onboarding');
+      expect(wizardState.launch('onboarding')).toBe(true);
 
       expect(wizardState.isActive).toBe(true);
       expect(wizardState.status).toBe('active');
@@ -593,6 +594,61 @@ describe('wizardState - state machine', () => {
       await wizardState.next();
 
       expect(handler).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('model-next-steps flow', () => {
+    const model = {
+      catalogId: 'perch-v2',
+      name: 'Perch v2',
+      category: 'bird',
+      registryId: 'Perch_V2',
+    } satisfies InstalledModelContext;
+
+    function launchModelFlow(): void {
+      vi.mocked(getStepsForFlow).mockReturnValue(createTestSteps(1));
+      wizardState.launch('model-next-steps', { model });
+    }
+
+    it('exposes the installed model while active', () => {
+      launchModelFlow();
+      expect(wizardState.installedModel).toEqual(model);
+    });
+
+    it('shows its own save errors, not the onboarding ones', async () => {
+      vi.mocked(getStepsForFlow).mockReturnValue(createComponentSteps([undefined]));
+      wizardState.launch('model-next-steps', { model });
+      wizardState.registerLeaveHandler(() => Promise.reject(new Error('offline')));
+      readyStep();
+
+      await wizardState.complete();
+      expect(wizardState.stepError).toBe('wizard.modelNextSteps.errors.saveFailed');
+
+      const refusal = new ApiError('bad', 400, new Response(null, { status: 400 }));
+      wizardState.registerLeaveHandler(() => Promise.reject(refusal));
+      await wizardState.complete();
+      expect(wizardState.stepError).toBe('wizard.modelNextSteps.errors.saveRejected');
+    });
+
+    it('closing it does not record the app wizard as dismissed and clears the model', () => {
+      launchModelFlow();
+
+      wizardState.skip();
+
+      expect(api.post).not.toHaveBeenCalled();
+      expect(localStorage.getItem('birdnet-wizard-dismissed-version')).toBeNull();
+      expect(wizardState.installedModel).toBeNull();
+    });
+
+    it('finishing it does not record the app wizard as dismissed', async () => {
+      launchModelFlow();
+      readyStep();
+
+      await wizardState.complete();
+
+      expect(wizardState.isActive).toBe(false);
+      expect(api.post).not.toHaveBeenCalled();
+      expect(wizardState.installedModel).toBeNull();
     });
   });
 

@@ -50,6 +50,8 @@ func TestGetAppConfigReadsLiveSnapshot(t *testing.T) {
 	live := conf.CloneSettings(controller.Settings.Load())
 	live.Version = "9.9.9-live"
 	live.Realtime.Dashboard.ColorScheme = "live-scheme"
+	live.Realtime.Dashboard.DefaultAudioGain = -4.5
+	live.Realtime.Dashboard.Playback.HighPassHz = 250
 	conftest.SetTestSettings(live)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
@@ -67,6 +69,10 @@ func TestGetAppConfigReadsLiveSnapshot(t *testing.T) {
 		"GetAppConfig must reflect the live published version, not the stale construction-time snapshot")
 	assert.Equal(t, "live-scheme", response.ColorScheme,
 		"GetAppConfig must reflect the live published color scheme, not the stale construction-time snapshot")
+	assert.InDelta(t, -4.5, response.PlaybackDefaults.GainDb, 1e-9,
+		"GetAppConfig must reflect the live published default gain, so a change applies without a restart")
+	assert.Equal(t, 250, response.PlaybackDefaults.HighPassHz,
+		"GetAppConfig must reflect the live published default high-pass cutoff, so a change applies without a restart")
 }
 
 // TestGetAppConfigConcurrentSaveIsRaceFree hammers GetAppConfig from multiple

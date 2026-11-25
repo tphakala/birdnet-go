@@ -1,3 +1,4 @@
+/** How long a copy button shows its copied state before it resets, in milliseconds */
 export const COPY_FEEDBACK_TIMEOUT_MS = 2000;
 
 /**
@@ -24,6 +25,8 @@ function fallbackCopy(text: string, targetDoc?: Document): boolean {
   const doc = targetDoc ?? document;
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- body is null when a popup document is destroyed
   if (!doc.body) return false;
+  // select() moves focus to the textarea; the button the user pressed gets it back below
+  const previouslyFocused = doc.activeElement;
   const textarea = doc.createElement('textarea');
   textarea.value = text;
   textarea.style.position = 'fixed';
@@ -35,6 +38,15 @@ function fallbackCopy(text: string, targetDoc?: Document): boolean {
   } catch {
     return false;
   } finally {
-    doc.body.removeChild(textarea);
+    textarea.remove();
+    restoreFocus(doc, previouslyFocused);
   }
+}
+
+function restoreFocus(doc: Document, element: Element | null): void {
+  // A popup document's elements belong to the popup window's classes, not this window's
+  const view = doc.defaultView ?? window;
+  if (!(element instanceof view.HTMLElement || element instanceof view.SVGElement)) return;
+  if (!element.isConnected || element === doc.body || element === doc.documentElement) return;
+  element.focus({ preventScroll: true });
 }

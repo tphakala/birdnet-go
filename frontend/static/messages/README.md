@@ -140,7 +140,8 @@ To maximize reusability and avoid duplication, translations are organized by fun
       "noData": "No data available",
       "loading": "Loading data...",
       "error": "Failed to load data",
-      "sortBy": "Sort by {column}",
+      "sortedAscending": "Sorted by {column}, ascending",
+      "sortedDescending": "Sorted by {column}, descending",
       "rowsPerPage": "Rows per page",
       "pageInfo": "Showing {from} to {to} of {total} results"
     },
@@ -277,7 +278,6 @@ Always include translations for aria-labels and screen reader text:
    - EmptyState.svelte
    - ErrorAlert.svelte
    - Pagination.svelte
-   - DataTable.svelte
 
 2. **Medium Priority** (Form components):
    - All form field components

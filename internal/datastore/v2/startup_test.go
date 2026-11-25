@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -690,7 +691,9 @@ func createLegacySQLite(t *testing.T, path string, recordCount int) {
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqlDB.Close() })
+	// Closed before the helper returns: Windows refuses to rename a file that a
+	// connection still holds open, and the tests hand this file to the promotion.
+	defer func() { require.NoError(t, sqlDB.Close()) }()
 
 	require.NoError(t, db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, source_node TEXT)").Error)
 	for i := range recordCount {
@@ -1108,6 +1111,33 @@ func TestReportStartupError_SkipsConnectivityFailures(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, []string{"datastore-startup", "mysql", "openDatabase"}, events[0].Fingerprint)
 	assert.Equal(t, sentry.LevelWarning, events[0].Level)
+}
+
+// TestDirectReports_SkipConnectivityFailures pins that the schema init and
+// state transition reports skip a lost database connection and still report
+// a server error.
+// Not parallel: it binds a client on the process-wide Sentry hub.
+func TestDirectReports_SkipConnectivityFailures(t *testing.T) {
+	refused := &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+	serverErr := &mysql.MySQLError{Number: 1049, Message: "Unknown database 'birdnet'"}
+
+	reports := map[string]func(err error){
+		"reportInitFailure":          func(err error) { reportInitFailure("mysql", "AutoMigrate", err) },
+		"reportStateTransitionError": func(err error) { reportStateTransitionError("idle", "initializing", err) },
+	}
+	for name, report := range reports {
+		t.Run(name, func(t *testing.T) {
+			transport := bindCaptureTransport(t)
+
+			report(refused)
+			sentry.Flush(time.Second)
+			assert.Empty(t, transport.captured(), "a lost connection is not a schema or state defect")
+
+			report(serverErr)
+			sentry.Flush(time.Second)
+			assert.Len(t, transport.captured(), 1, "a server error is still reported")
+		})
+	}
 }
 
 // TestMigrationTableResolveErrors pins the errors of the migration state table

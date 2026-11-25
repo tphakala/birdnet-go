@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -18,6 +19,7 @@
   import DatabaseMysqlInnodbCard from '$lib/desktop/features/system/components/DatabaseMysqlInnodbCard.svelte';
   import DatabaseDetectionRateCard from '$lib/desktop/features/system/components/DatabaseDetectionRateCard.svelte';
   import DatabaseTableBreakdown from '$lib/desktop/features/system/components/DatabaseTableBreakdown.svelte';
+  import DatabaseDashboardSkeleton from '$lib/desktop/features/system/components/DatabaseDashboardSkeleton.svelte';
 
   // Migration view components
   import DatabaseMigrationMetricStrip from '$lib/desktop/features/system/components/DatabaseMigrationMetricStrip.svelte';
@@ -404,6 +406,8 @@
   }
 
   let backupJobs = $state<BackupJob[]>([]);
+  /** True until the first backup jobs request settles; polls never set it again. */
+  let backupJobsLoading = $state(true);
   let backupCreating = $state(false);
   let backupJobsError = $state<string | null>(null);
   let backupCreateError = $state<string | null>(null);
@@ -415,8 +419,33 @@
       backupJobsError = null;
     } catch (e) {
       backupJobsError = apiErrorMessage(e);
+    } finally {
+      backupJobsLoading = false;
     }
   }
+
+  // --- Initial load ---
+  // The page shows one skeleton until the first requests its cards read have answered (the
+  // status; then the overview and legacy status, or the stats and backups of the migration
+  // view), so no card shows a placeholder value (Disconnected, No backups) or pops in late.
+  // A failed overview ends it at once: its error replaces the cards that need the legacy status.
+  let legacySettled = $derived(legacyStatus.data !== null || legacyStatus.error !== null);
+  let firstLoadPending = $derived(
+    migrationStatus.loading ||
+      (isV2OnlyMode
+        ? overviewLoading || (!overviewError && !legacySettled)
+        : legacyStats.loading || v2Stats.loading || backupJobsLoading)
+  );
+  // Latched: once the page has loaded, refreshes and polls never bring the page skeleton
+  // back. A later switch to v2-only whose overview has not answered yet shows the dashboard
+  // skeleton inside that view instead (see the template)
+  let initialLoadDone = $state(false);
+  $effect(() => {
+    // Read nothing once latched, so polls stop re-running this effect
+    if (initialLoadDone) return;
+    if (!firstLoadPending) initialLoadDone = true;
+  });
+  let showSkeleton = $derived(!initialLoadDone && firstLoadPending);
 
   async function createBackup(): Promise<void> {
     backupCreating = true;
@@ -470,7 +499,9 @@
   function connectMetricsStream(): void {
     disconnectMetricsStream();
     metricsSSE = new ReconnectingEventSource(
-      '/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec',
+      buildAppUrl(
+        '/api/v2/system/metrics/stream?metrics=db.read_latency_ms,db.write_latency_ms,db.queries_per_sec'
+      ),
       { max_retry_time: 30000 }
     );
 
@@ -713,21 +744,13 @@
     />
   {/if}
 
-  {#if migrationStatus.loading}
-    <!-- Loading state (waiting for migration status to determine view) -->
-    <div class="flex items-center justify-center py-16" role="status">
-      <div class="text-sm text-muted">
-        {t('system.database.dashboard.loading')}
-      </div>
-    </div>
+  {#if showSkeleton}
+    <DatabaseDashboardSkeleton />
   {:else if isV2OnlyMode}
     <!-- OPERATIONAL DASHBOARD VIEW -->
-    {#if overviewLoading}
-      <div class="flex items-center justify-center py-16" role="status">
-        <div class="text-sm text-muted">
-          {t('system.database.dashboard.loading')}
-        </div>
-      </div>
+    {#if overviewLoading && !overview}
+      <!-- Reached when the page loaded in the migration view and switched before the overview answered -->
+      <DatabaseDashboardSkeleton />
     {:else if overviewError || !overview}
       <ErrorAlert
         title={t('system.database.dashboard.fetchFailed')}
@@ -750,22 +773,25 @@
           {queriesPerSecHistory}
         />
 
-        <!-- Middle row: engine-specific cards + detection rate -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          {#if overview.engine === 'sqlite' && overview.sqlite}
+        <!-- Middle row: engine-specific cards -->
+        {#if overview.engine === 'sqlite' && overview.sqlite}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <DatabaseSqliteDetails details={overview.sqlite} />
             <DatabaseLocksWalCard details={overview.sqlite} />
-          {:else if overview.engine === 'mysql' && overview.mysql}
+          </div>
+        {:else if overview.engine === 'mysql' && overview.mysql}
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <DatabaseMysqlConnectionPool details={overview.mysql} />
             <DatabaseMysqlInnodbCard details={overview.mysql} />
-          {/if}
+          </div>
+        {/if}
 
-          <DatabaseDetectionRateCard
-            data={overview.detection_rate_24h ?? []}
-            engine={overview.engine}
-            mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
-          />
-        </div>
+        <!-- Detection rate: full-width row so the chart can size to its container -->
+        <DatabaseDetectionRateCard
+          data={overview.detection_rate_24h ?? []}
+          engine={overview.engine}
+          mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
+        />
 
         <!-- Table breakdown -->
         <DatabaseTableBreakdown
@@ -804,7 +830,7 @@
               cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
               cleanupError={migrationStatus.data?.cleanup_error ?? ''}
               cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
-              isLoading={legacyStatus.loading || cleanupLoading}
+              isLoading={cleanupLoading}
               onDelete={() => (showCleanupDialog = true)}
             />
           {/if}

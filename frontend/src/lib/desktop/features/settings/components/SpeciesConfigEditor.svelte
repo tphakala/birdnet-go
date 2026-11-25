@@ -7,16 +7,20 @@
   @component
 -->
 <script lang="ts">
-  import { ChevronRight, Check } from '@lucide/svelte';
+  import { untrack } from 'svelte';
+  import { ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { SpeciesConfig, Action } from '$lib/stores/settings';
   import EditorCard from './editor/EditorCard.svelte';
   import EditorTextField from './editor/EditorTextField.svelte';
   import EditorSlider from './editor/EditorSlider.svelte';
   import EditorFooter from './editor/EditorFooter.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import EditorSpeciesInput from './editor/EditorSpeciesInput.svelte';
   import { toLocalizedPredictions, matchTypedToCanonical } from '$lib/utils/speciesPredictions';
   import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
+  import { samePathAndQuery } from '$lib/stores/unsavedChanges.svelte';
 
   interface SavePayload {
     species: string;
@@ -81,6 +85,31 @@
     Array.isArray(existingAction?.parameters) ? existingAction.parameters.join(',') : ''
   );
   let actionExecuteDefaults = $state(existingAction?.executeDefaults !== false);
+
+  // The saved fields as they were when the editor opened (the parent re-creates the editor per
+  // species with {#key}). showActions only expands a section and is not saved, so it is left out.
+  const opening = untrack(() => ({
+    canonicalSpecies,
+    speciesName: speciesName.trim(),
+    threshold,
+    interval,
+    actionCommand,
+    actionParameters,
+    actionExecuteDefaults,
+  }));
+
+  // Typed text counts only while it differs from the opening label, so erasing back is clean.
+  const isDirty = () =>
+    canonicalSpecies !== opening.canonicalSpecies ||
+    (speciesEdited && speciesName.trim() !== opening.speciesName) ||
+    threshold !== opening.threshold ||
+    interval !== opening.interval ||
+    actionCommand !== opening.actionCommand ||
+    actionParameters !== opening.actionParameters ||
+    actionExecuteDefaults !== opening.actionExecuteDefaults;
+
+  // The editor lives in a tab, so a tab switch (query change) unmounts it as well.
+  useUnsavedChangesGuard(isDirty, { allows: samePathAndQuery });
 
   // Predictions paired with localized labels for save-time resolution.
   let localizedPredictions = $derived(toLocalizedPredictions(predictions ?? [], localizeLabel));
@@ -227,7 +256,7 @@
   <div class="border-t border-[var(--color-base-300)] pt-3">
     <button
       type="button"
-      class="flex items-center gap-2 text-xs font-medium text-[var(--color-base-content)]/60 hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+      class="flex items-center gap-2 text-xs font-medium text-[var(--color-base-content)]/60 hover:text-[var(--text-primary)] transition-colors cursor-pointer"
       onclick={() => (showActions = !showActions)}
       aria-expanded={showActions}
     >
@@ -294,26 +323,15 @@
         </div>
       </div>
 
-      <!-- Execute defaults checkbox -->
-      <label class="flex items-center gap-2 cursor-pointer">
-        <span class="relative inline-flex items-center justify-center w-4 h-4">
-          <input
-            type="checkbox"
-            bind:checked={actionExecuteDefaults}
-            disabled={disabled || saving}
-            class="peer appearance-none w-4 h-4 border-2 border-[var(--color-base-300)] rounded bg-[var(--color-base-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
-          />
-          <Check
-            class="absolute w-2.5 h-2.5 text-[var(--color-primary-content)] pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity"
-          />
-        </span>
-        <span class="text-xs text-[var(--color-base-content)]/60">
-          {t('settings.species.actionsModal.executeDefaults.label')}
-        </span>
-      </label>
-      <span class="text-xs text-[var(--color-base-content)]/40 block">
-        {t('settings.species.actionsModal.executeDefaults.helpText')}
-      </span>
+      <!-- Execute defaults switch -->
+      <ToggleField
+        variant="inline"
+        label={t('settings.species.actionsModal.executeDefaults.label')}
+        description={t('settings.species.actionsModal.executeDefaults.helpText')}
+        value={actionExecuteDefaults}
+        disabled={disabled || saving}
+        onUpdate={value => (actionExecuteDefaults = value)}
+      />
     </div>
   {/if}
 

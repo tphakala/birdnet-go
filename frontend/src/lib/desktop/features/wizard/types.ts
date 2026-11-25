@@ -1,7 +1,13 @@
 import type { Component } from 'svelte';
 import type { TranslationKey } from '$lib/i18n';
+import type { CatalogEntry } from '$lib/types/models';
 
-export type WizardFlow = 'onboarding' | 'whats-new';
+/**
+ * The wizard flows. Onboarding and what's new belong to an app version and are
+ * dismissed for it; the model next steps flow follows a model install and is
+ * offered again after the next one.
+ */
+export type WizardFlow = 'onboarding' | 'whats-new' | 'model-next-steps';
 export type WizardStatus = 'idle' | 'active' | 'completed';
 
 /** Load status of the current step, set by the dialog. */
@@ -58,7 +64,23 @@ export interface WizardStepProps {
   registerLeaveHandler?: (handler: StepLeaveHandler) => () => void;
 }
 
+/** The model a model next steps flow was launched for, taken from its catalog entry. */
+export interface InstalledModelContext {
+  catalogId: string;
+  name: string;
+  category: CatalogEntry['category'];
+  /** Classifier registry ID; absent for an entry that is not a classifier (the geomodel). */
+  registryId?: string;
+}
+
+/** A step of the model next steps flow, shown when its predicate holds for the installed model. */
+export type ModelNextStep = ComponentStep & {
+  appliesTo: (model: InstalledModelContext) => boolean;
+};
+
 export interface WizardLaunchOptions {
   previousVersion?: string;
   currentVersion?: string;
+  /** The installed model; required by the model next steps flow. */
+  model?: InstalledModelContext;
 }

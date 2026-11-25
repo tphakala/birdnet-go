@@ -34,6 +34,9 @@
   import type { Snippet } from 'svelte';
   import { TrendingUp, TrendingDown, Minus } from '@lucide/svelte';
   import { safeGet } from '$lib/utils/security';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
+  import { t } from '$lib/i18n';
 
   type TrendDirection = 'up' | 'down' | 'neutral';
   type CardVariant =
@@ -98,8 +101,8 @@
   };
 
   const trendClasses: Record<TrendDirection, string> = {
-    up: 'text-[var(--color-success)]',
-    down: 'text-[var(--color-error)]',
+    up: 'text-[var(--text-success)]',
+    down: 'text-[var(--text-error)]',
     neutral: 'text-[var(--color-base-content)]/70',
   };
 
@@ -128,11 +131,17 @@
     <div class="flex items-start justify-between">
       <div class="flex-1">
         {#if loading}
+          <!-- The label stands where the loaded label line is, in the card's own text colour, so
+               the loading card is as tall as the loaded value and label (28 + 8 + 20 = the 36 + 20
+               loaded); a trend row, when the card has one, still arrives with the data -->
           <div class="space-y-2">
-            <div class="skeleton h-8 w-24"></div>
-            <div class="skeleton h-4 w-32"></div>
+            <Skeleton className="h-7 w-24" />
+            <SkeletonStatus
+              label={t('common.loading')}
+              className="block text-sm font-medium opacity-90 text-current!"
+            />
             {#if subLabel}
-              <div class="skeleton h-3 w-28"></div>
+              <Skeleton className="h-3 w-28" />
             {/if}
           </div>
         {:else}

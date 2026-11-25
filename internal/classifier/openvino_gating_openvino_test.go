@@ -55,7 +55,7 @@ func TestShouldTryOpenVINO_Tagged_HardwareGateDecides(t *testing.T) {
 	// opt-in would make `shouldTryOpenVINO` diverge from `expected` on a capable
 	// host). The fixed-expectation gate coverage lives in the sibling _OptOut,
 	// _WrongModel, and TestOpenVINOPlan_* tests.
-	expected := cpuspec.HasNativeF16() || openVINOGPUAvailable("")
+	expected := cpuspec.HasNativeF16() || len(openVINOGPUs("")) > 0
 	assert.Equal(t, expected, bn.shouldTryOpenVINO(),
 		"with tag, supported model, and opt-in, eligibility must equal ARM f16 CPU capability or OV GPU availability")
 }

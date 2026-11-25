@@ -257,7 +257,7 @@
               tabindex="-1"
               class="mt-3 flex items-center gap-1.5 font-medium focus:outline-none"
             >
-              <CircleCheck class="size-4 shrink-0 text-[var(--color-success)]" aria-hidden="true" />
+              <CircleCheck class="size-4 shrink-0 text-[var(--text-success)]" aria-hidden="true" />
               {coveringRange
                 ? t('settings.security.reverseProxy.check.coveredBy', { range: coveringRange })
                 : t('settings.security.reverseProxy.check.added')}

@@ -5,7 +5,9 @@ import {
   settingsActions,
   hasUnsavedChanges,
   resetIfMatchFallbackForTest,
+  resetStagedEditsForTest,
   SECTION_STORE_PATHS,
+  SettingsChangedElsewhereError,
 } from './settings';
 import type {
   AudioSettings,
@@ -16,7 +18,9 @@ import type {
   SettingsFormData,
 } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
+import type { SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+import { mergeSettingsPatch } from '$lib/utils/settingsMerge';
 import { deferred } from '../../test/async-helpers';
 import { lookup, serverSettings } from '../../test/settings-helpers';
 import { serveConfirmedSettings } from '../../test/settings-store-helpers';
@@ -2184,5 +2188,618 @@ describe('Settings Store - save conflicts (If-Match)', () => {
     await settingsActions.saveSettings({ notify: false });
 
     expect(sentIfMatch()).toEqual([expected]);
+  });
+});
+
+describe('Settings Store - staged section saves', () => {
+  type Rec = Record<string, unknown>;
+  type PatchOptions = { ifMatch?: string; onETag?: (etag: string | null) => void };
+  type LoadOptions = { onETag?: (etag: string | null) => void };
+
+  let server: Rec;
+  let revision: number;
+  /** What the fake server sends as ETag: strong, weak (a proxy) or absent (an older backend). */
+  let etagMode: 'strong' | 'weak' | 'none';
+  /** When set, the next PATCH waits for it after being recorded, so a test can act mid-request. */
+  let hold: { promise: Promise<void> } | null;
+  /** When set, the held PATCH fails once released. */
+  let failHeld: boolean;
+  let callLog: string[];
+
+  const currentETag = (): string | null => {
+    if (etagMode === 'none') return null;
+    return `${etagMode === 'weak' ? 'W/' : ''}"e-${revision}"`;
+  };
+  const conflict412 = () => Object.assign(new Error('Precondition Failed'), { status: 412 });
+  const badRequest = () => Object.assign(new Error('Bad Request'), { status: 400 });
+
+  const sectionOf = (root: Rec, section: keyof typeof SECTION_STORE_PATHS): Rec =>
+    lookup(root, [...SECTION_STORE_PATHS[section]]) as Rec;
+  /** Merges patch into target in place with the server's PATCH merge. */
+  const mergeInto = (target: Rec, patch: Rec): void => {
+    Object.assign(target, mergeSettingsPatch(target, patch));
+  };
+  /** The server always emits quietHours on a source; a client never sends it. */
+  const inServerShape = (sources: Rec[]): Rec[] =>
+    sources.map(source => ({ quietHours: { enabled: false }, ...source }));
+
+  const sources = (name: string, gain = 0) => [{ name, device: 'hw:0', gain, models: ['birdnet'] }];
+  const stage = (partial: Rec) => settingsActions.stageSectionEdit('audio', partial);
+  const formAudio = () => get(settingsStore).formData.realtime?.audio as unknown as Rec;
+  const savedAudio = () => get(settingsStore).originalData.realtime?.audio as unknown as Rec;
+  const patchCalls = () => vi.mocked(settingsAPI.patchSection).mock.calls;
+  const patchBody = (index: number) => patchCalls()[index][1] as unknown as Rec;
+  const patchOptions = (index: number) => patchCalls()[index][2];
+  /** Changes the server behind the client's back, as another writer would. */
+  const changeServerElsewhere = (section: keyof typeof SECTION_STORE_PATHS, patch: Rec) => {
+    mergeInto(sectionOf(server, section), patch);
+    revision++;
+  };
+  const waitForPatch = (count: number) =>
+    vi.waitFor(() => expect(patchCalls().length).toBeGreaterThanOrEqual(count));
+
+  beforeEach(async () => {
+    resetIfMatchFallbackForTest();
+    resetStagedEditsForTest();
+    server = serverSettings() as unknown as Rec;
+    revision = 1;
+    etagMode = 'strong';
+    hold = null;
+    failHeld = false;
+    callLog = [];
+    vi.mocked(settingsAPI.load)
+      .mockReset()
+      .mockImplementation((async (options?: LoadOptions) => {
+        options?.onETag?.(currentETag());
+        return JSON.parse(JSON.stringify(server));
+      }) as typeof settingsAPI.load);
+    vi.mocked(settingsAPI.save)
+      .mockReset()
+      .mockImplementation(async () => {
+        callLog.push('put');
+        return undefined;
+      });
+    vi.mocked(settingsAPI.patchSection)
+      .mockReset()
+      .mockImplementation(
+        async (section: keyof typeof SECTION_STORE_PATHS, body: Rec, options?: PatchOptions) => {
+          callLog.push(`patch:${section}`);
+          if (hold) {
+            const gate = hold;
+            hold = null;
+            await gate.promise;
+            if (failHeld) {
+              failHeld = false;
+              throw badRequest();
+            }
+          }
+          if (options?.ifMatch && options.ifMatch !== currentETag()) {
+            options.onETag?.(currentETag());
+            throw conflict412();
+          }
+          const target = sectionOf(server, section);
+          mergeInto(target, body);
+          if (Array.isArray(target.sources))
+            target.sources = inServerShape(target.sources as Rec[]);
+          revision++;
+          options?.onETag?.(currentETag());
+          return { settings: JSON.parse(JSON.stringify(target)), skippedFields: [] };
+        }
+      );
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    await settingsActions.loadSettings();
+  });
+
+  afterEach(() => {
+    resetStagedEditsForTest();
+  });
+
+  it('refuses to stage before settings have loaded', () => {
+    settingsStore.update(state => ({ ...state, dataLoaded: false }));
+    expect(() => stage({ sources: sources('A') })).toThrow('settings.errors.loadFailed');
+  });
+
+  it('sends only the staged path with If-Match and records the echoed server shape as saved', async () => {
+    stage({ sources: sources('A') });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(1);
+    expect(patchBody(0)).toEqual({ sources: sources('A') });
+    expect(patchOptions(0)?.ifMatch).toBe('"e-1"');
+    expect(result).toMatchObject({
+      saved: [['sources']],
+      dropped: [],
+      failed: [],
+      remaining: false,
+    });
+    const echoed = inServerShape(sources('A'));
+    expect(formAudio().sources).toEqual(echoed);
+    expect(savedAudio().sources).toEqual(echoed);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('coalesces two edits of the same array into one request carrying the latest', async () => {
+    stage({ sources: sources('A') });
+    stage({ sources: sources('B') });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(1);
+    expect(patchBody(0)).toEqual({ sources: sources('B') });
+    expect(result.saved).toEqual([['sources']]);
+  });
+
+  it('takes the staged value back to the stored one when the save fails', async () => {
+    const stored = savedAudio().sources;
+    stage({ sources: sources('A') });
+    vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(badRequest());
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(result.failed).toEqual([['sources']]);
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.remaining).toBe(false);
+    expect(formAudio().sources).toEqual(stored);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    // Nothing is staged any more, so another save has nothing to send.
+    await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(1);
+  });
+
+  it('takes back a value that coercion changed, which no longer equals what the caller handed in', async () => {
+    const stored = savedAudio().export;
+    stage({ export: { ...(stored as Rec), gain: 99 } });
+    expect((formAudio().export as Rec).gain).toBe(40);
+    vi.mocked(settingsAPI.patchSection).mockRejectedValueOnce(badRequest());
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(result.failed).toContainEqual(['export', 'gain']);
+    expect(formAudio().export).toEqual(stored);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('keeps a newer edit staged when the request it raced succeeds, and sends it next', async () => {
+    stage({ sources: sources('v1') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: sources('v2') });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(sources('v2'));
+    const second = await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(2);
+    expect(patchBody(1)).toEqual({ sources: sources('v2') });
+    expect(second.remaining).toBe(false);
+    expect(patchOptions(1)?.ifMatch).toBe('"e-2"');
+    expect(formAudio().sources).toEqual(inServerShape(sources('v2')));
+  });
+
+  it('keeps a newer edit staged when the request it raced fails, and sends it next', async () => {
+    stage({ sources: sources('v1') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: sources('v2') });
+    failHeld = true;
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    expect(result.failed).toEqual([]);
+    expect(formAudio().sources).toEqual(sources('v2'));
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('v2') });
+  });
+
+  it('keeps an edit made back to the stored value during the request, and sends it next', async () => {
+    const stored = savedAudio().sources;
+    stage({ sources: sources('v1') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: stored });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(stored);
+    await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(2);
+    expect(patchBody(1)).toEqual({ sources: stored });
+    expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(stored as Rec[]));
+  });
+
+  it('reverts only the newest edit of a path when an older request fails after A, B, A', async () => {
+    const stored = savedAudio().sources;
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    failHeld = true;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: sources('B') });
+    stage({ sources: sources('A') });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.failed).toEqual([]);
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(sources('A'));
+    expect(formAudio().sources).not.toEqual(stored);
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('A') });
+  });
+
+  it('keeps a path staged after a success when it was edited to the sent value again', async () => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    stage({ sources: sources('B') });
+    stage({ sources: sources('A') });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    const second = await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(1);
+    expect(second).toMatchObject({ saved: [['sources']], failed: [], remaining: false });
+  });
+
+  it('keeps a path staged when a store listener edits it again while a save is published', async () => {
+    stage({ sources: sources('A') });
+    let armed = true;
+    const unsubscribe = settingsStore.subscribe(state => {
+      const saved = state.originalData.realtime?.audio?.sources;
+      if (armed && JSON.stringify(saved) === JSON.stringify(inServerShape(sources('A')))) {
+        armed = false;
+        stage({ sources: sources('B') });
+      }
+    });
+
+    const result = await settingsActions.saveStagedSection('audio');
+    unsubscribe();
+
+    expect(result.saved).toEqual([]);
+    expect(result.remaining).toBe(true);
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('B') });
+  });
+
+  it.each([
+    ['resetAllSettings', () => settingsActions.resetAllSettings()],
+    ['resetSection', () => settingsActions.resetSection('realtime')],
+  ])('%s drops staged paths so a request in flight does not resend them', async (_name, reset) => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    reset();
+    gate.resolve();
+    const result = await first;
+
+    // The reset discarded unsaved edits; the value already on its way is stored now,
+    // so the form follows it and nothing is left unsaved.
+    expect(result.remaining).toBe(false);
+    expect(result.failed).toEqual([]);
+    expect(formAudio().sources).toEqual(inServerShape(sources('A')));
+    expect(savedAudio().sources).toEqual(inServerShape(sources('A')));
+    expect(get(hasUnsavedChanges)).toBe(false);
+    const next = await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(1);
+    expect(next.saved).toEqual([]);
+  });
+
+  it('keeps a form edit made through updateSection after a reset while the path is being sent', async () => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    settingsActions.resetSection('realtime');
+    settingsActions.updateSection('realtime', {
+      audio: { ...formAudio(), sources: sources('B') },
+    } as unknown as Parameters<typeof settingsActions.updateSection>[1]);
+    gate.resolve();
+    await first;
+
+    expect(formAudio().sources).toEqual(sources('B'));
+    expect(get(hasUnsavedChanges)).toBe(true);
+  });
+
+  it('keeps an edit made after a reset while the reset path is still being sent', async () => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const first = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    settingsActions.resetSection('realtime');
+    stage({ sources: sources('B') });
+    gate.resolve();
+    const result = await first;
+
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(sources('B'));
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(patchCalls().length - 1)).toEqual({ sources: sources('B') });
+  });
+
+  it('does not stage an empty object, which the server merge would not clear', () => {
+    const before = formAudio().export;
+    stage({ export: {} });
+    expect(formAudio().export).toEqual(before);
+    return settingsActions.saveStagedSection('audio').then(result => {
+      expect(patchCalls()).toHaveLength(0);
+      expect(result).toMatchObject({ saved: [], failed: [], remaining: false });
+    });
+  });
+
+  it('takes staged edits back when the baseline fetch fails before the first send', async () => {
+    const stored = savedAudio().sources;
+    etagMode = 'none';
+    await settingsActions.loadSettings();
+    stage({ sources: sources('A') });
+    vi.mocked(settingsAPI.load).mockRejectedValueOnce(new Error('network down'));
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(0);
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.failed).toEqual([['sources']]);
+    expect(result.remaining).toBe(false);
+    expect(formAudio().sources).toEqual(stored);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('confirms a staged value equal to the stored one without sending a request', async () => {
+    stage({ sources: savedAudio().sources });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(0);
+    expect(result).toMatchObject({ saved: [['sources']], failed: [], remaining: false });
+  });
+
+  it('gives up after the attempt cap when every send is refused, and takes the edit back', async () => {
+    const stored = savedAudio().sources;
+    let refusals = 0;
+    vi.mocked(settingsAPI.patchSection).mockImplementation(async (_section, _body, options) => {
+      refusals++;
+      options?.onETag?.(`"other-${refusals}"`);
+      throw conflict412();
+    });
+    stage({ sources: sources('A') });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(2);
+    expect(result.error).toBeInstanceOf(SettingsChangedElsewhereError);
+    expect(result.failed).toEqual([['sources']]);
+    expect(formAudio().sources).toEqual(stored);
+  });
+
+  it('sends once without If-Match when two refusals name the same ETag', async () => {
+    const accepting = vi.mocked(settingsAPI.patchSection).getMockImplementation();
+    vi.mocked(settingsAPI.patchSection).mockImplementation((async (
+      ...args: Parameters<typeof settingsAPI.patchSection>
+    ) => {
+      const options = args[2];
+      if (options?.ifMatch) {
+        options.onETag?.('"rewritten"');
+        throw conflict412();
+      }
+      return accepting?.(...args);
+    }) as typeof settingsAPI.patchSection);
+    stage({ sources: sources('A') });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(3);
+    expect(patchOptions(2)?.ifMatch).toBeUndefined();
+    expect(result).toMatchObject({ saved: [['sources']], failed: [] });
+    expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(sources('A')));
+  });
+
+  it('keeps an edit made while the baseline fetch is failing, and reports only the unsent paths it took back', async () => {
+    etagMode = 'none';
+    await settingsActions.loadSettings();
+    stage({ sources: sources('A') });
+    vi.mocked(settingsAPI.load).mockImplementationOnce(async () => {
+      stage({ sources: sources('B') });
+      throw new Error('network down');
+    });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(result.failed).toEqual([]);
+    expect(result.remaining).toBe(true);
+    expect(formAudio().sources).toEqual(sources('B'));
+  });
+
+  it('does not report a staged value equal to the stored one as failed when the baseline fetch fails', async () => {
+    etagMode = 'none';
+    await settingsActions.loadSettings();
+    stage({ sources: savedAudio().sources });
+    vi.mocked(settingsAPI.load).mockRejectedValueOnce(new Error('network down'));
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.failed).toEqual([]);
+  });
+
+  it('refetches and resends once after a 412 when the server changed another path', async () => {
+    stage({ sources: sources('A') });
+    changeServerElsewhere('audio', { export: { type: 'flac' } });
+
+    const result = await settingsActions.saveStagedSection('audio');
+
+    expect(patchCalls()).toHaveLength(2);
+    expect(patchOptions(0)?.ifMatch).toBe('"e-1"');
+    expect(patchOptions(1)?.ifMatch).toBe('"e-2"');
+    expect(result).toMatchObject({ saved: [['sources']], dropped: [], failed: [] });
+    expect(sectionOf(server, 'audio').sources).toEqual(inServerShape(sources('A')));
+    expect((formAudio().export as Rec).type).toBe('flac');
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('does not resend a stale array after a 412 when the server changed that array', async () => {
+    const listener = vi.fn();
+    const unsubscribe = settingsActions.onStagedEditsDropped(listener);
+    stage({ sources: sources('mine') });
+    changeServerElsewhere('audio', { sources: sources('theirs') });
+
+    const result = await settingsActions.saveStagedSection('audio');
+    unsubscribe();
+
+    expect(patchCalls()).toHaveLength(1);
+    expect(result).toMatchObject({ saved: [], dropped: [['sources']], failed: [] });
+    expect(sectionOf(server, 'audio').sources).toEqual(sources('theirs'));
+    expect(formAudio().sources).toEqual(sources('theirs'));
+    expect(listener).toHaveBeenCalledWith([{ section: 'audio', path: ['sources'] }]);
+  });
+
+  it('never sends a queued edit of another section whose path the server changed during a 412', async () => {
+    stage({ sources: sources('A') });
+    const mine: SettingsSectionPayloads['rtsp'] = {
+      streams: [{ name: 'Mine', url: 'rtsp://mine', enabled: true, type: 'rtsp' }],
+    };
+    settingsActions.stageSectionEdit('rtsp', mine);
+    changeServerElsewhere('rtsp', {
+      streams: [{ name: 'Theirs', url: 'rtsp://theirs', enabled: true, type: 'rtsp' }],
+    });
+
+    const own = await settingsActions.saveStagedSection('audio');
+    const queued = await settingsActions.saveStagedSection('rtsp');
+
+    expect(own.dropped).toEqual([]);
+    expect(callLog).toEqual(['patch:audio', 'patch:audio']);
+    expect(queued.saved).toEqual([]);
+    const streams = get(settingsStore).formData.realtime?.rtsp?.streams;
+    expect(streams?.[0].name).toBe('Theirs');
+  });
+
+  it('drops a staged path on refreshKeepingEdits when the server changed it', async () => {
+    const listener = vi.fn();
+    const unsubscribe = settingsActions.onStagedEditsDropped(listener);
+    stage({ sources: sources('mine') });
+    changeServerElsewhere('audio', { sources: sources('theirs') });
+
+    await settingsActions.refreshKeepingEdits();
+    unsubscribe();
+
+    expect(formAudio().sources).toEqual(sources('theirs'));
+    expect(listener).toHaveBeenCalledWith([{ section: 'audio', path: ['sources'] }]);
+    await settingsActions.saveStagedSection('audio');
+    expect(patchCalls()).toHaveLength(0);
+  });
+
+  it('keeps a staged edit across loadSettings when the server did not change it, and sends it', async () => {
+    stage({ sources: sources('mine') });
+
+    await settingsActions.loadSettings();
+
+    expect(formAudio().sources).toEqual(sources('mine'));
+    await settingsActions.saveStagedSection('audio');
+    expect(patchBody(0)).toEqual({ sources: sources('mine') });
+  });
+
+  it('reports a staged path as dropped when loadSettings finds the server changed it', async () => {
+    const listener = vi.fn();
+    const unsubscribe = settingsActions.onStagedEditsDropped(listener);
+    stage({ sources: sources('mine') });
+    changeServerElsewhere('audio', { sources: sources('theirs') });
+
+    await settingsActions.loadSettings();
+    unsubscribe();
+
+    expect(formAudio().sources).toEqual(sources('theirs'));
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes a full save wait for a staged save in flight, then sends one PUT after one PATCH', async () => {
+    stage({ sources: sources('A') });
+    const gate = deferred();
+    hold = gate;
+    const staged = settingsActions.saveStagedSection('audio');
+    await waitForPatch(1);
+
+    const full = settingsActions.saveSettings({ notify: false });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(callLog).toEqual(['patch:audio']);
+
+    gate.resolve();
+    await Promise.all([staged, full]);
+    expect(callLog).toEqual(['patch:audio', 'put']);
+  });
+
+  it('leaves an unsaved manual edit in the same section out of the PATCH and still unsaved', async () => {
+    const edited: Rec = JSON.parse(JSON.stringify(get(settingsStore).formData));
+    const editedAudio = (edited.realtime as Rec).audio as Rec;
+    editedAudio.export = { ...(editedAudio.export as Rec), type: 'flac' };
+    settingsStore.update(state => ({ ...state, formData: edited as unknown as SettingsFormData }));
+    stage({ sources: sources('A') });
+
+    await settingsActions.saveStagedSection('audio');
+
+    expect(patchBody(0)).toEqual({ sources: sources('A') });
+    expect((formAudio().export as Rec).type).toBe('flac');
+    expect((savedAudio().export as Rec).type).toBe('wav');
+    expect(get(hasUnsavedChanges)).toBe(true);
+  });
+
+  it('fetches a snapshot before sending when no ETag is known, and sends no If-Match for a weak one', async () => {
+    etagMode = 'none';
+    await settingsActions.loadSettings();
+    vi.mocked(settingsAPI.load).mockClear();
+    stage({ sources: sources('A') });
+    await settingsActions.saveStagedSection('audio');
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+    expect(patchOptions(0)?.ifMatch).toBeUndefined();
+
+    etagMode = 'weak';
+    vi.mocked(settingsAPI.load).mockClear();
+    stage({ sources: sources('B') });
+    await settingsActions.saveStagedSection('audio');
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+    expect(patchOptions(1)?.ifMatch).toBeUndefined();
+  });
+
+  it('reuses the ETag of the last response instead of fetching before the next send', async () => {
+    stage({ sources: sources('A') });
+    await settingsActions.saveStagedSection('audio');
+    vi.mocked(settingsAPI.load).mockClear();
+    stage({ sources: sources('B') });
+
+    await settingsActions.saveStagedSection('audio');
+
+    expect(settingsAPI.load).not.toHaveBeenCalled();
+    expect(patchOptions(1)?.ifMatch).toBe(`"e-${revision - 1}"`);
   });
 });

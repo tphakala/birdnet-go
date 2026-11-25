@@ -97,7 +97,15 @@ func decodeChannels(ctx context.Context, path string, win *window, maxBytes, min
 	}
 	defer func() { _ = f.Close() }()
 
-	src, err := openSourceChannels(f, path, maxChannels)
+	return decodeOpenFile(ctx, f, size, path, win, maxBytes, minRate, maxChannels)
+}
+
+// decodeOpenFile is the decode step of decodeChannels on an opened file of the
+// given size: the decoder is chosen by the extension of name, and f is read from
+// its current offset and not closed. maxBytes must already be within
+// (0, maxDecodedPCMBytes].
+func decodeOpenFile(ctx context.Context, f *os.File, size int64, name string, win *window, maxBytes, minRate, maxChannels int) (*pcmBuffer, error) {
+	src, err := openSourceChannels(f, name, maxChannels)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +141,20 @@ func openSourceFile(path string) (*os.File, int64, error) {
 		return nil, 0, wrapError(err, errors.CategoryFileIO, "decode_open")
 	}
 	return f, info.Size(), nil
+}
+
+// statSourceFile checks that an already opened file is a regular file within the
+// size bound, and returns its size. It is openSourceFile's check for a handle the
+// caller opened, so no path is resolved again.
+func statSourceFile(f *os.File) (int64, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return 0, wrapError(err, errors.CategoryFileIO, "decode_stat")
+	}
+	if err := checkSourceInfo(info); err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
 }
 
 // checkSourceInfo rejects a source that is not a regular file or exceeds the

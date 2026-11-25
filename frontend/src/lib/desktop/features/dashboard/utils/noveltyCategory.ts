@@ -6,6 +6,8 @@
 // Each card keeps its own icon and label, but the category logic and colors live
 // here so they cannot drift apart.
 
+import { textColorFor } from '$lib/utils/statusTextColor';
+
 /** Novelty categories in precedence order: lifetime > year > season > infrequent. */
 export type NoveltyCategory = 'lifetime' | 'year' | 'season' | 'infrequent';
 
@@ -73,4 +75,13 @@ export function noveltyCategoryColorVar(category: NoveltyCategory): string {
     case 'infrequent':
       return 'var(--color-secondary)';
   }
+}
+
+/**
+ * Colour for a category's icon. Status categories use the AA text token for their fill; the
+ * infrequent category keeps its secondary accent, which is not a status fill.
+ */
+export function noveltyCategoryTextColor(category: NoveltyCategory): string {
+  const fill = noveltyCategoryColorVar(category);
+  return category === 'infrequent' ? fill : textColorFor(fill);
 }

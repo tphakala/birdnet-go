@@ -305,9 +305,9 @@
                         <li class="flex flex-col">
                           <span class="italic">{sub.scientific_name}</span>
                           {#if sub.common_name}
-                            <span class="text-xs opacity-70"
-                              >{localizeSpeciesName(sub.scientific_name, sub.common_name)}</span
-                            >
+                            <span class="text-xs opacity-70">
+                              {localizeSpeciesName(sub.scientific_name, sub.common_name)}
+                            </span>
                           {/if}
                         </li>
                       {/each}

@@ -473,7 +473,7 @@
       {#snippet icon()}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 text-[var(--color-primary)]"
+          class="h-6 w-6 text-[var(--text-primary)]"
           viewBox="0 0 921.998 921.998"
           fill="currentColor"
           aria-hidden="true"
@@ -564,7 +564,7 @@
       {#snippet icon()}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 text-[var(--color-success)]"
+          class="h-6 w-6 text-[var(--text-success)]"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -632,11 +632,11 @@
           <table class="table w-full">
             <thead>
               <tr>
-                <th>{t('analytics.recentDetections.headers.dateTime')}</th>
-                <th>{t('analytics.recentDetections.headers.species')}</th>
-                <th>{t('analytics.recentDetections.headers.confidence')}</th>
-                <th>{t('analytics.recentDetections.headers.source')}</th>
-                <th>{t('analytics.recentDetections.headers.timeOfDay')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.dateTime')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.species')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.confidence')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.source')}</th>
+                <th scope="col">{t('analytics.recentDetections.headers.timeOfDay')}</th>
               </tr>
             </thead>
             <tbody>
@@ -701,8 +701,9 @@
                   <td
                     colspan="5"
                     class="text-center py-4 text-[var(--color-base-content)] opacity-50"
-                    >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
+                    {t('analytics.recentDetections.noRecentDetections')}
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -752,9 +753,9 @@
                       {formatPercentage(detection.confidence)}
                     </span>
                     <SourceBadge {detection} variant="inline" />
-                    <span class="text-xs opacity-70"
-                      >{detection.timeOfDay || t('analytics.recentDetections.unknown')}</span
-                    >
+                    <span class="text-xs opacity-70">
+                      {detection.timeOfDay || t('analytics.recentDetections.unknown')}
+                    </span>
                   </div>
                 </div>
               </div>

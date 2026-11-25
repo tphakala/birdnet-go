@@ -118,7 +118,7 @@ All audio infrastructure lives in `internal/audiocore`. (The older `myaudio` pac
 **From frames to analysis windows.**
 
 1. `analysis.BufferConsumer` is registered per source. It resamples to each enabled model's sample rate (one resampler per distinct target rate) and writes PCM16 to a per-source, per-model analysis buffer and to the source's capture buffer.
-2. The analysis buffer is a ring sized to one model clip, in overwrite mode. A monitor goroutine per source and model polls it and reads a full window when one is available. The window is 3 seconds for BirdNET v2.4, Bat and BSG, and 5 seconds for BirdNET v3 and Perch. The `birdnet.overlap` setting (default none) is scaled proportionally for 5 second models.
+2. The analysis buffer is a ring sized to one model clip, in overwrite mode. A monitor goroutine per source and model polls it and reads a full window when one is available. The window is 3 seconds for BirdNET v2.4, Bat and BSG, and 5 seconds for BirdNET v3, BirdNET+ v3.0 and Perch. The `birdnet.overlap` setting (default none) is scaled proportionally for 5 second models.
 3. The capture buffer holds recent audio (120 seconds by default, longer with extended capture) so that a clip can be cut with pre-roll when a detection is saved.
 
 **Other consumers on a route** include audio level metering (the live level meter in the UI), sound level monitoring (`internal/analysis/sound_level*.go`), and live listening, which is served as HLS (see the API section). Sound level series exposed to Prometheus are labelled with the source id, never the display name, because the metrics listener has no authentication.
@@ -131,17 +131,19 @@ All audio infrastructure lives in `internal/audiocore`. (The older `myaudio` pac
 
 `internal/classifier` owns models and prediction. `internal/inference` defines the backend abstraction and the runtime implementations.
 
-**Orchestrator and model manager.** `classifier.Orchestrator` is the entry point for inference. It manages one or more loaded models with per-model locking, name resolution to a common species identity, hot reload and failover. `ModelManager` handles the model catalog, installation, variant and primary swaps, and uninstalling, driven from the settings UI and API.
+**Orchestrator and model manager.** `classifier.Orchestrator` is the entry point for inference. It manages one or more loaded models with per-model locking, name resolution to a common species identity, hot reload and failover. `ModelManager` handles the model catalog, installation, model and variant swaps, and uninstalling, driven from the settings UI and API.
 
 **Models.** The registry knows these model families; which ones run is chosen by `models.enabled` and the per-model settings sections:
 
-| Model        | Format | Clip | Notes                                                          |
-| ------------ | ------ | ---- | -------------------------------------------------------------- |
-| BirdNET v2.4 | TFLite | 3 s  | Default. FP32 model and range filter models are embedded.      |
-| BirdNET v3   | ONNX   | 5 s  | Downloaded.                                                    |
-| Perch v2     | ONNX   | 5 s  | Downloaded.                                                    |
-| Bat          | ONNX   | 3 s  | Ultrasonic source; gated by a night-time schedule. Downloaded. |
-| BSG Finland  | ONNX   | 3 s  | Regional model. Downloaded.                                    |
+| Model         | Format | Clip   | Notes                                                                                   |
+| ------------- | ------ | ------ | --------------------------------------------------------------------------------------- |
+| BirdNET v2.4  | TFLite | 3 s    | Default. FP32 model and range filter models are embedded.                               |
+| BirdNET v3    | ONNX   | 5 s    | Downloaded.                                                                             |
+| BirdNET+ v3.0 | ONNX   | 5 s    | Own settings section (`birdnetplus`).                                                   |
+| Perch v2      | ONNX   | 5 s    | Downloaded.                                                                             |
+| Bat           | ONNX   | 3 s    | Ultrasonic source; gated by a night-time schedule. Downloaded.                          |
+| BSG-BAT       | ONNX   | 1.02 s | European bat classifier (384 kHz ultrasonic; `bsgbat` settings, nighttime). Downloaded. |
+| BSG Finland   | ONNX   | 3 s    | Regional model. Downloaded.                                                             |
 
 Regional BirdNET v2.4 variants and geographic range models exist in the catalog. Non-embedded models are fetched from Hugging Face by the model manager. Building with the `noembed` tag leaves the embedded models out for smaller binaries and images; the Docker image ships them separately.
 
@@ -149,7 +151,7 @@ Regional BirdNET v2.4 variants and geographic range models exist in the catalog.
 
 - **TFLite** through `go-tflite` (CGO), built unless the `notflite` tag is set. Used for BirdNET v2.4.
 - **ONNX Runtime** through `onnxruntime_go`, loaded as a shared library (`task download-onnxruntime`).
-- **OpenVINO** behind the `openvino` build tag, loaded at runtime, with ONNX Runtime as the fallback when the library is absent. Selected with `birdnet.backend` (`auto`, `onnx`, `openvino`). The default Linux amd64 and arm64 builds carry the tag.
+- **OpenVINO** behind the `openvino` build tag, loaded at runtime, with ONNX Runtime as the fallback when the library is absent. Selected with `birdnet.backend` (`auto`, `onnx`, `openvino`). The default Linux amd64, Linux arm64 and Windows amd64 builds carry the tag.
 
 `internal/hwprofile` decides which model builds a machine can run.
 

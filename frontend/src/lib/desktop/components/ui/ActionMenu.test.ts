@@ -32,6 +32,7 @@ describe('ActionMenu', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('renders the action menu button', () => {
@@ -484,5 +485,70 @@ describe('ActionMenu', () => {
     await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
     const incorrectItem = screen.getByRole('menuitem', { name: /^incorrect/i });
     expect(incorrectItem.textContent).toContain('✗');
+  });
+
+  it('re-anchors the open menu when its size changes', async () => {
+    // The shared ResizeObserver mock never calls back; this one calls back for the elements it
+    // observes, so a size change only reaches the component through observe()
+    const observers = new Set<CapturingObserver>();
+    class CapturingObserver implements ResizeObserver {
+      readonly observed = new Set<Element>();
+      readonly callback: ResizeObserverCallback;
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+        observers.add(this);
+      }
+      observe(target: Element): void {
+        this.observed.add(target);
+      }
+      unobserve(target: Element): void {
+        this.observed.delete(target);
+      }
+      disconnect(): void {
+        this.observed.clear();
+      }
+    }
+    const isObserved = (target: Element) =>
+      [...observers].some(observer => observer.observed.has(target));
+    const resize = (target: Element) => {
+      for (const observer of observers) {
+        if (observer.observed.has(target)) observer.callback([], observer);
+      }
+    };
+    vi.stubGlobal('ResizeObserver', CapturingObserver);
+
+    // The trigger's right edge is at 800 px in the 1024 px jsdom viewport, so the end-aligned
+    // menu is placed at 800 minus its width, clear of the viewport clamp at both widths below
+    const TRIGGER = { left: 768, top: 100, size: 32 };
+    const TRIGGER_RIGHT = TRIGGER.left + TRIGGER.size;
+    const MENU_HEIGHT = 200;
+    const NARROW = 208;
+    const WIDE = 260;
+    let menuWidth = NARROW;
+
+    render(ActionMenu, {
+      props: { detection: createMockDetection(), onReview: vi.fn(), onDelete: vi.fn() },
+    });
+    const trigger = screen.getByRole('button', { name: /actions menu/i });
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(TRIGGER.left, TRIGGER.top, TRIGGER.size, TRIGGER.size)
+    );
+    await fireEvent.click(trigger);
+    const menu = screen.getByRole('menu');
+    Object.defineProperty(menu, 'offsetWidth', { configurable: true, get: () => menuWidth });
+    Object.defineProperty(menu, 'offsetHeight', { configurable: true, get: () => MENU_HEIGHT });
+
+    // The position applied on open, before any size change
+    await waitFor(() => expect(menu.style.left).toBe(`${TRIGGER_RIGHT - NARROW}px`));
+    expect(isObserved(menu)).toBe(true);
+
+    // A verified badge or a longer label widens the menu while it is open
+    menuWidth = WIDE;
+    resize(menu);
+    expect(menu.style.left).toBe(`${TRIGGER_RIGHT - WIDE}px`);
+
+    // Closing stops observing the menu
+    await fireEvent.keyDown(document, { key: 'Escape' });
+    expect(isObserved(menu)).toBe(false);
   });
 });

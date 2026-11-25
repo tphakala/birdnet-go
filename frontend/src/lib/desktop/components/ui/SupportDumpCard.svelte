@@ -1,5 +1,6 @@
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import { buildAppUrl, isRelativePath } from '$lib/utils/urlHelpers';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { Check, Globe, ShieldCheck, Info, Download, XCircle, CircleCheck } from '@lucide/svelte';
   import { onMount } from 'svelte';
@@ -7,6 +8,8 @@
   import { loggers } from '$lib/utils/logger';
   import { api } from '$lib/utils/api';
   import { appState } from '$lib/stores/appState.svelte';
+  import { downloadFromUrl } from '$lib/utils/fileHelpers';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
 
   import type { HTMLAttributes } from 'svelte/elements';
 
@@ -91,6 +94,13 @@
     userMessage: '',
     uploadToSentry: true,
   });
+
+  // The message the last successful generate sent along. A typed message that differs from it
+  // would be lost when the page is left.
+  let submittedMessage = $state('');
+  useUnsavedChangesGuard(
+    () => supportDump.userMessage.trim() !== '' && supportDump.userMessage !== submittedMessage
+  );
 
   let normalizedGithubIssue = $derived(supportDump.githubIssueNumber.trim());
   let hasValidGithubIssue = $derived(/^#?\d+$/.test(normalizedGithubIssue));
@@ -182,6 +192,7 @@
       generating = false;
 
       if (data.success) {
+        submittedMessage = supportDump.userMessage;
         if (supportDump.uploadToSentry && data.uploaded_at) {
           if (data.dump_id) {
             updateStatus(
@@ -198,15 +209,15 @@
               100
             );
           }
-        } else if (data.download_url) {
+        } else if (data.download_url && isRelativePath(data.download_url)) {
           updateStatus(
             t('settings.support.supportReport.statusMessages.downloadSuccess'),
             'success',
             100
           );
-          const downloadUrl = data.download_url;
+          const downloadUrl = buildAppUrl(data.download_url);
           safeTimeout(() => {
-            window.location.href = downloadUrl;
+            downloadFromUrl(downloadUrl);
           }, 500);
         } else {
           updateStatus(
@@ -291,21 +302,21 @@
             </h4>
             <ul class="text-xs space-y-1 text-[var(--color-base-content)] opacity-70">
               <li class="flex items-center gap-2">
-                <CircleCheck class="size-4 text-[var(--color-success)] shrink-0" />
-                <span
-                  >{@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}</span
-                >
+                <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
+                <span>
+                  {@html t('settings.support.supportReport.whatsIncluded.applicationLogs')}
+                </span>
               </li>
               <li class="flex items-center gap-2">
-                <CircleCheck class="size-4 text-[var(--color-success)] shrink-0" />
+                <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
                 <span>{@html t('settings.support.supportReport.whatsIncluded.configuration')}</span>
               </li>
               <li class="flex items-center gap-2">
-                <CircleCheck class="size-4 text-[var(--color-success)] shrink-0" />
+                <CircleCheck class="size-4 text-[var(--text-success)] shrink-0" />
                 <span>{@html t('settings.support.supportReport.whatsIncluded.systemInfo')}</span>
               </li>
               <li class="flex items-center gap-2">
-                <XCircle class="size-4 text-[var(--color-error)] shrink-0" />
+                <XCircle class="size-4 text-[var(--text-error)] shrink-0" />
                 <span>{@html t('settings.support.supportReport.whatsIncluded.notIncluded')}</span>
               </li>
             </ul>
@@ -336,7 +347,7 @@
               <label class="block py-1" for={githubIssueInputId}>
                 <span class="text-sm text-[var(--color-base-content)]">
                   {t('settings.support.supportReport.githubIssue.label')}
-                  <span class="text-[var(--color-error)]">*</span>
+                  <span class="text-[var(--text-error)]">*</span>
                 </span>
               </label>
               <input
@@ -356,7 +367,7 @@
                 pattern="#?[0-9]+"
                 disabled={generating}
               />
-              <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block">
+              <span class="text-xs text-[var(--color-base-content)]/60 mt-1 block">
                 {@html t('settings.support.supportReport.githubIssue.helper', {
                   viewIssuesLink,
                   createIssueLink: createNewIssueLink,
@@ -367,9 +378,9 @@
 
           <div class="mt-4">
             <label class="block py-1" for={userMessageInputId}>
-              <span class="text-sm text-[var(--color-base-content)]"
-                >{t('settings.support.supportReport.userMessage.labelOptional')}</span
-              >
+              <span class="text-sm text-[var(--color-base-content)]">
+                {t('settings.support.supportReport.userMessage.labelOptional')}
+              </span>
             </label>
             <textarea
               id={userMessageInputId}
@@ -405,7 +416,7 @@
                   {t('settings.support.supportReport.uploadOption.details.privacyCompliant')}
                 </p>
               </div>
-              <div class="text-xs text-[var(--color-warning)]/80 flex items-center gap-1">
+              <div class="text-xs text-[var(--text-warning)] flex items-center gap-1">
                 <Info class="size-4 shrink-0" />
                 {t('settings.support.supportReport.uploadOption.details.manualWarning')}
               </div>
@@ -419,13 +430,13 @@
               class="flex items-start gap-3 py-2 px-3 rounded-lg text-sm"
               class:bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)]={statusType ===
                 'info'}
-              class:text-[var(--color-info)]={statusType === 'info'}
+              class:text-[var(--text-info)]={statusType === 'info'}
               class:bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)]={statusType ===
                 'success'}
-              class:text-[var(--color-success)]={statusType === 'success'}
+              class:text-[var(--text-success)]={statusType === 'success'}
               class:bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)]={statusType ===
                 'error'}
-              class:text-[var(--color-error)]={statusType === 'error'}
+              class:text-[var(--text-error)]={statusType === 'error'}
               role="status"
               aria-live="polite"
             >
@@ -461,11 +472,11 @@
             {#if !generating}
               <span class="flex items-center gap-2">
                 <Download class="size-4" />
-                <span
-                  >{supportDump.uploadToSentry
+                <span>
+                  {supportDump.uploadToSentry
                     ? t('settings.support.supportReport.generateButton.upload')
-                    : t('settings.support.supportReport.generateButton.download')}</span
-                >
+                    : t('settings.support.supportReport.generateButton.download')}
+                </span>
               </span>
             {:else}
               <span

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { coerceSettings } from './settingsCoercion';
 import { hasSettingsChanged } from './settingsChanges';
+import { isPlainObject } from './security';
 
 describe('settingsCoercion realtime rtsp streams', () => {
   it('defaults missing stream enabled flag to true', () => {
@@ -532,6 +533,47 @@ describe('settingsCoercion realtime dashboard playbackDenoise', () => {
     const toggledBack = { ...(original as object), enabled: false };
     expect(hasSettingsChanged(original, toggledBack)).toBe(false);
     expect(hasSettingsChanged(original, { ...(original as object), enabled: true })).toBe(true);
+  });
+});
+
+describe('settingsCoercion realtime dashboard playback defaults', () => {
+  // coerceSettings returns a loose object; narrow it to the dashboard section under test.
+  const dashboardOf = (dashboard: Record<string, unknown>) => {
+    const section = coerceSettings('realtime', { dashboard }).dashboard;
+    if (!isPlainObject(section)) throw new Error('the coerced realtime section has no dashboard');
+    return section;
+  };
+
+  it('backfills a missing playback object as the filter off (older server)', () => {
+    expect(dashboardOf({ summaryLimit: 30 }).playback).toEqual({ highPassHz: 0 });
+  });
+
+  it.each([
+    { name: 'off', stored: 0, want: 0 },
+    { name: '1 Hz', stored: 1, want: 0 },
+    { name: '19 Hz', stored: 19, want: 0 },
+    { name: 'the floor', stored: 20, want: 0 },
+    { name: 'just above the floor', stored: 21, want: 21 },
+    { name: 'the lowest cutoff the slider offers', stored: 30, want: 30 },
+    { name: 'an active cutoff', stored: 300, want: 300 },
+    { name: 'above the maximum', stored: 9000, want: 5000 },
+    { name: 'not a number', stored: 'high', want: 0 },
+  ])('stores a cutoff of $name as $want', ({ stored, want }) => {
+    expect(dashboardOf({ playback: { highPassHz: stored } }).playback).toEqual({
+      highPassHz: want,
+    });
+  });
+
+  it('holds the default gain to the playback range and keeps a missing one missing', () => {
+    expect(dashboardOf({ defaultAudioGain: -20 }).defaultAudioGain).toBe(-12);
+    expect(dashboardOf({ defaultAudioGain: 30 }).defaultAudioGain).toBe(24);
+    expect(dashboardOf({ defaultAudioGain: -6.5 }).defaultAudioGain).toBe(-6.5);
+    expect(dashboardOf({ summaryLimit: 30 })).not.toHaveProperty('defaultAudioGain');
+  });
+
+  it('leaves the store clean when the server stored 15 Hz and the form shows off', () => {
+    const original = dashboardOf({ playback: { highPassHz: 15 } }).playback;
+    expect(hasSettingsChanged(original, { highPassHz: 0 })).toBe(false);
   });
 });
 

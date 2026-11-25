@@ -4,7 +4,7 @@
   The "Reverse Proxy" card of the Security page's Server tab. Edits
   security.trustedProxies, which mixes proxy addresses with the reserved `cloudflare`
   preset token: the address rows go through NetworkAddressListInput and the token
-  through the Trust Cloudflare checkbox (see utils/trustedProxies.ts for how the two are
+  through the Trust Cloudflare switch (see utils/trustedProxies.ts for how the two are
   split and put back without reordering the saved list).
 
   It also runs the connection check (GET /api/v2/settings/connection) and shows it in
@@ -20,9 +20,10 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import { ArrowLeftRight } from '@lucide/svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ConnectionCheckPanel from '$lib/desktop/features/settings/components/ConnectionCheckPanel.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import NetworkAddressListInput from '$lib/desktop/components/forms/NetworkAddressListInput.svelte';
   import Badge from '$lib/desktop/components/ui/Badge.svelte';
   import {
@@ -167,6 +168,7 @@
 >
   <SettingsSection
     title={t('settings.security.reverseProxy.title')}
+    icon={ArrowLeftRight}
     description={t('settings.security.reverseProxy.description')}
     {hasChanges}
   >
@@ -184,12 +186,12 @@
         onTrustWithCloudflare={trustPeerWithCloudflare}
       />
 
-      <Checkbox
-        checked={partition.hasCloudflare}
+      <ToggleField
+        value={partition.hasCloudflare}
         label={t('settings.security.reverseProxy.cloudflareLabel')}
-        helpText={t('settings.security.reverseProxy.cloudflareHelp')}
+        description={t('settings.security.reverseProxy.cloudflareHelp')}
         {disabled}
-        onchange={updateCloudflare}
+        onUpdate={updateCloudflare}
       />
 
       <NetworkAddressListInput

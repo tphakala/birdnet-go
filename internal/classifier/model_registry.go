@@ -22,7 +22,9 @@ const modelIDCustom = "Custom"
 const (
 	ModelNameBirdNETv24 = "BirdNET v2.4"
 	ModelNameBirdNETv30 = "BirdNET v3.0"
-	ModelNamePerchV2    = "Google Perch v2"
+	// ModelNameBirdNETPlusV30 is the display name of the BirdNET+ v3.0 family.
+	ModelNameBirdNETPlusV30 = "BirdNET+ v3.0"
+	ModelNamePerchV2        = "Google Perch v2"
 )
 
 // Inference backend identifiers.
@@ -58,10 +60,13 @@ const (
 // Registry ID constants for model identification across packages.
 const (
 	RegistryIDBirdNETV3 = "BirdNET_V3.0"
-	RegistryIDBSG       = "BSG"
-	RegistryIDBat       = "Bat"
-	RegistryIDPerchV2   = "Perch_V2"
-	RegistryIDBSGBat    = "BSG_BAT"
+	// RegistryIDBirdNETPlusV3 identifies BirdNET+ v3.0, a family separate from the
+	// BirdNET v3.0 preview: own settings section, own detection model row.
+	RegistryIDBirdNETPlusV3 = "BirdNET_Plus_V3.0"
+	RegistryIDBSG           = "BSG"
+	RegistryIDBat           = "Bat"
+	RegistryIDPerchV2       = "Perch_V2"
+	RegistryIDBSGBat        = "BSG_BAT"
 )
 
 // BSG-BAT registry parameters. The window geometry is fixed by the model's
@@ -237,6 +242,24 @@ var ModelRegistry = map[string]ModelInfo{
 		// Catalog form mirrors the catalog entry ID; the underscore primary stays
 		// canonical for write-back. See BirdNET v2.4 entry above.
 		ConfigAliases: []string{conf.ModelIDBirdNETV3, conf.ModelIDBirdNETV3Catalog},
+		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
+			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
+			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
+		DefaultLocale:     "en-uk",
+		rangeFilterCompat: rangeFilterCompatGeomodel,
+		taxonGroup:        TaxonGroupBird,
+	},
+	RegistryIDBirdNETPlusV3: {
+		ID:               RegistryIDBirdNETPlusV3,
+		Name:             ModelNameBirdNETPlusV30,
+		Backend:          BackendONNX,
+		DetectionName:    detection.ModelNameBirdNETPlus,
+		DetectionVersion: "3.0",
+		Description:      "BirdNET+ v3.0 model (32kHz, 5s clips, embeddings)", // NumSpecies omitted: determined at runtime from label file
+		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
+		// Catalog form mirrors the catalog entry ID; the underscore primary stays
+		// canonical for write-back. See BirdNET v2.4 entry above.
+		ConfigAliases: []string{conf.ModelIDBirdNETPlusV3, conf.ModelIDBirdNETPlusV3Catalog},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
@@ -524,6 +547,8 @@ var filenamePatterns = map[string]string{
 	"birdnet-v30":            RegistryIDBirdNETV3,
 	"birdnet_v3.0":           RegistryIDBirdNETV3,
 	"birdnet-v3.0":           RegistryIDBirdNETV3,
+	"birdnet_plus_v3.0":      RegistryIDBirdNETPlusV3,
+	"birdnet-plus-v3.0":      RegistryIDBirdNETPlusV3,
 	"perch_v2":               RegistryIDPerchV2,
 	"perch-v2":               RegistryIDPerchV2,
 	"bsg_finland":            RegistryIDBSG,
@@ -649,8 +674,8 @@ func DetectionModelInfoForID(modelID string) detection.ModelInfo {
 // ParticipatesInRangeFilter reports whether detections from the model with the
 // given registry ID should be gated by the geographic range filter. Registry
 // models participate when their label space is range-filter compatible
-// (rangeFilterCompat != rangeFilterCompatNone): BirdNET v2.4 (MData), BirdNET v3.0
-// and Perch (mapped geomodel). Bat, BSG-BAT and BSG classify their own label spaces and do
+// (rangeFilterCompat != rangeFilterCompatNone): BirdNET v2.4 (MData), BirdNET v3.0,
+// BirdNET+ v3.0 and Perch (mapped geomodel). Bat, BSG-BAT and BSG classify their own label spaces and do
 // not participate.
 //
 // An ID absent from the registry (a custom or otherwise unknown classifier) does
@@ -668,6 +693,33 @@ func ParticipatesInRangeFilter(registryID string) bool {
 		return false
 	}
 	return info.rangeFilterCompat != rangeFilterCompatNone
+}
+
+// ShouldApplyRangeFilter returns true if the given model should have its
+// detections filtered by the geographic range filter. The decision is a registry
+// capability, not a display-name check: BirdNET (any version) and Perch participate
+// (their label spaces are range-filter compatible), while Bat and BSG classify their
+// own label spaces and never participate. An unknown or custom model ID does NOT
+// participate: its label space is arbitrary, and unregistered IDs never reach a live
+// detection anyway (LoadModel rejects them), so this only pins the intended semantics.
+// Perch returns scientific-name labels, and the included-species set stores
+// scientific names for O(1) lookup, so the normal range list applies even when the
+// active range model is the embedded BirdNET geomodel rather than v3.
+func ShouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
+	if settings == nil || !settings.BirdNET.LocationConfigured {
+		return false
+	}
+	return ParticipatesInRangeFilter(modelID)
+}
+
+// PassesRangeFilter reports whether rawLabel survives the range filter for the
+// given model under the given settings snapshot: always true when the filter
+// does not apply (see ShouldApplyRangeFilter), otherwise true when the species
+// is on the included list. The processor's Last-heard feed, detection gate and
+// stored alternates, model consensus eligibility and the species coverage API
+// all use it, so they agree on one chunk.
+func PassesRangeFilter(modelID string, settings *conf.Settings, rawLabel string) bool {
+	return !ShouldApplyRangeFilter(modelID, settings) || settings.IsSpeciesIncluded(rawLabel)
 }
 
 // IsLocaleSupported checks if a locale is supported by the given model.

@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { cleanup, screen, within, fireEvent, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, within, fireEvent, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { renderTyped } from '../../../../../test/render-helpers';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 import DatabaseBackupHistory from './DatabaseBackupHistory.svelte';
 
 const completedBackup = {
@@ -16,7 +17,7 @@ const completedBackup = {
 };
 
 interface HistoryProps {
-  backups?: (typeof completedBackup)[];
+  backups?: (typeof completedBackup & { download_url?: string })[];
   loadError?: string | null;
   onRetryLoad?: () => Promise<void>;
   createError?: string | null;
@@ -32,6 +33,36 @@ function renderHistory(props: HistoryProps = {}) {
 describe('DatabaseBackupHistory', () => {
   afterEach(() => {
     cleanup();
+    resetBasePath();
+  });
+
+  it('links the backup download under the reverse proxy prefix', () => {
+    // The server returns an unprefixed download_url; a proxy at /birdnet does not rewrite it.
+    setBasePath('/birdnet');
+    renderHistory({
+      backups: [
+        { ...completedBackup, download_url: '/api/v2/system/database/backup/jobs/job-1/download' },
+      ],
+    });
+
+    expect(screen.getByRole('link')).toHaveAttribute(
+      'href',
+      '/birdnet/api/v2/system/database/backup/jobs/job-1/download'
+    );
+  });
+
+  it('shows no download link for a non-relative download_url', () => {
+    renderHistory({
+      backups: [{ ...completedBackup, download_url: 'https://example.com/backup.db' }],
+    });
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('shows no download link for a completed backup without a download_url', () => {
+    renderHistory({ backups: [completedBackup] });
+
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
   it('says there are no backups when the list is empty and nothing failed', () => {
@@ -88,5 +119,46 @@ describe('DatabaseBackupHistory', () => {
     renderHistory({ createError: 'Disk is full', loadError: 'Backups unavailable' });
 
     expect(screen.getAllByRole('alert')).toHaveLength(2);
+  });
+
+  it('sorts from a header button, marks only that column and announces it', async () => {
+    renderHistory({ backups: [completedBackup] });
+    const sizeLabel = t('system.database.backup.history.columns.size');
+    const sizeHeader = screen.getByRole('columnheader', { name: sizeLabel });
+
+    expect(within(sizeHeader).getByRole('button', { name: sizeLabel })).toBeInTheDocument();
+    expect(screen.getByRole('status').textContent).toBe('');
+
+    await fireEvent.click(screen.getByTestId('sort-size'));
+
+    const sorted = screen.getAllByRole('columnheader').filter(th => th.hasAttribute('aria-sort'));
+    expect(sorted).toEqual([sizeHeader]);
+    expect(sizeHeader).toHaveAttribute('aria-sort', 'descending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedDescending', { column: sizeLabel })
+    );
+  });
+
+  it('names the table by its visible title', () => {
+    renderHistory({ backups: [completedBackup] });
+
+    expect(
+      screen.getByRole('table', { name: t('system.database.backup.history.title') })
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    { name: 'the list empties', next: { backups: [] } },
+    { name: 'the list fails to load', next: { loadError: 'Backups unavailable' } },
+  ])('drops the sort announcement when $name', async ({ next }) => {
+    const view = render(DatabaseBackupHistory, {
+      props: { backups: [completedBackup], onCreateBackup: () => {} },
+    });
+    await fireEvent.click(screen.getByTestId('sort-size'));
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await view.rerender(next);
+
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 });

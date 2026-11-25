@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 SCRIPT_VERSION = "1.4.0"
-SCHEMA_VERSION = "v2-2026-10-26"
+SCHEMA_VERSION = "v2-2026-11-14"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -62,7 +62,8 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "id", "model_id", "label_id", "source_id", "detected_at",
         "begin_time", "end_time", "confidence", "latitude", "longitude",
         "clip_name", "spectrogram_clip_name", "clip_sample_rate",
-        "processing_time_ms", "unlikely", "legacy_id",
+        "clip_denoised", "original_label_id", "processing_time_ms", "unlikely",
+        "legacy_id",
     ],
     "detection_predictions": [
         "id", "detection_id", "label_id", "confidence", "rank",
@@ -309,6 +310,8 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             clip_name VARCHAR(500),
             spectrogram_clip_name VARCHAR(500),
             clip_sample_rate INTEGER,
+            clip_denoised NUMERIC,
+            original_label_id INTEGER,
             processing_time_ms INTEGER,
             unlikely NUMERIC NOT NULL DEFAULT 0,
             legacy_id INTEGER,
@@ -395,6 +398,8 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "clip_name": "TEXT",
         "spectrogram_clip_name": "TEXT",
         "clip_sample_rate": "INTEGER",
+        "clip_denoised": "NUMERIC",
+        "original_label_id": "INTEGER",
         "processing_time_ms": "INTEGER",
         "unlikely": "NUMERIC NOT NULL DEFAULT 0",
         "legacy_id": "INTEGER",
@@ -1964,13 +1969,16 @@ class DatabaseDoctor:
         if "notes" in tables:
             try:
                 conn.execute("BEGIN IMMEDIATE")
-                # Only update rows where a matching label actually exists
-                # (prevents setting label_id to NULL)
+                # Labels are per model, so only a label of the detection's
+                # own model qualifies. Only update rows where such a label
+                # exists (prevents setting label_id to NULL and keeps
+                # detections.model_id paired with the label's model_id).
                 cur = conn.execute(
                     "UPDATE detections SET label_id = ("
                     "  SELECT l.id FROM labels l"
                     "  JOIN notes n ON n.id = detections.legacy_id"
                     "  WHERE l.scientific_name = n.scientific_name"
+                    "  AND l.model_id = detections.model_id"
                     "  LIMIT 1"
                     ") WHERE label_id NOT IN (SELECT id FROM labels)"
                     "  AND legacy_id IS NOT NULL"
@@ -1979,6 +1987,7 @@ class DatabaseDoctor:
                     "    SELECT 1 FROM labels l"
                     "    JOIN notes n ON n.id = detections.legacy_id"
                     "    WHERE l.scientific_name = n.scientific_name"
+                    "    AND l.model_id = detections.model_id"
                     "  )"
                 )
                 recovered = cur.rowcount

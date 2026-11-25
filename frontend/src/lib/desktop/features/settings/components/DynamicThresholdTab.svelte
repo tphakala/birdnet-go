@@ -18,7 +18,6 @@
     Activity,
     ChevronDown,
     ChevronUp,
-    ChevronsUpDown,
     Trash2,
     AlertTriangle,
     RefreshCw,
@@ -38,7 +37,11 @@
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { formatDateTime } from '$lib/utils/formatters';
   import SettingsNote from './SettingsNote.svelte';
+  import SettingsGroupLabel from './SettingsGroupLabel.svelte';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
+  import { cn } from '$lib/utils/cn';
 
   const logger = loggers.settings;
 
@@ -53,6 +56,9 @@
   } from '$lib/types/dynamic-threshold';
   import { getLevelDisplay, getTimeRemaining } from '$lib/types/dynamic-threshold';
   import type { ThresholdChangeReason } from '$lib/types/dynamic-threshold';
+
+  // Shared cell classes of the sortable headers
+  const SORT_HEADER_CLASS = 'py-2 px-3 text-xs font-medium select-none text-muted';
 
   // Sort types
   type SortColumn = 'species' | 'scientificName' | 'threshold' | 'expires';
@@ -74,14 +80,40 @@
   let sortColumn = $state<SortColumn>('species');
   let sortDirection = $state<SortDirection>('asc');
 
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
+  const SORT_COLUMNS: Set<string> = new Set<SortColumn>([
+    'species',
+    'scientificName',
+    'threshold',
+    'expires',
+  ]);
+
+  function isSortColumn(value: string): value is SortColumn {
+    return SORT_COLUMNS.has(value);
+  }
+
+  // Header labels, shared by the header cells and the sort announcement
+  const sortHeaderLabels: Record<SortColumn, () => string> = {
+    species: () => t('settings.species.activeSpecies.columns.commonName'),
+    scientificName: () => t('settings.species.activeSpecies.columns.scientificName'),
+    threshold: () => t('settings.species.dynamicThreshold.header.threshold'),
+    expires: () => t('settings.species.dynamicThreshold.header.expires'),
+  };
+
   // Handle column header click to toggle sort
-  function handleSort(column: SortColumn) {
+  function handleSort(column: string) {
+    if (!isSortColumn(column)) return;
     if (sortColumn === column) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = column;
       sortDirection = 'asc';
     }
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (filteredThresholds.length === 0) return;
+    sortStatus = sortAnnouncement(sortHeaderLabels[column](), sortDirection);
   }
 
   // Derived state - filter and sort by selected column
@@ -125,6 +157,12 @@
     });
   });
 
+  // Clear the sort message when no thresholds are shown (a search with no matches), so rows
+  // returning later do not announce a sort the user did not just make
+  $effect(() => {
+    if (filteredThresholds.length === 0) sortStatus = '';
+  });
+
   let activeThresholds = $derived(thresholds.filter(t => t.isActive));
 
   onMount(() => {
@@ -134,6 +172,8 @@
   async function loadData() {
     if (loading) return;
     loading = true;
+    // The table is replaced while loading; do not announce the old sort again afterwards
+    sortStatus = '';
     try {
       const [thresholdResponse, statsResponse] = await Promise.all([
         api.get<{ data: DynamicThreshold[]; total: number }>(
@@ -233,11 +273,11 @@
   <!-- Description -->
   <p class="text-sm text-muted">{t('settings.species.dynamicThreshold.description')}</p>
   <a
-    href={buildAppUrl(SETTINGS_ROUTES.analysisSettings)}
+    href={buildAppUrl(SETTINGS_ROUTES.analysisDetection)}
     onclick={handleAppLinkClick}
     class="inline-block text-sm text-primary underline"
   >
-    {t('settings.sections.analysis')} → {t('analysis.tabs.settings')}
+    {t('settings.sections.analysis')} → {t('analysis.tabs.detection')}
   </a>
 
   <!-- Stats Cards -->
@@ -250,9 +290,9 @@
           <div class="p-1 rounded-md bg-violet-500/10">
             <Activity class="w-3.5 h-3.5 text-violet-500" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('settings.species.dynamicThreshold.stats.active')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('settings.species.dynamicThreshold.stats.active')}
+          </span>
         </div>
         <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">{stats.activeCount}</span>
       </div>
@@ -262,15 +302,15 @@
       >
         <div class="flex items-center gap-2 mb-1.5">
           <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]">
-            <TrendingDown class="w-3.5 h-3.5 text-[var(--color-warning)]" />
+            <TrendingDown class="w-3.5 h-3.5 text-[var(--text-warning)]" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('settings.species.dynamicThreshold.stats.atMinimum')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('settings.species.dynamicThreshold.stats.atMinimum')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
-          >{stats.atMinimumCount}</span
-        >
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">
+          {stats.atMinimumCount}
+        </span>
       </div>
 
       <div
@@ -278,15 +318,15 @@
       >
         <div class="flex items-center gap-2 mb-1.5">
           <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]">
-            <Gauge class="w-3.5 h-3.5 text-[var(--color-success)]" />
+            <Gauge class="w-3.5 h-3.5 text-[var(--text-success)]" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('settings.species.dynamicThreshold.stats.minThreshold')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('settings.species.dynamicThreshold.stats.minThreshold')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
-          >{(stats.minThreshold * 100).toFixed(0)}%</span
-        >
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">
+          {(stats.minThreshold * 100).toFixed(0)}%
+        </span>
       </div>
 
       <div
@@ -294,15 +334,15 @@
       >
         <div class="flex items-center gap-2 mb-1.5">
           <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]">
-            <Clock class="w-3.5 h-3.5 text-[var(--color-info)]" />
+            <Clock class="w-3.5 h-3.5 text-[var(--text-info)]" />
           </div>
-          <span class="text-xs font-medium text-muted"
-            >{t('settings.species.dynamicThreshold.stats.validityPeriod')}</span
-          >
+          <span class="text-xs font-medium text-muted">
+            {t('settings.species.dynamicThreshold.stats.validityPeriod')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
-          >{stats.validHours}{t('common.hoursShort')}</span
-        >
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">
+          {stats.validHours}{t('common.hoursShort')}
+        </span>
       </div>
     </div>
   {/if}
@@ -315,9 +355,9 @@
         <div class="p-1.5 rounded-lg bg-violet-500/10">
           <Activity class="w-4 h-4 text-violet-500" />
         </div>
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
+        <SettingsGroupLabel as="h3">
           {t('settings.species.dynamicThreshold.header.species')}
-        </h3>
+        </SettingsGroupLabel>
         <span
           class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
         >
@@ -336,7 +376,7 @@
               type="text"
               placeholder={t('settings.species.dynamicThreshold.searchPlaceholder')}
               aria-label={t('settings.species.dynamicThreshold.searchPlaceholder')}
-              class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus-ring"
               bind:value={searchQuery}
               autocomplete="off"
               data-1p-ignore
@@ -369,6 +409,7 @@
         {/if}
       </div>
     </div>
+    <p role="status" class="sr-only">{sortStatus}</p>
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <div
@@ -384,131 +425,52 @@
     {:else}
       <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
         <table class="w-full text-sm">
+          <caption class="sr-only">{t('settings.species.dynamicThreshold.header.species')}</caption>
           <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
             <tr class="border-b border-[var(--border-100)]">
-              <th class="w-8 py-2 px-2"><span class="sr-only">{t('common.toggle')}</span></th>
-              <th class="w-10 py-2 px-1"><span class="sr-only">{t('common.image')}</span></th>
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'species'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('species')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('species');
-                  }
-                }}
-              >
-                <div class="flex items-center gap-1">
-                  {t('settings.species.activeSpecies.columns.commonName')}
-                  {#if sortColumn === 'species'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
+              <th scope="col" class="w-8 py-2 px-2">
+                <span class="sr-only">{t('common.toggle')}</span>
               </th>
-              <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'scientificName'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('scientificName')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('scientificName');
-                  }
-                }}
-              >
-                <div class="flex items-center gap-1">
-                  {t('settings.species.activeSpecies.columns.scientificName')}
-                  {#if sortColumn === 'scientificName'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
+              <th scope="col" class="w-10 py-2 px-1">
+                <span class="sr-only">{t('common.image')}</span>
               </th>
-              <th
-                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted w-24"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'threshold'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('threshold')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('threshold');
-                  }
-                }}
-              >
-                <div class="flex items-center justify-center gap-1">
-                  {t('settings.species.dynamicThreshold.header.threshold')}
-                  {#if sortColumn === 'threshold'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
+              <SortableHeader
+                label={sortHeaderLabels.species()}
+                field="species"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                className={SORT_HEADER_CLASS}
+              />
+              <SortableHeader
+                label={sortHeaderLabels.scientificName()}
+                field="scientificName"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                className={SORT_HEADER_CLASS}
+              />
+              <SortableHeader
+                label={sortHeaderLabels.threshold()}
+                field="threshold"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className={cn(SORT_HEADER_CLASS, 'w-24')}
+              />
+              <SortableHeader
+                label={sortHeaderLabels.expires()}
+                field="expires"
+                activeField={sortColumn}
+                direction={sortDirection}
+                onSort={handleSort}
+                align="center"
+                className={cn(SORT_HEADER_CLASS, 'w-24')}
+              />
+              <th scope="col" class="w-12">
+                <span class="sr-only">{t('common.actionsColumn')}</span>
               </th>
-              <th
-                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted w-24"
-                role="columnheader"
-                tabindex="0"
-                aria-sort={sortColumn === 'expires'
-                  ? sortDirection === 'asc'
-                    ? 'ascending'
-                    : 'descending'
-                  : 'none'}
-                onclick={() => handleSort('expires')}
-                onkeydown={(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleSort('expires');
-                  }
-                }}
-              >
-                <div class="flex items-center justify-center gap-1">
-                  {t('settings.species.dynamicThreshold.header.expires')}
-                  {#if sortColumn === 'expires'}
-                    {#if sortDirection === 'asc'}
-                      <ChevronUp class="w-3 h-3" />
-                    {:else}
-                      <ChevronDown class="w-3 h-3" />
-                    {/if}
-                  {:else}
-                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                  {/if}
-                </div>
-              </th>
-              <th class="w-12"><span class="sr-only">{t('common.actionsColumn')}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -572,9 +534,9 @@
                   {#if threshold.isActive}
                     <span class="text-xs font-medium">{getTimeRemaining(threshold.expiresAt)}</span>
                   {:else}
-                    <span class="text-xs font-medium text-[var(--color-warning)]"
-                      >{t('settings.species.dynamicThreshold.expired')}</span
-                    >
+                    <span class="text-xs font-medium text-[var(--text-warning)]">
+                      {t('settings.species.dynamicThreshold.expired')}
+                    </span>
                   {/if}
                 </td>
                 <td class="py-2 px-3 w-12 text-right">
@@ -599,7 +561,7 @@
                   {:else}
                     <button
                       type="button"
-                      class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)]"
+                      class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--text-error)]"
                       onclick={() => (resetConfirmSpecies = threshold.speciesName)}
                       title={t('settings.species.dynamicThreshold.resetSpecies')}
                       aria-label={t('settings.species.dynamicThreshold.resetSpecies')}
@@ -701,7 +663,7 @@
       class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-lg p-6 max-w-md mx-4"
     >
       <h3 id="reset-modal-title" class="font-bold text-lg flex items-center gap-2">
-        <AlertTriangle class="size-5 text-[var(--color-warning)]" />
+        <AlertTriangle class="size-5 text-[var(--text-warning)]" />
         {t('settings.species.dynamicThreshold.resetAllConfirm.title')}
       </h3>
       <p class="text-sm text-muted mt-3">

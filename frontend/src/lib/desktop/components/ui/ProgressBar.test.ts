@@ -1,4 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { stripComments } from '../../../../test/source-comments';
 import { createComponentTestFactory, screen } from '../../../../test/render-helpers';
 import ProgressBar from './ProgressBar.svelte';
 import { safeGet } from '$lib/utils/security';
@@ -359,5 +363,53 @@ describe('ProgressBar', () => {
     expect(
       container.querySelector('.text-\\[var\\(--color-warning-content\\)\\]')
     ).toBeInTheDocument();
+  });
+
+  describe('label chip on a striped fill', () => {
+    const chipOf = (container: HTMLElement) =>
+      container.querySelector<HTMLElement>('[data-label-part="fill"] [data-label-chip]');
+
+    it.each([
+      ['a striped default bar', { striped: true }, 'bg-[var(--color-primary)]'],
+      [
+        'a striped bar past a warning threshold',
+        { striped: true, colorThresholds: [{ value: 80, variant: 'warning' as const }] },
+        'bg-[var(--color-warning)]',
+      ],
+    ])('puts the fill colour on the chip of %s', (_name, props, expected) => {
+      const { container } = progressTest.render({ value: 90, showLabel: true, ...props });
+
+      expect(chipOf(container)).toHaveTextContent('90%');
+      expect(chipOf(container)).toHaveClass(expected);
+    });
+
+    it('gives both label copies the same box so they stay aligned at the fill edge', () => {
+      const { container } = progressTest.render({ value: 50, showLabel: true, striped: true });
+      const track = container.querySelector('[data-label-part="track"] span');
+
+      for (const copy of [track, chipOf(container)]) {
+        expect(copy).toHaveClass('flex', 'items-center', 'self-stretch', 'px-1');
+      }
+    });
+
+    it('leaves the chip of an unstriped bar without a background', () => {
+      const { container } = progressTest.render({ value: 90, showLabel: true });
+
+      expect(chipOf(container)).toHaveTextContent('90%');
+      expect(chipOf(container)?.className).not.toContain('bg-');
+    });
+  });
+
+  it('starts the stripe animation only under no-preference for reduced motion', () => {
+    const source = stripComments(
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'ProgressBar.svelte'), 'utf8')
+    );
+    const start = source.indexOf('.animate-stripes {');
+    const body = source.slice(start, source.indexOf('\n  }\n', start));
+    const guard = '@media (prefers-reduced-motion: no-preference)';
+
+    expect(start).toBeGreaterThan(-1);
+    expect(body).toContain(guard);
+    expect(body.slice(0, body.indexOf(guard))).not.toContain('animation');
   });
 });

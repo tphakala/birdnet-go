@@ -164,6 +164,34 @@ func TestPrimarySwap_ToDFTKeepsCustomRangeFilter(t *testing.T) {
 	assert.Contains(t, installedSnapshot(h.mm), depIDG, "the dependency is still recorded")
 }
 
+// TestInstall_GeomodelReplacesStockMDataRangeFilterAndReloads pins that installing the
+// geomodel at runtime replaces a stock MData range filter path and reloads the range
+// filter with the geomodel config already published, so no restart is needed.
+func TestInstall_GeomodelReplacesStockMDataRangeFilterAndReloads(t *testing.T) {
+	h := newDepHarness(t)
+	stock := conf.CloneSettings(conf.GetSettings())
+	stockRF := stock.RangeFilterConfig()
+	stockRF.Model = conf.RangeFilterModelLatest
+	stockRF.ModelPath = filepath.Join(DefaultModelDirectory, DefaultRangeFilterV2ONNXModelName)
+	stockRF.LabelsPath = ""
+	conf.StoreSettings(stock)
+
+	var atReload []conf.RangeFilterSettings
+	h.mm.reloadRangeFilterFn = func() error {
+		atReload = append(atReload, *conf.GetSettings().RangeFilterConfig())
+		return nil
+	}
+
+	require.NoError(t, h.install(depIDG, ""))
+
+	require.Len(t, atReload, 1, "the install reloads the range filter once")
+	for _, rf := range []conf.RangeFilterSettings{atReload[0], *conf.GetSettings().RangeFilterConfig()} {
+		assert.Equal(t, depGeomodelVer, rf.Model)
+		assert.Equal(t, h.shared(depLocalGeoModel), rf.ModelPath)
+		assert.Equal(t, h.shared(depLocalGeoLabels), rf.LabelsPath)
+	}
+}
+
 func TestPrimarySwap_ToBuiltinInstallsAndRecordsMissingDependency(t *testing.T) {
 	h := newDepHarness(t)
 	require.NoError(t, h.install(depIDP, depVariantDFT))
@@ -686,4 +714,144 @@ func TestPrimarySwap_FailureKeepsRefetchedFileTheCurrentVariantUses(t *testing.T
 	assert.Equal(t, 2, h.srv.Hits("g-model.onnx"), "the corrupt geomodel file is refetched")
 	assert.FileExists(t, geo, "a failed swap keeps a refetched file the still-installed variant uses")
 	assert.Equal(t, depVariantDFT, installedSnapshot(h.mm)[depIDP].VariantID, "the previous variant stays installed")
+}
+
+func TestEmbeddedCatalog_InstallRegistersGeomodelDependency(t *testing.T) {
+	plus, ok := GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok)
+	// The last regional tile the gallery offers: a Legacy tile is not offered to a new install.
+	offered := -1
+	for i := range plus.Variants {
+		if !plus.Variants[i].Legacy && plus.Variants[i].Region != "" {
+			offered = i
+		}
+	}
+	require.GreaterOrEqual(t, offered, 0)
+	regionalVariant := plus.Variants[offered].ID
+
+	cases := []struct{ id, variant string }{
+		{"birdnet-plus-v3.0", ""},
+		{"birdnet-plus-v3.0", regionalVariant},
+		{"perch-v2", ""},
+		{"birdnet-v3.0", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.id+"/"+tc.variant, func(t *testing.T) {
+			h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
+
+			require.NoError(t, h.install(tc.id, tc.variant))
+
+			got := installedSnapshot(h.mm)
+			require.Contains(t, got, geomodelV3CatalogID)
+			assert.Equal(t, h.shared(conf.GeomodelONNXLocalName), got[geomodelV3CatalogID].ModelPath)
+			assert.Equal(t, h.shared(conf.GeomodelLabelsLocalName), got[geomodelV3CatalogID].LabelsPath)
+			rf := conf.GetSettings().RangeFilterConfig()
+			assert.Equal(t, "v3", rf.Model)
+			assert.Equal(t, h.shared(conf.GeomodelONNXLocalName), rf.ModelPath)
+			assert.Equal(t, h.shared(conf.GeomodelLabelsLocalName), rf.LabelsPath)
+			assert.Equal(t, 1, h.reloads)
+			h.assertDependencyInvariants(t, "after install")
+		})
+	}
+}
+
+// TestEmbeddedCatalog_BirdNETPlusUpdateFromRelease30 walks the update an installed
+// BirdNET+ 3.0 goes through: the Legacy 3.0 variant installs and is reported as
+// release 3.0, switching to the 3.0.1 variant downloads it, removes the 3.0 model
+// and labels files, records the new variant and release, and the Geomodel stays
+// pinned by BirdNET+ as a dependent throughout.
+func TestEmbeddedCatalog_BirdNETPlusUpdateFromRelease30(t *testing.T) {
+	const plusID = "birdnet-plus-v3.0"
+	h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
+	entry := h.entry(plusID)
+
+	require.NoError(t, h.install(plusID, "fp32"))
+	got := installedSnapshot(h.mm)[plusID]
+	assert.Equal(t, "fp32", got.VariantID)
+	assert.Equal(t, "3.0", got.Version)
+	oldModel, oldLabels := h.own(plusID, "birdnet_plus_v3.0_fp32.onnx"), h.own(plusID, "birdnet_plus_v3.0_labels.txt")
+	require.FileExists(t, oldModel)
+	require.FileExists(t, oldLabels)
+
+	require.NoError(t, h.mm.InstallOrReplace(t.Context(), &entry, "fp32-3.0.1", h.srv.URL, nil))
+
+	got = installedSnapshot(h.mm)[plusID]
+	assert.Equal(t, "fp32-3.0.1", got.VariantID)
+	assert.Equal(t, "3.0.1", got.Version)
+	assert.Equal(t, h.own(plusID, "birdnet_plus_v3.0.1_fp32.onnx"), got.ModelPath)
+	assert.FileExists(t, got.ModelPath)
+	assert.FileExists(t, h.own(plusID, "birdnet_plus_v3.0.1_labels.txt"))
+	assert.NoFileExists(t, oldModel, "the 3.0 model file is removed after the swap")
+	assert.NoFileExists(t, oldLabels, "the 3.0 labels file is removed after the swap")
+	requireDependents(t, h.mm.Uninstall(geomodelV3CatalogID), geomodelV3CatalogID, plusID)
+	h.assertDependencyInvariants(t, "after the 3.0 to 3.0.1 update")
+
+	// A restart re-derives the same record from the files on disk.
+	h.rescan()
+	got = installedSnapshot(h.mm)[plusID]
+	assert.Equal(t, "fp32-3.0.1", got.VariantID)
+	assert.Equal(t, "3.0.1", got.Version)
+}
+
+// TestEmbeddedCatalog_BirdNETPlusSwitchRecordsTargetRelease checks the install
+// record a variant switch writes carries the release of the variant switched to,
+// not the entry's: moving an installed 3.0.1 build back to the Legacy 3.0 variant
+// records release 3.0. It reads the record before any rescan, which would
+// re-derive the release from disk.
+func TestEmbeddedCatalog_BirdNETPlusSwitchRecordsTargetRelease(t *testing.T) {
+	const plusID = "birdnet-plus-v3.0"
+	h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
+	entry := h.entry(plusID)
+
+	require.NoError(t, h.install(plusID, "fp32-3.0.1"))
+	require.Equal(t, "3.0.1", installedSnapshot(h.mm)[plusID].Version)
+
+	require.NoError(t, h.mm.InstallOrReplace(t.Context(), &entry, "fp32", h.srv.URL, nil))
+
+	got := installedSnapshot(h.mm)[plusID]
+	assert.Equal(t, "fp32", got.VariantID)
+	assert.Equal(t, "3.0", got.Version)
+	assert.Equal(t, h.own(plusID, "birdnet_plus_v3.0_fp32.onnx"), got.ModelPath)
+}
+
+func TestEmbeddedCatalog_GeomodelOutlivesItsDependents(t *testing.T) {
+	h := newDepHarnessWithCatalog(t, downloadableEmbeddedCatalog(t))
+	require.NoError(t, h.install("birdnet-plus-v3.0", ""))
+	require.NoError(t, h.install("perch-v2", ""))
+	rfBefore := *conf.GetSettings().RangeFilterConfig()
+	h.assertDependencyInvariants(t, "after both installs")
+
+	// The geomodel cannot be removed while a dependent is installed.
+	requireDependents(t, h.mm.Uninstall(geomodelV3CatalogID), geomodelV3CatalogID, "birdnet-plus-v3.0", "perch-v2")
+	h.assertDependencyInvariants(t, "after refused geomodel uninstall")
+
+	// Removing one dependent keeps the taxonomy the other still carries.
+	h.reloads = 0
+	require.NoError(t, h.mm.Uninstall("birdnet-plus-v3.0"))
+	assert.FileExists(t, h.shared("taxonomy.csv"))
+	h.assertDependencyInvariants(t, "after first dependent uninstall")
+
+	// A restart keeps the picture.
+	h.rescan()
+	h.assertDependencyInvariants(t, "after restart")
+
+	// Removing the last dependent leaves the geomodel installed and active.
+	require.NoError(t, h.mm.Uninstall("perch-v2"))
+	assert.Contains(t, installedSnapshot(h.mm), geomodelV3CatalogID)
+	assert.FileExists(t, h.shared(conf.GeomodelONNXLocalName))
+	assert.FileExists(t, h.shared(conf.GeomodelLabelsLocalName))
+	assert.NoFileExists(t, h.shared("taxonomy.csv"))
+	assert.Equal(t, rfBefore, *conf.GetSettings().RangeFilterConfig())
+	assert.Zero(t, h.reloads)
+	h.assertDependencyInvariants(t, "after last dependent uninstall")
+
+	// With no dependent left the geomodel can go, and the range filter is cleared.
+	require.NoError(t, h.mm.Uninstall(geomodelV3CatalogID))
+	assert.NoFileExists(t, h.shared(conf.GeomodelONNXLocalName))
+	assert.NoFileExists(t, h.shared(conf.GeomodelLabelsLocalName))
+	rf := conf.GetSettings().RangeFilterConfig()
+	assert.Empty(t, rf.Model)
+	assert.Empty(t, rf.ModelPath)
+	assert.Empty(t, rf.LabelsPath)
+	assert.Equal(t, 1, h.reloads)
 }

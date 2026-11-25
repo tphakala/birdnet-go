@@ -377,11 +377,11 @@
   function getNotificationIconClass(notification) {
     const baseClass = 'w-8 h-8 rounded-full flex items-center justify-center';
     const typeClasses = {
-      error: 'bg-[var(--color-error)]/20 text-[var(--color-error)]',
-      warning: 'bg-[var(--color-warning)]/20 text-[var(--color-warning)]',
-      info: 'bg-[var(--color-info)]/20 text-[var(--color-info)]',
-      detection: 'bg-[var(--color-success)]/20 text-[var(--color-success)]',
-      system: 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]',
+      error: 'bg-[var(--color-error)]/20 text-[var(--text-error)]',
+      warning: 'bg-[var(--color-warning)]/20 text-[var(--text-warning)]',
+      info: 'bg-[var(--color-info)]/20 text-[var(--text-info)]',
+      detection: 'bg-[var(--color-success)]/20 text-[var(--text-success)]',
+      system: 'bg-[var(--color-primary)]/20 text-[var(--text-primary)]',
     };
     return `${baseClass} ${safeGet(typeClasses, notification.type, 'bg-[var(--color-base-300)]')}`;
   }
@@ -698,7 +698,7 @@
                     {/if}
                     <button
                       onclick={e => deleteNotification(notification.id, e)}
-                      class="p-1 text-[var(--color-error)] hover:text-[var(--color-error-hover)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
+                      class="p-1 text-[var(--text-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
                       aria-label={t('notifications.actions.delete')}
                     >
                       <Trash2 class="size-3" />
@@ -720,8 +720,10 @@
             onclick={previousPage}
             disabled={currentPage === 1}
             class="join-item btn btn-sm"
-            aria-label={t('dataDisplay.pagination.goToPreviousPage')}>«</button
+            aria-label={t('dataDisplay.pagination.goToPreviousPage')}
           >
+            «
+          </button>
           <button
             class="join-item btn btn-sm btn-primary"
             aria-label={t('dataDisplay.pagination.page', {
@@ -736,8 +738,10 @@
             onclick={nextPage}
             disabled={currentPage === totalPages}
             class="join-item btn btn-sm"
-            aria-label={t('dataDisplay.pagination.goToNextPage')}>»</button
+            aria-label={t('dataDisplay.pagination.goToNextPage')}
           >
+            »
+          </button>
         </div>
       </div>
     {/if}

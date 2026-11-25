@@ -32,6 +32,7 @@
   import { DENOISE_LOSSY_MIN_BITRATE_KBPS, isLosslessExportFormat } from './audioExportFormat';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
@@ -39,13 +40,36 @@
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import {
+    PLAYBACK_GAIN_MAX_DB,
+    PLAYBACK_GAIN_MIN_DB,
+    PLAYBACK_GAIN_STEP_DB,
+    PLAYBACK_HIGH_PASS_MAX_HZ,
+    PLAYBACK_HIGH_PASS_MIN_HZ,
+    PLAYBACK_HIGH_PASS_STEP_HZ,
+    clampPlaybackGain,
+    formatPlaybackGainLabel,
+    formatPlaybackHighPass,
+    highPassFromStored,
+    highPassToStored,
+  } from '$lib/utils/playbackDefaults';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
-  import { Palette, Globe, Image, Volume2, BookOpen, Info } from '@lucide/svelte';
+  import {
+    Palette,
+    Globe,
+    Image,
+    Volume2,
+    BookOpen,
+    Info,
+    Languages,
+    Headphones,
+  } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+  import { generateId } from '$lib/utils/uuid';
   import {
     SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
     SPECIES_GUIDE_MAX_WARM_TOP_N,
@@ -54,6 +78,15 @@
 
   let activeTab = $state('appearance');
   let store = $derived($settingsStore);
+
+  /** Why the settings cannot be changed right now, or undefined while they can. */
+  let settingsBusyReason = $derived(
+    store.isLoading
+      ? t('settings.loading')
+      : store.isSaving
+        ? t('settings.actions.saving')
+        : undefined
+  );
 
   // --- Locale options (same pattern as MainSettingsPage) ---
   interface LocaleOption extends SelectOption {
@@ -244,10 +277,12 @@
       {
         defaultAudioGain: store.originalData.realtime?.dashboard?.defaultAudioGain,
         playbackDenoise: store.originalData.realtime?.dashboard?.playbackDenoise,
+        playback: store.originalData.realtime?.dashboard?.playback,
       },
       {
         defaultAudioGain: store.formData.realtime?.dashboard?.defaultAudioGain,
         playbackDenoise: store.formData.realtime?.dashboard?.playbackDenoise,
+        playback: store.formData.realtime?.dashboard?.playback,
       }
     )
   );
@@ -276,6 +311,9 @@
   // Surfaced as both a tooltip and a visible note below: a disabled control with only an
   // opacity change tells the user nothing, and tells a screen-reader user nothing at all
   // — the ambiguous-disabled-state failure the frontend guidelines call out.
+  // Id of the visible disabled-reason note, which each sub-switch names through describedBy.
+  const SPECIES_GUIDE_REASON_ID = generateId('species-guide-reason');
+
   let speciesGuideDisabledReason = $derived(
     speciesGuide.enabled ? undefined : t('settings.userInterface.speciesGuide.disabledReason')
   );
@@ -298,6 +336,17 @@
   function updatePlaybackDenoise(patch: Partial<DenoiseSettings>) {
     settingsActions.updateSection('realtime', {
       dashboard: { ...settings.dashboard, playbackDenoise: { ...playbackDenoise, ...patch } },
+    });
+  }
+
+  // Writes the playback object whole, like the denoise object: updateSection
+  // merges shallowly, so a partial object would drop the other fields.
+  function updatePlaybackHighPass(hz: number) {
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        ...settings.dashboard,
+        playback: { ...settings.dashboard.playback, highPassHz: highPassToStored(hz) },
+      },
     });
   }
 
@@ -382,6 +431,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.appearance.title')}
+      icon={Palette}
       description={t('settings.userInterface.appearance.description')}
       originalData={{
         colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
@@ -394,7 +444,7 @@
         logoStyle: store.formData.realtime?.dashboard?.logoStyle,
       }}
     >
-      <ColorSchemePicker disabled={store.isLoading || store.isSaving} />
+      <ColorSchemePicker disabledReason={settingsBusyReason} />
     </SettingsSection>
   </div>
 {/snippet}
@@ -403,6 +453,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.language.title')}
+      icon={Languages}
       description={t('settings.userInterface.language.description')}
       originalData={{
         locale: store.originalData.realtime?.dashboard?.locale,
@@ -474,26 +525,40 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.audioPlayback.title')}
+      icon={Headphones}
       description={t('settings.userInterface.audioPlayback.description')}
       originalData={{
         defaultAudioGain: store.originalData.realtime?.dashboard?.defaultAudioGain,
         playbackDenoise: store.originalData.realtime?.dashboard?.playbackDenoise,
+        playback: store.originalData.realtime?.dashboard?.playback,
       }}
       currentData={{
         defaultAudioGain: store.formData.realtime?.dashboard?.defaultAudioGain,
         playbackDenoise: store.formData.realtime?.dashboard?.playbackDenoise,
+        playback: store.formData.realtime?.dashboard?.playback,
       }}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
         <InlineSlider
           label={t('settings.userInterface.audioPlayback.defaultGain')}
           helpText={t('settings.userInterface.audioPlayback.defaultGainHelpText')}
-          value={settings.dashboard.defaultAudioGain ?? 0}
+          value={clampPlaybackGain(settings.dashboard.defaultAudioGain)}
           onUpdate={value => updateDashboardSetting('defaultAudioGain', value)}
-          min={0}
-          max={24}
-          step={1}
-          unit={t('settings.userInterface.audioPlayback.defaultGainUnit')}
+          formatValue={formatPlaybackGainLabel}
+          min={PLAYBACK_GAIN_MIN_DB}
+          max={PLAYBACK_GAIN_MAX_DB}
+          step={PLAYBACK_GAIN_STEP_DB}
+          disabled={store.isLoading || store.isSaving}
+        />
+        <InlineSlider
+          label={t('settings.userInterface.audioPlayback.highPassLabel')}
+          helpText={t('settings.userInterface.audioPlayback.highPassHelpText')}
+          value={highPassFromStored(settings.dashboard.playback?.highPassHz)}
+          onUpdate={updatePlaybackHighPass}
+          min={PLAYBACK_HIGH_PASS_MIN_HZ}
+          max={PLAYBACK_HIGH_PASS_MAX_HZ}
+          step={PLAYBACK_HIGH_PASS_STEP_HZ}
+          formatValue={formatPlaybackHighPass}
           disabled={store.isLoading || store.isSaving}
         />
       </div>
@@ -504,19 +569,19 @@
             id="playback-denoise-export-precedence"
             class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-base-content)]"
           >
-            <Info class="size-6 shrink-0 text-[var(--color-info)]" aria-hidden="true" />
+            <Info class="size-6 shrink-0 text-[var(--text-info)]" aria-hidden="true" />
             <span>{t('settings.userInterface.audioPlayback.denoiseExportPrecedence')}</span>
           </div>
         {/if}
 
-        <Checkbox
-          checked={playbackDenoise.enabled}
+        <ToggleField
+          value={playbackDenoise.enabled}
           label={t('settings.userInterface.audioPlayback.denoiseLabel')}
-          helpText={exportDenoiseOn
+          description={exportDenoiseOn
             ? t('settings.userInterface.audioPlayback.denoiseExportPrecedence')
             : t('settings.userInterface.audioPlayback.denoiseHelpText')}
           disabled={exportDenoiseOn || store.isLoading || store.isSaving}
-          onchange={checked => updatePlaybackDenoise({ enabled: checked })}
+          onUpdate={checked => updatePlaybackDenoise({ enabled: checked })}
         />
 
         <SelectDropdown
@@ -564,117 +629,121 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.speciesGuide.title')}
+      icon={BookOpen}
       description={t('settings.userInterface.speciesGuide.description')}
       originalData={{ speciesGuide: store.originalData.realtime?.dashboard?.speciesGuide }}
       currentData={{ speciesGuide: store.formData.realtime?.dashboard?.speciesGuide }}
     >
       <div class="space-y-6">
-        <Checkbox
-          checked={speciesGuide.enabled}
+        <ToggleField
+          value={speciesGuide.enabled}
           label={t('settings.userInterface.speciesGuide.enabled.label')}
-          helpText={t('settings.userInterface.speciesGuide.enabled.helpText')}
+          description={t('settings.userInterface.speciesGuide.enabled.helpText')}
           disabled={store.isLoading || store.isSaving}
-          onchange={value => updateSpeciesGuideSetting('enabled', value)}
+          onUpdate={value => updateSpeciesGuideSetting('enabled', value)}
         />
 
         {#if speciesGuideDisabledReason}
           <!-- Visible (not tooltip-only) so the reason reaches touch devices and screen
-               readers; the per-control tooltips below repeat it on hover. role="status"
-               is what announces it, not an aria-describedby link: Checkbox and
-               InlineSlider each generate and own their describedby target, so a
-               page-level id here would have nothing pointing at it. -->
-          <p role="status" class="text-sm opacity-70">
+               readers. role="status" announces it when it appears, and every sub-switch
+               names it through describedBy, so a screen reader reads the reason with
+               the switch's own help text instead of in place of it. -->
+          <p
+            id={SPECIES_GUIDE_REASON_ID}
+            role="status"
+            class="text-sm text-[var(--color-base-content)]/70"
+          >
             {speciesGuideDisabledReason}
           </p>
         {/if}
 
-        <!-- One dimming wrapper for all the sub-controls, which share a single
-             enable gate. It used to be four copies of the same class:opacity-50,
-             three of them wrapping a lone Checkbox. The outer space-y-6 reproduces
-             the gaps those wrappers used to get from the section container. -->
-        <div class="space-y-6" class:opacity-50={!speciesGuide.enabled}>
-          <Checkbox
-            checked={speciesGuide.enableWikipedia}
+        <!-- The sub-controls share one enable gate. ToggleField dims a disabled switch
+             itself, without element opacity, so its focus ring stays visible. -->
+        <div class="divide-y divide-[var(--border-100)]">
+          <ToggleField
+            className="pb-4"
+            value={speciesGuide.enableWikipedia}
             label={t('settings.userInterface.speciesGuide.enableWikipedia.label')}
-            helpText={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
+            description={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
             disabled={speciesGuideSubControlsDisabled}
-            tooltip={speciesGuideDisabledReason}
-            onchange={value => updateSpeciesGuideSetting('enableWikipedia', value)}
+            describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+            onUpdate={value => updateSpeciesGuideSetting('enableWikipedia', value)}
           />
-
-          <Checkbox
-            checked={speciesGuide.enableSupplementaryLinks}
+          <ToggleField
+            className="py-4"
+            value={speciesGuide.enableSupplementaryLinks}
             label={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.label')}
-            helpText={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText')}
+            description={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText')}
             disabled={speciesGuideSubControlsDisabled}
-            tooltip={speciesGuideDisabledReason}
-            onchange={value => updateSpeciesGuideSetting('enableSupplementaryLinks', value)}
+            describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+            onUpdate={value => updateSpeciesGuideSetting('enableSupplementaryLinks', value)}
           />
+          <ToggleField
+            className="pt-4"
+            value={speciesGuide.preFetchEnabled}
+            label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
+            description={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
+            disabled={speciesGuideSubControlsDisabled}
+            describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+            onUpdate={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
+          />
+        </div>
 
-          <div class="space-y-4">
-            <Checkbox
-              checked={speciesGuide.preFetchEnabled}
-              label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
-              helpText={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
-              disabled={speciesGuideSubControlsDisabled}
-              tooltip={speciesGuideDisabledReason}
-              onchange={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
-            />
+        <!-- InlineSlider has no describedBy prop, so the reason rides its help text
+             instead; the visible note above covers it either way. -->
+        <InlineSlider
+          label={t('settings.userInterface.speciesGuide.warmTopN.label')}
+          helpText={speciesGuideDisabledReason ??
+            t('settings.userInterface.speciesGuide.warmTopN.helpText')}
+          value={speciesGuide.warmTopN}
+          onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
+          min={SPECIES_GUIDE_MIN_WARM_TOP_N}
+          max={SPECIES_GUIDE_MAX_WARM_TOP_N}
+          step={10}
+          disabled={speciesGuideSubControlsDisabled}
+        />
 
-            <!-- InlineSlider has no tooltip prop, so the reason rides its help text
-                 instead; the visible note above covers it either way. -->
-            <InlineSlider
-              label={t('settings.userInterface.speciesGuide.warmTopN.label')}
-              helpText={speciesGuideDisabledReason ??
-                t('settings.userInterface.speciesGuide.warmTopN.helpText')}
-              value={speciesGuide.warmTopN}
-              onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
-              min={SPECIES_GUIDE_MIN_WARM_TOP_N}
-              max={SPECIES_GUIDE_MAX_WARM_TOP_N}
-              step={10}
-              disabled={speciesGuideSubControlsDisabled}
-            />
-          </div>
+        <div class="space-y-4">
+          <SettingsGroupLabel divided>
+            {t('settings.userInterface.speciesGuide.sections.title')}
+          </SettingsGroupLabel>
 
-          <div class="space-y-4">
-            <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
-              {t('settings.userInterface.speciesGuide.sections.title')}
-            </h4>
-
-            <Checkbox
-              checked={speciesGuide.showNotes}
+          <div class="divide-y divide-[var(--border-100)]">
+            <ToggleField
+              className="pb-4"
+              value={speciesGuide.showNotes}
               label={t('settings.userInterface.speciesGuide.showNotes.label')}
-              helpText={t('settings.userInterface.speciesGuide.showNotes.helpText')}
+              description={t('settings.userInterface.speciesGuide.showNotes.helpText')}
               disabled={speciesGuideSubControlsDisabled}
-              tooltip={speciesGuideDisabledReason}
-              onchange={value => updateSpeciesGuideSetting('showNotes', value)}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showNotes', value)}
             />
-
-            <Checkbox
-              checked={speciesGuide.showEnrichments}
+            <ToggleField
+              className="py-4"
+              value={speciesGuide.showEnrichments}
               label={t('settings.userInterface.speciesGuide.showEnrichments.label')}
-              helpText={t('settings.userInterface.speciesGuide.showEnrichments.helpText')}
+              description={t('settings.userInterface.speciesGuide.showEnrichments.helpText')}
               disabled={speciesGuideSubControlsDisabled}
-              tooltip={speciesGuideDisabledReason}
-              onchange={value => updateSpeciesGuideSetting('showEnrichments', value)}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showEnrichments', value)}
             />
-
-            <Checkbox
-              checked={speciesGuide.showSimilarSpecies}
+            <ToggleField
+              className="py-4"
+              value={speciesGuide.showSimilarSpecies}
               label={t('settings.userInterface.speciesGuide.showSimilarSpecies.label')}
-              helpText={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
+              description={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
               disabled={speciesGuideSubControlsDisabled}
-              tooltip={speciesGuideDisabledReason}
-              onchange={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
             />
-
-            <Checkbox
-              checked={speciesGuide.showTaxonomy}
+            <ToggleField
+              className="pt-4"
+              value={speciesGuide.showTaxonomy}
               label={t('settings.userInterface.speciesGuide.showTaxonomy.label')}
-              helpText={t('settings.userInterface.speciesGuide.showTaxonomy.helpText')}
+              description={t('settings.userInterface.speciesGuide.showTaxonomy.helpText')}
               disabled={speciesGuideSubControlsDisabled}
-              tooltip={speciesGuideDisabledReason}
-              onchange={value => updateSpeciesGuideSetting('showTaxonomy', value)}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showTaxonomy', value)}
             />
           </div>
         </div>
@@ -687,6 +756,7 @@
   <div class="space-y-6">
     <SettingsSection
       title={t('settings.userInterface.visualContent.title')}
+      icon={Image}
       description={t('settings.userInterface.visualContent.description')}
       originalData={{
         thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
@@ -700,29 +770,33 @@
       <div class="space-y-6">
         <!-- Bird Images Section -->
         <div class="space-y-4">
-          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
+          <SettingsGroupLabel>
             {t('settings.main.sections.userInterface.dashboard.birdImages.title')}
-          </h4>
+          </SettingsGroupLabel>
 
-          <Checkbox
-            checked={settings.dashboard.thumbnails.summary}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('summary', value)}
-          />
+          <div class="divide-y divide-[var(--border-100)]">
+            <ToggleField
+              className="pb-4"
+              value={settings.dashboard.thumbnails.summary}
+              label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
+              description={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
+              )}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={value => updateThumbnailSetting('summary', value)}
+            />
 
-          <Checkbox
-            checked={settings.dashboard.thumbnails.recent}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('recent', value)}
-          />
+            <ToggleField
+              className="pt-4"
+              value={settings.dashboard.thumbnails.recent}
+              label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
+              description={t(
+                'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
+              )}
+              disabled={store.isLoading || store.isSaving}
+              onUpdate={value => updateThumbnailSetting('recent', value)}
+            />
+          </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
             <div class:opacity-50={!multipleProvidersAvailable}>
@@ -784,9 +858,9 @@
 
         <!-- Spectrograms Section -->
         <div class="space-y-4">
-          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
+          <SettingsGroupLabel>
             {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
-          </h4>
+          </SettingsGroupLabel>
 
           <!-- Generation Mode with contextual note -->
           <div class="space-y-3">
@@ -861,7 +935,7 @@
                 {@const isSelected = currentSpectrogramStyle === style.value}
                 <button
                   type="button"
-                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 {isSelected
+                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus-ring {isSelected
                     ? 'border-[var(--color-primary)]/60 bg-[var(--color-primary)]/10 shadow-[0_0_0_1px_rgba(37,99,235,0.3)]'
                     : 'border-[var(--border-200)] bg-[var(--color-base-100)] hover:border-[var(--color-base-content)]/30'}"
                   disabled={store.isLoading || store.isSaving}
@@ -874,7 +948,7 @@
                   />
                   <span
                     class="mt-2 text-xs leading-tight text-center {isSelected
-                      ? 'text-[var(--color-primary)] font-medium'
+                      ? 'text-[var(--text-primary)] font-medium'
                       : 'text-[var(--color-base-content)]/70'}"
                   >
                     {style.label}

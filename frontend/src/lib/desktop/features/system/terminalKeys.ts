@@ -1,0 +1,100 @@
+/**
+ * terminalKeys.ts - keyboard exit from the xterm terminal.
+ *
+ * xterm consumes Tab and Shift+Tab (the shell uses them for completion), so a
+ * keyboard user who tabs into the terminal cannot leave it. The handler made
+ * here implements the "Escape, then Tab" convention: Escape still reaches the
+ * shell, and a Tab or Shift+Tab pressed within TAB_RELEASE_WINDOW_MS of it is
+ * not handled by xterm, so the browser moves focus as it normally would.
+ *
+ * Keys that belong to something else never arm or release the exit: input
+ * method composition is left to xterm, and auto-repeat of Escape or Tab is
+ * ignored, so holding Tab and tapping Escape does not leave the terminal.
+ */
+
+import type { Terminal } from '@xterm/xterm';
+
+/** How long after Escape a Tab or Shift+Tab still leaves the terminal. */
+export const TAB_RELEASE_WINDOW_MS = 2000;
+
+const KEY_ESCAPE = 'Escape';
+const KEY_TAB = 'Tab';
+/** Legacy `keyCode` reported for keys consumed by an input method. */
+const KEYCODE_IME_PROCESSING = 229;
+const MODIFIER_KEYS: ReadonlySet<string> = new Set(['Shift', 'Control', 'Alt', 'Meta']);
+
+/** Key handling for one terminal. */
+export interface TerminalExitKeys {
+  /**
+   * Handler for `Terminal.attachCustomKeyEventHandler`: `true` when xterm should
+   * process the key, `false` when the key must be left to the browser (focus moves).
+   */
+  handleKey: (ev: KeyboardEvent) => boolean;
+  /** Forget a pending Escape, for example when the terminal input loses focus. */
+  disarm: () => void;
+}
+
+/**
+ * Create the key handling for one terminal. Each terminal needs its own.
+ *
+ * @param now Clock in milliseconds, injectable for tests.
+ */
+export function createTerminalExitKeys(now: () => number = Date.now): TerminalExitKeys {
+  let escapeAt: number | null = null;
+
+  const handleKey = (ev: KeyboardEvent): boolean => {
+    if (ev.type !== 'keydown') return true;
+
+    // Composition keys belong to the input method; xterm handles them itself.
+    if (ev.isComposing || ev.keyCode === KEYCODE_IME_PROCESSING) {
+      escapeAt = null;
+      return true;
+    }
+
+    // Pressing Shift for Shift+Tab is part of the sequence, not a new key.
+    if (MODIFIER_KEYS.has(ev.key)) return true;
+
+    // A repeating Escape or Tab neither arms nor releases, and keeps the armed
+    // state as it was: the window runs from the first Escape, not the last repeat.
+    if (ev.repeat && (ev.key === KEY_ESCAPE || ev.key === KEY_TAB)) return true;
+
+    const hasCommandModifier = ev.ctrlKey || ev.altKey || ev.metaKey;
+    const armedAt = escapeAt;
+    escapeAt = null;
+
+    // Only a plain Escape arms: Shift+Escape is another key, while Shift+Tab
+    // still releases below.
+    if (ev.key === KEY_ESCAPE && !hasCommandModifier && !ev.shiftKey) {
+      escapeAt = now();
+      return true;
+    }
+
+    if (ev.key === KEY_TAB && !hasCommandModifier && armedAt !== null) {
+      // A negative elapsed time means the clock stepped back; do not trust the arm.
+      const elapsed = now() - armedAt;
+      if (elapsed >= 0 && elapsed <= TAB_RELEASE_WINDOW_MS) return false;
+    }
+
+    return true;
+  };
+
+  return {
+    handleKey,
+    disarm: () => {
+      escapeAt = null;
+    },
+  };
+}
+
+/**
+ * Give a terminal the Escape-then-Tab exit and point its input at the hint
+ * that explains it. Losing focus drops a pending Escape, so a Tab after focus
+ * came back is sent to the shell. Call after `term.open()`, since the input
+ * textarea is created there.
+ */
+export function attachTerminalExitKeys(term: Terminal, hintId: string): void {
+  const keys = createTerminalExitKeys();
+  term.attachCustomKeyEventHandler(keys.handleKey);
+  term.textarea?.setAttribute('aria-describedby', hintId);
+  term.textarea?.addEventListener('blur', keys.disarm);
+}

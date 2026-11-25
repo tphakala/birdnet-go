@@ -5,6 +5,7 @@ import { svelteTesting } from '@testing-library/svelte/vite'
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
+import { injectPrePaintTheme } from './src/lib/utils/theme-prepaint.js'
 
 // Single source of truth for the translation files directory.
 const MESSAGES_SOURCE_DIR = './static/messages'
@@ -89,6 +90,11 @@ export default defineConfig({
         const formatted = locales.map(l => JSON.stringify(l)).join(', ')
         return html.replace(LOCALES_PLACEHOLDER, formatted)
       },
+    },
+    // Inline the theme resolver shared with the theme store into the pre-paint script
+    {
+      name: 'inline-prepaint-theme',
+      transformIndexHtml: html => injectPrePaintTheme(html),
     },
     // Copy message files to dist during build
     {

@@ -4,7 +4,11 @@
 // get stubs that report ErrOpenVINOUnavailable so callers degrade to ORT.
 package openvino
 
-import "github.com/tphakala/birdnet-go/internal/errors"
+import (
+	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
+)
 
 // DefaultPrecisionHint is the OpenVINO INFERENCE_PRECISION_HINT used for the
 // f16 acceleration path on ARMv8.2 CPUs and the Intel iGPU.
@@ -15,18 +19,35 @@ const DefaultPrecisionHint = "f16"
 // classifier.openVINOPrecisionFor for the per-model, per-device policy).
 const PrecisionF32 = "f32"
 
-// DefaultLibraryName is the soname the backend dlopens when no library path is
-// configured. It mirrors the fallback in ovbind_load (backend_openvino.go) and
-// is used only to report which library a path-less load resolved to.
-const DefaultLibraryName = "libopenvino_c.so"
-
 const (
 	// DeviceCPU is the OpenVINO CPU device. ARMv8.2 f16 acceleration runs here.
 	DeviceCPU = "CPU"
-	// DeviceGPU is the OpenVINO GPU device (Intel iGPU via intel_gpu_plugin). It
+	// DeviceGPU is OpenVINO's alias for the first GPU (Intel GPUs via
+	// intel_gpu_plugin; a host with several GPUs also enumerates "GPU.<n>"). It
 	// supports f16 natively and offloads inference from the CPU cores.
 	DeviceGPU = "GPU"
 )
+
+// IsGPUDevice reports whether name is an OpenVINO GPU device: the bare "GPU"
+// alias or a concrete "GPU.<n>" with a decimal index. OpenVINO enumerates a lone
+// GPU as "GPU" and, once a host has more than one (an iGPU plus a discrete card),
+// as "GPU.0", "GPU.1" and so on with no bare "GPU" entry, so gates compare the
+// device class instead of the literal DeviceGPU.
+func IsGPUDevice(name string) bool {
+	if name == DeviceGPU {
+		return true
+	}
+	index, found := strings.CutPrefix(name, DeviceGPU+".")
+	if !found || index == "" {
+		return false
+	}
+	for _, r := range index {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // ErrOpenVINOUnavailable is returned when the OpenVINO backend is not compiled
 // in (no "openvino" build tag) or libopenvino_c cannot be loaded at runtime.
@@ -57,8 +78,9 @@ type Options struct {
 	// Threads sets INFERENCE_NUM_THREADS (CPU device only; ignored for GPU).
 	// 0 lets OpenVINO auto-tune.
 	Threads int
-	// Device is the OpenVINO device to compile for: DeviceCPU (default) or
-	// DeviceGPU. An empty string is treated as DeviceCPU.
+	// Device is the OpenVINO device to compile for: DeviceCPU (default), DeviceGPU
+	// (OpenVINO's alias for the first GPU) or a concrete "GPU.<n>" name as
+	// enumerated by the probe. An empty string is treated as DeviceCPU.
 	Device string
 	// OutputIndex is the index of the logits output port to read. 0 (default)
 	// for single-output models like BirdNET v2.4; 3 for the Perch v2 multi-output

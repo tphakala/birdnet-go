@@ -1,9 +1,10 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { t } from '$lib/i18n';
   import { appState } from '$lib/stores/appState.svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { buildLoginUrl } from '$lib/utils/loginRedirect';
+  import { buildLoginUrl, DASHBOARD_PATH } from '$lib/utils/loginRedirect';
 
   interface SecuritySettings {
     enabled: boolean;
@@ -34,10 +35,6 @@
   let hasStackTrace = $derived(stackTrace && stackTrace.trim().length > 0);
 </script>
 
-<svelte:head>
-  <title>{code} - {title}</title>
-</svelte:head>
-
 <div class={cn('col-span-12 min-h-[60vh] flex items-center justify-center', className)}>
   <div class="text-center p-8 rounded-lg bg-[var(--color-base-100)] shadow-lg max-w-4xl w-full">
     <h1 class="text-6xl font-bold text-[var(--color-base-content)] mb-4">{code}</h1>
@@ -65,7 +62,7 @@
     <!-- Link Buttons -->
     <div class="mt-8 space-x-4">
       <a
-        href="/"
+        href={buildAppUrl(DASHBOARD_PATH)}
         class="btn btn-primary normal-case text-base font-semibold transition duration-300"
       >
         {t('common.goToDashboard')}

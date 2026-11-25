@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { DASHBOARD_PATH } from '$lib/utils/loginRedirect';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
 
@@ -227,7 +229,6 @@
 </script>
 
 <svelte:head>
-  <title>{t('pageTitle.pageNotFound')}</title>
   <style>
     /* Custom binoculars cursor - black outline for light theme */
     .cursor-binoculars {
@@ -409,7 +410,7 @@
 
     .timer {
       font-size: 0.875rem;
-      color: var(--color-primary);
+      color: var(--text-primary);
     }
 
     /* Spotting effect */
@@ -468,15 +469,20 @@
         onclick={handleZeroClick}
         onkeydown={handleZeroKeydown}
         role="button"
-        tabindex="0">0</span
-      >4
+        tabindex="0"
+      >
+        0
+      </span>4
     </h1>
     <h2 class="text-3xl font-semibold text-[var(--color-base-content)] opacity-70 mb-8">
       {t('error.404.title')}
     </h2>
 
     <!-- Link Button -->
-    <a href="/" class="btn btn-primary normal-case text-base font-semibold transition duration-300">
+    <a
+      href={buildAppUrl(DASHBOARD_PATH)}
+      class="btn btn-primary normal-case text-base font-semibold transition duration-300"
+    >
       {t('common.goToDashboard')}
     </a>
   </div>

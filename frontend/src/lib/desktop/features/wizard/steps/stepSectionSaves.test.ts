@@ -82,10 +82,10 @@ describe('wizard steps save with section PATCH requests', () => {
     const { leave } = renderStep(IntegrationStep);
     await flushAsync();
     await fireEvent.click(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
     );
     await fireEvent.click(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
     );
 
     await leave();
@@ -109,13 +109,13 @@ describe('wizard steps save with section PATCH requests', () => {
     const first = renderStep(IntegrationStep);
     await flushAsync();
     await fireEvent.click(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
     );
     await fireEvent.click(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
     );
     await fireEvent.click(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
     );
     await fireEvent.input(
       await screen.findByRole('textbox', {
@@ -134,13 +134,13 @@ describe('wizard steps save with section PATCH requests', () => {
       ['sentry', { enabled: true }],
     ]);
     expect(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.privacyFilterLabel/ })
     ).not.toBeChecked();
     expect(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
     ).toBeChecked();
     expect(
-      screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+      screen.getByRole('switch', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
     ).not.toBeChecked();
     expect(screen.queryByLabelText('settings.integration.birdweather.token.label')).toBeNull();
     await second.leave();

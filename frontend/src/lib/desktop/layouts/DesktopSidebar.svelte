@@ -43,6 +43,7 @@ Performance Optimizations:
   import { auth as authStore } from '$lib/stores/auth';
   import { sidebar } from '$lib/stores/sidebar';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
   import type { AuthConfig } from '../../../app.d';
   import {
     LayoutDashboard,
@@ -509,7 +510,9 @@ Performance Optimizations:
     }
   }
 
+  // Logout and login end in a page reload, so a draft is asked about in the app first.
   async function handleLogout() {
+    if (!(await unsavedChanges.confirmDiscard())) return;
     try {
       await authStore.logout();
     } catch {
@@ -518,7 +521,8 @@ Performance Optimizations:
     }
   }
 
-  function handleLogin() {
+  async function handleLogin() {
+    if (!(await unsavedChanges.confirmDiscard())) return;
     // Capture the full current location (path + query) at click time so the
     // post-login redirect returns the user to the exact filtered view (#3306).
     loginRedirectUrl = getCurrentPathWithQuery();
@@ -576,16 +580,16 @@ Performance Optimizations:
         >
           <LogoBadge size="md" variant={logoVariant} />
           {#if !isCollapsed}
-            <span class="text-xl font-bold tracking-tight text-[var(--color-base-content)]"
-              >BirdNET-Go</span
-            >
+            <span class="text-xl font-bold tracking-tight text-[var(--color-base-content)]">
+              BirdNET-Go
+            </span>
           {/if}
         </button>
         <!-- Collapse toggle - desktop only -->
         {#if !isCollapsed}
           <button
             onclick={toggleSidebar}
-            class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
+            class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-muted hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
             aria-label={t('navigation.collapseSidebar')}
             title={t('navigation.collapseSidebar')}
           >
@@ -597,7 +601,7 @@ Performance Optimizations:
       {#if isCollapsed}
         <button
           onclick={toggleSidebar}
-          class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
+          class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-muted hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
           aria-label={t('navigation.expandSidebar')}
           title={t('navigation.expandSidebar')}
         >
@@ -779,7 +783,7 @@ Performance Optimizations:
             href={appState.projectLinks.repoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="text-xs text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]/80 transition-colors duration-150"
+            class="text-xs text-muted hover:text-[var(--color-base-content)] hover:underline transition-colors duration-150"
             aria-label={t('navigation.viewOnGithubAriaLabel')}
           >
             {version}

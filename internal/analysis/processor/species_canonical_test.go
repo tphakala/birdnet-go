@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/classifier"
 )
 
 // Shared fixtures for the canonical-name tests: the Laughing Dove is a real
@@ -19,30 +21,41 @@ const (
 )
 
 // fakeTaxonomyResolver is a test double for the taxonomyResolver interface that
-// lets a test control (and observe) the canonical re-resolution call.
+// lets a test control (and observe) the canonical re-resolution call and the
+// taxonomy code lookup. A nil codeFn reports every label as not found.
 type fakeTaxonomyResolver struct {
-	fn func(label string) (scientific, common, code string)
+	fn     func(label string) (scientific, common, code string)
+	codeFn func(label string) (code string, found bool)
 }
 
 func (f fakeTaxonomyResolver) EnrichResultWithTaxonomy(label string) (scientific, common, code string) {
 	return f.fn(label)
 }
 
+func (f fakeTaxonomyResolver) GetSpeciesCode(label string) (code string, found bool) {
+	if f.codeFn == nil {
+		return "", false
+	}
+	return f.codeFn(label)
+}
+
 // TestCanonicalizeSpecies_AliasReResolvesCommonKeepsCode verifies that when a model
 // emits a legacy scientific name, canonicalizeSpecies collapses it to the canonical
 // name, preserves the legacy name as raw, re-resolves the common name for the
-// canonical name, and KEEPS the original eBird code. The code is stable across a pure
-// rename and the frozen eBird taxonomy holds only the legacy name, so re-resolving it
-// would degrade the real code to a placeholder.
+// canonical name, and KEEPS the original eBird code, because the frozen eBird
+// taxonomy holds the legacy name and its code is the taxon's real code.
 func TestCanonicalizeSpecies_AliasReResolvesCommonKeepsCode(t *testing.T) {
 	t.Parallel()
 
-	resolver := fakeTaxonomyResolver{fn: func(label string) (string, string, string) {
-		require.Equal(t, testSciCanonical, label,
-			"re-resolution must use the canonical scientific name")
-		// The resolver's code is intentionally ignored; the original code is kept.
-		return testSciCanonical, testCommonDove, testCodeDove
-	}}
+	resolver := fakeTaxonomyResolver{
+		fn: func(label string) (string, string, string) {
+			require.Equal(t, testSciCanonical, label,
+				"re-resolution must use the canonical scientific name")
+			// The resolver's code is intentionally ignored; the original code is kept.
+			return testSciCanonical, testCommonDove, testCodeDove
+		},
+		codeFn: func(label string) (string, bool) { return testCodeLegacy, label == testSciLegacy },
+	}
 
 	sci, common, code, raw := canonicalizeSpecies(resolver,
 		testSciLegacy, "Legacy Common", testCodeLegacy)
@@ -62,9 +75,12 @@ func TestCanonicalizeSpecies_AliasReResolvesCommonKeepsCode(t *testing.T) {
 func TestCanonicalizeSpecies_AliasKeepsOriginalCommonWhenCanonicalUnresolved(t *testing.T) {
 	t.Parallel()
 
-	resolver := fakeTaxonomyResolver{fn: func(string) (string, string, string) {
-		return testSciCanonical, "", testCodeDove // canonical name resolves no common name
-	}}
+	resolver := fakeTaxonomyResolver{
+		fn: func(string) (string, string, string) {
+			return testSciCanonical, "", testCodeDove // canonical name resolves no common name
+		},
+		codeFn: func(label string) (string, bool) { return testCodeLegacy, label == testSciLegacy },
+	}
 
 	sci, common, code, raw := canonicalizeSpecies(resolver,
 		testSciLegacy, testCommonDove, testCodeLegacy)
@@ -83,10 +99,16 @@ func TestCanonicalizeSpecies_NonAliasedUnchanged(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	resolver := fakeTaxonomyResolver{fn: func(label string) (string, string, string) {
-		called = true
-		return "", "", ""
-	}}
+	resolver := fakeTaxonomyResolver{
+		fn: func(label string) (string, string, string) {
+			called = true
+			return "", "", ""
+		},
+		codeFn: func(label string) (string, bool) {
+			called = true
+			return "", false
+		},
+	}
 
 	sci, common, code, raw := canonicalizeSpecies(resolver,
 		"Turdus merula", "Eurasian Blackbird", "eurbla1")
@@ -96,4 +118,103 @@ func TestCanonicalizeSpecies_NonAliasedUnchanged(t *testing.T) {
 	assert.Equal(t, "eurbla1", code)
 	assert.Empty(t, raw, "non-aliased name must store an empty raw")
 	assert.False(t, called, "resolver must not be called for a non-aliased name")
+}
+
+// TestCanonicalizeSpecies_AliasCode pins which eBird code an aliased detection
+// carries. The raw name wins when the taxonomy holds it; the canonical name's code
+// is used only when the raw name is absent and the canonical name is present (the
+// real index lists alias names under their partner's code, so in production this is
+// a letter-case variant of a label); when neither is present the incoming
+// placeholder is kept.
+func TestCanonicalizeSpecies_AliasCode(t *testing.T) {
+	t.Parallel()
+
+	const placeholder = "t-placeholder"
+	tests := []struct {
+		name      string
+		raw       string
+		canonical string
+		known     map[string]string // taxonomy: scientific name -> real code
+		incoming  string
+		want      string
+	}{
+		{
+			name: "legacy key in snapshot keeps raw code",
+			raw:  "Streptopelia senegalensis", canonical: "Spilopelia senegalensis",
+			known:    map[string]string{"Streptopelia senegalensis": "laudov1"},
+			incoming: "laudov1", want: "laudov1",
+		},
+		{
+			name: "raw name missing from taxonomy takes canonical code",
+			raw:  "nannus troglodytes", canonical: "Troglodytes troglodytes",
+			known:    map[string]string{"Troglodytes troglodytes": "winwre4"},
+			incoming: placeholder, want: "winwre4",
+		},
+		{
+			name: "neither in taxonomy keeps placeholder",
+			raw:  "Eptesicus nilssonii", canonical: "Cnephaeus nilssonii",
+			known:    map[string]string{},
+			incoming: placeholder, want: placeholder,
+		},
+		{
+			name: "both in taxonomy keeps raw code",
+			raw:  "Dicrurus divaricatus", canonical: "Dicrurus adsimilis",
+			known:    map[string]string{"Dicrurus divaricatus": "fotdro4", "Dicrurus adsimilis": "fotdro5"},
+			incoming: "fotdro4", want: "fotdro4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			resolver := fakeTaxonomyResolver{
+				fn: func(string) (string, string, string) { return tt.canonical, "Common", "" },
+				codeFn: func(label string) (string, bool) {
+					code, ok := tt.known[label]
+					return code, ok
+				},
+			}
+			sci, _, code, raw := canonicalizeSpecies(resolver, tt.raw, "Common", tt.incoming)
+			assert.Equal(t, tt.canonical, sci)
+			assert.Equal(t, tt.raw, raw)
+			assert.Equal(t, tt.want, code)
+		})
+	}
+}
+
+// TestCanonicalizeSpecies_EmbeddedSnapshot runs the alias code rule against the
+// real embedded eBird snapshot and alias map: renamed model labels the snapshot does
+// not hold get the canonical taxon's real code, a legacy key the snapshot holds
+// keeps its own.
+func TestCanonicalizeSpecies_EmbeddedSnapshot(t *testing.T) {
+	t.Parallel()
+
+	taxonomy, index, err := classifier.LoadTaxonomyData("")
+	require.NoError(t, err)
+	// The same lookup the orchestrator runs, so the real found semantics apply.
+	lookup := func(label string) (string, bool) {
+		return classifier.GetSpeciesCodeFromName(taxonomy, index, label)
+	}
+	resolver := fakeTaxonomyResolver{
+		fn:     func(label string) (string, string, string) { return label, "Common", "" },
+		codeFn: lookup,
+	}
+
+	tests := []struct {
+		raw, canonical, want string
+	}{
+		{"Nannus troglodytes", "Troglodytes troglodytes", "winwre4"},
+		{"Schoeniclus schoeniclus", "Emberiza schoeniclus", "reebun"},
+		{testSciLegacy, testSciCanonical, testCodeDove},
+	}
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			t.Parallel()
+			incoming, _ := lookup(tt.raw)
+			sci, _, code, rawName := canonicalizeSpecies(resolver, tt.raw, "Common", incoming)
+			assert.Equal(t, tt.canonical, sci)
+			assert.Equal(t, tt.raw, rawName)
+			assert.Equal(t, tt.want, code)
+		})
+	}
 }

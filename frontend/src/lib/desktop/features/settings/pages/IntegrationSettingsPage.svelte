@@ -24,7 +24,7 @@
   @component
 -->
 <script lang="ts">
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -33,6 +33,7 @@
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -40,7 +41,7 @@
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
-  import { Bird, Radio, Activity, Binoculars } from '@lucide/svelte';
+  import { Bird, Radio, Activity, Binoculars, Network, ChartLine } from '@lucide/svelte';
   import {
     integrationSettings,
     realtimeSettings,
@@ -1154,16 +1155,17 @@
     <!-- BirdWeather Settings Card -->
     <SettingsSection
       title={t('settings.integration.birdweather.title')}
+      icon={Bird}
       description={t('settings.integration.birdweather.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.birdweather}
       currentData={(store.formData as SettingsFormData)?.realtime?.birdweather}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.birdweather.enabled}
+        <ToggleField
+          value={settings.birdweather.enabled}
           label={t('settings.integration.birdweather.enable')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateBirdWeatherEnabled}
+          onUpdate={updateBirdWeatherEnabled}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -1256,16 +1258,17 @@
     <!-- MQTT Settings Card -->
     <SettingsSection
       title={t('settings.integration.mqtt.title')}
+      icon={Network}
       description={t('settings.integration.mqtt.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.mqtt}
       currentData={(store.formData as SettingsFormData)?.realtime?.mqtt}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.mqtt.enabled}
+        <ToggleField
+          value={settings.mqtt.enabled}
           label={t('settings.integration.mqtt.enable')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateMQTTEnabled}
+          onUpdate={updateMQTTEnabled}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -1293,27 +1296,30 @@
             />
 
             <!-- TLS/SSL Security -->
-            <div class="flex flex-col gap-2">
-              <Checkbox
-                checked={settings.mqtt.tls?.enabled ?? false}
+            <div class="divide-y divide-[var(--border-100)]">
+              <ToggleField
+                className={settings.mqtt.tls?.enabled ? 'pb-4' : ''}
+                value={settings.mqtt.tls?.enabled ?? false}
                 label={t('settings.integration.mqtt.tls.enable')}
                 disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
-                onchange={updateMQTTTLSEnabled}
+                onUpdate={updateMQTTTLSEnabled}
               />
 
               {#if settings.mqtt.tls?.enabled}
-                <Checkbox
-                  checked={settings.mqtt.tls?.insecureSkipVerify ?? false}
+                <!-- Indented under the TLS switch it depends on -->
+                <ToggleField
+                  className="py-4 pl-6"
+                  value={settings.mqtt.tls?.insecureSkipVerify ?? false}
                   label={t('settings.integration.mqtt.tls.skipVerify')}
                   disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
-                  onchange={updateMQTTTLSInsecureSkipVerify}
+                  onUpdate={updateMQTTTLSInsecureSkipVerify}
                 />
 
                 <!-- Certificate Management -->
-                <div class="border-t border-[var(--border-200)] pt-4 mt-2">
-                  <h3 class="text-sm font-medium mb-2">
+                <div class="pt-4">
+                  <SettingsGroupLabel as="h3" class="mb-2">
                     {t('settings.integration.mqtt.tls.certificates.title')}
-                  </h3>
+                  </SettingsGroupLabel>
                   <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
                     {t('settings.integration.mqtt.tls.certificates.description')}
                   </p>
@@ -1323,9 +1329,9 @@
                       <div
                         class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"
                       ></div>
-                      <span class="text-sm text-[var(--color-base-content)]/60"
-                        >{t('components.tls.loading')}</span
-                      >
+                      <span class="text-sm text-[var(--color-base-content)]/60">
+                        {t('components.tls.loading')}
+                      </span>
                     </div>
                   {:else if mqttCertError}
                     <ErrorAlert type="error">
@@ -1356,7 +1362,7 @@
 
                       <button
                         type="button"
-                        class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         onclick={handleMQTTCertDelete}
                         disabled={mqttDeleteLoading}
                       >
@@ -1434,9 +1440,9 @@
 
             <!-- Authentication Section -->
             <div class="border-t border-[var(--border-200)] pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">
+              <SettingsGroupLabel as="h3" class="mb-3">
                 {t('settings.integration.mqtt.authentication.title')}
-              </h3>
+              </SettingsGroupLabel>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextInput
@@ -1462,15 +1468,15 @@
 
             <!-- Home Assistant Integration Section -->
             <div class="border-t border-[var(--border-200)] pt-4 mt-2">
-              <h3 class="text-sm font-medium mb-3">
+              <SettingsGroupLabel as="h3" class="mb-3">
                 {t('settings.integration.mqtt.homeAssistant.title')}
-              </h3>
+              </SettingsGroupLabel>
 
-              <Checkbox
-                checked={settings.mqtt.homeAssistant?.enabled ?? false}
+              <ToggleField
+                value={settings.mqtt.homeAssistant?.enabled ?? false}
                 label={t('settings.integration.mqtt.homeAssistant.enable')}
                 disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
-                onchange={updateMQTTHomeAssistantEnabled}
+                onUpdate={updateMQTTHomeAssistantEnabled}
               />
 
               <SettingsNote>
@@ -1480,10 +1486,9 @@
               {#if settings.mqtt.homeAssistant?.enabled}
                 <!-- Retain Messages for Home Assistant -->
                 <div class="mt-4">
-                  <!-- prettier-ignore -->
-                  <Checkbox
-                    checked={settings.mqtt.retain ?? false}
-                    onchange={(checked) => updateMQTTRetain(checked)}
+                  <ToggleField
+                    value={settings.mqtt.retain ?? false}
+                    onUpdate={checked => updateMQTTRetain(checked)}
                     label={t('settings.integration.mqtt.homeAssistant.retain.label')}
                     disabled={!settings.mqtt.enabled || store.isLoading || store.isSaving}
                   />
@@ -1514,7 +1519,7 @@
                 </div>
 
                 <div
-                  class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]"
+                  class="flex items-start gap-3 p-4 rounded-lg mt-4 bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--text-info)]"
                 >
                   <Info class="size-5 shrink-0" />
                   <div>
@@ -1543,7 +1548,7 @@
                   </button>
 
                   {#if mqttHasChanges}
-                    <span class="text-sm text-[var(--color-warning)]">
+                    <span class="text-sm text-[var(--text-warning)]">
                       {t('settings.integration.mqtt.homeAssistant.discovery.saveFirst')}
                     </span>
                   {/if}
@@ -1599,16 +1604,17 @@
     <!-- Observability Settings Card -->
     <SettingsSection
       title={t('settings.integration.observability.title')}
+      icon={ChartLine}
       description={t('settings.integration.observability.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.telemetry}
       currentData={(store.formData as SettingsFormData)?.realtime?.telemetry}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.observability.prometheus.enabled}
+        <ToggleField
+          value={settings.observability.prometheus.enabled}
           label={t('settings.integration.observability.enable')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateObservabilityEnabled}
+          onUpdate={updateObservabilityEnabled}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -1645,16 +1651,17 @@
     <!-- eBird Settings Card -->
     <SettingsSection
       title={t('settings.integration.ebird.title')}
+      icon={Bird}
       description={t('settings.integration.ebird.description')}
       originalData={(store.originalData as SettingsFormData)?.realtime?.ebird}
       currentData={(store.formData as SettingsFormData)?.realtime?.ebird}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.ebird.enabled}
+        <ToggleField
+          value={settings.ebird.enabled}
           label={t('settings.integration.ebird.enable')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateEBirdEnabled}
+          onUpdate={updateEBirdEnabled}
         />
 
         <!-- Fieldset for accessible disabled state -->

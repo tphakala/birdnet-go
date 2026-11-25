@@ -1,5 +1,6 @@
 <script lang="ts">
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import type { StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import {
     Download,
@@ -24,10 +25,15 @@
   import { copyToClipboard, COPY_FEEDBACK_TIMEOUT_MS } from '$lib/utils/clipboard';
   import { getLocalDateString, getLocalTimeString } from '$lib/utils/date';
   import { downloadBlob } from '$lib/utils/fileHelpers';
-
-  type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown' | 'skipped';
-  type HealthCategory =
-    'system' | 'audio' | 'analysis' | 'streams' | 'database' | 'network' | 'config' | 'logs';
+  import { textColorFor } from '$lib/utils/statusTextColor';
+  import { generateId } from '$lib/utils/uuid';
+  import { radioGroupKeys } from '$lib/utils/radioGroupKeys';
+  import type {
+    HealthStatus,
+    HealthCategory,
+    DiagnosticsResult,
+    DiagnosticsReport,
+  } from '$lib/types/diagnostics.types';
 
   interface SparklineBucket {
     t: string;
@@ -39,28 +45,6 @@
     source: string;
     delta: number;
     metric: string;
-  }
-
-  interface DiagnosticsResult {
-    name: string;
-    category: HealthCategory;
-    status: HealthStatus;
-    message: string;
-    details?: Record<string, unknown>;
-    duration_ms: number;
-    timestamp: string;
-  }
-
-  interface DiagnosticsReport {
-    id: string;
-    status: HealthStatus;
-    started_at: string;
-    completed_at: string;
-    duration_ms: number;
-    total_checks: number;
-    results: DiagnosticsResult[];
-    summary: Record<string, HealthStatus>;
-    count_by_status: Record<string, number>;
   }
 
   const categoryOrder: HealthCategory[] = [
@@ -103,6 +87,13 @@
   }
 
   let selectedWindow = $state<string>(safeGetWindow());
+
+  // Id of the "Running diagnostics" text that explains why Refresh and the window selector wait.
+  const RUN_STATUS_ID = generateId('health-run-status');
+  /** Rows of each category card in the results skeleton, shaped like a typical report. */
+  const RESULTS_SKELETON_ROWS = [5, 4, 4];
+  /** Width of each row's check name bar, varied so the rows do not read as a table. */
+  const CHECK_NAME_WIDTHS = ['w-28', 'w-36', 'w-24', 'w-32', 'w-28'];
 
   function toggleExpand(checkName: string) {
     const next = new Set(expandedChecks);
@@ -281,6 +272,7 @@
   }
 
   function selectWindow(w: string) {
+    if (running) return;
     selectedWindow = w;
     try {
       localStorage.setItem('health-eval-window', w);
@@ -302,7 +294,7 @@
       // cached up to 24h. Only the explicit "Run diagnostics" click sets it; the
       // auto-run on mount and the window switch reuse the cache, because
       // quick_check runs on the single pinned SQLite connection and can stall
-      // writes on a large database (#3939).
+      // writes on a large database (issue 3939).
       const url = `/api/v2/system/diagnostics/run?window=${selectedWindow}${
         forceIntegrity ? '&refresh_integrity=true' : ''
       }`;
@@ -419,131 +411,179 @@
   </svg>
 {/snippet}
 
+<!-- A tile count; until the first report arrives a bar stands in, inside the numeral span -->
+{#snippet tileCount(count: number | undefined)}
+  {#if count !== undefined}
+    {count}
+  {:else if running && !report}
+    <Skeleton inline className="h-7 w-8" />
+  {:else}
+    -
+  {/if}
+{/snippet}
+
+<!-- First-run placeholder of the category cards; the run status beside Refresh is its label -->
+{#snippet resultsSkeleton()}
+  <div class="space-y-4" data-testid="health-results-skeleton">
+    {#each RESULTS_SKELETON_ROWS as rows, card (card)}
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm"
+      >
+        <div class="text-xs mb-3"><Skeleton inline className="h-3 w-28" /></div>
+        <div class="space-y-2">
+          {#each CHECK_NAME_WIDTHS.slice(0, rows) as width, row (row)}
+            <div
+              class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[var(--color-base-200)]/50"
+            >
+              <Skeleton className="h-5 w-20 shrink-0 rounded-full" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm">
+                  <Skeleton inline className="h-3.5 {width}" />
+                </div>
+                <div class="text-xs">
+                  <Skeleton inline className="h-3 w-48" />
+                </div>
+              </div>
+              <span class="text-xs shrink-0"><Skeleton inline className="h-3 w-10" /></span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/each}
+  </div>
+{/snippet}
+
 <div class="col-span-12 space-y-4">
   <!-- Status Metric Strip (matches System Overview pattern) -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-    <!-- Healthy -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-green-500/10">
-            <CheckCircle class="w-4 h-4 text-[var(--color-success)]" />
+  <div class="@container">
+    <div class="grid grid-cols-2 @4xl:grid-cols-4 gap-3">
+      <!-- Healthy -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-[var(--color-success)]/10">
+              <CheckCircle class="w-4 h-4 text-[var(--text-success)]" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.healthy')}</span>
+          <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--text-success)]">
+            {@render tileCount(report?.count_by_status?.healthy)}
+          </span>
         </div>
-        <span class="font-mono tabular-nums text-2xl font-semibold text-[var(--color-success)]">
-          {report?.count_by_status?.healthy ?? (running ? '…' : '-')}
-        </span>
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {@const h = report.count_by_status.healthy ?? 0}
+            {@const total = report.total_checks}
+            {h === total
+              ? t('health.metricFooter.allPassing')
+              : t('health.metricFooter.healthyOfTotal', { healthy: h, total })}
+          {:else if running}
+            <Skeleton inline className="h-3 w-20" />
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {@const h = report.count_by_status.healthy ?? 0}
-          {@const total = report.total_checks}
-          {h === total ? t('health.metricFooter.allPassing') : `${h} of ${total}`}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
-      </div>
-    </div>
 
-    <!-- Warning -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-amber-500/10">
-            <AlertTriangle class="w-4 h-4 text-[var(--color-warning)]" />
+      <!-- Warning -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-[var(--color-warning)]/10">
+              <AlertTriangle class="w-4 h-4 text-[var(--text-warning)]" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.warnings')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.warnings')}</span>
+          <span
+            class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
+              ?.warning ?? 0) > 0
+              ? 'text-[var(--text-warning)]'
+              : 'text-muted'}"
+          >
+            {@render tileCount(report?.count_by_status?.warning)}
+          </span>
         </div>
-        <span
-          class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status?.warning ??
-            0) > 0
-            ? 'text-[var(--color-warning)]'
-            : 'opacity-40'}"
-        >
-          {report?.count_by_status?.warning ?? (running ? '…' : '-')}
-        </span>
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {(report.count_by_status.warning ?? 0) > 0
+              ? t('health.metricFooter.needsAttention')
+              : t('health.metricFooter.none')}
+          {:else if running}
+            <Skeleton inline className="h-3 w-20" />
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {(report.count_by_status.warning ?? 0) > 0
-            ? t('health.metricFooter.needsAttention')
-            : t('health.metricFooter.none')}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
-      </div>
-    </div>
 
-    <!-- Critical -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-red-500/10">
-            <XCircle class="w-4 h-4 text-[var(--color-error)]" />
+      <!-- Critical -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-[var(--color-error)]/10">
+              <XCircle class="w-4 h-4 text-[var(--text-error)]" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.critical')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.critical')}</span>
+          <span
+            class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
+              ?.critical ?? 0) > 0
+              ? 'text-[var(--text-error)]'
+              : 'text-muted'}"
+          >
+            {@render tileCount(report?.count_by_status?.critical)}
+          </span>
         </div>
-        <span
-          class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
-            ?.critical ?? 0) > 0
-            ? 'text-[var(--color-error)]'
-            : 'opacity-40'}"
-        >
-          {report?.count_by_status?.critical ?? (running ? '…' : '-')}
-        </span>
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {(report.count_by_status.critical ?? 0) > 0
+              ? t('health.metricFooter.failing')
+              : t('health.metricFooter.allClear')}
+          {:else if running}
+            <Skeleton inline className="h-3 w-20" />
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {(report.count_by_status.critical ?? 0) > 0
-            ? t('health.metricFooter.failing')
-            : t('health.metricFooter.allClear')}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
-      </div>
-    </div>
 
-    <!-- Skipped -->
-    <div
-      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
-    >
-      <div class="flex items-center justify-between mb-3">
-        <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-slate-500/10">
-            <SkipForward class="w-4 h-4 text-slate-500" />
+      <!-- Skipped -->
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm flex flex-col"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 mb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-1.5 rounded-lg bg-[var(--color-base-content)]/10">
+              <SkipForward class="w-4 h-4 text-muted" />
+            </div>
+            <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
           </div>
-          <span class="text-xs font-medium text-muted">{t('health.summary.skipped')}</span>
+          <span
+            class="font-mono tabular-nums text-2xl font-semibold {(report?.count_by_status
+              ?.skipped ?? 0) > 0
+              ? ''
+              : 'text-[var(--color-base-content)]/70'}"
+          >
+            {@render tileCount(report?.count_by_status?.skipped)}
+          </span>
         </div>
-        <span
-          class="font-mono tabular-nums text-2xl font-semibold"
-          class:opacity-40={!((report?.count_by_status?.skipped ?? 0) > 0)}
-        >
-          {report?.count_by_status?.skipped ?? (running ? '…' : '-')}
-        </span>
-      </div>
-      <div class="mt-auto text-xs text-muted">
-        {#if report}
-          {(report.count_by_status.skipped ?? 0) > 0
-            ? t('health.metricFooter.noData')
-            : t('health.metricFooter.none')}
-        {:else if running}
-          {t('health.running')}
-        {:else}
-          —
-        {/if}
+        <div class="mt-auto text-xs text-muted">
+          {#if report}
+            {(report.count_by_status.skipped ?? 0) > 0
+              ? t('health.metricFooter.noData')
+              : t('health.metricFooter.none')}
+          {:else if running}
+            <Skeleton inline className="h-3 w-20" />
+          {:else}
+            -
+          {/if}
+        </div>
       </div>
     </div>
   </div>
@@ -554,19 +594,22 @@
       <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
         {t('health.diagnostics')}
       </h3>
-      <div
-        class="flex items-center gap-3 text-xs text-[var(--color-base-content)] opacity-60 shrink-0"
-      >
+      <div class="flex items-center gap-3 text-xs text-muted shrink-0">
+        <!-- Always mounted, so a run started by Refresh is announced: a status region
+             inserted together with its text often is not -->
+        <span id={RUN_STATUS_ID} role="status" class="sr-only">
+          {running ? t('health.running') : ''}
+        </span>
         {#if error}
           <span
             role="alert"
             aria-live="assertive"
-            class="flex items-center gap-1.5 text-[var(--color-error)] opacity-100"
+            class="flex items-center gap-1.5 text-[var(--text-error)]"
           >
             <XCircle class="size-3.5" />
             {error}
           </span>
-        {:else if report}
+        {:else if report && !running}
           <span
             class="flex items-center gap-1.5"
             title={new Date(report.started_at).toLocaleString()}
@@ -574,48 +617,53 @@
             <Clock class="size-3.5" />
             {t('health.lastRun')}
             {getLocalTimeString(new Date(report.started_at))}
-            <span class="opacity-60">· {report.duration_ms.toFixed(0)}ms</span>
+            <span class="text-muted">· {report.duration_ms.toFixed(0)}ms</span>
           </span>
         {:else if running}
-          <span class="flex items-center gap-1.5">
-            <Loader2 class="size-3.5 animate-spin" />
+          <!-- The visible label; the status region above carries the announcement -->
+          <span aria-hidden="true" class="flex items-center gap-1.5">
+            <Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
             {t('health.running')}
           </span>
         {/if}
         <button
           type="button"
           onclick={() => runDiagnostics(true)}
-          disabled={running}
+          aria-disabled={running ? 'true' : undefined}
+          aria-describedby={running ? RUN_STATUS_ID : undefined}
           aria-label={t('health.refresh')}
           title={t('health.refresh')}
-          class="inline-flex items-center justify-center size-8 rounded-md transition-colors hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center justify-center size-8 rounded-md transition-colors not-aria-disabled:hover:bg-[var(--color-base-200)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed"
         >
-          <RefreshCw class="size-4 {running ? 'animate-spin' : ''}" />
+          <RefreshCw class="size-4 {running ? 'animate-spin motion-reduce:animate-none' : ''}" />
         </button>
       </div>
     </div>
 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex items-center gap-2">
-        <span class="text-xs text-[var(--color-base-content)] opacity-60">
+        <span class="text-xs text-muted">
           {t('health.window.label')}:
         </span>
         <div
           class="inline-flex rounded-md border border-[var(--color-base-300)] overflow-hidden"
           role="radiogroup"
           aria-label={t('health.window.label')}
+          use:radioGroupKeys
         >
           {#each windowPresets as w (w)}
             <button
               type="button"
               role="radio"
               aria-checked={selectedWindow === w}
-              disabled={running}
+              tabindex={selectedWindow === w ? 0 : -1}
+              aria-disabled={running ? 'true' : undefined}
+              aria-describedby={running ? RUN_STATUS_ID : undefined}
               onclick={() => selectWindow(w)}
-              class="px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 {selectedWindow ===
+              class="px-2.5 py-1 text-xs font-medium transition-colors focus-ring-inset aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-100 aria-disabled:cursor-not-allowed {selectedWindow ===
               w
-                ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)]'
-                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)]'}"
+                ? 'bg-[var(--color-primary)] text-[var(--color-primary-content)] forced-colors:forced-color-adjust-none forced-colors:bg-[Highlight] forced-colors:text-[HighlightText] forced-colors:focus-visible:outline-[HighlightText] forced-colors:focus-visible:shadow-none'
+                : 'bg-[var(--color-base-200)] text-[var(--color-base-content)] not-aria-disabled:hover:bg-[var(--color-base-300)]'}"
             >
               {t(`health.window.${w}`)}
             </button>
@@ -631,7 +679,7 @@
           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {#if copied}
-            <CheckCircle class="size-3.5 text-[var(--color-success)]" />
+            <CheckCircle class="size-3.5 text-[var(--text-success)]" />
             {t('health.copied')}
           {:else}
             <ClipboardCopy class="size-3.5" />
@@ -694,16 +742,16 @@
                       {@render sparklineSvg(sparkline, statusColor(result.status))}
                     {/if}
                   </div>
-                  <p class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
+                  <p class="text-xs text-muted truncate">
                     {result.message}
                   </p>
                 </div>
-                <span class="text-xs text-[var(--color-base-content)] opacity-40 shrink-0">
+                <span class="text-xs text-muted shrink-0">
                   {result.duration_ms.toFixed(1)}ms
                 </span>
                 {#if expandable}
                   <ChevronDown
-                    class="size-4 shrink-0 opacity-40 transition-transform {isExpanded
+                    class="size-4 shrink-0 text-muted transition-transform {isExpanded
                       ? 'rotate-180'
                       : ''}"
                   />
@@ -717,26 +765,29 @@
                 >
                   <!-- Top Errors (for log checks) -->
                   {#if topErrors}
-                    <p
-                      class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60"
-                    >
+                    <p class="px-3 py-1.5 text-xs font-medium text-muted">
                       {t('health.logs.topErrors')}
                     </p>
                     <table class="w-full text-xs">
                       <thead>
-                        <tr
-                          class="text-left text-[var(--color-base-content)] opacity-50 border-b border-[var(--color-base-200)]"
-                        >
-                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorComponent')}</th>
-                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorMessage')}</th>
-                          <th class="px-3 py-1.5 font-medium text-right"
-                            >{t('health.logs.errorCount')}</th
-                          >
-                          <th class="px-3 py-1.5 font-medium">{t('health.logs.errorLevel')}</th>
+                        <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
+                          <th scope="col" class="px-3 py-1.5 font-medium">
+                            {t('health.logs.errorComponent')}
+                          </th>
+                          <th scope="col" class="px-3 py-1.5 font-medium">
+                            {t('health.logs.errorMessage')}
+                          </th>
+                          <th scope="col" class="px-3 py-1.5 font-medium text-right">
+                            {t('health.logs.errorCount')}
+                          </th>
+                          <th scope="col" class="px-3 py-1.5 font-medium">
+                            {t('health.logs.errorLevel')}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {#each topErrors as group (group.component + ':' + group.message)}
+                          {@const levelFill = levelColor(group.level)}
                           <tr class="border-b border-[var(--color-base-200)]/50 last:border-0">
                             <td class="px-3 py-1.5">
                               {#if group.component}
@@ -746,7 +797,7 @@
                                   {group.component}
                                 </span>
                               {:else}
-                                <span class="opacity-30">-</span>
+                                <span class="text-muted">-</span>
                               {/if}
                             </td>
                             <td class="px-3 py-1.5 max-w-[300px] truncate" title={group.message}>
@@ -756,8 +807,8 @@
                             <td class="px-3 py-1.5">
                               <span
                                 class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
-                                style:color={levelColor(group.level)}
-                                style:background="color-mix(in srgb, {levelColor(group.level)} 10%, transparent)"
+                                style:color={textColorFor(levelFill)}
+                                style:background="color-mix(in srgb, {levelFill} 10%, transparent)"
                               >
                                 {group.level}
                               </span>
@@ -773,15 +824,15 @@
                     <!-- Last Event Callout -->
                     {#if result.details?.last_event}
                       <div class="px-3 py-2 flex items-center gap-2">
-                        <Clock class="size-3.5 opacity-50" />
+                        <Clock class="size-3.5 text-muted" />
                         <span class="text-xs font-medium">
                           {t('health.detail.lastEvent')}:
-                          <span class="opacity-70" title={String(result.details.last_event)}>
+                          <span class="text-muted" title={String(result.details.last_event)}>
                             {formatTimeAgo(String(result.details.last_event))}
                           </span>
                         </span>
                         {#if result.details?.lifetime_total != null}
-                          <span class="text-xs opacity-50">
+                          <span class="text-xs text-muted">
                             ({result.details.lifetime_total}
                             {t('health.detail.lifetime')})
                           </span>
@@ -800,27 +851,28 @@
                       >
                         {#if windowTotal != null && typeof windowTotal === 'number' && windowTotal > 0}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <Activity class="size-3 opacity-50" />
-                            <span class="opacity-60">{t('health.detail.windowTotal')}:</span>
+                            <Activity class="size-3 text-muted" />
+                            <span class="text-muted">{t('health.detail.windowTotal')}:</span>
                             <span class="font-medium font-mono">{windowTotal}</span>
                           </span>
                         {/if}
 
                         {#if typeof activeHours === 'number' && activeHours > 0}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <Clock class="size-3 opacity-50" />
-                            <span class="opacity-60">{t('health.detail.activeHours')}:</span>
+                            <Clock class="size-3 text-muted" />
+                            <span class="text-muted">{t('health.detail.activeHours')}:</span>
                             <span class="font-medium font-mono">{activeHours}</span>
                           </span>
                         {/if}
 
                         {#if typeof pattern === 'string' && pattern !== PATTERN_NONE}
+                          {@const patternFill = patternColor(pattern)}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <span class="opacity-60">{t('health.detail.pattern')}:</span>
+                            <span class="text-muted">{t('health.detail.pattern')}:</span>
                             <span
                               class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium"
-                              style:color={patternColor(pattern)}
-                              style:background="color-mix(in srgb, {patternColor(pattern)} 10%, transparent)"
+                              style:color={textColorFor(patternFill)}
+                              style:background="color-mix(in srgb, {patternFill} 10%, transparent)"
                             >
                               {patternLabel(pattern)}
                             </span>
@@ -828,12 +880,13 @@
                         {/if}
 
                         {#if typeof velocity === 'string' && velocity !== VELOCITY_NA}
+                          {@const velocityFill = velocityColor(velocity)}
                           <span class="inline-flex items-center gap-1.5 text-xs">
-                            <span class="opacity-60">{t('health.detail.velocity')}:</span>
+                            <span class="text-muted">{t('health.detail.velocity')}:</span>
                             <span
                               class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
-                              style:color={velocityColor(velocity)}
-                              style:background="color-mix(in srgb, {velocityColor(velocity)} 10%, transparent)"
+                              style:color={textColorFor(velocityFill)}
+                              style:background="color-mix(in srgb, {velocityFill} 10%, transparent)"
                             >
                               {#if velocity === VELOCITY_INCREASING}
                                 <TrendingUp class="size-3" />
@@ -852,20 +905,22 @@
                     <!-- Recent Events Table -->
                     {#if recentEvents && recentEvents.length > 0}
                       <p
-                        class="px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] opacity-60 border-t border-[var(--color-base-200)]/50"
+                        class="px-3 py-1.5 text-xs font-medium text-muted border-t border-[var(--color-base-200)]/50"
                       >
                         {t('health.detail.recentEvents')}
                       </p>
                       <table class="w-full text-xs">
                         <thead>
-                          <tr
-                            class="text-left text-[var(--color-base-content)] opacity-50 border-b border-[var(--color-base-200)]"
-                          >
-                            <th class="px-3 py-1.5 font-medium">{t('health.detail.time')}</th>
-                            <th class="px-3 py-1.5 font-medium">{t('health.detail.source')}</th>
-                            <th class="px-3 py-1.5 font-medium text-right"
-                              >{t('health.detail.count')}</th
-                            >
+                          <tr class="text-left text-muted border-b border-[var(--color-base-200)]">
+                            <th scope="col" class="px-3 py-1.5 font-medium">
+                              {t('health.detail.time')}
+                            </th>
+                            <th scope="col" class="px-3 py-1.5 font-medium">
+                              {t('health.detail.source')}
+                            </th>
+                            <th scope="col" class="px-3 py-1.5 font-medium text-right">
+                              {t('health.detail.count')}
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -891,5 +946,7 @@
         </div>
       </div>
     {/each}
+  {:else if running}
+    {@render resultsSkeleton()}
   {/if}
 </div>

@@ -38,6 +38,7 @@ func TestModelRegistry_BackendAndDisplayName(t *testing.T) {
 		{"BirdNET_V2.4", ModelNameBirdNETv24, BackendTFLite, "BirdNET v2.4 (TFLite)"},
 		{"BirdNET_V3.0", ModelNameBirdNETv30, BackendONNX, "BirdNET v3.0 (ONNX)"},
 		{"Perch_V2", ModelNamePerchV2, BackendONNX, "Google Perch v2 (ONNX)"},
+		{RegistryIDBirdNETPlusV3, ModelNameBirdNETPlusV30, BackendONNX, "BirdNET+ v3.0 (ONNX)"},
 	}
 
 	for _, tt := range tests {
@@ -302,12 +303,13 @@ func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
 	// Perch and BSG are the entries most likely to be "corrected" to match their
 	// catalog category or lack of a loader, so the table pins every entry.
 	want := map[string]TaxonGroup{
-		RegistryIDBirdNETV24: TaxonGroupBird,
-		RegistryIDBirdNETV3:  TaxonGroupBird,
-		RegistryIDPerchV2:    TaxonGroupBird,
-		RegistryIDBSG:        TaxonGroupBird,
-		RegistryIDBat:        TaxonGroupBat,
-		RegistryIDBSGBat:     TaxonGroupBat,
+		RegistryIDBirdNETV24:    TaxonGroupBird,
+		RegistryIDBirdNETV3:     TaxonGroupBird,
+		RegistryIDBirdNETPlusV3: TaxonGroupBird,
+		RegistryIDPerchV2:       TaxonGroupBird,
+		RegistryIDBSG:           TaxonGroupBird,
+		RegistryIDBat:           TaxonGroupBat,
+		RegistryIDBSGBat:        TaxonGroupBat,
 	}
 	for id := range ModelRegistry {
 		assert.Contains(t, want, id, "registry entry %q needs a taxon group in this table", id)
@@ -368,11 +370,12 @@ func TestRegistryIDConstants_MatchRegistryKeys(t *testing.T) {
 	t.Parallel()
 
 	constants := map[string]string{
-		"RegistryIDBirdNETV3": RegistryIDBirdNETV3,
-		"RegistryIDBSG":       RegistryIDBSG,
-		"RegistryIDBSGBat":    RegistryIDBSGBat,
-		"RegistryIDBat":       RegistryIDBat,
-		"RegistryIDPerchV2":   RegistryIDPerchV2,
+		"RegistryIDBirdNETV3":     RegistryIDBirdNETV3,
+		"RegistryIDBirdNETPlusV3": RegistryIDBirdNETPlusV3,
+		"RegistryIDBSG":           RegistryIDBSG,
+		"RegistryIDBSGBat":        RegistryIDBSGBat,
+		"RegistryIDBat":           RegistryIDBat,
+		"RegistryIDPerchV2":       RegistryIDPerchV2,
 	}
 	for name, id := range constants {
 		_, exists := ModelRegistry[id]
@@ -432,6 +435,7 @@ func TestConfigAliasForRegistry_ReturnsCanonicalPrimary(t *testing.T) {
 	// rewrites models.enabled to the catalog-style spelling.
 	assert.Equal(t, "perch_v2", ConfigAliasForRegistry(RegistryIDPerchV2))
 	assert.Equal(t, "birdnet_v3.0", ConfigAliasForRegistry(RegistryIDBirdNETV3))
+	assert.Equal(t, "birdnet_plus_v3.0", ConfigAliasForRegistry(RegistryIDBirdNETPlusV3))
 	assert.Equal(t, "birdnet", ConfigAliasForRegistry("BirdNET_V2.4"))
 	assert.Equal(t, "bsg", ConfigAliasForRegistry(RegistryIDBSG))
 	assert.Equal(t, "bsg_bat", ConfigAliasForRegistry(RegistryIDBSGBat))
@@ -448,6 +452,8 @@ func TestResolveConfigModelID_AllModels(t *testing.T) {
 	}{
 		{"birdnet resolves", "birdnet", "BirdNET_V2.4", true},
 		{"birdnet_v3.0 resolves", "birdnet_v3.0", RegistryIDBirdNETV3, true},
+		{"birdnet_plus_v3.0 resolves", "birdnet_plus_v3.0", RegistryIDBirdNETPlusV3, true},
+		{"birdnet-plus-v3.0 catalog id resolves", "birdnet-plus-v3.0", RegistryIDBirdNETPlusV3, true},
 		{"perch_v2 resolves", "perch_v2", RegistryIDPerchV2, true},
 		{"bat resolves", "bat", RegistryIDBat, true},
 		{"bsg resolves", "bsg", RegistryIDBSG, true},
@@ -484,6 +490,7 @@ func TestGetModelSpec_AllModels(t *testing.T) {
 	}{
 		{"BirdNET_V2.4", 48000, 3 * time.Second},
 		{RegistryIDBirdNETV3, 32000, 5 * time.Second},
+		{RegistryIDBirdNETPlusV3, 32000, 5 * time.Second},
 		{RegistryIDPerchV2, 32000, 5 * time.Second},
 		{RegistryIDBat, 48000, 3 * time.Second},
 		{RegistryIDBSG, 48000, 3 * time.Second},
@@ -555,6 +562,7 @@ func TestDetectionModelInfoForID_AllModels(t *testing.T) {
 		wantName   string
 	}{
 		{RegistryIDBirdNETV3, "BirdNET"},
+		{RegistryIDBirdNETPlusV3, detection.ModelNameBirdNETPlus},
 		{RegistryIDPerchV2, "Perch"},
 		{RegistryIDBSG, "BSG"},
 		{RegistryIDBat, "BattyBirdNET"},

@@ -23,9 +23,9 @@
     <!-- Pool usage bar -->
     <div>
       <div class="flex items-center justify-between mb-1.5">
-        <span class="text-sm font-medium"
-          >{t('system.database.dashboard.connectionPool.poolUsage')}</span
-        >
+        <span class="text-sm font-medium">
+          {t('system.database.dashboard.connectionPool.poolUsage')}
+        </span>
         <span class="font-mono tabular-nums text-sm">
           <span class="font-semibold">{details.active_connections}</span>
           <span class="text-muted"> / {details.max_connections}</span>
@@ -45,11 +45,11 @@
         ></div>
       </div>
       <div class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-muted">
-        <span
-          >{details.active_connections}
+        <span>
+          {details.active_connections}
           {t('system.database.dashboard.connectionPool.active')}, {details.idle_connections}
-          {t('system.database.dashboard.connectionPool.idle')}</span
-        >
+          {t('system.database.dashboard.connectionPool.idle')}
+        </span>
         <span>{details.threads_idle} {t('system.database.dashboard.connectionPool.waiting')}</span>
       </div>
     </div>
@@ -60,12 +60,13 @@
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
           <Users class="w-3.5 h-3.5 text-muted" />
-          <span class="text-muted"
-            >{t('system.database.dashboard.connectionPool.totalCreated')}</span
-          >
+          <span class="text-muted">
+            {t('system.database.dashboard.connectionPool.totalCreated')}
+          </span>
         </div>
-        <span class="font-mono tabular-nums font-medium">{formatNumber(details.total_created)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatNumber(details.total_created)}
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
@@ -74,20 +75,22 @@
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.connection_errors > 0
-            ? 'text-[var(--color-warning)]'
-            : ''}">{details.connection_errors}</span
+            ? 'text-[var(--text-warning)]'
+            : ''}"
         >
+          {details.connection_errors}
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
           <Network class="w-3.5 h-3.5 text-muted" />
           <span class="text-muted">{t('system.database.dashboard.connectionPool.threads')}</span>
         </div>
-        <span class="font-mono tabular-nums font-medium"
-          >{details.threads_running}
+        <span class="font-mono tabular-nums font-medium">
+          {details.threads_running}
           {t('system.database.dashboard.connectionPool.running')}, {details.threads_cached}
-          {t('system.database.dashboard.connectionPool.cached')}</span
-        >
+          {t('system.database.dashboard.connectionPool.cached')}
+        </span>
       </div>
     </div>
   </div>

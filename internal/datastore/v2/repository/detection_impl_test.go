@@ -448,15 +448,21 @@ func TestLock_AlreadyLockedIsIdempotent(t *testing.T) {
 	det := createTestDetection(t, db, 1000)
 
 	require.NoError(t, repo.Lock(ctx, det.ID))
+	// A fixed past time, so a second lock that rewrites locked_at is told apart
+	// from one that keeps it even when both fall in the same instant.
+	firstLockedAt := time.Date(2025, 3, 3, 9, 30, 15, 0, time.UTC)
+	require.NoError(t, db.Table(tableDetectionLocks).Where("detection_id = ?", det.ID).
+		UpdateColumn("locked_at", firstLockedAt).Error)
 
 	// Second lock should succeed silently
 	err := repo.Lock(ctx, det.ID)
 	require.NoError(t, err)
 
-	// Should still be exactly one lock row
-	var count int64
-	require.NoError(t, db.Table(tableDetectionLocks).Where("detection_id = ?", det.ID).Count(&count).Error)
-	assert.Equal(t, int64(1), count)
+	// Should still be exactly one lock row, with the first lock time
+	var locks []entities.DetectionLock
+	require.NoError(t, db.Table(tableDetectionLocks).Where("detection_id = ?", det.ID).Find(&locks).Error)
+	require.Len(t, locks, 1)
+	assert.True(t, locks[0].LockedAt.Equal(firstLockedAt), "the first lock time must stay, got %s", locks[0].LockedAt)
 }
 
 func TestLock_NonexistentDetection(t *testing.T) {

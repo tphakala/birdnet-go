@@ -95,6 +95,8 @@ vi.mock('$lib/utils/cn', () => ({
 import NotificationBell from './NotificationBell.svelte';
 import { api, ApiError } from '$lib/utils/api';
 import { toastActions } from '$lib/stores/toast';
+import { navigation } from '$lib/stores/navigation.svelte';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 interface TestNotification {
   id: string;
@@ -750,6 +752,42 @@ describe('NotificationBell Component', () => {
       await fireEvent.click(viewAllButton);
 
       expect(onNavigate).toHaveBeenCalled();
+    });
+  });
+
+  describe('Navigation held by an unsaved-changes guard', () => {
+    let unregister: (() => void) | undefined;
+
+    afterEach(() => {
+      unregister?.();
+      unsavedChanges.resetForTesting();
+    });
+
+    // The prompt records the focused element as the place to return to; the dropdown item
+    // unmounts with the dropdown, so the bell button must hold focus by then.
+    it('moves focus to the bell button when View all opens the leave prompt', async () => {
+      // An earlier test may have moved the router to the notifications page already.
+      navigation.redirect(['', 'ui', 'dashboard'].join('/'));
+      unregister = unsavedChanges.register({ isDirty: () => true });
+      render(NotificationBell, {
+        props: {
+          onNavigateToNotifications: () => {
+            void navigation.navigate(['', 'ui', 'notifications'].join('/'));
+          },
+        },
+      });
+      await waitFor(() => {
+        expect(api.get).toHaveBeenCalled();
+      });
+      const trigger = screen.getByRole('button', { name: /notifications/i });
+      await fireEvent.click(trigger);
+      const viewAll = screen.getByText('View all notifications');
+      viewAll.focus();
+
+      await fireEvent.click(viewAll);
+
+      expect(unsavedChanges.prompting).toBe(true);
+      expect(trigger).toHaveFocus();
     });
   });
 

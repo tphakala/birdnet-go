@@ -30,7 +30,6 @@ export interface CatalogVariant {
   /** True for the embedded baseline variant (the built-in BirdNET v2.4 model); it carries no downloadable files. */
   builtIn?: boolean;
   sizeBytes: number;
-  headlineLatencyMs?: number;
   compatible: boolean;
   recommended: boolean;
   reasons?: VariantReason[];
@@ -42,11 +41,71 @@ export interface CatalogVariant {
    * server, in which case the client derives a coarser class from the id.
    */
   hardwareClass?: string;
+  /** Release of the variant's files (its own or the model's); absent on an older server. */
+  version?: string;
+  /** Build of the variant's files within its release (1 or more); absent on an older server, meaning 1. */
+  build?: number;
+}
+
+/**
+ * Release notes of one build of one release of a model. Mirrors the Go
+ * CatalogBuildResponse. `reason` and `notes` are English text from the upstream
+ * manifest, shown as plain text (never as markup); `date` is YYYY-MM-DD.
+ */
+export interface CatalogBuild {
+  version: string;
+  build: number;
+  date: string;
+  reason?: string;
+  notes?: string[];
+}
+
+/**
+ * A licence or policy document of a catalog entry's own repo. Mirrors the Go
+ * CatalogDocumentResponse (internal/api/v2/models/models.go). A hosted document
+ * carries `sha256` (its verified text is served by the documents endpoint), an
+ * external one carries `url`. `kind` is an open vocabulary ('license',
+ * 'acceptable_use', others).
+ */
+export interface CatalogDocument {
+  repo: string;
+  kind: string;
+  requiresAgreement: boolean;
+  /** True when an agreement is recorded for this exact text. */
+  agreed: boolean;
+  sha256?: string;
+  url?: string;
+}
+
+/**
+ * A document the user must agree to before an install starts: one of the entry's
+ * outstanding catalog documents, or one listed by the server's agreement refusal.
+ */
+export interface AgreementDocument {
+  repo: string;
+  kind: string;
+  sha256: string;
+}
+
+/** Body of GET /api/v2/models/documents/:sha256. Mirrors Go ModelDocumentResponse. */
+export interface ModelDocument {
+  repo: string;
+  kind: string;
+  requiresAgreement: boolean;
+  sha256: string;
+  /** The verified document text, plain text to render as is. */
+  text: string;
 }
 
 /** A model entry in the catalog, enriched with install/compat status. */
 export interface CatalogEntry {
   id: string;
+  /**
+   * Classifier registry ID the entry loads as (e.g. "BirdNET_V2.4"), the join key
+   * against `registryId` on the GET /api/v2/models items. Absent for an entry that
+   * is not a classifier (the geomodel) and on a server that predates the field.
+   */
+  registryId?: string;
   name: string;
   description: string;
   author: string;
@@ -56,10 +115,12 @@ export interface CatalogEntry {
   region: string;
   speciesCount: number;
   version: string;
-  /** Release channel: 'stable' for a GA build, 'preview' for a developer preview the gallery flags as not-GA. Always present. */
+  /** Release channel: 'stable' for a GA build, 'preview' for a developer preview the gallery flags as not-GA, 'experimental' for a published model whose performance in BirdNET-Go is not proven yet. Always present. */
   channel: string;
   /** Human-facing build tag shown next to the version for a non-stable channel (e.g. 'preview3.1'); absent for stable releases. */
   buildLabel?: string;
+  /** The visible catalog entry that replaces this one; absent when nothing does or the successor is hidden. */
+  supersededBy?: { id: string; name: string };
   upstreamUrl?: string;
   installed: boolean;
   compatible: boolean;
@@ -74,8 +135,25 @@ export interface CatalogEntry {
   installedVariantId?: string;
   /** The variant the gallery preselects for this host, absent when not eligible. */
   recommendedVariantId?: string;
+  /**
+   * Set when the installed build is superseded by a newer release or a newer build of the same
+   * release of this model: `variantId` is the successor variant to install, `fromVersion` and
+   * `toVersion` are the two releases, `fromBuild` and `toBuild` the build numbers within them
+   * (1 or more). Equal releases mean a newer build of one release. Absent otherwise.
+   */
+  update?: {
+    variantId: string;
+    fromVersion: string;
+    toVersion: string;
+    fromBuild: number;
+    toBuild: number;
+  };
   /** Catalog IDs installed with this model; absent when it has none. May name hidden components the catalog does not list. */
   dependsOn?: string[];
+  /** Licence and policy documents of the entry's own repo; absent when it has none. */
+  documents?: CatalogDocument[];
+  /** Release notes of the model's builds that carry any, ordered by release string (compared as text) and then build; absent when it has none. */
+  builds?: CatalogBuild[];
 }
 
 /** Response wrapper for the catalog endpoint. */
@@ -97,7 +175,7 @@ export interface InstalledModel {
 /** Progress state for an ongoing model download, sent via SSE. */
 export interface DownloadProgress {
   catalogId: string;
-  status: 'downloading' | 'verifying' | 'loading' | 'complete' | 'failed';
+  status: 'downloading' | 'verifying' | 'loading' | 'complete' | 'failed' | 'cancelled';
   downloadedBytes: number;
   totalBytes: number;
   currentFile: number;

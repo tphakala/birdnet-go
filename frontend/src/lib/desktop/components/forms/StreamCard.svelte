@@ -1,56 +1,76 @@
 <!--
   Stream Card Component
 
-  Purpose: Display and manage a single audio stream with health status indicator,
-  URL editing, stream type, and protocol settings.
+  Purpose: One audio stream whose settings go into the settings form; the
+  page's Save Changes bar persists them. The header is always visible and
+  toggles the body: status pill, masked URL, badges, the enabled switch and
+  delete, with the live stats and warnings below it. The body holds the stream's
+  settings in groups and the diagnostics.
 
-  Features:
-  - Card background styling based on connection state
-  - Colored stream icon (auto-assigned based on index)
-  - Status pill with semantic coloring
-  - Editable stream name and URL with credential masking
-  - Stream type selector (RTSP, HTTP, HLS, RTMP, UDP)
-  - Protocol selector (TCP/UDP) for RTSP and RTMP streams
-  - Gain slider (-40 to +40 dB)
-  - Inline editing mode
-  - Delete confirmation
-  - Always-visible action buttons for accessibility
+  Editing:
+  - Every control writes the complete stream with the key it changes (the URL
+    field also sets the type its scheme names) through onChange. A name and a
+    URL are written as typed and trimmed when the field is left. A connection
+    change reconnects the stream when it is saved.
+  - A URL that is not in the saved configuration is saved only after a
+    successful test of exactly that URL; until then the field says so and the
+    page blocks Save (the rules are in sourceRules.ts).
+  - A name or URL error hides while that field is edited and shows again when it
+    is left (also when a save or a collapse ends the edit without a blur). A
+    problem another card caused shows at once, and so does the untested URL.
+
+  Props:
+  - stream: The stream as it is in the form
+  - status: Connection status shown in the header
+  - healthUrl: The saved URL the stream's live health is filed under, when the stream
+    still has it; without it the card shows no live health
+  - problem: What the page's save rules report for this stream
+  - availableModels: Models the server lists for the source editors
+  - modelOptions: Labels of the listed models, for the header summary
+  - disabled: Blocks every change
+  - disabledReason: Why it is disabled, shown beside delete (default: loading)
+  - expanded: Whether the body is shown
+  - onToggleExpanded: Called by the header button
+  - onChange: Receives the complete changed stream
+  - onUrlTested: Called with the URL a successful test was run for
+  - onDelete: Called after the delete was confirmed
 
   @component
 -->
 <script lang="ts">
-  import { getContext } from 'svelte';
-  import {
-    Settings,
-    Trash2,
-    Check,
-    X,
-    AlertCircle,
-    AlertTriangle,
-    Radio,
-    ChevronDown,
-    Moon,
-  } from '@lucide/svelte';
+  import { getContext, untrack } from 'svelte';
+  import { AlertTriangle, ChevronDown, Moon, Radio } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import { modelsLoading } from '$lib/stores/models.svelte';
+  import { generateId } from '$lib/utils/uuid';
+  import { maskUrlCredentials } from '$lib/utils/security';
+  import {
+    modelsFailed,
+    modelsLoading,
+    refreshModels,
+    type BackendModel,
+  } from '$lib/stores/models.svelte';
   import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
-  import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
-  import Checkbox from './Checkbox.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import TextInput from './TextInput.svelte';
+  import ToggleField from './ToggleField.svelte';
   import InlineSlider from './InlineSlider.svelte';
-  import ModelCheckboxList from './ModelCheckboxList.svelte';
+  import ModelToggleList from './ModelToggleList.svelte';
+  import SourceModelBadges from './SourceModelBadges.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
+  import SourceCard from '$lib/desktop/features/settings/components/SourceCard.svelte';
+  import SettingsGroup from '$lib/desktop/features/settings/components/SettingsGroup.svelte';
+  import { SETTINGS_GROUP_DISCLOSURE_CLASSES } from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
+  import { savedEqualizer } from './sourceFields';
+  import type { StreamProblem } from './sourceRules';
   import type {
     StreamConfig,
-    StreamType,
-    EqualizerFilterType,
+    EqualizerSettings,
     QuietHoursConfig,
-    ChannelMode,
     MediaMode,
     ChannelAnalysis,
   } from '$lib/stores/settings';
@@ -64,24 +84,20 @@
   import StreamTimeline from './StreamTimeline.svelte';
   import StreamChannelControls from './StreamChannelControls.svelte';
   import {
+    DEFAULT_SAMPLE_RATE,
+    MAX_STREAM_NAME_LENGTH,
+    MAX_STREAM_URL_LENGTH,
     streamTypeOptions,
     transportOptions,
     getMediaModeOptions,
     analyzeStreamChannels,
+    detectStreamType,
+    streamHasTransport,
+    streamNameProblemMessage,
+    streamUrlProblemMessage,
+    toStreamType,
   } from './streamOptions';
   import { normalizeChannelMode } from './streamChannel';
-
-  interface LocalEqualizerSettings {
-    enabled: boolean;
-    filters: Array<{
-      type: EqualizerFilterType;
-      frequency: number;
-      q?: number;
-      width?: number;
-      gain?: number;
-      passes?: number;
-    }>;
-  }
 
   // Stream health status type
   export type StreamStatus =
@@ -89,201 +105,175 @@
 
   interface Props {
     stream: StreamConfig;
-    index: number;
     status?: StreamStatus;
-    availableModels: Array<{
-      id: string;
-      /** Classifier registry ID; the join key for default-target mapping. Absent on an older server. */
-      registryId?: string;
-      name: string;
-      category: string;
-      minSampleRate?: number;
-      recommendedSampleRate?: number;
-    }>;
+    healthUrl?: string;
+    problem?: StreamProblem;
+    availableModels: BackendModel[];
+    modelOptions: Array<{ value: string; label: string }>;
     disabled?: boolean;
-    onUpdate: (_stream: StreamConfig) => boolean;
+    disabledReason?: string;
+    expanded: boolean;
+    onToggleExpanded: () => void;
+    onChange: (_stream: StreamConfig) => void;
+    onUrlTested: (_url: string) => void;
     onDelete: () => void;
   }
 
   let {
     stream,
-    index,
     status = 'unknown',
+    healthUrl,
+    problem,
     availableModels,
+    modelOptions,
     disabled = false,
-    onUpdate,
+    disabledReason,
+    expanded,
+    onToggleExpanded,
+    onChange,
+    onUrlTested,
     onDelete,
   }: Props = $props();
 
+  const SECONDS_PER_MINUTE = 60;
+  const SECONDS_PER_HOUR = 3600;
+  const BYTES_PER_KIB = 1024;
+  const BYTE_UNITS = ['B', 'KB', 'MB', 'GB'];
+  const DEFAULT_TRANSPORT = 'tcp';
+  const DEFAULT_MEDIA_MODE: MediaMode = 'full-stream';
+
+  const cardId = generateId('stream');
+  const nameInputId = `${cardId}-name`;
+  const nameTextId = `${cardId}-stream-name`;
+  const urlInputId = `${cardId}-url`;
+  const modelsHeadingId = `${cardId}-models`;
+  const equalizerHeadingId = `${cardId}-equalizer`;
+  const diagnosticsId = `${cardId}-diagnostics`;
+
+  function change(patch: Partial<StreamConfig>) {
+    onChange({ ...stream, ...patch });
+  }
+
   const acousticAvailability = $derived(acousticModelAvailability());
+  let defaultModels = $derived(defaultModelSelection(acousticAvailability, availableModels));
+  let selectedModels = $derived(stream.models ?? []);
+  let listFailed = $derived(modelsFailed());
+  let listLoading = $derived(modelsLoading());
 
-  // Get the stream health state from context - the $state object is passed directly
-  // Mutations to this object are reactive and will trigger re-renders
+  // ----- Health (live, from the manager's SSE) -----
+
+  // The manager passes its $state object directly; reading its keys is reactive.
   const streamHealthMap = getContext<Record<string, StreamHealthResponse>>('streamHealth');
+  // Filed under the saved URL the manager says this card still has, never under a URL
+  // typed into the field.
+  // eslint-disable-next-line security/detect-object-injection -- saved URL from validated stream config, not user input
+  let health = $derived(healthUrl === undefined ? null : (streamHealthMap[healthUrl] ?? null));
 
-  // Derive health for this stream - accessing properties on the $state object is reactive
-  let health = $derived(streamHealthMap[stream.url] ?? null);
-
-  // Expandable diagnostics state
-  let expanded = $state(false);
-
-  // Utility functions for formatting
   function formatBytes(bytes: number): string {
-    // Guard <= 0 (not just === 0): a negative value would make Math.log return
-    // NaN and render "NaN undefined".
+    // Guard <= 0 (not just === 0): a negative value would make Math.log return NaN.
     if (!bytes || bytes <= 0) return '--';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    // Clamp index to valid array bounds (0 to 3) to prevent out-of-bounds access
-    const rawIndex = Math.floor(Math.log(bytes) / Math.log(1024));
-    const i = Math.min(Math.max(0, rawIndex), units.length - 1);
-    // eslint-disable-next-line security/detect-object-injection -- Index clamped to valid range [0, units.length-1]
-    return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+    const rawIndex = Math.floor(Math.log(bytes) / Math.log(BYTES_PER_KIB));
+    const i = Math.min(Math.max(0, rawIndex), BYTE_UNITS.length - 1);
+    // eslint-disable-next-line security/detect-object-injection -- index clamped to the array bounds
+    return `${(bytes / Math.pow(BYTES_PER_KIB, i)).toFixed(1)} ${BYTE_UNITS[i]}`;
   }
 
   function formatRate(bytesPerSecond: number): string {
-    if (!bytesPerSecond || bytesPerSecond === 0) return '--';
-    const kbps = bytesPerSecond / 1024;
-    return `${kbps.toFixed(1)} KB/s`;
+    if (!bytesPerSecond) return '--';
+    return `${(bytesPerSecond / BYTES_PER_KIB).toFixed(1)} KB/s`;
   }
 
   function formatTimeAgo(seconds: number | undefined): string {
     if (seconds === undefined || seconds === null) return '--';
-    if (seconds < 60) return `${Math.floor(seconds)}s ago`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    return `${Math.floor(seconds / 3600)}h ago`;
+    if (seconds < SECONDS_PER_MINUTE) {
+      return t('settings.audio.streams.ago.seconds', { count: Math.floor(seconds) });
+    }
+    if (seconds < SECONDS_PER_HOUR) {
+      return t('settings.audio.streams.ago.minutes', {
+        count: Math.floor(seconds / SECONDS_PER_MINUTE),
+      });
+    }
+    return t('settings.audio.streams.ago.hours', {
+      count: Math.floor(seconds / SECONDS_PER_HOUR),
+    });
   }
 
-  // Derive status message from health object
-  let statusMessage = $derived.by(() => {
-    if (!health) return '';
-    if (health.error) return health.error;
-    return '';
-  });
+  let lastDataAgo = $derived(formatTimeAgo(health?.time_since_data_seconds));
+  let statsLine = $derived(
+    t('settings.audio.streams.statsLine', {
+      total: formatBytes(health?.total_bytes_received ?? 0),
+      rate: formatRate(health?.bytes_per_second ?? 0),
+      last: lastDataAgo,
+    })
+  );
+  let statusMessage = $derived(health?.error ?? '');
 
-  // Derive inline stats from health - use $derived.by to ensure proper tracking
-  let totalData = $derived.by(() => {
-    const bytes = health?.total_bytes_received ?? 0;
-    return formatBytes(bytes);
-  });
-
-  let currentRate = $derived.by(() => {
-    const bps = health?.bytes_per_second ?? 0;
-    return formatRate(bps);
-  });
-
-  let lastDataAgo = $derived.by(() => {
-    const secs = health?.time_since_data_seconds;
-    return formatTimeAgo(secs);
-  });
-
-  // Derive connection stability status
   let connectionStatus = $derived.by(() => {
-    if (!health) return 'Unknown';
+    if (!health) return 'unknown';
     if (health.process_state === 'circuit_open' || health.process_state === 'failed')
-      return 'Failed';
+      return 'failed';
     if (health.process_state === 'backoff' || health.process_state === 'restarting')
-      return 'Degraded';
-    if (health.is_healthy && health.is_receiving_data) return 'Stable';
-    return 'Unknown';
+      return 'degraded';
+    if (health.is_healthy && health.is_receiving_data) return 'stable';
+    return 'unknown';
   });
 
-  let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
+  const CONNECTION_STATUS_CLASS = new Map<string, string>([
+    ['stable', 'text-[var(--text-success)]'],
+    ['degraded', 'text-[var(--text-warning)]'],
+    ['failed', 'text-[var(--text-error)]'],
+  ]);
 
-  // Show a warning when a stereo source is still set to downmix mode.
-  // normalizeChannelMode treats an unset/empty mode as the real default (downmix),
-  // which a bare `?? 'downmix'` misses because the API returns "" not undefined.
+  // A stereo source still set to downmix. normalizeChannelMode treats an unset
+  // or empty mode as downmix, which a bare `?? 'downmix'` misses.
   let showStereoWarning = $derived(
     (health?.source_channels ?? 0) >= 2 && normalizeChannelMode(stream.channelMode) === 'downmix'
   );
 
-  // Local editing state - initialized with defaults, synced from props in startEdit()
-  let isEditing = $state(false);
-  let editName = $state('');
-  let editUrl = $state('');
-  let editTransport = $state<'tcp' | 'udp'>('tcp');
-  let editStreamType = $state<StreamType>('rtsp');
-  let editEnabled = $state(true);
-  let editGain = $state(0);
-  let editModels = $state<string[]>([]);
-  let editEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
-  let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
-  let showDeleteConfirm = $state(false);
-  let showEqualizer = $state(false);
-  let editChannelMode = $state<ChannelMode>('downmix');
-  // Default matches the backend default (empty = full-stream).
-  let editMediaMode = $state<MediaMode>('full-stream');
-  let isAnalyzing = $state(false);
-  let analysisResult = $state<ChannelAnalysis | null>(null);
-  let analysisError = $state<string | null>(null);
-  let analysisSeq = 0;
+  // ----- Header -----
 
-  // Get icon colors based on stream status - using CSS variables for theme compatibility
-  function getIconColors(s: StreamStatus): { bg: string; text: string; border: string } {
-    switch (s) {
-      case 'connected':
-        return {
-          bg: 'bg-[color-mix(in_srgb,var(--color-success)_20%,transparent)]',
-          text: 'text-[var(--color-success)]',
-          border: 'border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]',
-        };
-      case 'connecting':
-        return {
-          bg: 'bg-[color-mix(in_srgb,var(--color-warning)_20%,transparent)]',
-          text: 'text-[var(--color-warning)]',
-          border: 'border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]',
-        };
-      case 'error':
-        return {
-          bg: 'bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)]',
-          text: 'text-[var(--color-error)]',
-          border: 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)]',
-        };
-      case 'disabled':
-        return {
-          bg: 'bg-[var(--color-base-content)]/8',
-          text: 'text-[var(--color-base-content)]/55',
-          border: 'border-[var(--color-base-content)]/15',
-        };
-      case 'suppressed':
-        return {
-          bg: 'bg-[color-mix(in_srgb,var(--color-info)_20%,transparent)]',
-          text: 'text-[var(--color-info)]',
-          border: 'border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]',
-        };
-      case 'idle':
-      default:
-        return {
-          bg: 'bg-[var(--color-base-content)]/10',
-          text: 'text-[var(--color-base-content)]/50',
-          border: 'border-[var(--color-base-content)]/20',
-        };
-    }
-  }
+  const ICON_CLASSES = new Map<StreamStatus, string>([
+    [
+      'connected',
+      'bg-[color-mix(in_srgb,var(--color-success)_20%,transparent)] text-[var(--text-success)] border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]',
+    ],
+    [
+      'connecting',
+      'bg-[color-mix(in_srgb,var(--color-warning)_20%,transparent)] text-[var(--text-warning)] border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]',
+    ],
+    [
+      'error',
+      'bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] text-[var(--text-error)] border-[color-mix(in_srgb,var(--color-error)_30%,transparent)]',
+    ],
+    [
+      'disabled',
+      'bg-[var(--color-base-content)]/8 text-[var(--color-base-content)]/55 border-[var(--color-base-content)]/15',
+    ],
+    [
+      'suppressed',
+      'bg-[color-mix(in_srgb,var(--color-info)_20%,transparent)] text-[var(--text-info)] border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]',
+    ],
+    [
+      'idle',
+      'bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]/50 border-[var(--color-base-content)]/20',
+    ],
+    [
+      'unknown',
+      'bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]/50 border-[var(--color-base-content)]/20',
+    ],
+  ]);
 
-  // Derive icon color based on current status
-  let iconColor = $derived(getIconColors(status));
+  const STATUS_VARIANTS = new Map<StreamStatus, StatusVariant>([
+    ['connected', 'success'],
+    ['connecting', 'warning'],
+    ['error', 'error'],
+    ['disabled', 'neutral'],
+    ['suppressed', 'neutral'],
+    ['idle', 'neutral'],
+    ['unknown', 'neutral'],
+  ]);
 
-  // Map stream status to StatusPill variant
-  function getStatusVariant(s: StreamStatus): StatusVariant {
-    switch (s) {
-      case 'connected':
-        return 'success';
-      case 'connecting':
-        return 'warning';
-      case 'error':
-        return 'error';
-      case 'disabled':
-        return 'neutral';
-      case 'suppressed':
-        return 'neutral';
-      case 'idle':
-      default:
-        return 'neutral';
-    }
-  }
-
-  // Get status text
-  function getStatusText(s: StreamStatus): string {
+  function statusText(s: StreamStatus): string {
     switch (s) {
       case 'connected':
         return t('settings.audio.streams.status.connected');
@@ -302,139 +292,122 @@
     }
   }
 
-  // Get card background styles based on status - using CSS variables for theme compatibility
-  function getCardStyles(s: StreamStatus): string {
-    switch (s) {
-      case 'connected':
-        return 'border-[color-mix(in_srgb,var(--color-success)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-success)_5%,transparent)]';
-      case 'connecting':
-        return 'border-[color-mix(in_srgb,var(--color-warning)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_5%,transparent)]';
-      case 'error':
-        return 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]';
-      case 'disabled':
-        return 'border-[var(--color-base-content)]/12 bg-[var(--color-base-content)]/4';
-      case 'suppressed':
-        return 'border-[color-mix(in_srgb,var(--color-info)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-info)_5%,transparent)]';
-      case 'idle':
-      default:
-        return 'border-[var(--border-200)] bg-[var(--color-base-200)]/50';
-    }
-  }
-
   let displayUrl = $derived(maskUrlCredentials(stream.url));
-  let cardStyles = $derived(getCardStyles(status));
+  let showTransport = $derived(streamHasTransport(stream.type) && Boolean(stream.transport));
 
-  // Show transport only for RTSP and RTMP
-  let showTransport = $derived(stream.type === 'rtsp' || stream.type === 'rtmp');
-  let showTransportInEdit = $derived(editStreamType === 'rtsp' || editStreamType === 'rtmp');
+  const BADGE_CLASS = 'px-2 py-0.5 rounded text-xs font-semibold';
+  const INFO_BADGE_CLASS = 'bg-[var(--color-info)]/15 text-[var(--text-info)]';
+  const NEUTRAL_BADGE_CLASS = 'bg-[var(--color-base-300)] text-[var(--color-base-content)]';
 
-  // Media mode only affects the RTSP handshake, so it is RTSP-only.
-  let showMediaModeInEdit = $derived(editStreamType === 'rtsp');
+  // ----- Name -----
 
-  function startEdit() {
-    editName = stream.name;
-    editUrl = stream.url;
-    editTransport = stream.transport ?? 'tcp';
-    editChannelMode = normalizeChannelMode(stream.channelMode);
-    // Empty/unset media mode is the full-stream default.
-    editMediaMode = stream.mediaMode ?? 'full-stream';
-    editStreamType = stream.type;
-    editEnabled = stream.enabled;
-    editGain = stream.gain ?? 0;
-    editModels = stream.models?.length
-      ? [...stream.models]
-      : defaultModelSelection(acousticAvailability, availableModels);
-    editEqualizer = stream.equalizer
-      ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
-      : { enabled: false, filters: [] };
-    editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
-    showEqualizer = false;
-    // Channel count for an already-running stream comes from the live probe
-    // (health.source_channels) via detectedChannels; a fresh test result, when
-    // present, takes precedence and also carries the source sample rate.
-    testResult = null;
-    // Invalidate any analysis still in flight from a previous edit session so a
-    // late result cannot write editChannelMode/analysisResult into this one.
-    analysisSeq++;
-    analysisResult = null;
-    analysisError = null;
-    isEditing = true;
+  // The field shows its problem once it was left, and hides it again while the
+  // user edits it. A problem this field did not cause (a duplicate typed on
+  // another card) shows at once, also on a card that opens with one.
+  let nameTouched = $state(untrack(() => Boolean(problem?.name)));
+  // Reactive, so an edit that ends without a blur (see the collapse and disable
+  // effect below) shows a problem the edit had hidden.
+  let nameEditing = $state(false);
+  $effect(() => {
+    if (problem?.name && !nameEditing) nameTouched = true;
+  });
+  let nameError = $derived(
+    problem?.name && nameTouched ? streamNameProblemMessage(problem.name) : undefined
+  );
+  let hasProblem = $derived(Boolean(problem?.name || problem?.url));
+
+  function handleNameInput(name: string) {
+    nameEditing = true;
+    nameTouched = false;
+    if (name !== stream.name) change({ name });
   }
 
-  function cancelEdit() {
-    isEditing = false;
-    showDeleteConfirm = false;
-    // Cancel any pending channel analysis so its late result is discarded.
-    analysisSeq++;
-    isAnalyzing = false;
+  function handleNameBlur(name: string) {
+    nameEditing = false;
+    nameTouched = true;
+    const trimmed = name.trim();
+    if (trimmed !== stream.name) change({ name: trimmed });
   }
 
-  function saveEdit() {
-    if (needsTest) return;
-    if (editName.trim() && editUrl.trim()) {
-      // Rewrite an empty model list to the defaults so a cleared selection saves
-      // the classifier defaults rather than []. This is a no-op at N=0, where
-      // defaultModelSelection returns [] (no acoustic model to map), preserving
-      // the empty-list save the backend resolves to its own defaults.
-      if (editModels.length === 0) {
-        editModels = defaultModelSelection(acousticAvailability, availableModels);
-      }
+  // ----- Connection (URL, type, transport, media mode, channel mode) -----
 
-      const transformedEqualizer =
-        editEqualizer.enabled || editEqualizer.filters.length > 0
-          ? {
-              enabled: editEqualizer.enabled,
-              filters: editEqualizer.filters,
-            }
-          : undefined;
+  // Like the name: the field shows its problem once it was left, hides it while
+  // it is edited, and shows a problem another card caused at once. An untested
+  // URL is shown always, since the test is the next step.
+  let urlTouched = $state(untrack(() => Boolean(problem?.url)));
+  let urlEditing = $state(false);
+  $effect(() => {
+    if (problem?.url && !urlEditing) urlTouched = true;
+  });
+  let urlError = $derived.by(() => {
+    if (!problem?.url) return undefined;
+    return problem.url === 'untested' || urlTouched
+      ? streamUrlProblemMessage(problem.url)
+      : undefined;
+  });
 
-      const success = onUpdate({
-        name: editName.trim(),
-        url: editUrl.trim(),
-        enabled: editEnabled,
-        type: editStreamType,
-        models: editModels,
-        channelMode: editChannelMode,
-        // Use selected transport for RTSP/RTMP, omit for others
-        ...(showTransportInEdit ? { transport: editTransport } : {}),
-        // Media mode is RTSP-only; omit for other stream types so it is not persisted where it has no effect.
-        ...(showMediaModeInEdit ? { mediaMode: editMediaMode } : {}),
-        gain: editGain,
-        equalizer: transformedEqualizer,
-        quietHours: editQuietHours,
-      });
-      if (success) {
-        isEditing = false;
-      }
+  // The result of the connection test of the current URL; any other URL clears it.
+  let testResult = $state<{ sampleRate: number; channels: number } | null>(null);
+
+  // The trimmed URL of the field at its last input.
+  let lastTrimmedUrl = untrack(() => stream.url.trim());
+
+  function handleUrlInput(url: string) {
+    urlEditing = true;
+    urlTouched = false;
+    const trimmed = url.trim();
+    if (trimmed !== lastTrimmedUrl) {
+      lastTrimmedUrl = trimmed;
+      // A run, a result or a rejection of an earlier URL must not land on this one.
+      analysisSeq++;
+      isAnalyzing = false;
+      analysisResult = null;
+      analysisError = null;
+    }
+    if (url === stream.url) return;
+    // A URL that names its scheme picks the matching type, as in the add form.
+    change({ url, type: trimmed.includes('://') ? detectStreamType(trimmed) : stream.type });
+  }
+
+  function handleUrlBlur(url: string) {
+    urlEditing = false;
+    urlTouched = true;
+    const trimmed = url.trim();
+    if (trimmed !== stream.url) change({ url: trimmed });
+  }
+
+  function setType(value: string | string[]) {
+    const type = toStreamType(value);
+    if (type && type !== stream.type) change({ type });
+  }
+
+  function setTransport(value: string | string[]) {
+    if (value === 'tcp' || value === 'udp') change({ transport: value });
+  }
+
+  function setMediaMode(value: string | string[]) {
+    if (value === 'auto' || value === 'audio-only' || value === 'full-stream') {
+      change({ mediaMode: value });
     }
   }
 
-  function handleEqualizerUpdate(updated: LocalEqualizerSettings) {
-    editEqualizer = updated;
-  }
-
-  function confirmDelete() {
-    showDeleteConfirm = true;
-  }
-
-  function executeDelete() {
-    onDelete();
-    showDeleteConfirm = false;
-  }
-
-  function cancelDelete() {
-    showDeleteConfirm = false;
-  }
-
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      saveEdit();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      cancelEdit();
+  function handleTestResult(result: { sampleRate: number; channels: number } | null, url: string) {
+    if (result) onUrlTested(url);
+    // A result for an earlier URL (a probe that finished after the field changed) says
+    // nothing about the URL the card holds now.
+    if (url.trim() !== stream.url.trim()) return;
+    testResult = result;
+    if (!result) {
+      analysisResult = null;
+      analysisError = null;
     }
   }
+
+  // Channel analysis of the URL; a newer run or a collapse discards a late result.
+  let isAnalyzing = $state(false);
+  let analysisResult = $state<ChannelAnalysis | null>(null);
+  let analysisError = $state<string | null>(null);
+  let analysisSeq = 0;
 
   async function analyzeChannels(url: string) {
     const seq = ++analysisSeq;
@@ -443,10 +416,10 @@
     analysisError = null;
     try {
       const result = await analyzeStreamChannels(url);
-      if (seq !== analysisSeq) return;
+      if (seq !== analysisSeq || url.trim() !== stream.url.trim()) return;
       analysisResult = result;
       if (result.recommended && result.recommended !== 'downmix') {
-        editChannelMode = result.recommended;
+        change({ channelMode: result.recommended });
       }
     } catch (err: unknown) {
       if (seq !== analysisSeq) return;
@@ -456,527 +429,451 @@
     }
   }
 
-  let urlChanged = $derived(editUrl.trim() !== stream.url);
-  let needsTest = $derived(urlChanged && !testResult);
-  let sourceSampleRate = $derived(testResult?.sampleRate ?? 48000);
+  // A collapsed or disabled card (a save is running) drops a pending analysis, so
+  // its late result cannot write into the form while a save runs or after a Reset.
+  $effect(() => {
+    if (expanded && !disabled) return;
+    untrack(() => {
+      analysisSeq++;
+      isAnalyzing = false;
+    });
+  });
 
-  // Detected channel count: a fresh stream test wins; otherwise fall back to the
-  // running stream's probe (health). 0 means "not yet known". Sample rate is only
-  // surfaced when it comes from an actual test (health does not report it).
-  let detectedChannels = $derived(testResult?.channels ?? health?.source_channels ?? 0);
-  let detectedSampleRate = $derived(testResult?.sampleRate);
-
-  function handleTestResult(result: { sampleRate: number; channels: number } | null) {
-    testResult = result;
-    if (!result) {
-      analysisResult = null;
-      analysisError = null;
+  // A collapsed or disabled card (a save is running) is not being edited: a field
+  // can lose focus without a blur event when it is disabled or unmounted.
+  $effect(() => {
+    if (!expanded || disabled) {
+      untrack(() => {
+        nameEditing = false;
+        urlEditing = false;
+      });
     }
+  });
+
+  // A fresh test wins; otherwise the running stream's probe. 0 means not known yet.
+  let detectedChannels = $derived(testResult?.channels ?? health?.source_channels ?? 0);
+  let sourceSampleRate = $derived(testResult?.sampleRate ?? DEFAULT_SAMPLE_RATE);
+
+  // ----- Equalizer -----
+
+  let showEqualizer = $state(false);
+  let equalizer = $derived<EqualizerSettings>(stream.equalizer ?? { enabled: false, filters: [] });
+
+  function changeEqualizer(updated: EqualizerSettings) {
+    change({ equalizer: savedEqualizer(updated) });
   }
 
-  function updateEnabled(enabled: boolean) {
-    onUpdate({ ...stream, enabled });
+  // ----- Quiet hours -----
+
+  let quietHours = $derived<QuietHoursConfig>({ ...defaultQuietHoursConfig, ...stream.quietHours });
+
+  function changeQuietHours(updated: QuietHoursConfig) {
+    change({ quietHours: updated });
   }
+
+  // ----- Diagnostics -----
+
+  let showDiagnostics = $state(false);
 </script>
 
-<div
-  class={cn(
-    'relative rounded-lg border transition-all duration-200',
-    isEditing
-      ? 'border-[var(--color-primary)]/50 bg-[var(--color-base-100)] shadow-md'
-      : cardStyles,
-    disabled && 'opacity-60 pointer-events-none'
-  )}
+<SourceCard
+  name={stream.name}
+  subtitle={displayUrl}
+  icon={Radio}
+  iconClass={ICON_CLASSES.get(status)}
+  {expanded}
+  {onToggleExpanded}
+  deleteConfirm={t('settings.audio.streams.deleteConfirm', { name: stream.name })}
+  {onDelete}
+  {disabled}
+  disabledReason={disabledReason ?? t('common.loading')}
 >
-  {#if showDeleteConfirm}
-    <!-- Delete Confirmation Overlay -->
-    <div
-      class="absolute inset-0 z-10 flex items-center rounded-lg bg-[var(--color-base-300)]/95 backdrop-blur-sm px-4"
-    >
-      <div class="flex items-center gap-3 w-full">
-        <AlertCircle class="size-6 text-[var(--color-error)] flex-shrink-0" />
-        <p class="text-sm font-medium text-[var(--color-base-content)] flex-1">
-          {t('settings.audio.streams.deleteConfirm')}
-        </p>
-        <div class="flex gap-2 flex-shrink-0">
-          <button
-            type="button"
-            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors"
-            onclick={cancelDelete}
+  {#snippet nameAddon()}
+    <StatusPill
+      variant={STATUS_VARIANTS.get(status) ?? 'neutral'}
+      label={statusText(status)}
+      size="sm"
+      pulse={status === 'connecting'}
+    />
+  {/snippet}
+
+  {#snippet badges()}
+    {#if hasProblem}
+      <span class={cn(BADGE_CLASS, 'bg-[var(--color-error)]/15 text-[var(--text-error)]')}>
+        {t('settings.audio.validation.needsAttention')}
+      </span>
+    {/if}
+    {#if stream.quietHours?.enabled}
+      <span
+        class={cn(BADGE_CLASS, 'inline-flex items-center gap-1', NEUTRAL_BADGE_CLASS)}
+        title={t('settings.audio.quietHours.enabledBadge')}
+      >
+        <Moon class="size-3" aria-hidden="true" />
+        {t('settings.audio.quietHours.badge')}
+      </span>
+    {/if}
+    {#if stream.gain}
+      <span class={cn(BADGE_CLASS, 'bg-[var(--color-warning)]/15 text-[var(--text-warning)]')}>
+        {stream.gain > 0 ? '+' : ''}{stream.gain} dB
+      </span>
+    {/if}
+    <SourceModelBadges
+      {selectedModels}
+      {defaultModels}
+      {availableModels}
+      {modelOptions}
+      availability={acousticAvailability}
+      {listLoading}
+      {listFailed}
+    />
+  {/snippet}
+
+  {#snippet actions()}
+    <span id={nameTextId} class="sr-only">{stream.name}</span>
+    <ToggleField
+      variant="inline"
+      label={t('settings.audio.streams.enabled')}
+      value={stream.enabled}
+      {disabled}
+      describedBy={nameTextId}
+      onUpdate={enabled => change({ enabled })}
+    />
+  {/snippet}
+
+  {#snippet details()}
+    {#if status === 'error' && statusMessage}
+      <p class="text-xs text-[var(--text-error)]">{statusMessage}</p>
+    {/if}
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class={cn(BADGE_CLASS, INFO_BADGE_CLASS)}>{stream.type.toUpperCase()}</span>
+        {#if showTransport && stream.transport}
+          <span class={cn(BADGE_CLASS, NEUTRAL_BADGE_CLASS)}>{stream.transport.toUpperCase()}</span>
+        {/if}
+        {#if stream.channelMode === 'left' || stream.channelMode === 'right'}
+          <span
+            class={cn(BADGE_CLASS, 'font-mono', INFO_BADGE_CLASS)}
+            title={t(`settings.audio.streams.channelMode.${stream.channelMode}`)}
           >
-            {t('common.cancel')}
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors"
-            onclick={executeDelete}
-          >
-            {t('common.delete')}
-          </button>
-        </div>
+            {stream.channelMode === 'left' ? 'L' : 'R'}
+          </span>
+        {/if}
+        {#if stream.type === 'rtsp' && stream.mediaMode === 'auto'}
+          <span class={cn(BADGE_CLASS, NEUTRAL_BADGE_CLASS)}>
+            {t('settings.audio.streams.mediaMode.auto')}
+          </span>
+        {:else if stream.type === 'rtsp' && stream.mediaMode === 'audio-only'}
+          <span class={cn(BADGE_CLASS, NEUTRAL_BADGE_CLASS)}>
+            {t('settings.audio.streams.mediaMode.audioOnly')}
+          </span>
+        {/if}
       </div>
+      <p class="text-xs text-muted">{statsLine}</p>
     </div>
-  {/if}
+    {#if showStereoWarning}
+      <p class="flex items-center gap-1.5 text-xs text-[var(--text-warning)]">
+        <AlertTriangle class="size-3.5 shrink-0" aria-hidden="true" />
+        {t('settings.audio.streams.stereoWarning.short')}
+      </p>
+    {/if}
+  {/snippet}
 
-  <div class="p-3">
-    {#if isEditing}
-      <!-- Edit Mode -->
-      <div class="space-y-4">
-        <!-- Name Input -->
-        <div>
-          <label class="block py-1" for="stream-name-{index}">
-            <span class="text-xs font-medium text-[var(--color-base-content)]">
-              {t('settings.audio.streams.nameLabel')}
-              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
-            </span>
-          </label>
-          <input
-            id="stream-name-{index}"
-            type="text"
-            bind:value={editName}
-            onkeydown={handleKeydown}
-            required
-            class="w-full h-9 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-            placeholder={t('settings.audio.streams.namePlaceholder')}
-          />
-        </div>
+  <!-- Name and level -->
+  <div class="grid grid-cols-1 gap-x-8 gap-y-4 py-4 md:grid-cols-2">
+    <SettingsGroup
+      title={t('settings.audio.streams.nameLabel')}
+      labelFor={nameInputId}
+      required
+      class="space-y-1.5"
+    >
+      <TextInput
+        id={nameInputId}
+        value={stream.name}
+        placeholder={t('settings.audio.streams.namePlaceholder')}
+        maxlength={MAX_STREAM_NAME_LENGTH}
+        aria-required="true"
+        {disabled}
+        error={nameError}
+        oninput={handleNameInput}
+        onblur={handleNameBlur}
+      />
+    </SettingsGroup>
 
-        <!-- URL Input -->
-        <div>
-          <label class="block py-1" for="stream-url-{index}">
-            <span class="text-xs font-medium text-[var(--color-base-content)]">
-              {t('settings.audio.streams.urlLabel')}
-              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
-            </span>
-          </label>
-          <input
-            id="stream-url-{index}"
-            type="text"
-            bind:value={editUrl}
-            onkeydown={handleKeydown}
-            required
-            class="w-full h-9 px-3 font-mono text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-            placeholder="rtsp://user:password@host:port/path"
-          />
-        </div>
+    <SettingsGroup
+      title={t('settings.audio.soundCards.levelTitle')}
+      headingId="{cardId}-level"
+      class="space-y-1.5"
+    >
+      <InlineSlider
+        label={t('settings.audio.soundCards.gainLabel')}
+        value={stream.gain ?? 0}
+        updateOn="change"
+        onUpdate={value => change({ gain: value })}
+        min={AUDIO_GAIN_MIN_DB}
+        max={AUDIO_GAIN_MAX_DB}
+        step={1}
+        unit=" dB"
+        {disabled}
+      />
+    </SettingsGroup>
+  </div>
 
-        <!-- Test Stream -->
-        <StreamTestButton
-          url={editUrl}
-          models={availableModels}
-          selectedModels={editModels}
+  <!-- Connection -->
+  <SettingsGroup
+    title={t('settings.audio.streams.connectionTitle')}
+    headingId="{cardId}-connection"
+    class="py-4"
+    titleVariant="group"
+  >
+    <div class="space-y-4">
+      <div class="space-y-1.5">
+        <!-- The label of a TextInput, drawn here so the input need not carry the native
+             required attribute (its validation message is fixed English). -->
+        <label class="label justify-start" for={urlInputId}>
+          <span class="label-text capitalize">
+            {t('settings.audio.streams.urlLabel')}
+            <span class="ml-1 text-[var(--text-error)]" aria-hidden="true">*</span>
+          </span>
+        </label>
+        <TextInput
+          id={urlInputId}
+          value={stream.url}
+          placeholder="rtsp://user:password@host:port/path"
+          maxlength={MAX_STREAM_URL_LENGTH}
+          aria-required="true"
           {disabled}
-          onResult={handleTestResult}
+          error={urlError}
+          oninput={handleUrlInput}
+          onblur={handleUrlBlur}
         />
+      </div>
 
-        <!-- Type and Transport Row -->
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <SelectDropdown
-              value={editStreamType}
-              label={t('settings.audio.streams.typeLabel')}
-              options={streamTypeOptions}
-              onChange={value => (editStreamType = value as StreamType)}
-              groupBy={false}
-              menuSize="sm"
-            />
+      <StreamTestButton
+        url={stream.url}
+        models={availableModels}
+        {selectedModels}
+        {disabled}
+        onResult={handleTestResult}
+      />
+
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <SelectDropdown
+          value={stream.type}
+          label={t('settings.audio.streams.typeLabel')}
+          options={streamTypeOptions}
+          {disabled}
+          onChange={setType}
+          groupBy={false}
+          menuSize="sm"
+        />
+        {#if streamHasTransport(stream.type)}
+          <SelectDropdown
+            value={stream.transport ?? DEFAULT_TRANSPORT}
+            label={t('settings.audio.streams.transportLabel')}
+            options={transportOptions}
+            {disabled}
+            onChange={setTransport}
+            groupBy={false}
+            menuSize="sm"
+          />
+        {/if}
+      </div>
+
+      <!-- RTSP media mode: audio-only handshake, full stream, or auto fallback -->
+      {#if stream.type === 'rtsp'}
+        <SelectDropdown
+          value={stream.mediaMode || DEFAULT_MEDIA_MODE}
+          label={t('settings.audio.streams.mediaModeLabel')}
+          helpText={t('settings.audio.streams.mediaModeHelp')}
+          options={getMediaModeOptions()}
+          {disabled}
+          onChange={setMediaMode}
+          groupBy={false}
+          menuSize="sm"
+        />
+      {/if}
+
+      <StreamChannelControls
+        channelMode={normalizeChannelMode(stream.channelMode)}
+        channels={detectedChannels}
+        sampleRate={testResult?.sampleRate}
+        analyzeUrl={stream.url}
+        {isAnalyzing}
+        {analysisResult}
+        {analysisError}
+        {disabled}
+        onChange={mode => change({ channelMode: mode })}
+        onAnalyze={url => void analyzeChannels(url)}
+      />
+    </div>
+  </SettingsGroup>
+
+  <!-- Classifiers -->
+  <SettingsGroup
+    title={t('settings.audio.soundCards.modelLabel')}
+    headingId={modelsHeadingId}
+    class="py-4"
+    titleVariant="group"
+  >
+    <ModelToggleList
+      models={availableModels}
+      {selectedModels}
+      {defaultModels}
+      sourceName={stream.name}
+      {sourceSampleRate}
+      isStream
+      loading={listLoading}
+      failed={listFailed}
+      availability={acousticAvailability}
+      labelledBy={modelsHeadingId}
+      {disabled}
+      onChange={models => change({ models })}
+      onRetry={() => void refreshModels()}
+    />
+  </SettingsGroup>
+
+  <!-- Audio filters (collapsed by default) -->
+  <SettingsGroup headingId={equalizerHeadingId} class="space-y-0 py-4">
+    {#snippet heading()}
+      <button
+        id={equalizerHeadingId}
+        type="button"
+        class={SETTINGS_GROUP_DISCLOSURE_CLASSES}
+        aria-expanded={showEqualizer}
+        onclick={() => (showEqualizer = !showEqualizer)}
+      >
+        <ChevronDown
+          class={cn(
+            'size-4 transition-transform duration-200 motion-reduce:transition-none',
+            showEqualizer && 'rotate-180'
+          )}
+          aria-hidden="true"
+        />
+        {t('settings.audio.audioFilters.title')}
+      </button>
+      <div class="flex items-center gap-3">
+        {#if equalizer.enabled}
+          <span class={cn(BADGE_CLASS, 'bg-[var(--color-primary)]/15 text-[var(--text-primary)]')}>
+            {t('common.enabled')}
+          </span>
+        {/if}
+      </div>
+    {/snippet}
+    {#if showEqualizer}
+      <div class="mt-3" transition:slide={{ duration: 150 }}>
+        <!-- No sampleRate: a stream's EQ chain runs at the pipeline output rate,
+             which is the server's configured rate (the preview default) for
+             every stream except a bat stream with a higher native rate. The
+             probed stream rate is not that rate, so it is not sent. -->
+        <AudioEqualizerSettings
+          equalizerSettings={equalizer}
+          {disabled}
+          onUpdate={changeEqualizer}
+        />
+      </div>
+    {/if}
+  </SettingsGroup>
+
+  <!-- Quiet hours -->
+  <SettingsGroup
+    title={t('settings.audio.quietHours.title')}
+    headingId="{cardId}-quiet"
+    class="py-4"
+    titleVariant="group"
+  >
+    <QuietHoursEditor
+      config={quietHours}
+      onChange={changeQuietHours}
+      {disabled}
+      idPrefix="{cardId}-qh"
+      enableLabel={t('settings.audio.quietHours.enableLabel')}
+    />
+  </SettingsGroup>
+
+  <!-- Diagnostics (collapsed by default) -->
+  <SettingsGroup class="space-y-0 py-4">
+    {#snippet heading()}
+      <button
+        type="button"
+        class={SETTINGS_GROUP_DISCLOSURE_CLASSES}
+        aria-expanded={showDiagnostics}
+        aria-controls={diagnosticsId}
+        onclick={() => (showDiagnostics = !showDiagnostics)}
+      >
+        <ChevronDown
+          class={cn(
+            'size-4 transition-transform duration-200 motion-reduce:transition-none',
+            showDiagnostics && 'rotate-180'
+          )}
+          aria-hidden="true"
+        />
+        {t('settings.audio.streams.diagnostics.title')}
+      </button>
+    {/snippet}
+    {#if showDiagnostics}
+      <div id={diagnosticsId} class="mt-3 space-y-4" transition:slide={{ duration: 150 }}>
+        <dl class="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+          <div class="flex gap-2">
+            <dt class="font-medium text-muted">
+              {t('settings.audio.streams.diagnostics.processState')}
+            </dt>
+            <dd
+              class={cn(
+                health?.process_state === 'circuit_open' ||
+                  health?.process_state === 'failed' ||
+                  health?.process_state === 'stopped'
+                  ? 'text-[var(--text-error)]'
+                  : 'text-[var(--color-base-content)]'
+              )}
+            >
+              {health?.process_state ?? t('common.unknown')}
+            </dd>
           </div>
+          <div class="flex gap-2">
+            <dt class="font-medium text-muted">
+              {t('settings.audio.streams.diagnostics.lastData')}
+            </dt>
+            <dd class="text-[var(--color-base-content)]">{lastDataAgo}</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="font-medium text-muted">
+              {t('settings.audio.streams.diagnostics.restartCount')}
+            </dt>
+            <dd
+              class={cn(
+                (health?.restart_count ?? 0) > 0
+                  ? 'text-[var(--text-warning)]'
+                  : 'text-[var(--color-base-content)]'
+              )}
+            >
+              {health?.restart_count ?? 0}
+            </dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="font-medium text-muted">
+              {t('settings.audio.streams.diagnostics.connection')}
+            </dt>
+            <dd
+              class={CONNECTION_STATUS_CLASS.get(connectionStatus) ??
+                'text-[var(--color-base-content)]'}
+            >
+              {t(`settings.audio.streams.connectionStatus.${connectionStatus}`)}
+            </dd>
+          </div>
+        </dl>
 
-          {#if showTransportInEdit}
-            <div>
-              <SelectDropdown
-                value={editTransport}
-                label={t('settings.audio.streams.transportLabel')}
-                options={transportOptions}
-                onChange={value => (editTransport = value as 'tcp' | 'udp')}
-                groupBy={false}
-                menuSize="sm"
-              />
-            </div>
-          {/if}
-        </div>
-
-        <!-- RTSP media mode: audio-only handshake, full stream, or auto fallback -->
-        {#if showMediaModeInEdit}
-          <div>
-            <SelectDropdown
-              value={editMediaMode}
-              label={t('settings.audio.streams.mediaModeLabel')}
-              helpText={t('settings.audio.streams.mediaModeHelp')}
-              options={getMediaModeOptions()}
-              onChange={value => (editMediaMode = value as MediaMode)}
-              groupBy={false}
-              menuSize="sm"
+        {#if health?.state_history?.length || health?.error_history?.length}
+          <div class="border-t border-[var(--border-100)] pt-4">
+            <p class="mb-3 text-xs font-medium text-muted">
+              {t('settings.audio.streams.diagnostics.stateErrorHistory')}
+            </p>
+            <StreamTimeline
+              stateHistory={health?.state_history}
+              errorHistory={health?.error_history}
             />
           </div>
         {/if}
-
-        <!-- Channel handling: format display, selector, and stereo analysis -->
-        <StreamChannelControls
-          channelMode={editChannelMode}
-          channels={detectedChannels}
-          sampleRate={detectedSampleRate}
-          analyzeUrl={editUrl || stream.url}
-          {isAnalyzing}
-          {analysisResult}
-          {analysisError}
-          {disabled}
-          onChange={mode => (editChannelMode = mode)}
-          onAnalyze={url => analyzeChannels(url)}
-        />
-
-        <Checkbox
-          checked={editEnabled}
-          onchange={checked => (editEnabled = checked)}
-          label={t('settings.audio.streams.enabled')}
-          {disabled}
-          size="sm"
-        />
-
-        <!-- Gain -->
-        <InlineSlider
-          label={t('settings.audio.soundCards.gainLabel')}
-          value={editGain}
-          onUpdate={value => (editGain = value)}
-          min={AUDIO_GAIN_MIN_DB}
-          max={AUDIO_GAIN_MAX_DB}
-          step={1}
-          unit=" dB"
-          {disabled}
-        />
-
-        <!-- Model Selection -->
-        <ModelCheckboxList
-          models={availableModels}
-          selectedModels={editModels}
-          {sourceSampleRate}
-          isStream={true}
-          loading={modelsLoading()}
-          availability={acousticAvailability}
-          {disabled}
-          onToggle={models => (editModels = models)}
-        />
-
-        <!-- Equalizer (expandable) -->
-        <div>
-          <button
-            type="button"
-            class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--color-primary)] transition-colors"
-            onclick={() => (showEqualizer = !showEqualizer)}
-            aria-expanded={showEqualizer}
-            aria-controls="stream-eq-{index}"
-          >
-            <ChevronDown
-              class={cn('size-4 transition-transform duration-200', showEqualizer && 'rotate-180')}
-            />
-            {t('settings.audio.audioFilters.title')}
-            {#if editEqualizer.enabled}
-              <span
-                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
-              >
-                {t('common.enabled')}
-              </span>
-            {/if}
-          </button>
-          {#if showEqualizer}
-            <div id="stream-eq-{index}" class="mt-3" transition:slide={{ duration: 200 }}>
-              <!-- No sampleRate: a stream's EQ chain runs at the pipeline output rate,
-                   which is the server's configured rate (the preview default) for
-                   every stream except a bat stream with a higher native rate. The
-                   probed stream rate is not that rate, so it is not sent. -->
-              <AudioEqualizerSettings
-                equalizerSettings={editEqualizer}
-                {disabled}
-                onUpdate={handleEqualizerUpdate}
-              />
-            </div>
-          {/if}
-        </div>
-
-        <!-- Quiet Hours -->
-        <QuietHoursEditor
-          config={editQuietHours}
-          onChange={qh => (editQuietHours = qh)}
-          {disabled}
-          idPrefix="stream-qh-{index}"
-        />
-
-        <!-- Action Buttons -->
-        <div class="flex justify-end gap-2 pt-2 border-t border-[var(--border-200)]">
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors"
-            onclick={cancelEdit}
-          >
-            <X class="size-4" />
-            {t('common.cancel')}
-          </button>
-          <span title={needsTest ? t('settings.audio.streams.testRequired') : undefined}>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={saveEdit}
-              disabled={!editName.trim() || !editUrl.trim() || needsTest}
-            >
-              <Check class="size-4" />
-              {t('common.save')}
-            </button>
-          </span>
-        </div>
       </div>
-    {:else}
-      <!-- View Mode - Compact Layout -->
-      <div class="flex items-center gap-3">
-        <!-- Stream Icon -->
-        <div
-          class={cn(
-            'flex-shrink-0 size-10 rounded-lg flex items-center justify-center border',
-            iconColor.bg,
-            iconColor.text,
-            iconColor.border
-          )}
-        >
-          <Radio class="size-5" />
-        </div>
-
-        <!-- Stream Info -->
-        <div class="flex-1 min-w-0">
-          <!-- Stream Name, Status, and URL on same line where possible -->
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-sm font-semibold text-[var(--color-base-content)]">
-              {stream.name}
-            </span>
-            <StatusPill
-              variant={getStatusVariant(status)}
-              label={getStatusText(status)}
-              size="sm"
-              pulse={status === 'connecting'}
-            />
-            {#if stream.equalizer?.enabled}
-              <span
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
-              >
-                {t('settings.audio.audioFilters.title')}
-              </span>
-            {/if}
-            {#if stream.quietHours?.enabled}
-              <span
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-70"
-                title={t('settings.audio.quietHours.enabledBadge')}
-              >
-                <Moon class="size-3" />
-                {t('settings.audio.quietHours.badge')}
-              </span>
-            {/if}
-          </div>
-
-          <!-- URL and Error Message -->
-          <p
-            class="font-mono text-xs text-[var(--color-base-content)] opacity-70 break-all leading-snug mt-0.5"
-          >
-            {displayUrl}
-          </p>
-          {#if status === 'error' && statusMessage}
-            <p class="text-xs text-[var(--color-error)] mt-1">{statusMessage}</p>
-          {/if}
-
-          <!-- Inline Stats Row -->
-          <p class="text-xs text-[var(--color-base-content)]/70 mt-1.5 mb-1">
-            Total: {totalData} • Rate: {currentRate} • Last: {lastDataAgo}
-          </p>
-
-          <div class="mt-2">
-            <Checkbox
-              checked={stream.enabled}
-              onchange={updateEnabled}
-              label={t('settings.audio.streams.enabled')}
-              {disabled}
-              size="sm"
-            />
-          </div>
-        </div>
-
-        <!-- Right Side: Protocol Tags + Actions -->
-        <div class="flex-shrink-0 flex items-center gap-2">
-          <!-- Colored Protocol Tags -->
-          <div class="hidden sm:flex items-center gap-1.5">
-            {#if stream.gain}
-              <span
-                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning)]/15 text-[var(--color-warning)]"
-              >
-                {stream.gain > 0 ? '+' : ''}{stream.gain} dB
-              </span>
-            {/if}
-            <span
-              class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
-            >
-              {stream.type.toUpperCase()}
-            </span>
-            {#if showTransport && stream.transport}
-              <span
-                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary)]/15 text-[var(--color-secondary)]"
-              >
-                {stream.transport.toUpperCase()}
-              </span>
-            {/if}
-            {#if stream.channelMode === 'left'}
-              <span
-                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
-                >L</span
-              >
-            {:else if stream.channelMode === 'right'}
-              <span
-                class="px-2 py-0.5 rounded text-xs font-mono font-semibold bg-[var(--color-info)]/15 text-[var(--color-info)]"
-                >R</span
-              >
-            {/if}
-            {#if stream.type === 'rtsp' && stream.mediaMode === 'auto'}
-              <span
-                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary)]/15 text-[var(--color-secondary)]"
-              >
-                {t('settings.audio.streams.mediaMode.auto')}
-              </span>
-            {:else if stream.type === 'rtsp' && stream.mediaMode === 'audio-only'}
-              <span
-                class="px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary)]/15 text-[var(--color-secondary)]"
-              >
-                {t('settings.audio.streams.mediaMode.audioOnly')}
-              </span>
-            {/if}
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="flex items-center gap-0.5">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center size-8 rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={startEdit}
-              {disabled}
-              aria-label={t('common.edit')}
-            >
-              <Settings class="size-4" />
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center size-8 rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={confirmDelete}
-              {disabled}
-              aria-label={t('common.delete')}
-            >
-              <Trash2 class="size-4" />
-            </button>
-            <button
-              type="button"
-              class="p-1.5 rounded-md hover:bg-[var(--color-base-content)]/10 transition-colors"
-              onclick={() => (expanded = !expanded)}
-              aria-expanded={expanded}
-              aria-controls="diagnostics-{index}"
-              aria-label={t('settings.audio.streams.diagnostics.toggleDiagnostics')}
-            >
-              <ChevronDown
-                class={cn(
-                  'size-4 text-[var(--color-base-content)]/60 transition-transform duration-200',
-                  expanded && 'rotate-180'
-                )}
-              />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Stereo downmix warning: shown when a stereo source is still using downmix -->
-      {#if showStereoWarning}
-        <div
-          class="flex items-center gap-2 px-3 py-1.5 border-t border-[var(--color-warning)]/20 bg-[var(--color-warning)]/5 text-[var(--color-warning)]"
-          title={t('settings.audio.streams.stereoWarning.tooltip')}
-        >
-          <AlertTriangle class="size-3.5 flex-shrink-0" />
-          <span class="text-xs">{t('settings.audio.streams.stereoWarning.short')}</span>
-        </div>
-      {/if}
-
-      <!-- Expandable Diagnostics Panel -->
-      {#if expanded}
-        <div
-          id="diagnostics-{index}"
-          class="border-t border-[var(--color-base-content)]/20 px-3 py-3"
-          transition:slide={{ duration: 200 }}
-        >
-          <!-- Stats Grid -->
-          <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium"
-                >{t('settings.audio.streams.diagnostics.processState')}:</span
-              >
-              <span
-                class={cn(
-                  'ml-2',
-                  health?.process_state === 'circuit_open' ||
-                    health?.process_state === 'failed' ||
-                    health?.process_state === 'stopped'
-                    ? 'text-[var(--color-error)]'
-                    : 'text-[var(--color-base-content)]'
-                )}
-              >
-                {health?.process_state ?? t('common.unknown')}
-              </span>
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium"
-                >{t('settings.audio.streams.diagnostics.lastData')}:</span
-              >
-              <span class="ml-2 text-[var(--color-base-content)]">{lastDataAgo}</span>
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium"
-                >{t('settings.audio.streams.diagnostics.restartCount')}:</span
-              >
-              <span
-                class={cn(
-                  'ml-2',
-                  (health?.restart_count ?? 0) > 0
-                    ? 'text-[var(--color-warning)]'
-                    : 'text-[var(--color-base-content)]'
-                )}
-              >
-                {health?.restart_count ?? 0}
-              </span>
-            </div>
-            <div>
-              <span class="text-[var(--color-base-content)]/60 font-medium"
-                >{t('settings.audio.streams.diagnostics.connection')}:</span
-              >
-              <span
-                class={cn(
-                  'ml-2',
-                  connectionStatus === 'Stable'
-                    ? 'text-[var(--color-success)]'
-                    : connectionStatus === 'Degraded'
-                      ? 'text-[var(--color-warning)]'
-                      : connectionStatus === 'Failed'
-                        ? 'text-[var(--color-error)]'
-                        : 'text-[var(--color-base-content)]'
-                )}
-              >
-                {t(`settings.audio.streams.connectionStatus.${connectionStatus.toLowerCase()}`)}
-              </span>
-            </div>
-          </div>
-
-          <!-- Timeline Section -->
-          {#if health?.state_history?.length || health?.error_history?.length}
-            <div class="mt-4 pt-4 border-t border-[var(--color-base-content)]/20">
-              <p class="text-xs font-medium text-[var(--color-base-content)]/60 mb-3">
-                {t('settings.audio.streams.diagnostics.stateErrorHistory')}
-              </p>
-              <StreamTimeline
-                stateHistory={health?.state_history}
-                errorHistory={health?.error_history}
-              />
-            </div>
-          {/if}
-        </div>
-      {/if}
     {/if}
-  </div>
-</div>
+  </SettingsGroup>
+</SourceCard>

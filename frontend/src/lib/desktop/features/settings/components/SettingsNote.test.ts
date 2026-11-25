@@ -34,7 +34,7 @@ describe('SettingsNote', () => {
       expect(noteContainer).toHaveClass(
         'mt-4',
         'p-4',
-        'bg-[var(--color-base-200)]',
+        'bg-[var(--note-bg)]',
         'text-sm',
         'rounded-lg'
       );
@@ -53,7 +53,7 @@ describe('SettingsNote', () => {
       expect(noteContainer).toHaveClass(
         'mt-4',
         'p-4',
-        'bg-[var(--color-base-200)]',
+        'bg-[var(--note-bg)]',
         'text-sm',
         'rounded-lg'
       );
@@ -172,7 +172,7 @@ describe('SettingsNote', () => {
         div =>
           div.classList.contains('mt-4') &&
           div.classList.contains('p-4') &&
-          div.classList.contains('bg-[var(--color-base-200)]')
+          div.classList.contains('bg-[var(--note-bg)]')
       );
       expect(noteContainer).toBeInTheDocument();
 
@@ -204,13 +204,7 @@ describe('SettingsNote', () => {
 
       let container =
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(container).toHaveClass(
-        'mt-4',
-        'p-4',
-        'bg-[var(--color-base-200)]',
-        'text-sm',
-        'rounded-lg'
-      );
+      expect(container).toHaveClass('mt-4', 'p-4', 'bg-[var(--note-bg)]', 'text-sm', 'rounded-lg');
 
       // Test with undefined className
       rerender({
@@ -218,13 +212,7 @@ describe('SettingsNote', () => {
       });
 
       container = screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(container).toHaveClass(
-        'mt-4',
-        'p-4',
-        'bg-[var(--color-base-200)]',
-        'text-sm',
-        'rounded-lg'
-      );
+      expect(container).toHaveClass('mt-4', 'p-4', 'bg-[var(--note-bg)]', 'text-sm', 'rounded-lg');
     });
   });
 
@@ -301,20 +289,20 @@ describe('SettingsNote', () => {
   describe('Integration Patterns', () => {
     it('works as an info note', () => {
       wrapperFactory.render({
-        className: 'text-[var(--color-info)]',
+        className: 'text-[var(--text-info)]',
         showIcon: true,
         childContent: '<p><strong>Info:</strong> This is an informational message.</p>',
       });
 
       const container =
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(container).toHaveClass('text-[var(--color-info)]');
+      expect(container).toHaveClass('text-[var(--text-info)]');
       expect(screen.getByText('Info:')).toBeInTheDocument();
     });
 
     it('works as a warning note', () => {
       wrapperFactory.render({
-        className: 'text-[var(--color-warning)] border border-[var(--color-warning)]',
+        className: 'text-[var(--text-warning)] border border-[var(--color-warning)]',
         childContent: `
           <p class="font-semibold">Warning</p>
           <p class="mt-1">This action cannot be undone.</p>
@@ -324,7 +312,7 @@ describe('SettingsNote', () => {
       const container =
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
       expect(container).toHaveClass(
-        'text-[var(--color-warning)]',
+        'text-[var(--text-warning)]',
         'border',
         'border-[var(--color-warning)]'
       );

@@ -39,6 +39,18 @@ describe('SpectrogramImage', () => {
     fetchSpy.mockRestore();
   });
 
+  it.each([
+    [true, 'text-white/75'],
+    [false, 'text-[var(--color-base-content)]/75'],
+  ] as const)('with cover=%s, draws the unavailable label as %s', async (cover, labelClass) => {
+    imageTest.render({ detectionId: '42', size: 'md', raw: true, cover });
+
+    await fireEvent.error(screen.getByRole('img'));
+
+    const label = screen.getByText(/unavailable/i);
+    expect(label).toHaveClass(labelClass);
+  });
+
   it('retries with a different detection after a failed load', async () => {
     const { rerender } = imageTest.render({ detectionId: '42', size: 'md', raw: true });
     await fireEvent.error(screen.getByRole('img'));

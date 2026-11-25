@@ -20,12 +20,13 @@ func TestModelRegistry_RangeFilterCompat(t *testing.T) {
 	t.Parallel()
 
 	want := map[string]rangeFilterCompat{
-		RegistryIDBirdNETV24: rangeFilterCompatMDataV24,
-		RegistryIDBirdNETV3:  rangeFilterCompatGeomodel,
-		RegistryIDPerchV2:    rangeFilterCompatGeomodel,
-		RegistryIDBat:        rangeFilterCompatNone,
-		RegistryIDBSGBat:     rangeFilterCompatNone,
-		RegistryIDBSG:        rangeFilterCompatNone,
+		RegistryIDBirdNETV24:    rangeFilterCompatMDataV24,
+		RegistryIDBirdNETV3:     rangeFilterCompatGeomodel,
+		RegistryIDBirdNETPlusV3: rangeFilterCompatGeomodel,
+		RegistryIDPerchV2:       rangeFilterCompatGeomodel,
+		RegistryIDBat:           rangeFilterCompatNone,
+		RegistryIDBSGBat:        rangeFilterCompatNone,
+		RegistryIDBSG:           rangeFilterCompatNone,
 	}
 	for id := range ModelRegistry {
 		w, ok := want[id]
@@ -56,8 +57,8 @@ func TestShouldAutoSelectV3Geomodel_MatchesLegacyIDSwitch(t *testing.T) {
 	ids = append(ids, modelIDCustom, "", "NoSuchModel")
 
 	for _, id := range ids {
-		want := id == RegistryIDPerchV2 || id == RegistryIDBirdNETV3
+		want := id == RegistryIDPerchV2 || id == RegistryIDBirdNETV3 || id == RegistryIDBirdNETPlusV3
 		assert.Equalf(t, want, shouldAutoSelectV3Geomodel(id, modelsDir),
-			"shouldAutoSelectV3Geomodel(%q) must match the legacy {Perch_V2, BirdNET_V3.0} switch", id)
+			"shouldAutoSelectV3Geomodel(%q) must match the legacy {Perch_V2, BirdNET_V3.0} switch extended with BirdNET_Plus_V3.0", id)
 	}
 }

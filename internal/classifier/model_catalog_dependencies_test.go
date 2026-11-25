@@ -189,28 +189,48 @@ func TestDependencyEntries_SkipsUnknownSelfAndDuplicates(t *testing.T) {
 	assert.Equal(t, depIDG, deps[1].ID)
 }
 
-// TestEffectiveFiles_EmbeddedCatalogEqualsVariantFiles pins that the dependency
-// machinery is inert on the shipped catalog: no embedded entry declares a
-// dependency, so the effective files are exactly the variant files. This is expected
-// to change when the catalog starts declaring dependencies.
-func TestEffectiveFiles_EmbeddedCatalogEqualsVariantFiles(t *testing.T) {
+// TestEmbeddedCatalog_GeomodelIsADependency pins how the shipped catalog uses the
+// dependency machinery: Perch v2, BirdNET v3.0 and BirdNET+ v3.0 depend on the
+// geomodel entry and carry none of its files themselves, so an install records the
+// geomodel. Every other entry declares nothing and resolves to its own variant files.
+func TestEmbeddedCatalog_GeomodelIsADependency(t *testing.T) {
 	setActiveCatalog(nil)
-	for i := range EmbeddedCatalog {
-		entry := &EmbeddedCatalog[i]
-		assert.Empty(t, entry.DependsOn, "%s must not declare dependencies yet", entry.ID)
-		assert.False(t, entry.Component, "%s must not be a component yet", entry.ID)
+	geomodel, ok := GetCatalogEntry(geomodelV3CatalogID)
+	require.True(t, ok)
+	geomodelOwn, ok := variantFilesByID(&geomodel, "")
+	require.True(t, ok)
+	require.Len(t, geomodelOwn, 2)
+
+	dependents := map[string]bool{"birdnet-plus-v3.0": true, "birdnet-v3.0": true, "perch-v2": true}
+	catalog := ActiveCatalog()
+	for i := range catalog {
+		entry := &catalog[i]
+		assert.False(t, entry.Component, "%s must not be a component", entry.ID)
+		if !dependents[entry.ID] {
+			assert.Empty(t, entry.DependsOn, "%s must not declare dependencies", entry.ID)
+		} else {
+			assert.Equal(t, []string{geomodelV3CatalogID}, entry.DependsOn, "%s", entry.ID)
+			assert.False(t, HasGeomodelFiles(entry), "%s must not carry geomodel files inline", entry.ID)
+			assert.True(t, ProvidesGeomodel(entry, ""), "%s must reach the geomodel", entry.ID)
+		}
 		ids := []string{""}
 		for _, v := range entry.Variants {
 			ids = append(ids, v.ID)
 		}
 		for _, id := range ids {
-			want, wantOK := variantFilesByID(entry, id)
+			own, ownOK := variantFilesByID(entry, id)
 			got, gotOK := EffectiveFiles(entry, id)
-			assert.Equal(t, wantOK, gotOK, "%s/%s", entry.ID, id)
-			assert.Equal(t, want, got, "%s/%s", entry.ID, id)
+			assert.Equal(t, ownOK, gotOK, "%s/%s", entry.ID, id)
+			if !dependents[entry.ID] {
+				assert.Equal(t, own, got, "%s/%s", entry.ID, id)
+				continue
+			}
+			for _, f := range own {
+				assert.NotContains(t, []string{RoleGeomodelModel, RoleGeomodelLabels}, f.Role, "%s/%s own files", entry.ID, id)
+			}
+			if ownOK {
+				assert.Equal(t, append(slices.Clone(own), geomodelOwn...), got, "%s/%s", entry.ID, id)
+			}
 		}
-	}
-	for _, e := range ActiveCatalog() {
-		assert.Equal(t, HasGeomodelFiles(&e), ProvidesGeomodel(&e, ""), "%s", e.ID)
 	}
 }

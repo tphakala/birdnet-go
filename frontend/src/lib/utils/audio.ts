@@ -138,6 +138,31 @@ export function playButtonLabelKey(
   return isPlaying ? 'media.audio.pause' : 'media.audio.play';
 }
 
+/** What a keyboard shortcut can ask the audio player to do. */
+export interface PlaybackControls {
+  /** Does what the visible play button does: play, pause, or play or stop the selection. */
+  togglePlayback(): void;
+  /** Moves the playback position by `seconds` from the live position, clamped to the clip. */
+  seekBy(seconds: number): void;
+}
+
+/** What the play button does when pressed. */
+export type PlayButtonAction = 'toggle' | 'playSelection' | 'stopSelection';
+
+/**
+ * The action of the play button, which plays the selected range when there is one.
+ * A full clip that is already playing is always paused first.
+ */
+export function playButtonAction(state: {
+  isPlaying: boolean;
+  isPlayingSelection: boolean;
+  hasSelection: boolean;
+}): PlayButtonAction {
+  if (state.isPlaying && !state.isPlayingSelection) return 'toggle';
+  if (!state.hasSelection) return 'toggle';
+  return state.isPlayingSelection ? 'stopSelection' : 'playSelection';
+}
+
 // =============================================================================
 // Load failure probe
 // =============================================================================

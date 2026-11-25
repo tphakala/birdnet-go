@@ -115,7 +115,8 @@ type Handler struct {
 	charsetReportFn func(ctx context.Context) (dbserver.CharsetReport, error)
 
 	// startPreflightLimit bounds the checks a migration start re-runs. Zero means
-	// startPreflightTimeout; tests set a tiny value to reach the timeout branch.
+	// startPreflightTimeout; tests set a negative value, so the deadline has
+	// already passed and the timeout branch is reached without waiting for a timer.
 	startPreflightLimit time.Duration
 
 	// cleanupStatus tracks the state of legacy database cleanup. It is initialized

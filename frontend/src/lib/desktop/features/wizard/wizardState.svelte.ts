@@ -3,6 +3,7 @@ import { loggers } from '$lib/utils/logger';
 import { t, type TranslationKey } from '$lib/i18n';
 import { toastActions } from '$lib/stores/toast';
 import type {
+  InstalledModelContext,
   StepLeaveHandler,
   StepStatus,
   WizardFlow,
@@ -30,6 +31,9 @@ let stepError = $state<TranslationKey | null>(null);
 let stepBlockedReason = $state<TranslationKey | null>(null);
 let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
+// The model passed to the last launch that opened a flow (only the model next steps flow
+// passes one); null when closed
+let installedModel = $state<InstalledModelContext | null>(null);
 
 const totalSteps = $derived(steps.length);
 // eslint-disable-next-line security/detect-object-injection -- currentStepIndex is a numeric index bounded by steps.length
@@ -48,23 +52,37 @@ let leaveHandler: StepLeaveHandler | null = null;
 // belongs to an earlier session can be recognised and dropped.
 let session = 0;
 
-const SAVE_FAILED_KEY: TranslationKey = 'wizard.errors.saveFailed';
-const SAVE_REJECTED_KEY: TranslationKey = 'wizard.errors.saveRejected';
+// The save error keys per flow: the setup ones point to skipping setup, which the
+// model next steps flow does not have
+const SETUP_SAVE_ERRORS = {
+  failed: 'wizard.errors.saveFailed',
+  rejected: 'wizard.errors.saveRejected',
+} as const satisfies { failed: TranslationKey; rejected: TranslationKey };
+const SAVE_ERROR_KEYS = {
+  onboarding: SETUP_SAVE_ERRORS,
+  'whats-new': SETUP_SAVE_ERRORS,
+  'model-next-steps': {
+    failed: 'wizard.modelNextSteps.errors.saveFailed',
+    rejected: 'wizard.modelNextSteps.errors.saveRejected',
+  },
+} as const satisfies Record<WizardFlow, { failed: TranslationKey; rejected: TranslationKey }>;
 const SAVE_UNFINISHED_KEY: TranslationKey = 'wizard.errors.saveUnfinished';
 const HTTP_STATUS_BAD_REQUEST = 400;
 const HTTP_STATUS_UNPROCESSABLE = 422;
 
 /**
- * The error message key for a failed step save: "not accepted" when the server
- * answered 400 or 422, so the user is not told to check the connection after a
- * validation refusal; the connection message for everything else.
+ * The error message key for a failed step save in a flow: "not accepted" when the
+ * server answered 400 or 422, so the user is not told to check the connection
+ * after a validation refusal; the connection message for everything else.
  */
-function saveErrorKey(err: unknown): TranslationKey {
+function saveErrorKey(err: unknown, wizardFlow: WizardFlow | null): TranslationKey {
   const refused =
     err instanceof ApiError &&
     !err.isNetworkError &&
     (err.status === HTTP_STATUS_BAD_REQUEST || err.status === HTTP_STATUS_UNPROCESSABLE);
-  return refused ? SAVE_REJECTED_KEY : SAVE_FAILED_KEY;
+  // A save runs only while a flow is open
+  const keys = wizardFlow ? SAVE_ERROR_KEYS[wizardFlow] : SETUP_SAVE_ERRORS;
+  return refused ? keys.rejected : keys.failed;
 }
 
 /**
@@ -114,6 +132,14 @@ function resetStepFlags(): void {
   clearStepMoveGuard();
 }
 
+/**
+ * Whether closing the flow records the app wizard as dismissed for this version.
+ * Only the flows tied to the app version do; the model next steps flow just closes.
+ */
+function recordsDismissal(wizardFlow: WizardFlow | null): boolean {
+  return wizardFlow === 'onboarding' || wizardFlow === 'whats-new';
+}
+
 async function dismiss(): Promise<void> {
   // Optimistic localStorage update
   const version = currentVersion ?? '';
@@ -141,6 +167,7 @@ function resetState(): void {
   steps = [];
   previousVersion = null;
   currentVersion = null;
+  installedModel = null;
   session++;
   resetStepFlags();
 }
@@ -170,9 +197,10 @@ function _resetForTesting(): void {
   status = 'idle';
 }
 
-function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): void {
+/** Opens a flow; returns false, and changes nothing, when no step applies. */
+function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): boolean {
   const resolvedSteps = getStepsForFlow(wizardFlow, options);
-  if (resolvedSteps.length === 0) return;
+  if (resolvedSteps.length === 0) return false;
 
   flow = wizardFlow;
   steps = resolvedSteps;
@@ -180,8 +208,10 @@ function launch(wizardFlow: WizardFlow, options?: WizardLaunchOptions): void {
   status = 'active';
   previousVersion = options?.previousVersion ?? null;
   currentVersion = options?.currentVersion ?? null;
+  installedModel = options?.model ?? null;
   session++;
   resetStepFlags();
+  return true;
 }
 
 function registerLeaveHandler(handler: StepLeaveHandler): () => void {
@@ -247,7 +277,7 @@ async function runLeave(move: () => void): Promise<void> {
     if (isStale()) {
       reportUnfinishedSave(startStep);
     } else {
-      stepError = saveErrorKey(err);
+      stepError = saveErrorKey(err, flow);
       isSaving = false;
     }
     return;
@@ -273,14 +303,14 @@ async function back(): Promise<void> {
 }
 
 function skip(): void {
-  void dismiss();
+  if (recordsDismissal(flow)) void dismiss();
   resetState();
 }
 
 async function complete(): Promise<void> {
   if (!canAdvance || !isLastStep || isStepMoveGuarded()) return;
   await runLeave(() => {
-    void dismiss();
+    if (recordsDismissal(flow)) void dismiss();
     resetState();
   });
 }
@@ -333,6 +363,10 @@ export const wizardState = {
   },
   get previousVersion() {
     return previousVersion;
+  },
+  /** The model passed to the last launch that opened a flow (only the model next steps flow passes one); null when closed. */
+  get installedModel() {
+    return installedModel;
   },
   launch,
   next,

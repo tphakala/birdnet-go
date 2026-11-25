@@ -20,12 +20,13 @@
   @component
 -->
 <script lang="ts">
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import LowPassIcon from '$lib/desktop/components/ui/LowPassIcon.svelte';
   import HighPassIcon from '$lib/desktop/components/ui/HighPassIcon.svelte';
   import BandRejectIcon from '$lib/desktop/components/ui/BandRejectIcon.svelte';
   import FilterResponseGraph from './FilterResponseGraph.svelte';
+  import SettingsGroupLabel from './SettingsGroupLabel.svelte';
   import EqualizerNumberInput, {
     eqLabelClasses,
     EQ_PARAMETER_CELL_CLASS,
@@ -575,28 +576,26 @@
 </script>
 
 <div class="space-y-4">
-  <Checkbox
-    checked={equalizerSettings.enabled}
+  <ToggleField
+    value={equalizerSettings.enabled}
     label={t('settings.audio.audioFilters.enableEqualizer')}
-    helpText={t('settings.audio.audioFilters.enableEqualizerHelp')}
+    description={t('settings.audio.audioFilters.enableEqualizerHelp')}
     {disabled}
-    onchange={handleEqualizerToggle}
+    onUpdate={handleEqualizerToggle}
   />
 
   {#if equalizerSettings.enabled && !loadingConfig}
     <!-- Filter Response Visualization - Always visible to show current state -->
-    <div class="mb-6">
-      <h3 class="text-sm font-medium mb-2">
-        {t('settings.audio.audioFilters.frequencyResponse')}
-      </h3>
-      <FilterResponseGraph
-        equalizer={{
-          enabled: equalizerSettings.enabled,
-          filters: equalizerSettings.filters ?? [],
-        }}
-        {sampleRate}
-      />
-    </div>
+    <SettingsGroupLabel as="h3" class="mb-3">
+      {t('settings.audio.audioFilters.frequencyResponse')}
+    </SettingsGroupLabel>
+    <FilterResponseGraph
+      equalizer={{
+        enabled: equalizerSettings.enabled,
+        filters: equalizerSettings.filters ?? [],
+      }}
+      {sampleRate}
+    />
 
     <!-- One parameter cell of a filter row: a number input, or the attenuation dropdown -->
     {#snippet parameterCell(

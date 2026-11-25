@@ -37,6 +37,12 @@ type DetectionRepository interface {
 	// clip metadata) and never reports ErrDetectionNotFound or ErrDetectionLocked.
 	RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error
 
+	// RecordClipDenoised sets whether the clip of the detection whose clip_name
+	// still equals clipName was denoised on export, overwriting any stored value.
+	// An empty clipName is a no-op. It ignores detection locks (the marker is clip
+	// metadata) and never reports ErrDetectionNotFound or ErrDetectionLocked.
+	RecordClipDenoised(ctx context.Context, id uint, clipName string, denoised bool) error
+
 	// FillClipSampleRate sets the clip sample rate (Hz) only while it is NULL and
 	// clip_name still equals clipName, so concurrent fills converge and an exporter
 	// value is never overwritten. It reports whether a row changed. An empty
@@ -319,6 +325,47 @@ type DetectionRepository interface {
 	// GetModelType returns the AI model type for a detection by JOINing
 	// the detections table with ai_models. Returns "bird" if not found.
 	GetModelType(ctx context.Context, id uint) (string, error)
+
+	// ChangeSpecies sets the species of a detection to scientificName as a
+	// reviewer's correction. Of the detection row only label_id and
+	// original_label_id change: the first change records the model's own pick in
+	// original_label_id and later changes keep it, also when the species is
+	// changed back. The detection is marked reviewed as correct in the same
+	// transaction. The new label is the detection's own model's label for the
+	// species, matched by name or by a taxonomic alias of it; when only other
+	// models have a label of that name, one is created for the detection's model
+	// with their label type and taxonomic class; that label is made before the
+	// guarded update and stays, as a valid label of the model, if the detection is
+	// locked or deleted in between. A request for the species the detection's
+	// current label already stands for is a no-op that writes nothing, whatever
+	// the spelling requested and whichever of the model's labels of the species
+	// the detection holds. Returns ErrDetectionNotFound if id does not exist,
+	// ErrDetectionLocked if it is locked, and ErrLabelNotFound if the name is
+	// empty or has no species part, or no model has a label for the species.
+	ChangeSpecies(ctx context.Context, id uint, scientificName string) error
+
+	// GetNeighborIDs returns the nearest lower and higher detection ID overall
+	// and among detections of the same species, for stepping through detections
+	// in record ID order. Same species means the scientific name extracted from the
+	// detection's label (see detection.ExtractScientificName), matched across every
+	// model's labels as LabelMatchForScientificName does, so a label stored in the
+	// legacy "ScientificName_CommonName" form belongs to the species too. A
+	// detection whose label no longer exists, or whose label has no species part
+	// (empty or "_Common"), gets the overall neighbors only.
+	// Returns ErrDetectionNotFound if id does not exist.
+	GetNeighborIDs(ctx context.Context, id uint) (*DetectionNeighbors, error)
+
+	// GetSpeciesStats returns the all-time statistics of one species. The species
+	// is the scientific name extracted from scientificName (see
+	// detection.ExtractScientificName), matched across every model's labels as
+	// LabelMatchForScientificName does, which are the labels GetNeighborIDs walks,
+	// so a label stored in the legacy "ScientificName_CommonName" form belongs to
+	// the species too. Detections reviewed as false positive are left out of the
+	// count, the times and the confidences, as in GetSpeciesSummary; the review
+	// counts cover every reviewed detection. A name with no species part, a name
+	// no label carries and a species with no detections all return zero
+	// statistics and no error.
+	GetSpeciesStats(ctx context.Context, scientificName string) (*SpeciesStats, error)
 
 	// Exists checks if a detection with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)

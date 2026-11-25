@@ -270,6 +270,24 @@ func TestOrchestrator_ResolveInstalledPaths_NonDefaultVariant(t *testing.T) {
 		"resolveInstalledPaths must find the installed non-default variant on disk")
 }
 
+// TestOrchestrator_ResolveInstalledPaths_PrefersLiveOverLegacyVariant verifies
+// that with no configured path, a live variant's files win over a Legacy
+// variant's even though the Legacy global variant is listed before every tile.
+func TestOrchestrator_ResolveInstalledPaths_PrefersLiveOverLegacyVariant(t *testing.T) {
+	entry, ok := GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok)
+
+	modelsDir := t.TempDir()
+	writeVariantModelFile(t, modelsDir, &entry, "fp32") // Legacy 3.0 global
+	livePath := writeVariantModelFile(t, modelsDir, &entry, "fp32-3.0.1-b2@nordic")
+
+	o := &Orchestrator{}
+	o.SetModelsDir(modelsDir)
+
+	modelPath, _, _ := o.resolveInstalledPaths(RegistryIDBirdNETPlusV3)
+	assert.Equal(t, livePath, modelPath, "a live variant on disk must win over a Legacy one")
+}
+
 // TestModelManager_InstallOrReplace_RollsBackOnLoadFailure verifies that when the
 // new variant is downloaded but fails to activate, the switch rolls back to the
 // previous variant and reports failure rather than reporting success with no

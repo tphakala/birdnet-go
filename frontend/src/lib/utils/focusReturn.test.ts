@@ -78,4 +78,144 @@ describe('createFocusReturn', () => {
 
     expect(document.activeElement).toBe(inner);
   });
+
+  describe('fallback after the container is removed', () => {
+    async function removeContainer(
+      action: ReturnType<ReturnType<typeof createFocusReturn>['track']>
+    ) {
+      if (typeof action === 'object') action.destroy?.();
+      container.remove();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('leaves focus alone after a press on plain content inside the container', async () => {
+      setup();
+      const plain = document.createElement('p');
+      container.appendChild(plain);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      plain.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it.each([
+      { tabindex: '-1', name: 'a tabindex=-1 wrapper' },
+      { tabindex: '0', name: 'a tabindex=0 wrapper' },
+    ])('leaves focus alone after a press on plain text inside $name', async ({ tabindex }) => {
+      setup();
+      const wrapper = document.createElement('div');
+      wrapper.tabIndex = Number(tabindex);
+      const text = document.createElement('p');
+      wrapper.appendChild(text);
+      container.appendChild(wrapper);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      text.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('leaves focus alone after a press on a button that did not take focus is followed by a press outside', async () => {
+      setup();
+      const page = document.createElement('p');
+      document.body.appendChild(page);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      inner.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      page.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+      page.remove();
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('leaves focus alone when a focused control is followed by a press on plain content outside', async () => {
+      setup();
+      const page = document.createElement('p');
+      document.body.appendChild(page);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      inner.focus();
+      page.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      // The press on non-focusable content drops focus to the body without a related target
+      inner.blur();
+      await removeContainer(action);
+      page.remove();
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('runs the fallback after a press on a button the browser did not focus', async () => {
+      setup();
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      inner.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(outside);
+    });
+
+    it('keeps tracking the newer element when an older one is destroyed after it mounted', async () => {
+      setup();
+      const older = document.createElement('div');
+      document.body.appendChild(older);
+      const { track } = createFocusReturn(() => [outside]);
+      const olderAction = track(older);
+      const action = track(container);
+
+      // The outgoing branch finishes after the new one mounted.
+      if (typeof olderAction === 'object') olderAction.destroy?.();
+      older.remove();
+      inner.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(outside);
+    });
+
+    it('runs the fallback for an older element that held focus when it is destroyed after a newer one mounted', async () => {
+      setup();
+      const older = document.createElement('div');
+      const olderButton = document.createElement('button');
+      older.appendChild(olderButton);
+      document.body.appendChild(older);
+      const { track } = createFocusReturn(() => [outside]);
+      const olderAction = track(older);
+      olderButton.focus();
+      const action = track(container);
+
+      // The outgoing branch that held focus finishes after the new one mounted.
+      if (typeof olderAction === 'object') olderAction.destroy?.();
+      older.remove();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(outside);
+
+      // The newer element never held focus, so its own removal leaves focus alone.
+      outside.blur();
+      await removeContainer(action);
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('runs the fallback after a press on content inside a control', async () => {
+      setup();
+      const icon = document.createElement('span');
+      inner.appendChild(icon);
+      const { track } = createFocusReturn(() => [outside]);
+      const action = track(container);
+
+      icon.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      await removeContainer(action);
+
+      expect(document.activeElement).toBe(outside);
+    });
+  });
 });

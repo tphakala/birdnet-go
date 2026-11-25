@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { cleanup, fireEvent, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { t } from '$lib/i18n';
 import { createComponentTestFactory } from '../../../../../test/render-helpers';
 import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 import Species from './Species.svelte';
@@ -184,17 +185,67 @@ describe('Species (analytics page) — sortable column headers', () => {
     const { container } = await renderListView();
     const countButton = container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX];
 
+    const countLabel = countButton.textContent.trim();
+    expect(screen.getByRole('status').textContent).toBe('');
+
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['American Robin', 'Zebra Finch', 'Blue Jay']);
     expect(
       container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
     ).toBe('ascending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedAscending', { column: countLabel })
+    );
 
     await fireEvent.click(countButton);
     expect(rowNames(container)).toEqual(['Blue Jay', 'Zebra Finch', 'American Robin']);
     expect(
       container.querySelectorAll('table thead th')[COUNT_COLUMN_INDEX].getAttribute('aria-sort')
     ).toBe('descending');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      t('dataDisplay.table.sortedDescending', { column: countLabel })
+    );
+  });
+
+  it('clears the sort announcement when resetting the filters restores the default sort', async () => {
+    const { container } = await renderListView();
+    const countButton = () =>
+      container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX];
+    const countLabel = countButton().textContent.trim();
+    const ascendingMessage = t('dataDisplay.table.sortedAscending', { column: countLabel });
+
+    await fireEvent.click(countButton());
+    expect(screen.getByRole('status')).toHaveTextContent(ascendingMessage);
+
+    await fireEvent.click(screen.getByRole('button', { name: t('analytics.filters.reset') }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
+    await waitFor(() => {
+      if (!container.querySelector('table tbody tr')) throw new Error('table not yet rendered');
+    });
+
+    // The same ascending sort again must reach the live region as a new text
+    await fireEvent.click(countButton());
+    expect(screen.getByRole('status')).toHaveTextContent(ascendingMessage);
+  });
+
+  it('names the table by its visible heading', async () => {
+    await renderListView();
+
+    expect(
+      screen.getByRole('table', { name: t('analytics.species.speciesList') })
+    ).toBeInTheDocument();
+  });
+
+  it('drops the sort announcement when a search matches no species', async () => {
+    const { container } = await renderListView();
+    await fireEvent.click(container.querySelectorAll('table thead th button')[COUNT_COLUMN_INDEX]);
+    expect(screen.getByRole('status').textContent).not.toBe('');
+
+    await fireEvent.input(screen.getByPlaceholderText(t('analytics.filters.searchPlaceholder')), {
+      target: { value: 'zzzz' },
+    });
+
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe(''));
   });
 
   it('persists the chosen sort order to localStorage', async () => {

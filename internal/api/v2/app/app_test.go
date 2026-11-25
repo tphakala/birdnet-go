@@ -237,6 +237,38 @@ func TestGetAppConfig_PlaybackDenoise(t *testing.T) {
 	}
 }
 
+// TestGetAppConfig_PlaybackDefaults verifies the response carries the default
+// playback gain and high-pass cutoff from the dashboard settings, including a
+// negative gain and the zero values that mean "nothing configured".
+func TestGetAppConfig_PlaybackDefaults(t *testing.T) {
+	tests := []struct {
+		name       string
+		gainDb     float64
+		highPassHz int
+	}{
+		{name: "zero values", gainDb: 0, highPassHz: 0},
+		{name: "positive gain with filter", gainDb: 6.5, highPassHz: 300},
+		{name: "negative gain", gainDb: -6.5, highPassHz: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			settings := &conf.Settings{Version: "1.0.0-test"}
+			settings.Realtime.Dashboard.DefaultAudioGain = tt.gainDb
+			settings.Realtime.Dashboard.Playback.HighPassHz = tt.highPassHz
+			controller := newAppHandler(t, e, settings)
+
+			rec := requestAppConfig(t, e, controller)
+
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			assert.InDelta(t, tt.gainDb, response.PlaybackDefaults.GainDb, 1e-9)
+			assert.Equal(t, tt.highPassHz, response.PlaybackDefaults.HighPassHz)
+		})
+	}
+}
+
 // TestGetAppConfig_ProjectLinks verifies the response always carries the
 // project identity/links (independent of telemetry), defaulting to the upstream
 // values with correctly derived issue URLs when nothing is overridden.
@@ -449,13 +481,14 @@ func TestGetAppConfig_ResponseShape(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{
 		"csrfToken", "security", "version", "speciesDictVersion", "basePath",
-		"liveSpectrogram", "audioExportEnabled", "playbackDenoise", "freshInstall", "newVersion", "projectLinks",
+		"liveSpectrogram", "audioExportEnabled", "playbackDenoise", "playbackDefaults", "freshInstall", "newVersion", "projectLinks",
 	}, keys(raw))
 
 	securityObj := object(raw, "security")
 	assert.ElementsMatch(t, []string{"enabled", "accessAllowed", "authConfig", "publicAccess", "privateMode"}, keys(securityObj))
 	assert.ElementsMatch(t, []string{"basicEnabled", "enabledProviders"}, keys(object(securityObj, "authConfig")))
 	assert.ElementsMatch(t, []string{"liveAudio"}, keys(object(securityObj, "publicAccess")))
+	assert.ElementsMatch(t, []string{"gainDb", "highPassHz"}, keys(object(raw, "playbackDefaults")))
 	assert.ElementsMatch(t, []string{
 		"name", "repoUrl", "issuesUrl", "newIssueUrl", "supportUrl", "discussionsUrl", "releasesUrl", "communityUrl",
 	}, keys(object(raw, "projectLinks")))

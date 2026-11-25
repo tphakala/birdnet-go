@@ -29,7 +29,7 @@ if [ -n "$MATCHES" ]; then
   echo "Examples:"
   echo "  bg-base-200      -> bg-[var(--color-base-200)]"
   echo "  text-base-content -> text-[var(--color-base-content)]"
-  echo "  text-error        -> text-[var(--color-error)]"
+  echo "  text-error        -> text-[var(--text-error)]"
   echo "  border-primary    -> border-[var(--color-primary)]"
   echo ""
   echo "Found in:"

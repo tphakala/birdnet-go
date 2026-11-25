@@ -1,4 +1,10 @@
 <script module lang="ts">
+  import {
+    canReturnFocus,
+    pickOpener,
+    TABBABLE_CANDIDATE_SELECTOR,
+  } from '$lib/utils/pressedElement';
+
   // Open Modal instances, oldest first. Only the last one (the topmost) acts on
   // Tab and Escape, so a dialog opened over another (the setup wizard and its
   // leave confirmation) does not have its keys handled twice.
@@ -12,15 +18,36 @@
     restoreTo: HTMLElement | SVGElement | null;
     /** Moves focus to this dialog's first tabbable control, else its box */
     focusInto: () => void;
+    /** Paint layer: one above the Modal that was on top when this one opened, 1 on an empty stack */
+    layer: number;
   }
 
-  // CSS selector for elements that may be keyboard focusable. getTabbable()
-  // narrows the matches to the ones the Tab key actually reaches.
-  const TABBABLE_CANDIDATE_SELECTOR =
-    'button, a[href], area[href], input, select, textarea, summary, [tabindex]';
+  // A Modal opened over others paints one layer above the Modal on top, so the Modal
+  // opened last is on top whatever its place in the DOM (a dialog portaled to the body comes
+  // after the app's own dialogs). Every layer stays under the toasts.
+  const MODAL_BASE_Z_INDEX = Z_INDEX.MODAL_DIALOG;
 
   // Another modal dialog (LoginModal, the range filter dialog) that owns focus while open
   const ARIA_MODAL_SELECTOR = '[aria-modal="true"]';
+
+  // Set on every Modal root, open or closed, so a closed Modal (always in the DOM with
+  // aria-modal) is not mistaken for another dialog
+  const MODAL_ROOT_ATTRIBUTE = 'data-modal-root';
+  const MODAL_ROOT_ATTRIBUTES = { [MODAL_ROOT_ATTRIBUTE]: '' };
+
+  // Open dialogs this component does not manage: a foreign aria-modal dialog that is not a
+  // Modal root, or a native dialog that is open. One selector, so an element that is both
+  // is counted once.
+  const FOREIGN_OPEN_DIALOG_SELECTOR = `${ARIA_MODAL_SELECTOR}:not([${MODAL_ROOT_ATTRIBUTE}]), dialog[open]`;
+
+  /**
+   * Number of dialogs open right now: the open Modals plus foreign open dialogs. Closed
+   * Modals do not count. Keyboard shortcuts stay off while this is above zero.
+   */
+  export function openDialogCount(): number {
+    if (typeof document === 'undefined') return openModals.length;
+    return openModals.length + document.querySelectorAll(FOREIGN_OPEN_DIALOG_SELECTOR).length;
+  }
 
   // Ancestors that take their whole subtree out of the tab order
   const TAB_EXCLUDING_ANCESTOR_SELECTOR = '[inert], [hidden]';
@@ -132,6 +159,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { generateId } from '$lib/utils/uuid';
+  import { Z_INDEX } from '$lib/utils/z-index';
 
   const logger = loggers.ui;
 
@@ -221,7 +249,11 @@
     opener: null,
     restoreTo: null,
     focusInto: () => setInitialFocus(),
+    layer: 1,
   };
+  // This instance's paint layer for the template; kept after closing, so the fade-out
+  // stays in place, and set again on the next open
+  let paintLayer = $state(1);
   // Ids are per instance and fixed for its life: the dialog is always mounted,
   // so a shared literal would repeat on every page that has two Modals
   const titleId = generateId('modal-title');
@@ -450,8 +482,10 @@
     return stop;
   }
 
-  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus
+  // A trigger that was removed while the dialog was open (a delete flow) cannot take focus, and
+  // focus the user moved to another control of the page stays there
   function restoreFocus(target: HTMLElement | SVGElement | null) {
+    if (!canReturnFocus(stackEntry.dialog)) return;
     if (target?.isConnected && 'focus' in target) target.focus();
   }
 
@@ -521,18 +555,17 @@
 
   $effect(() => {
     if (isOpen) {
-      // Not an element of this dialog (focus left there by a quick close and reopen): keep the earlier opener
-      const active = document.activeElement;
-      if (
-        (active instanceof HTMLElement || active instanceof SVGElement) &&
-        !untrack(() => dialogElement)?.contains(active)
-      ) {
-        stackEntry.opener = active;
-      }
+      // Focus inside this dialog (left there by a quick close and reopen) keeps the earlier opener;
+      // otherwise the opener is set afresh, to null when nothing usable was focused or pressed
+      const opener = pickOpener(untrack(() => dialogElement));
+      if (opener !== undefined) stackEntry.opener = opener;
       stackEntry.restoreTo = null;
 
       const stopInitialFocus = scheduleInitialFocus();
 
+      // Untracked: the layer of the Modal below must not make this effect re-run
+      stackEntry.layer = untrack(() => (openModals.at(-1)?.layer ?? 0) + 1);
+      paintLayer = stackEntry.layer;
       openModals.push(stackEntry);
       document.addEventListener('keydown', handleKeydown);
 
@@ -556,18 +589,20 @@
 <div
   bind:this={dialogElement}
   class={cn(
-    'fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
+    'fixed inset-0 flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
     {
       'opacity-100 visible pointer-events-auto': isOpen,
       'pointer-events-none': !isOpen,
     }
   )}
+  style:z-index={MODAL_BASE_Z_INDEX + paintLayer - 1}
   role="dialog"
   aria-modal="true"
   aria-labelledby={title ? titleId : undefined}
   aria-describedby={describeBody && children ? bodyId : undefined}
   onclick={handleBackdropClick}
   {...rest}
+  {...MODAL_ROOT_ATTRIBUTES}
 >
   <div
     bind:this={modalElement}

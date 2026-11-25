@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -38,6 +39,25 @@ func TestOVProbeHelperProcess(t *testing.T) {
 		fmt.Println("INFO some interleaved log line")
 		fmt.Println("OVPROBE_DEVICE=CPU")
 		fmt.Println("OVPROBE_DEVICE=GPU")
+		fmt.Println("OVPROBE_OK")
+		os.Exit(0)
+	case "multi-gpu":
+		// A host with an iGPU and a discrete card: OpenVINO lists only the
+		// indexed GPU names and no bare "GPU".
+		fmt.Println("OVPROBE_DEVICE=CPU")
+		fmt.Println("OVPROBE_DEVICE=GPU.0")
+		fmt.Println("OVPROBE_DEVICE=GPU.1")
+		fmt.Println("OVPROBE_OK")
+		os.Exit(0)
+	case "multi-gpu-info":
+		// The same host as "multi-gpu", from a child that also reports the
+		// DEVICE_TYPE and FULL_DEVICE_NAME of every device.
+		fmt.Println("OVPROBE_DEVICE=CPU")
+		fmt.Println("OVPROBE_DEVICE=GPU.0")
+		fmt.Println("OVPROBE_DEVICE=GPU.1")
+		fmt.Println("OVPROBE_DEVICE_INFO=CPU|integrated|Test CPU")
+		fmt.Println("OVPROBE_DEVICE_INFO=GPU.0|integrated|Test iGPU (iGPU)")
+		fmt.Println("OVPROBE_DEVICE_INFO=GPU.1|discrete|Test Arc A750 (dGPU)")
 		fmt.Println("OVPROBE_OK")
 		os.Exit(0)
 	case "crash":
@@ -141,42 +161,96 @@ func TestParseOVProbeOutput(t *testing.T) {
 		name        string
 		input       string
 		wantDevices []string
+		wantInfo    []OpenVINODevice
 		wantOK      bool
 	}{
 		{
 			name:        "devices with interleaved logging",
 			input:       "INFO starting up\nOVPROBE_DEVICE=CPU\nnoise\nOVPROBE_DEVICE=GPU\nOVPROBE_OK\n",
 			wantDevices: []string{"CPU", "GPU"},
+			wantInfo:    []OpenVINODevice{{Name: "CPU"}, {Name: "GPU"}},
 			wantOK:      true,
 		},
 		{
 			name:        "no devices but completed",
 			input:       "OVPROBE_OK\n",
 			wantDevices: nil,
+			wantInfo:    nil,
 			wantOK:      true,
 		},
 		{
 			name:        "truncated output without completion marker",
 			input:       "OVPROBE_DEVICE=CPU\n",
 			wantDevices: []string{"CPU"},
+			wantInfo:    []OpenVINODevice{{Name: "CPU"}},
 			wantOK:      false,
 		},
 		{
 			name:        "empty device name ignored",
 			input:       "OVPROBE_DEVICE=\nOVPROBE_OK\n",
 			wantDevices: nil,
+			wantInfo:    nil,
+			wantOK:      true,
+		},
+		{
+			name:        "info lines attach to the device of the same name",
+			input:       "OVPROBE_DEVICE=CPU\nOVPROBE_DEVICE=GPU.1\nOVPROBE_DEVICE_INFO=GPU.1|discrete|Arc\nOVPROBE_OK\n",
+			wantDevices: []string{"CPU", "GPU.1"},
+			wantInfo:    []OpenVINODevice{{Name: "CPU"}, {Name: "GPU.1", Type: "discrete", FullName: "Arc"}},
+			wantOK:      true,
+		},
+		{
+			name:        "info line for an unlisted device is ignored",
+			input:       "OVPROBE_DEVICE=CPU\nOVPROBE_DEVICE_INFO=GPU.7|discrete|Ghost\nOVPROBE_OK\n",
+			wantDevices: []string{"CPU"},
+			wantInfo:    []OpenVINODevice{{Name: "CPU"}},
+			wantOK:      true,
+		},
+		{
+			name:        "malformed info lines are ignored",
+			input:       "OVPROBE_DEVICE=GPU\nOVPROBE_DEVICE_INFO=GPU|discrete\nOVPROBE_DEVICE_INFO=\nOVPROBE_OK\n",
+			wantDevices: []string{"GPU"},
+			wantInfo:    []OpenVINODevice{{Name: "GPU"}},
 			wantOK:      true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			devices, sawOK, err := parseOVProbeOutput(strings.NewReader(tt.input))
+			devices, info, sawOK, err := parseOVProbeOutput(strings.NewReader(tt.input))
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantDevices, devices)
+			assert.Equal(t, tt.wantInfo, info)
 			assert.Equal(t, tt.wantOK, sawOK)
 		})
 	}
+}
+
+// TestOVProbeOutputRoundTrip pins that what the child writes is what the parent
+// reads back: a full name with spaces, parentheses and the field separator, and
+// values carrying CR or LF (which would otherwise split the line).
+func TestOVProbeOutputRoundTrip(t *testing.T) {
+	t.Parallel()
+	devices := []OpenVINODevice{
+		{Name: "CPU", Type: "integrated", FullName: "12th Gen Intel(R) Core(TM) i7-1260P"},
+		{Name: "GPU.0", Type: "integrated", FullName: "Intel(R) UHD Graphics 730 (iGPU)"},
+		{Name: "GPU.1", Type: "discrete", FullName: "Vendor | Model (dGPU)"},
+		{Name: "GPU.2", Type: "dis\ncrete\r", FullName: "two\r\nlines"},
+		{Name: "NPU"},
+	}
+
+	var buf strings.Builder
+	require.NoError(t, writeOVProbeOutput(&buf, devices))
+	names, info, sawOK, err := parseOVProbeOutput(strings.NewReader(buf.String()))
+	require.NoError(t, err)
+
+	assert.True(t, sawOK)
+	assert.Equal(t, []string{"CPU", "GPU.0", "GPU.1", "GPU.2", "NPU"}, names)
+	assert.Equal(t, []OpenVINODevice{
+		devices[0], devices[1], devices[2],
+		{Name: "GPU.2", Type: "dis crete", FullName: "two lines"},
+		{Name: "NPU"},
+	}, info)
 }
 
 func TestParseOVProbeOutputSurfacesReadErrors(t *testing.T) {
@@ -184,14 +258,14 @@ func TestParseOVProbeOutputSurfacesReadErrors(t *testing.T) {
 	// A single line longer than the scanner's maximum must be reported, not
 	// silently mistaken for a probe that never printed its completion marker.
 	huge := strings.Repeat("x", ovProbeMaxLineBytes+1) + "\nOVPROBE_OK\n"
-	_, sawOK, err := parseOVProbeOutput(strings.NewReader(huge))
+	_, _, sawOK, err := parseOVProbeOutput(strings.NewReader(huge))
 	require.Error(t, err)
 	assert.False(t, sawOK)
 }
 
 func TestRunOVProbeSuccess(t *testing.T) {
 	fakeOVProbeChild(t, "ok")
-	devices, cacheable, err := runOVProbe("libopenvino_c.so")
+	devices, _, cacheable, err := runOVProbe("libopenvino_c.so")
 	require.NoError(t, err)
 	assert.False(t, cacheable)
 	assert.Equal(t, []string{"CPU", "GPU"}, devices)
@@ -199,7 +273,7 @@ func TestRunOVProbeSuccess(t *testing.T) {
 
 func TestRunOVProbeChildCrashIsCacheable(t *testing.T) {
 	fakeOVProbeChild(t, "crash")
-	_, cacheable, err := runOVProbe("libopenvino_c.so")
+	_, _, cacheable, err := runOVProbe("libopenvino_c.so")
 	require.Error(t, err)
 	assert.True(t, cacheable, "a child verdict must be remembered")
 	assert.Contains(t, err.Error(), "child failed")
@@ -208,7 +282,7 @@ func TestRunOVProbeChildCrashIsCacheable(t *testing.T) {
 
 func TestRunOVProbeMissingCompletionMarkerIsCacheable(t *testing.T) {
 	fakeOVProbeChild(t, "no-marker")
-	_, cacheable, err := runOVProbe("libopenvino_c.so")
+	_, _, cacheable, err := runOVProbe("libopenvino_c.so")
 	require.Error(t, err)
 	assert.True(t, cacheable)
 	assert.Contains(t, err.Error(), "completion marker")
@@ -217,10 +291,65 @@ func TestRunOVProbeMissingCompletionMarkerIsCacheable(t *testing.T) {
 func TestRunOVProbeTimeoutIsTransient(t *testing.T) {
 	fakeOVProbeChild(t, "hang")
 	shortenOVProbeTimeout(t, 500*time.Millisecond)
-	_, cacheable, err := runOVProbe("libopenvino_c.so")
+	_, _, cacheable, err := runOVProbe("libopenvino_c.so")
 	require.Error(t, err)
 	assert.False(t, cacheable, "a timeout is not a child verdict and must not be cached")
 	assert.Contains(t, err.Error(), "timed out")
+}
+
+// TestOpenVINOHasDeviceMatchesGPUByClass pins that a multi-GPU host, which lists
+// only GPU.0 and GPU.1, still reports a GPU: the capability gate must not look for
+// the literal "GPU".
+func TestOpenVINOHasDeviceMatchesGPUByClass(t *testing.T) {
+	fakeOVProbeChild(t, "multi-gpu")
+	if !ov.Supported {
+		t.Skip("probe needs the openvino build tag")
+	}
+
+	_, err := OpenVINOProbeDevices("libopenvino_c.so")
+	require.NoError(t, err)
+
+	assert.True(t, OpenVINOHasDevice(OVDeviceGPU), "indexed GPUs satisfy a GPU request")
+	assert.True(t, OpenVINOHasDevice("GPU.1"), "a concrete name still matches exactly")
+	assert.False(t, OpenVINOHasDevice("GPU.2"))
+}
+
+// TestOpenVINOGPUs pins the status reader's contract: before any probe it
+// answers nil and launches no child; after a probe it lists the GPU-class
+// devices with the name and type the child reported, and no CPU entry.
+func TestOpenVINOGPUs(t *testing.T) {
+	calls := fakeOVProbeChild(t, "multi-gpu-info")
+	if !ov.Supported {
+		t.Skip("probe needs the openvino build tag")
+	}
+
+	assert.Nil(t, OpenVINOGPUs(), "no probe has run yet")
+	assert.Equal(t, 0, calls.count(), "the status reader must never launch a child")
+
+	all, err := OpenVINOProbeDeviceInfo("libopenvino_c.so")
+	require.NoError(t, err)
+	assert.Len(t, all, 3, "the full probe result keeps the CPU entry")
+
+	assert.Equal(t, []OpenVINODevice{
+		{Name: "GPU.0", Type: "integrated", FullName: "Test iGPU (iGPU)"},
+		{Name: "GPU.1", Type: "discrete", FullName: "Test Arc A750 (dGPU)"},
+	}, OpenVINOGPUs())
+	assert.Equal(t, 1, calls.count())
+}
+
+// TestOpenVINOGPUsFromOldChild pins that a child without info lines (a binary
+// replaced under a running service) still yields the GPUs, with the name and
+// type left empty.
+func TestOpenVINOGPUsFromOldChild(t *testing.T) {
+	fakeOVProbeChild(t, "multi-gpu")
+	if !ov.Supported {
+		t.Skip("probe needs the openvino build tag")
+	}
+
+	_, err := OpenVINOProbeDevices("libopenvino_c.so")
+	require.NoError(t, err)
+
+	assert.Equal(t, []OpenVINODevice{{Name: "GPU.0"}, {Name: "GPU.1"}}, OpenVINOGPUs())
 }
 
 func TestOpenVINOProbeDevicesCachesResult(t *testing.T) {
@@ -372,6 +501,11 @@ func TestOpenVINOHasDeviceNeverProbesOrEnumeratesBeforeProbe(t *testing.T) {
 // process precisely so a driver fault cannot abort BirdNET-Go (issue #4236).
 const ovInProcessEnumerationAllowed = "RunOVProbeChild"
 
+// ovInProcessDeviceQueries names the OpenVINO calls that walk the vendor driver
+// stack for a device and so must run only in the probe child: the device
+// enumeration and the per-device property reads.
+var ovInProcessDeviceQueries = []string{"AvailableDevices", "DeviceProperty"}
+
 // TestOnlyProbeChildEnumeratesInProcess is the structural guard for #4236: a
 // behavioural test cannot tell an in-process ov.AvailableDevices call apart
 // from "no device" without a real OpenVINO core, so this parses the package's
@@ -397,9 +531,9 @@ func TestOnlyProbeChildEnumeratesInProcess(t *testing.T) {
 			}
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				sel, ok := n.(*ast.SelectorExpr)
-				if ok && sel.Sel.Name == "AvailableDevices" {
+				if ok && slices.Contains(ovInProcessDeviceQueries, sel.Sel.Name) {
 					if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "ov" {
-						callers = append(callers, name+":"+fn.Name.Name)
+						callers = append(callers, name+":"+fn.Name.Name+":"+sel.Sel.Name)
 					}
 				}
 				return true
@@ -407,9 +541,13 @@ func TestOnlyProbeChildEnumeratesInProcess(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, callers, "the probe child must still enumerate (guards against a vacuous scan)")
+	for _, query := range ovInProcessDeviceQueries {
+		assert.Truef(t, slices.ContainsFunc(callers, func(c string) bool { return strings.HasSuffix(c, ":"+query) }),
+			"the probe child must still call ov.%s (guards against a vacuous scan)", query)
+	}
 	for _, c := range callers {
-		assert.True(t, strings.HasSuffix(c, ":"+ovInProcessEnumerationAllowed),
-			"%s enumerates OpenVINO devices in-process; only the probe child may (issue #4236)", c)
+		assert.Containsf(t, c, ":"+ovInProcessEnumerationAllowed+":",
+			"%s queries OpenVINO devices in-process; only the probe child may (issue #4236)", c)
 	}
 }
 
@@ -444,4 +582,34 @@ func TestEnsureOpenVINOProbeNoopWithoutCore(t *testing.T) {
 	EnsureOpenVINOProbe()
 
 	assert.Equal(t, 0, calls.count())
+}
+
+// TestInitOpenVINORecordsLoadedLibraryPath pins that the path later handed to
+// the probe child is the library the loader really bound, not the configured
+// string: with nothing configured the loader may have discovered one, and a
+// child that received "" would rediscover (or load another) library.
+func TestInitOpenVINORecordsLoadedLibraryPath(t *testing.T) {
+	const discovered = "/discovered/openvino/libopenvino_c.so"
+	for name, tt := range map[string]struct {
+		configured string
+		loaded     string
+		want       string
+	}{
+		"discovered path replaces empty config": {configured: "", loaded: discovered, want: discovered},
+		"configured path is kept":               {configured: "/pinned/lib.so", loaded: "/pinned/lib.so", want: "/pinned/lib.so"},
+		"default name load is named":            {configured: "", loaded: "", want: ov.DefaultLibraryName},
+	} {
+		t.Run(name, func(t *testing.T) {
+			markOVCoreLoadedForTest(t, false, "")
+			t.Cleanup(func() { ovInitializedSnap.Store(false) })
+			origInit, origLoaded := ovInit, ovLoadedLibrary
+			t.Cleanup(func() { ovInit, ovLoadedLibrary = origInit, origLoaded })
+			ovInit = func(string) error { return nil }
+			ovLoadedLibrary = func() (string, bool) { return tt.loaded, true }
+
+			require.NoError(t, InitOpenVINO(tt.configured))
+
+			assert.Equal(t, tt.want, OpenVINOLoadedLibraryPath())
+		})
+	}
 }

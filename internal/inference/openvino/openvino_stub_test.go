@@ -18,4 +18,8 @@ func TestStub_ReturnsUnavailable(t *testing.T) {
 	require.ErrorIs(t, err, ErrOpenVINOUnavailable)
 
 	require.ErrorIs(t, DestroyOV(), ErrOpenVINOUnavailable)
+
+	name, err := DeviceProperty(DeviceCPU, "FULL_DEVICE_NAME")
+	assert.Empty(t, name)
+	require.ErrorIs(t, err, ErrOpenVINOUnavailable)
 }

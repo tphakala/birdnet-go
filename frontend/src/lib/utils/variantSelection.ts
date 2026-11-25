@@ -2,20 +2,34 @@
 // unit-testable; the only non-pure import is `t` for reason localization, which
 // every test environment mocks (see src/test/setup.ts).
 
-import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
+import type {
+  CatalogBuild,
+  CatalogEntry,
+  CatalogVariant,
+  RegionFamily,
+  VariantReason,
+} from '$lib/types/models';
 import { t } from '$lib/i18n';
 
 /**
  * Choose the variant the gallery preselects for an entry. This is the "smart by
  * default" decision: the server-recommended variant when present, else the
- * installed one, else the catalog default, else the first compatible one, else
- * the first variant. Returns '' when the entry has no variants.
+ * installed one, else a fallback that skips regional slices of other regions.
+ * Returns '' when the entry has no variants.
  *
  * Each id is checked against the actual variant list so a stale recommended or
  * installed id (e.g. a variant hidden because it is Legacy) falls through to the
  * next rule instead of selecting nothing.
+ *
+ * `activeRegionSlug` is the region the picker is scoped to ('' when none). The
+ * fallback ignores slices of other regions, since they cover only that region's
+ * species; an entry made only of such slices falls back to its first variant.
+ * This mirrors the server's foreign-region rule (recommend.go rankEntry). The
+ * recommended id is taken as is: the server resolves it from the saved region,
+ * even when the regions request failed here, so after an unsaved region change
+ * it can be a slice of a region other than this one.
  */
-export function pickPreselectedVariant(entry: CatalogEntry): string {
+export function pickPreselectedVariant(entry: CatalogEntry, activeRegionSlug = ''): string {
   const variants = entry.variants ?? [];
   if (variants.length === 0) return '';
 
@@ -25,16 +39,40 @@ export function pickPreselectedVariant(entry: CatalogEntry): string {
   if (has(entry.recommendedVariantId)) return entry.recommendedVariantId;
   if (has(entry.installedVariantId)) return entry.installedVariantId;
 
-  // Prefer a compatible variant so the dialog never opens with a blocked one
-  // preselected while a runnable variant exists: compatible default, else any
-  // compatible, else the default, else the first. When every variant is blocked
-  // the first is returned and the install control is disabled by the dialog.
+  // Among the global variants and the active region's slices, prefer a
+  // compatible one: compatible default, else any compatible, else the default,
+  // else the first. When none of them runs, a blocked one is returned (even if
+  // another region's slice would run) and the dialog disables install and shows
+  // why. An entry with neither falls back to its first variant.
+  const local = variants.filter(v => !v.region || v.region === activeRegionSlug);
   const preferred =
-    variants.find(v => v.default && v.compatible) ??
-    variants.find(v => v.compatible) ??
-    variants.find(v => v.default) ??
+    local.find(v => v.default && v.compatible) ??
+    local.find(v => v.compatible) ??
+    local.find(v => v.default) ??
+    local.at(0) ??
     variants[0];
   return preferred.id;
+}
+
+/**
+ * The region slug an entry's variant picker is scoped to. Model families ship
+ * different tile sets, so the page-wide slug (the detected or pinned region) may
+ * name a tile this entry's family lacks; the server then resolves the station
+ * coordinates to the family's own nearest tile (RegionFamily.resolved, computed
+ * from the saved location, so an unsaved region change is not reflected). Returns the active slug when the
+ * entry ships a variant for it, else the family's own resolution from `families`
+ * ('' when that is the global model), and the active slug when the entry has no
+ * family record. '' (no region) stays '' so a global scope is never narrowed.
+ */
+export function familyRegionSlug(
+  entry: CatalogEntry,
+  activeRegionSlug: string,
+  families: readonly RegionFamily[] | undefined
+): string {
+  if (!activeRegionSlug) return '';
+  if (entry.variants?.some(v => v.region === activeRegionSlug)) return activeRegionSlug;
+  const family = families?.find(f => f.catalogId === entry.id);
+  return family ? family.resolved.slug : activeRegionSlug;
 }
 
 /**
@@ -232,13 +270,17 @@ export interface OptimizeOffer {
  * differs from the host-recommended variant, and that recommended variant is
  * compatible and present in the list. The permanent BirdNET v2.4 model participates
  * like any other installed model (its BuiltIn baseline is the installed variant when
- * no DFT build is active).
+ * no DFT build is active). An entry with `supersededBy` (the server sets it only when
+ * the successor is visible) gets no offer: the superseded notice tells the user to
+ * move to the successor instead of switching builds of the old model. An entry with
+ * `update` (its installed build is an older release or an older build) gets none either: the update notice
+ * and the card's Update action cover it, so one model never has two prompts.
  */
 export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
   const offers: OptimizeOffer[] = [];
   for (const entry of catalog) {
     const variants = entry.variants ?? [];
-    if (variants.length === 0 || !entry.installed) continue;
+    if (variants.length === 0 || !entry.installed || entry.supersededBy || entry.update) continue;
 
     const installedId = entry.installedVariantId;
     const recommendedId = entry.recommendedVariantId;
@@ -255,12 +297,70 @@ export function optimizeOffers(catalog: CatalogEntry[]): OptimizeOffer[] {
   return offers;
 }
 
+/** The build a variant without a `build` (an older server, a hand-written variant) belongs to. */
+const DEFAULT_BUILD = 1;
+
+/** The release and build of a variant's files: its own, else the entry's release and build 1. */
+function variantBuildKey(entry: CatalogEntry, variant: CatalogVariant): [string, number] {
+  return [variant.version ?? entry.version, variant.build ?? DEFAULT_BUILD];
+}
+
+/** Whether a release-notes record has any text to show: a non-blank reason or note. */
+function hasNotesText(record: CatalogBuild): boolean {
+  return Boolean(record.reason?.trim()) || (record.notes ?? []).some(n => n.trim() !== '');
+}
+
+/**
+ * The release notes of a variant's build: the entry's `builds` record with the
+ * variant's release and build, or null when that build has none or its record has
+ * no text (a build without notes shows nothing).
+ */
+export function buildRecordFor(entry: CatalogEntry, variant: CatalogVariant): CatalogBuild | null {
+  const [version, build] = variantBuildKey(entry, variant);
+  const record = entry.builds?.find(b => b.version === version && b.build === build);
+  return record && hasNotesText(record) ? record : null;
+}
+
+/**
+ * The release notes the install dialog shows before a variant swap: those of the
+ * target variant's build, when the model is installed and the target is a
+ * different release or build than the installed variant. Null for a fresh
+ * install, for a swap within the installed build (another region or precision of
+ * it brings nothing new), and for a target build without notes. When the
+ * installed variant is not in the list its build is unknown, so the target's
+ * notes are returned.
+ */
+export function targetBuildNotes(
+  entry: CatalogEntry,
+  targetVariantId: string
+): CatalogBuild | null {
+  if (!entry.installed) return null;
+  const variants = entry.variants ?? [];
+  const target = variants.find(v => v.id === targetVariantId);
+  if (!target) return null;
+  const installed = variants.find(v => v.id === entry.installedVariantId);
+  if (installed) {
+    const [fromVersion, fromBuild] = variantBuildKey(entry, installed);
+    const [toVersion, toBuild] = variantBuildKey(entry, target);
+    if (fromVersion === toVersion && fromBuild === toBuild) return null;
+  }
+  return buildRecordFor(entry, target);
+}
+
 /**
  * The catalog release channel marking a developer-preview (not-GA) build. The gallery
- * flags an entry on this channel with a PREVIEW badge and a not-GA notice. Mirrors the
- * Go `classifier.ChannelPreview` constant.
+ * flags an entry on this channel with a PREVIEW badge. Mirrors the Go
+ * `classifier.ChannelPreview` constant.
  */
 export const CHANNEL_PREVIEW = 'preview';
+
+/**
+ * The catalog release channel marking a published model whose performance in
+ * BirdNET-Go is not proven yet. The gallery flags an entry on this channel with an
+ * EXPERIMENTAL badge and a notice. Mirrors the Go `classifier.ChannelExperimental`
+ * constant.
+ */
+export const CHANNEL_EXPERIMENTAL = 'experimental';
 
 /**
  * The catalog release channel marking a stable (GA) build, the default an entry
@@ -268,6 +368,13 @@ export const CHANNEL_PREVIEW = 'preview';
  * constant.
  */
 export const CHANNEL_STABLE = 'stable';
+
+/**
+ * Catalog ids of the entries the gallery flags with a NEW badge. A static list for
+ * now: a temporary stand-in until per-browser tracking of the models a user has
+ * already seen replaces it.
+ */
+export const NEW_MODEL_IDS: readonly string[] = ['birdnet-plus-v3.0'];
 
 /**
  * The canonical "automatic" region mode. An empty string, null, and undefined

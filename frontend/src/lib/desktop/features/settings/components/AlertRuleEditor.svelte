@@ -15,6 +15,7 @@
   @component
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { generateId } from '$lib/utils/uuid';
   import {
     Plus,
@@ -44,6 +45,8 @@
     schemaOperatorLabel,
   } from '$lib/utils/alertSchema';
   import { translateField } from '$lib/utils/notifications';
+  import { useUnsavedChangesGuard } from '$lib/utils/useUnsavedChangesGuard.svelte';
+  import { samePathAndQuery } from '$lib/stores/unsavedChanges.svelte';
 
   interface Props {
     rule: AlertRule | null;
@@ -87,6 +90,30 @@
   let objDropOpen = $state(false);
   let eventDropOpen = $state(false);
 
+  // The editable fields as JSON.
+  function formSnapshot(): string {
+    return JSON.stringify({
+      name,
+      description,
+      enabled,
+      objectType,
+      triggerType,
+      eventName,
+      metricName,
+      cooldownSec,
+      conditions,
+      actions,
+    });
+  }
+
+  // The form as the last init left it; null until then.
+  let initialSnapshot = $state<string | null>(null);
+
+  // The editor lives in a tab, so a tab switch (query change) unmounts it as well.
+  useUnsavedChangesGuard(() => initialSnapshot !== null && formSnapshot() !== initialSnapshot, {
+    allows: samePathAndQuery,
+  });
+
   // Initialize form state from rule prop
   $effect(() => {
     if (rule) {
@@ -127,6 +154,8 @@
       conditions = [];
       actions = [{ target: 'bell', template_title: '', template_message: '' }];
     }
+    // untrack: reading every field here would re-run this effect on each keystroke and reset the form
+    initialSnapshot = untrack(() => formSnapshot());
   });
 
   // Schema-driven options
@@ -202,20 +231,20 @@
     const colors: Record<string, { bg: string; text: string }> = {
       detection: {
         bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
-        text: 'text-[var(--color-success)]',
+        text: 'text-[var(--text-success)]',
       },
       stream: {
         bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
-        text: 'text-[var(--color-info)]',
+        text: 'text-[var(--text-info)]',
       },
       device: { bg: 'bg-violet-500/10', text: 'text-violet-500' },
       system: {
         bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
-        text: 'text-[var(--color-error)]',
+        text: 'text-[var(--text-error)]',
       },
       integration: {
         bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
-        text: 'text-[var(--color-warning)]',
+        text: 'text-[var(--text-warning)]',
       },
       application: { bg: 'bg-sky-500/10', text: 'text-sky-500' },
     };
@@ -399,7 +428,7 @@
           type="text"
           bind:value={name}
           placeholder={t('settings.alerts.editor.namePlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
       <div>
@@ -414,7 +443,7 @@
           type="text"
           bind:value={description}
           placeholder={t('settings.alerts.editor.descriptionPlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
     </div>
@@ -493,7 +522,7 @@
                   </div>
                 </div>
                 {#if objectType === ot.name}
-                  <Check class="w-3.5 h-3.5 text-[var(--color-primary)] flex-shrink-0" />
+                  <Check class="w-3.5 h-3.5 text-[var(--text-primary)] flex-shrink-0" />
                 {/if}
               </button>
             {/each}
@@ -625,7 +654,7 @@
                 </div>
               </div>
               {#if isSelected}
-                <Check class="w-3.5 h-3.5 text-[var(--color-primary)] flex-shrink-0" />
+                <Check class="w-3.5 h-3.5 text-[var(--text-primary)] flex-shrink-0" />
               {/if}
             </button>
           {/each}
@@ -645,7 +674,7 @@
         {#if availableProperties.length > 0}
           <button
             type="button"
-            class="flex items-center gap-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 px-2 py-1 rounded-md transition-colors cursor-pointer"
+            class="flex items-center gap-1 text-[11px] font-medium text-[var(--text-primary)] hover:bg-[var(--color-primary)]/10 px-2 py-1 rounded-md transition-colors cursor-pointer"
             onclick={addCondition}
           >
             <Plus class="w-3 h-3" />
@@ -671,7 +700,7 @@
               <select
                 bind:value={condition.property}
                 aria-label={t('settings.alerts.editor.property')}
-                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer focus-ring"
               >
                 {#each propertyOptions as prop (prop.value)}
                   <option value={prop.value}>{prop.label}</option>
@@ -681,7 +710,7 @@
               <select
                 bind:value={condition.operator}
                 aria-label={t('settings.alerts.editor.operator')}
-                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer focus-ring"
               >
                 {#each operatorsForProperty(condition.property ?? '') as op (op.value)}
                   <option value={op.value}>{op.label}</option>
@@ -693,29 +722,29 @@
                 bind:value={condition.value}
                 aria-label={t('settings.alerts.editor.value')}
                 placeholder={t('settings.alerts.editor.valuePlaceholder')}
-                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 tabular-nums placeholder:text-[var(--color-base-content)]/40"
+                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] focus-ring tabular-nums placeholder:text-[var(--color-base-content)]/40"
               />
               <!-- Duration (metric only) -->
               {#if triggerType === 'metric'}
                 <div class="flex items-center gap-1">
-                  <span class="text-[10px] text-[var(--color-base-content)]/40"
-                    >{t('settings.alerts.editor.durationFor')}</span
-                  >
+                  <span class="text-[10px] text-[var(--color-base-content)]/40">
+                    {t('settings.alerts.editor.durationFor')}
+                  </span>
                   <input
                     type="number"
                     min="0"
                     step="1"
                     aria-label={t('settings.alerts.editor.duration')}
-                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none tabular-nums focus:ring-1 focus:ring-[var(--color-primary)]/30"
+                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] focus-ring tabular-nums"
                     value={condition.duration_sec ?? 0}
                     onchange={e => {
                       const v = Number(e.currentTarget.value);
                       condition.duration_sec = Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : 0;
                     }}
                   />
-                  <span class="text-[10px] text-[var(--color-base-content)]/40"
-                    >{t('settings.alerts.editor.durationSec')}</span
-                  >
+                  <span class="text-[10px] text-[var(--color-base-content)]/40">
+                    {t('settings.alerts.editor.durationSec')}
+                  </span>
                 </div>
               {/if}
               <!-- Remove -->
@@ -725,7 +754,7 @@
                 aria-label={t('settings.alerts.editor.removeCondition')}
                 onclick={() => removeCondition(index)}
               >
-                <X class="w-3.5 h-3.5 text-[var(--color-error)]" />
+                <X class="w-3.5 h-3.5 text-[var(--text-error)]" />
               </button>
             </div>
           {/each}
@@ -751,11 +780,11 @@
             onclick={() => toggleAction('bell')}
           >
             <Bell class="w-3.5 h-3.5 text-[var(--color-base-content)]" />
-            <span class="text-[var(--color-base-content)]"
-              >{t('settings.alerts.editor.actionBell')}</span
-            >
+            <span class="text-[var(--color-base-content)]">
+              {t('settings.alerts.editor.actionBell')}
+            </span>
             {#if isActionSelected('bell')}
-              <Check class="w-3 h-3 text-[var(--color-primary)] ml-auto" />
+              <Check class="w-3 h-3 text-[var(--text-primary)] ml-auto" />
             {/if}
           </button>
           <button
@@ -768,11 +797,11 @@
             onclick={() => toggleAction('push')}
           >
             <Send class="w-3.5 h-3.5 text-[var(--color-base-content)]" />
-            <span class="text-[var(--color-base-content)]"
-              >{t('settings.alerts.editor.actionPush')}</span
-            >
+            <span class="text-[var(--color-base-content)]">
+              {t('settings.alerts.editor.actionPush')}
+            </span>
             {#if isActionSelected('push')}
-              <Check class="w-3 h-3 text-[var(--color-primary)] ml-auto" />
+              <Check class="w-3 h-3 text-[var(--text-primary)] ml-auto" />
             {/if}
           </button>
         </div>
@@ -790,7 +819,7 @@
           id="rule-cooldown"
           type="number"
           min="0"
-          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors tabular-nums"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] focus-ring focus:border-[var(--color-primary)] transition-colors tabular-nums"
           value={cooldownSec}
           step="1"
           onchange={e => {
@@ -821,7 +850,7 @@
                 type="text"
                 bind:value={action.template_title}
                 placeholder={t('settings.alerts.editor.templateTitlePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
             <div>
@@ -836,7 +865,7 @@
                 type="text"
                 bind:value={action.template_message}
                 placeholder={t('settings.alerts.editor.templateMessagePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus-ring focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
           </div>
@@ -850,7 +879,7 @@
         {#if rule && !rule.built_in && onDelete}
           <button
             type="button"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer"
             onclick={() => onDelete?.(rule)}
           >
             <Trash2 class="w-3.5 h-3.5" />

@@ -12,7 +12,7 @@ ARG TENSORFLOW_VERSION=2.17.1
 # sync with TENSORFLOW_VERSION (headers) and the Taskfile TFLITE_VERSION var; the
 # runtime-base stage downloads the matching prebuilt libtensorflowlite_c.so.
 ARG TFLITE_VERSION=v2.17.1
-ARG ONNXRUNTIME_VERSION=1.31.1
+ARG ONNXRUNTIME_VERSION=1.32.0
 # OpenVINO toolkit pin for the runtime libraries bundled into the images. Keep the
 # release/build in sync with the Taskfile OPENVINO_RELEASE / OPENVINO_BUILD values;
 # the SHA256s are per-arch (arm64 matches the Taskfile OPENVINO_SHA256 header pin).
@@ -177,10 +177,30 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     BUILD_VERSION="${BUILD_VERSION}" SENTRY_DSN="${SENTRY_DSN}" PROJECT_NAME="${PROJECT_NAME}" PROJECT_REPO_URL="${PROJECT_REPO_URL}" PROJECT_COMMUNITY_URL="${PROJECT_COMMUNITY_URL}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET} OPENVINO_BUILD="${OPENVINO_BUILD}"
 
 # ============================================================================
+# ort-fetch: download and verify the ONNX Runtime libraries.
+#
+# Runs on the build platform because it only downloads and checks files, so a
+# cross-arch build needs no emulation here. The download source and the SHA-256
+# pins live in scripts/fetch-onnxruntime.sh and scripts/onnxruntime-pins.sha256;
+# nothing reaches /ort/lib before its hash matched a pin. unzip and the downloaded
+# package stay in this stage and out of the runtime image.
+# ============================================================================
+FROM --platform=$BUILDPLATFORM debian:trixie-slim AS ort-fetch
+RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    unzip
+ARG TARGETARCH
+ARG ONNXRUNTIME_VERSION
+COPY scripts/fetch-onnxruntime.sh scripts/onnxruntime-pins.sha256 /ort/
+RUN sh /ort/fetch-onnxruntime.sh install "${ONNXRUNTIME_VERSION}" "linux-${TARGETARCH}" /ort/lib
+
+# ============================================================================
 # runtime-base: the heavy, rarely-changing runtime library layer.
 #
 # This stage is published separately as ghcr.io/<repo>-base:base-<sha> (the tag is
-# content-addressed on this Dockerfile; see .github/workflows/base-image.yml). The
+# content-addressed on this Dockerfile and the two ONNX Runtime fetch files it
+# copies; see .github/workflows/base-image.yml). The
 # final app stage below does `FROM ${BASE_IMAGE}` where BASE_IMAGE defaults to this
 # local stage (so a from-scratch `docker build .` and the PR container-test build
 # are fully self-contained), and CI publish builds override BASE_IMAGE with the
@@ -188,12 +208,13 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
 # model/script/binary layers on top of immutable base blobs (structural layer
 # dedup, independent of BuildKit cache state).
 #
-# It downloads its own runtime .so sets rather than copying from the `build`
+# It provisions its own runtime .so sets rather than copying from the `build`
 # stage, so building `--target runtime-base` never drags in the Go compile. The
-# pins are the top-of-file ARGs (the single source of truth); content-addressing
-# the base tag on this Dockerfile means any pin change yields a new base tag and a
-# rebuild, so the shipped runtime libs never drift from what the binary linked and
-# compiled against.
+# ONNX Runtime libraries come from the ort-fetch stage and their pins from
+# scripts/onnxruntime-pins.sha256; the other pins are the top-of-file ARGs.
+# Content-addressing the base tag on this Dockerfile and the two scripts/ files
+# means any pin change yields a new base tag and a rebuild, so the shipped runtime
+# libs never drift from what the binary linked and compiled against.
 # ============================================================================
 FROM --platform=$TARGETPLATFORM debian:trixie-slim AS runtime-base
 ARG TARGETPLATFORM
@@ -240,25 +261,13 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
 
 # ONNX Runtime (used by all arches; arm64 relies on it exclusively). onnxruntime
 # is dlopened at runtime, never linked at compile, so it is provisioned here in
-# the base rather than in the `build` stage. `tar --no-same-owner` extracts the
-# archive as root (GNU tar as root otherwise restores the archive's stored UIDs),
-# so the libraries land root-owned under /usr/lib and a non-root runtime process
-# sharing an unrelated UID cannot overwrite them. The same flag is used for the
-# TFLite and OpenVINO extractions below for the same reason.
+# the base rather than in the `build` stage. COPY writes the files root-owned
+# under /usr/lib, so a non-root runtime process sharing an unrelated UID cannot
+# overwrite them. The check fails the build when the library links do not resolve
+# to the pinned version.
 ARG ONNXRUNTIME_VERSION
-RUN set -eu; \
-    ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
-        "linux/amd64") echo "x64" ;; \
-        "linux/arm64") echo "aarch64" ;; \
-        *) echo "Error: unsupported platform ${TARGETPLATFORM}" >&2; exit 1 ;; \
-    esac); \
-    echo "Downloading ONNX Runtime ${ONNXRUNTIME_VERSION} for ${ONNX_ARCH}"; \
-    curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
-        -o /tmp/onnxruntime.tgz; \
-    mkdir -p /tmp/onnxruntime; \
-    tar --no-same-owner -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1; \
-    cp -a /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/lib/; \
-    rm -rf /tmp/onnxruntime /tmp/onnxruntime.tgz
+COPY --from=ort-fetch /ort/lib/ /usr/lib/
+RUN test "$(readlink -f /usr/lib/libonnxruntime.so)" = "/usr/lib/libonnxruntime.so.${ONNXRUNTIME_VERSION}"
 
 # TensorFlow Lite C runtime library: installed for all arches. The stock default
 # classifier is ONNX on arm64 (reduced memory) and TFLite on amd64, but every arch
@@ -267,6 +276,11 @@ RUN set -eu; \
 # loaded, so the arm64 memory win for the ONNX default is preserved. Downloaded from
 # the same prebuilt release the Taskfile download-tflite task uses; the bare soname
 # symlink is created so a bare-soname dlopen/link resolves.
+# `tar --no-same-owner` extracts the archive as root (GNU tar as root otherwise
+# restores the archive's stored UIDs), so the libraries land root-owned under
+# /usr/lib and a non-root runtime process sharing an unrelated UID cannot
+# overwrite them. The OpenVINO extraction below uses the same flag for the same
+# reason.
 ARG TFLITE_VERSION
 RUN set -eu; \
     TFA=$(case "${TARGETPLATFORM}" in \

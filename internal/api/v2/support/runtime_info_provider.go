@@ -111,7 +111,7 @@ func (p *runtimeInfoProvider) onnxRuntime() *supportpkg.ONNXRuntimeInfo {
 }
 
 // openVINO reports the OpenVINO snapshot. A load that used the default soname
-// has an empty path, which is reported as that soname.
+// has an empty path, which is reported as that default library name.
 func (p *runtimeInfoProvider) openVINO() *supportpkg.OpenVINOInfo {
 	rt := p.ovSnap()
 	path := rt.LibraryPath
@@ -119,10 +119,11 @@ func (p *runtimeInfoProvider) openVINO() *supportpkg.OpenVINOInfo {
 		path = ov.DefaultLibraryName
 	}
 	return &supportpkg.OpenVINOInfo{
-		CompiledIn:  rt.CompiledIn,
-		Initialized: rt.Initialized,
-		Active:      rt.Active,
-		LibraryPath: path,
+		CompiledIn:        rt.CompiledIn,
+		Initialized:       rt.Initialized,
+		Active:            rt.Active,
+		LibraryPath:       path,
+		LibraryConfigured: rt.LibraryConfigured,
 		Probe: supportpkg.OpenVINOProbeInfo{
 			Status:  rt.ProbeStatus,
 			Devices: rt.ProbeDevices,

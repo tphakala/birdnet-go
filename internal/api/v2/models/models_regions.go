@@ -89,18 +89,13 @@ func (c *Handler) GetModelRegions(ctx echo.Context) error {
 
 	resolved := RegionResolution{Source: string(region.SourceGlobal)}
 	if s.BirdNET.LocationConfigured {
-		// All families carry identical geometry (enforced by a region-package
-		// test), so any family's auto resolution is the detected region. Reuse the
-		// first to avoid a redundant sweep, falling back to a representative table
-		// only when no visible family maps to a region table.
-		switch {
-		case len(families) > 0:
-			resolved = families[0].Resolved
-		default:
-			if rep := representativeTable(tables); rep != nil {
-				sel := region.Select(rep, region.ModeAuto, s.BirdNET.Latitude, s.BirdNET.Longitude)
-				resolved = toRegionResolution(&sel)
-			}
+		// Families may ship different tile sets, so the detected region the UI
+		// shows comes from the representative table (the most specific tile set),
+		// not from whichever family happens to be listed first. A family without
+		// that tile reports its own resolution in Families.
+		if rep := representativeTable(tables); rep != nil {
+			sel := region.Select(rep, region.ModeAuto, s.BirdNET.Latitude, s.BirdNET.Longitude)
+			resolved = toRegionResolution(&sel)
 		}
 	}
 
@@ -135,29 +130,32 @@ func (c *Handler) GetRegionCoverageMap(ctx echo.Context) error {
 	return ctx.Blob(http.StatusOK, svgContentType, svg)
 }
 
-// representativeTable picks a deterministic table from the embedded set (lowest
-// repo id), used for the geometry-only top-level resolution. Returns nil when no
-// table is embedded.
+// representativeTable picks a deterministic table from the embedded set for the
+// top-level resolution: the one with the most regions (the most specific tile
+// set is the detected region the UI shows), ties broken by the lowest repo id.
+// Returns nil when no table is embedded.
 func representativeTable(tables map[string]*region.Table) *region.Table {
-	repos := slices.Sorted(maps.Keys(tables))
-	if len(repos) == 0 {
-		return nil
+	var best *region.Table
+	for _, repo := range slices.Sorted(maps.Keys(tables)) {
+		tbl := tables[repo]
+		if tbl == nil {
+			continue
+		}
+		if best == nil || len(tbl.Regions) > len(best.Regions) {
+			best = tbl
+		}
 	}
-	return tables[repos[0]]
+	return best
 }
 
-// resolveRecommendRegion resolves the single region slug the recommender scores
-// against, matching the top-level resolution in GetModelRegions. All families
-// share identical geometry (a region-package test enforces it), so a
-// representative table's resolution is the detected region for every entry.
-// A pinned region is an explicit choice independent of coordinates and is
-// honored even before a station location is configured; auto resolution needs
-// coordinates and otherwise stays on the global model (mirroring GetModelRegions,
-// which keeps an unconfigured station off any tile). Returns "" (the global
-// model) when the location is unconfigured under auto/global mode, no tile
-// applies, or region data is unavailable. This runs per request, so a coordinate
-// or ModelRegion change takes effect on the next gallery load without a restart.
-func (c *Handler) resolveRecommendRegion() string {
+// resolveRecommendRegions resolves the region slugs the recommender scores
+// against: the slug of each entry in its own family's table (families may ship
+// different tile sets, so one table cannot stand for all), plus the fallback
+// slug from the representative table for an entry without a table. See
+// recommendRegions for the rules. This runs per request, so a coordinate or
+// ModelRegion change takes effect on the next gallery load without a restart.
+// Both results are empty (the global model) when region data is unavailable.
+func (c *Handler) resolveRecommendRegions(entries []classifier.CatalogEntry) (fallback string, byEntry map[string]string) {
 	s := c.CurrentSettings()
 	tables, err := region.Tables()
 	if err != nil {
@@ -167,35 +165,70 @@ func (c *Handler) resolveRecommendRegion() string {
 		// fail the gallery over region data.
 		c.LogDebugIfEnabled("region tables unavailable; recommender falling back to global scoring",
 			logger.String("error", err.Error()))
-		return "" // recommender falls back to global scoring; non-fatal
+		return "", nil // recommender falls back to global scoring; non-fatal
 	}
-	rep := representativeTable(tables)
-	if rep == nil {
-		return ""
-	}
-	// Auto resolution needs coordinates; without a configured location only an
-	// explicit pin selects a region. region.Select owns the mode classification,
-	// so ask it and honor just the coordinate-independent pinned outcome (its
-	// SourcePinned result), avoiding a null-island auto resolution.
-	if !s.BirdNET.LocationConfigured {
-		if sel := region.Select(rep, s.BirdNET.ModelRegion, 0, 0); sel.Source == region.SourcePinned {
-			return sel.Slug
+	return recommendRegions(tables, entries, s.BirdNET.ModelRegion, s.BirdNET.LocationConfigured, s.BirdNET.Latitude, s.BirdNET.Longitude)
+}
+
+// recommendRegions resolves the recommender region per entry. A pinned region
+// is an explicit choice independent of coordinates and is honored even before a
+// station location is configured, when the entry's family ships that slug (a
+// family without it falls back to coordinate resolution in its own table, see
+// region.Select); auto resolution needs coordinates and otherwise stays on the
+// global model (mirroring GetModelRegions, which keeps an unconfigured station
+// off any tile). The map holds an entry per family table, "" meaning the global
+// model; fallback is the representative table's resolution, for an entry whose
+// repo has no table.
+func recommendRegions(tables map[string]*region.Table, entries []classifier.CatalogEntry, modelRegion string, configured bool, lat, lon float64) (fallback string, byEntry map[string]string) {
+	pick := func(tbl *region.Table) string {
+		if tbl == nil {
+			return ""
 		}
-		return ""
+		// Without a configured location only an explicit pin selects a region.
+		// region.Select owns the mode classification, so ask it and honor just the
+		// coordinate-independent pinned outcome (its SourcePinned result), avoiding
+		// a null-island auto resolution.
+		if !configured {
+			if sel := region.Select(tbl, modelRegion, 0, 0); sel.Source == region.SourcePinned {
+				return sel.Slug
+			}
+			return ""
+		}
+		return region.Select(tbl, modelRegion, lat, lon).Slug
 	}
-	return region.Select(rep, s.BirdNET.ModelRegion, s.BirdNET.Latitude, s.BirdNET.Longitude).Slug
+	fallback = pick(representativeTable(tables))
+	byRepo := make(map[string]string, len(tables)) // a family's slug is the same for each of its entries
+	byEntry = make(map[string]string, len(entries))
+	for i := range entries {
+		repo := entries[i].HuggingFaceRepo
+		tbl, ok := tables[repo]
+		if !ok {
+			continue
+		}
+		slug, done := byRepo[repo]
+		if !done {
+			slug = pick(tbl)
+			byRepo[repo] = slug
+		}
+		byEntry[entries[i].ID] = slug
+	}
+	return fallback, byEntry
 }
 
 // buildRegionOptions flattens the embedded tables into a deduplicated, sorted
 // list of dropdown options. Tables are visited in sorted repo order so that, for
 // a slug shared across families, the display metadata is taken deterministically
-// from the lowest-keyed repo (matching representativeTable) rather than from a
+// from the lowest-keyed repo (shared slugs agree across families, a region-package
+// test enforces it) rather than from a
 // random map-iteration winner. Ordering is by group display, then name, then
 // slug (a unique final tiebreaker) for a stable UI.
 func buildRegionOptions(tables map[string]*region.Table) []RegionOption {
 	seen := make(map[string]RegionOption)
 	for _, repo := range slices.Sorted(maps.Keys(tables)) {
 		tbl := tables[repo]
+		if tbl == nil {
+			continue
+		}
 		for slug := range tbl.Regions {
 			if _, ok := seen[slug]; ok {
 				continue

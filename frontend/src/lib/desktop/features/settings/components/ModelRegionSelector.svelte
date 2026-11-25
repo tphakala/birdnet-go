@@ -33,6 +33,7 @@
   import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
   import type { ModelRegionsResponse, RegionOption } from '$lib/types/models';
   import RegionCard from './RegionCard.svelte';
+  import SettingsGroupLabel from './SettingsGroupLabel.svelte';
 
   const logger = loggers.ui;
 
@@ -308,9 +309,9 @@
               <MapPin class="h-4 w-4" aria-hidden="true" />
               {t('analysis.gallery.region.modeAuto')}
             </span>
-            <span class="text-xs text-base-content/70"
-              >{t('analysis.gallery.region.modeAutoHint')}</span
-            >
+            <span class="text-xs text-base-content/70">
+              {t('analysis.gallery.region.modeAutoHint')}
+            </span>
           </div>
         </label>
 
@@ -336,9 +337,9 @@
               <Layers class="h-4 w-4" aria-hidden="true" />
               {t('analysis.gallery.region.modeManual')}
             </span>
-            <span class="text-xs text-base-content/70"
-              >{t('analysis.gallery.region.modeManualHint')}</span
-            >
+            <span class="text-xs text-base-content/70">
+              {t('analysis.gallery.region.modeManualHint')}
+            </span>
           </div>
         </label>
       </div>
@@ -439,14 +440,14 @@
               <div class="flex items-center gap-2">
                 <span class="font-semibold">{t('analysis.gallery.region.worldwideTitle')}</span>
                 {#if isGlobal}
-                  <span class="badge badge-primary badge-sm"
-                    >{t('analysis.gallery.region.selectedBadge')}</span
-                  >
+                  <span class="badge badge-primary badge-sm">
+                    {t('analysis.gallery.region.selectedBadge')}
+                  </span>
                 {/if}
               </div>
-              <span class="text-xs text-base-content/70"
-                >{t('analysis.gallery.region.worldwideSubtitle')}</span
-              >
+              <span class="text-xs text-base-content/70">
+                {t('analysis.gallery.region.worldwideSubtitle')}
+              </span>
               <span
                 class="inline-flex items-center gap-1 self-start rounded px-1.5 py-0.5 text-xs font-medium text-warning bg-warning/10"
               >
@@ -456,9 +457,9 @@
             </div>
           </label>
 
-          <div class="text-[0.7rem] uppercase tracking-wide text-base-content/50 px-0.5">
+          <SettingsGroupLabel as="div" divided class="px-0.5">
             {t('analysis.gallery.region.orSpecificRegion')}
-          </div>
+          </SettingsGroupLabel>
 
           {#if noResults}
             <div role="status" class="text-xs text-base-content/60 py-2">
@@ -467,10 +468,7 @@
           {:else}
             {#each filteredGroups as group (group.slug)}
               <div class="flex flex-col gap-2">
-                <span
-                  class="text-xs font-semibold text-base-content/60 uppercase tracking-wide px-0.5"
-                  >{group.display}</span
-                >
+                <SettingsGroupLabel as="span" class="px-0.5">{group.display}</SettingsGroupLabel>
                 <div class="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
                   {#each group.options as opt (opt.slug)}
                     <RegionCard

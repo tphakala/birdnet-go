@@ -556,13 +556,13 @@ func TestTelemetryIntegration_ConfigurableThreshold(t *testing.T) {
 	assert.Contains(t, reporter.capturedEvents[0].message, "80.0%")
 }
 
-// TestWebhookRequestError_NetworkTimeout tests webhook timeout reporting
+// TestWebhookRequestError_NetworkTimeout verifies that a transport timeout is
+// not reported: it is the user's network or service, like a connection error.
 func TestWebhookRequestError_NetworkTimeout(t *testing.T) {
 	reporter := &mockTelemetryReporter{enabled: true}
 	config := DefaultTelemetryConfig()
 	telemetry := NewNotificationTelemetry(&config, reporter)
 
-	// Test timeout error
 	telemetry.WebhookRequestError(
 		"webhook-primary",
 		context.DeadlineExceeded,
@@ -574,33 +574,29 @@ func TestWebhookRequestError_NetworkTimeout(t *testing.T) {
 		false, // isCancelled
 	)
 
-	// Verify event captured
-	require.Len(t, reporter.capturedEvents, 1)
-	event := reporter.capturedEvents[0]
+	assert.Empty(t, reporter.capturedEvents, "a timeout should not generate a telemetry event")
+}
 
-	assert.Contains(t, event.message, "timed out")
-	assert.Equal(t, "warning", event.level, "Timeouts should be warning level (often user network issues)")
-	assert.Equal(t, "notification", event.tags["component"])
-	assert.Equal(t, "webhook-primary", event.tags["provider"])
-	assert.Equal(t, "webhook", event.tags["provider_type"])
-	assert.Equal(t, "0", event.tags["status_code"])
-	assert.Equal(t, "POST", event.tags["method"])
-	assert.Equal(t, "bearer", event.tags["auth_type"])
-	assert.Equal(t, "true", event.tags["is_timeout"])
+// TestWebhookRequestError_TransportFailureWithoutStatus verifies that a request
+// that never produced an HTTP status is not reported, whatever its cause: TLS
+// and certificate failures are the user's endpoint setup, not code defects.
+func TestWebhookRequestError_TransportFailureWithoutStatus(t *testing.T) {
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	telemetry := NewNotificationTelemetry(&config, reporter)
 
-	// Verify URL is anonymized (should be hash, not actual URL)
-	endpointHash := event.tags["endpoint_hash"]
-	assert.Contains(t, endpointHash, "url-")
-	assert.NotContains(t, endpointHash, "hooks.slack.com")
-	assert.NotContains(t, endpointHash, "T00")
+	telemetry.WebhookRequestError(
+		"webhook-primary",
+		fmt.Errorf("Post \"https://hooks.example.com\": tls: failed to verify certificate: x509: certificate signed by unknown authority"),
+		0, // No status code for transport errors
+		"https://hooks.example.com/services/T00/B00/xyz",
+		"POST",
+		"bearer",
+		false, // isTimeout
+		false, // isCancelled
+	)
 
-	// Verify contexts
-	reqContext, ok := event.contexts["request"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "POST", reqContext["method"])
-	assert.Equal(t, "bearer", reqContext["auth_type"])
-	assert.Equal(t, true, reqContext["is_timeout"])
-	assert.Equal(t, false, reqContext["is_cancelled"])
+	assert.Empty(t, reporter.capturedEvents, "a transport failure without a status should not generate a telemetry event")
 }
 
 // TestWebhookRequestError_HTTPServerError tests 5xx error reporting
@@ -630,7 +626,6 @@ func TestWebhookRequestError_HTTPServerError(t *testing.T) {
 	assert.Equal(t, "error", event.level, "5xx errors should be error level")
 	assert.Equal(t, "webhook-discord", event.tags["provider"])
 	assert.Equal(t, "500", event.tags["status_code"])
-	assert.Equal(t, "false", event.tags["is_timeout"])
 }
 
 // TestWebhookRequestError_HTTPClientError tests 4xx error reporting
@@ -840,6 +835,16 @@ func TestIsConnectionError(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "http2 client connection lost",
+			err:      errors.NewStd(`Post "https://example.com/hook": http2: client connection lost`),
+			expected: true,
+		},
+		{
+			name:     "HTTP client timeout",
+			err:      errors.NewStd(`Post "https://example.com/hook": net/http: request canceled (Client.Timeout exceeded while awaiting headers)`),
+			expected: true,
+		},
+		{
 			name:     "HTTP 500 error - not connection error",
 			err:      errors.NewStd("server returned 500: internal server error"),
 			expected: false,
@@ -938,7 +943,20 @@ func TestWebhookRequestError_ConnectionErrorDoesNotSuppressSubsequentErrors(t *t
 	)
 	assert.Empty(t, reporter.capturedEvents, "connection error should not generate a telemetry event")
 
-	// Step 2: Send a non-connection error (SHOULD be reported — this is the first real error)
+	// A timeout takes the same early return and must not touch the suppressor either.
+	telemetry.WebhookRequestError(
+		"webhook-test",
+		context.DeadlineExceeded,
+		0,
+		"https://example.com/webhook",
+		"POST",
+		"bearer",
+		true,
+		false,
+	)
+	assert.Empty(t, reporter.capturedEvents, "timeout should not generate a telemetry event")
+
+	// Step 2: Send a non-connection error (SHOULD be reported, this is the first real error)
 	telemetry.WebhookRequestError(
 		"webhook-test",
 		errors.NewStd("server returned 500: internal server error"),

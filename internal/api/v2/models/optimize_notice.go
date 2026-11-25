@@ -64,7 +64,10 @@ type optimizeNotice struct {
 // variants, is installed, its installed variant differs from the host-recommended
 // variant, and that recommended variant is compatible. The installed variant may
 // be absent from the catalog (a dropped build); the offer still stands so the user
-// can move off it. Offers keep catalog order.
+// can move off it. An entry superseded by a visible entry (visibleSuccessor)
+// qualifies for no offer, and neither does one whose installed variant is an
+// older release or build with an update (installedUpdate): one model gets one notice.
+// Offers keep catalog order.
 func optimizeOffers(entries []classifier.CatalogEntry, installed map[string]string, byVariant map[string]map[string]recommend.Recommendation, recommended map[string]string) []optimizeOffer {
 	var offers []optimizeOffer
 	for i := range entries {
@@ -72,9 +75,19 @@ func optimizeOffers(entries []classifier.CatalogEntry, installed map[string]stri
 		if len(entry.Variants) == 0 {
 			continue
 		}
+		// A superseded model is told to move to its successor (the superseded
+		// notice), so it gets no prompt to switch builds of itself.
+		if visibleSuccessor(entries, entry.SupersededBy) != nil {
+			continue
+		}
 		installedID, isInstalled := installed[entry.ID]
 		recommendedID := recommended[entry.ID]
 		if !isInstalled || installedID == "" || recommendedID == "" || installedID == recommendedID {
+			continue
+		}
+		// An installed older release or build is told to update (the update notice), so it
+		// gets no prompt to switch to the host-recommended build as well.
+		if _, hasUpdate := installedUpdate(entries, entry, installedID); hasUpdate {
 			continue
 		}
 		rec, ok := byVariant[entry.ID][recommendedID]
@@ -239,11 +252,11 @@ func newOptimizeNotification(offers []optimizeOffer) *notification.Notification 
 		WithDeliveryTarget(notification.DeliveryTargetBell)
 }
 
-// StartOptimizeNoticeSync enables optimize notice evaluations and schedules the
-// first one (the startup evaluation). Until it is called, ScheduleOptimizeNoticeSync
-// is a no-op, so a handler that is not serving (a controller built without
-// routes, as tests do) never arms a timer from its install or uninstall paths.
-// It is a no-op after StopOptimizeNoticeSync.
+// StartOptimizeNoticeSync enables notice evaluations (optimize, superseded and update)
+// and schedules the first one (the startup evaluation). Until it is called,
+// ScheduleOptimizeNoticeSync is a no-op, so a handler that is not serving (a
+// controller built without routes, as tests do) never arms a timer from its
+// install or uninstall paths. It is a no-op after StopOptimizeNoticeSync.
 func (c *Handler) StartOptimizeNoticeSync() {
 	if c == nil || c.ModelManager == nil {
 		return
@@ -258,9 +271,9 @@ func (c *Handler) StartOptimizeNoticeSync() {
 	c.armOptimizeNoticeTimerLocked()
 }
 
-// ScheduleOptimizeNoticeSync re-evaluates the optimize notice after a short
-// debounce, so a burst of triggers costs one evaluation (each evaluation probes
-// the host hardware and ranks the whole catalog). It is a no-op before
+// ScheduleOptimizeNoticeSync re-evaluates the optimize, superseded and update notices after
+// a short debounce, so a burst of triggers costs one evaluation (each optimize
+// evaluation probes the host hardware and ranks the whole catalog). It is a no-op before
 // StartOptimizeNoticeSync and after StopOptimizeNoticeSync.
 func (c *Handler) ScheduleOptimizeNoticeSync() {
 	if c == nil || c.ModelManager == nil {
@@ -285,8 +298,9 @@ func (c *Handler) armOptimizeNoticeTimerLocked() {
 	n.timer = time.AfterFunc(optimizeNoticeDebounce, c.fireOptimizeNoticeSync)
 }
 
-// fireOptimizeNoticeSync is the debounce timer's callback. It runs the evaluation
-// as a Core-tracked goroutine so Controller.Shutdown's Core.Wait joins it, and it
+// fireOptimizeNoticeSync is the debounce timer's callback. It runs the evaluations
+// (the cheap superseded and update ones first, then the optimize one, which can
+// block on the OpenVINO probe) as one Core-tracked goroutine so Controller.Shutdown's Core.Wait joins it, and it
 // starts nothing once StopOptimizeNoticeSync has run: both the stopped check and
 // the tracked start happen under timerMu, which StopOptimizeNoticeSync takes to
 // set stopped, so no evaluation can be added to the WaitGroup after Stop returns.
@@ -297,13 +311,17 @@ func (c *Handler) fireOptimizeNoticeSync() {
 	if n.stopped {
 		return
 	}
-	c.Go(c.syncOptimizeNotice)
+	c.Go(func() {
+		c.syncSupersededNotice()
+		c.syncUpdateNotice()
+		c.syncOptimizeNotice()
+	})
 }
 
 // StopOptimizeNoticeSync stops any pending evaluation and ignores later
-// schedules, and cancels a pending retry of a failed notice update (the latched
-// notice itself is left in place). Controller.Shutdown calls it before Core.Cancel and Core.Wait:
-// after it returns no new evaluation starts, and one already running is joined
+// schedules, and cancels a pending retry of a failed notice update on any of the
+// three notices (the latched notices themselves are left in place). Controller.Shutdown
+// calls it before Core.Cancel and Core.Wait: after it returns no new evaluation starts, and one already running is joined
 // by Core.Wait. That running evaluation can hold shutdown for as long as an
 // OpenVINO device probe child takes, bounded by the probe timeout.
 func (c *Handler) StopOptimizeNoticeSync() {
@@ -319,4 +337,6 @@ func (c *Handler) StopOptimizeNoticeSync() {
 		n.timer = nil
 	}
 	n.latch.Stop()
+	c.superseded.latch.Stop()
+	c.update.latch.Stop()
 }

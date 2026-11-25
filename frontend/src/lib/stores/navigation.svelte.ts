@@ -5,10 +5,17 @@
  * Supports reverse proxy scenarios (Home Assistant Ingress, custom proxies)
  * by using proxy-aware URL building for the browser address bar while
  * maintaining internal paths without proxy prefix for routing.
+ *
+ * Every writer of the route (navigate, redirect, handlePopState) first asks the
+ * unsaved-changes registry. A held move waits for the user's Leave or Stay; an
+ * unblocked move still applies synchronously. A held Back/Forward cannot be
+ * cancelled, so the store pushes the page's own URL back on top of the popped
+ * entry and, on Leave, goes back once more to land on the popped entry.
  */
 
 import { buildAppUrl, getAppBasePath, extractRelativePath } from '$lib/utils/urlHelpers';
 import { DEFAULT_LOGIN_TARGET as DEFAULT_PATH } from '$lib/utils/loginRedirect';
+import { unsavedChanges, type NavigationTarget } from '$lib/stores/unsavedChanges.svelte';
 
 // Path constants built via array join at runtime.
 // IMPORTANT: Do NOT use string literals like '/ui/dashboard' or '/ui/' here.
@@ -30,9 +37,17 @@ export interface NavigationStore {
   currentPath: string;
   /** Reactive query string, including '?', independent of page routing. */
   currentSearch: string;
-  navigate: (url: string) => void;
-  redirect: (url: string) => void;
-  handlePopState: () => void;
+  /** Pushes a history entry. Resolves true once applied, false when the user chose Stay or the move was dropped. */
+  navigate: (url: string) => Promise<boolean>;
+  /** Like navigate, but replaces the current history entry. */
+  redirect: (url: string) => Promise<boolean>;
+  /** Applies a browser Back/Forward. Returns false when the pop was held for the unsaved-changes prompt. */
+  handlePopState: () => boolean;
+  /**
+   * For pages that rewrite their own query on the current path: writes the URL to history without
+   * routing and records it as the current entry, so a held Back or Forward restores it.
+   */
+  writeUrl: (url: string, mode?: 'push' | 'replace') => void;
 }
 
 /**
@@ -77,6 +92,13 @@ function normalizeUiPath(url: string): string {
   return UI_PREFIX_STR + (cleaned.startsWith('/') ? cleaned : '/' + cleaned);
 }
 
+/** A URL split into the internal route state and the suffix (query and hash) the browser keeps. */
+interface ParsedUrl {
+  path: string;
+  search: string;
+  suffix: string;
+}
+
 /**
  * Create a navigation store instance.
  * Used for testing and the singleton export.
@@ -107,25 +129,22 @@ export function createNavigation(): NavigationStore {
     })()
   );
 
-  /**
-   * Apply a new URL to internal routing state and the browser address bar.
-   *
-   * Query parameters are exposed separately as currentSearch; query and hash
-   * remain outside currentPath. This matches the behavior on page reload where
-   * window.location.pathname (which doesn't include query string) is used for
-   * routing.
-   *
-   * @param url - Path to apply, optionally with query string / hash
-   * @param mode - 'push' adds a history entry; 'replace' overwrites the current one
-   */
-  function applyUrl(url: string, mode: 'push' | 'replace'): void {
-    // Separate pathname from query string and hash fragment
-    // Only pathname goes to currentPath (matches window.location.pathname behavior)
-    // Query state is separate from the route; the browser retains the full suffix.
-    let pathname: string;
-    let suffix: string; // query string + hash fragment
+  // Address-bar URL of the current entry (proxy-prefixed), put back after a held Back/Forward.
+  let committedUrl =
+    typeof window === 'undefined'
+      ? ''
+      : buildAppUrl(currentPath) + currentSearch + window.location.hash;
+  // Set when the user chose Leave on a held pop, so the pop that follows is accepted unasked.
+  let leavingByHistory = false;
 
-    // Find the first ? or # to split pathname from suffix
+  /**
+   * Split a URL into the internal route state and the suffix the browser keeps.
+   *
+   * Only the pathname goes to currentPath (matches window.location.pathname on a
+   * reload); the query string is exposed separately as currentSearch and the hash
+   * stays only in the address bar.
+   */
+  function parseUrl(url: string): ParsedUrl {
     const queryIndex = url.indexOf('?');
     const hashIndex = url.indexOf('#');
 
@@ -140,28 +159,62 @@ export function createNavigation(): NavigationStore {
       splitIndex = Math.min(queryIndex, hashIndex);
     }
 
-    if (splitIndex !== -1) {
-      pathname = url.substring(0, splitIndex);
-      suffix = url.substring(splitIndex);
-    } else {
-      pathname = url;
-      suffix = '';
-    }
+    const pathname = splitIndex === -1 ? url : url.substring(0, splitIndex);
+    const suffix = splitIndex === -1 ? '' : url.substring(splitIndex);
+    return {
+      path: normalizeUiPath(pathname),
+      search: suffix.startsWith('?') ? suffix.split('#')[0] : '',
+      suffix,
+    };
+  }
 
-    // Normalize only the pathname for internal routing state
-    const normalizedPath = normalizeUiPath(pathname);
-    currentPath = normalizedPath;
-    currentSearch = suffix.startsWith('?') ? suffix.split('#')[0] : '';
+  /**
+   * Apply a new URL to internal routing state and the browser address bar.
+   *
+   * Query parameters are exposed separately as currentSearch; query and hash
+   * remain outside currentPath. This matches the behavior on page reload where
+   * window.location.pathname (which doesn't include query string) is used for
+   * routing.
+   *
+   * @param target - The parsed URL (see parseUrl)
+   * @param mode - 'push' adds a history entry; 'replace' overwrites the current one
+   */
+  function applyUrl(target: ParsedUrl, mode: 'push' | 'replace'): void {
+    const { path, search, suffix } = target;
+    leavingByHistory = false;
+    currentPath = path;
+    currentSearch = search;
 
     if (typeof window !== 'undefined') {
       // Build proxy-aware URL for the browser address bar (includes query/hash)
-      const fullUrl = buildAppUrl(normalizedPath) + suffix;
+      const fullUrl = buildAppUrl(path) + suffix;
       if (mode === 'replace') {
         window.history.replaceState({}, '', fullUrl);
       } else {
         window.history.pushState({}, '', fullUrl);
       }
+      committedUrl = fullUrl;
     }
+  }
+
+  /**
+   * Apply the URL now when nothing blocks the move, otherwise after the user chooses Leave.
+   * A move made while a prompt is open is dropped.
+   */
+  function move(url: string, mode: 'push' | 'replace'): Promise<boolean> {
+    const target = parseUrl(url);
+    const decision = unsavedChanges.request(
+      { path: target.path, search: target.search },
+      { path: currentPath, search: currentSearch }
+    );
+    if (decision === null) {
+      applyUrl(target, mode);
+      return Promise.resolve(true);
+    }
+    return decision.then(leave => {
+      if (leave) applyUrl(target, mode);
+      return leave;
+    });
   }
 
   /**
@@ -170,8 +223,8 @@ export function createNavigation(): NavigationStore {
    *
    * @param url - Path to navigate to, optionally with query string (e.g., '/ui/detections/123?tab=review')
    */
-  function navigate(url: string): void {
-    applyUrl(url, 'push');
+  function navigate(url: string): Promise<boolean> {
+    return move(url, 'push');
   }
 
   /**
@@ -181,21 +234,60 @@ export function createNavigation(): NavigationStore {
    *
    * @param url - Path to redirect to, optionally with query string
    */
-  function redirect(url: string): void {
-    applyUrl(url, 'replace');
+  function redirect(url: string): Promise<boolean> {
+    return move(url, 'replace');
   }
 
   /**
    * Handle browser back/forward button navigation.
    * Strips proxy prefix from pathname for internal routing.
+   *
+   * The browser has already moved when this runs. When a registered guard holds the move, the
+   * page's own URL is pushed back on top and false is returned (the caller should stop the
+   * event); on Leave the store goes back once more, which lands on the popped entry.
    */
-  function handlePopState(): void {
-    if (typeof window === 'undefined') return;
+  function handlePopState(): boolean {
+    if (typeof window === 'undefined') return true;
 
-    // Get pathname and strip proxy prefix for internal routing
-    const pathname = stripProxyPrefix(window.location.pathname);
-    currentPath = normalizeUiPath(pathname);
+    const target: NavigationTarget = {
+      path: normalizeUiPath(stripProxyPrefix(window.location.pathname)),
+      search: window.location.search,
+    };
+    // The pop the user's Leave caused is accepted unasked. Back or Forward while the prompt is
+    // open answers it with Stay; that pop is a fresh attempt.
+    let decision: Promise<boolean> | null = null;
+    if (leavingByHistory) {
+      leavingByHistory = false;
+    } else {
+      if (unsavedChanges.prompting) unsavedChanges.stay();
+      decision = unsavedChanges.request(target, { path: currentPath, search: currentSearch });
+    }
+    if (decision === null) {
+      currentPath = target.path;
+      syncFromLocation();
+      return true;
+    }
+
+    window.history.pushState({}, '', committedUrl);
+    void decision.then(leave => {
+      if (leave) {
+        leavingByHistory = true;
+        window.history.back();
+      }
+    });
+    return false;
+  }
+
+  function syncFromLocation(): void {
     currentSearch = window.location.search;
+    committedUrl = window.location.pathname + window.location.search + window.location.hash;
+  }
+
+  function writeUrl(url: string, mode: 'push' | 'replace' = 'replace'): void {
+    if (typeof window === 'undefined') return;
+    if (mode === 'push') window.history.pushState(null, '', url);
+    else window.history.replaceState(null, '', url);
+    syncFromLocation();
   }
 
   return {
@@ -208,6 +300,7 @@ export function createNavigation(): NavigationStore {
     navigate,
     redirect,
     handlePopState,
+    writeUrl,
   };
 }
 

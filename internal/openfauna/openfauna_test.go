@@ -738,3 +738,24 @@ func TestExternalLinks_EmbeddedDataResolvesToExpectedHosts(t *testing.T) {
 	}
 	require.Positive(t, checked, "expected at least one id-resolved source in the embedded links")
 }
+
+// TestDecodeMetadataRows_RejectsBadRecords proves a corrupt artifact is an error
+// rather than a silently shorter dataset.
+func TestDecodeMetadataRows_RejectsBadRecords(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		jsonl string
+	}{
+		{"missing scientific_name", `{"taxonomy":{"class":"Aves"}}` + "\n"},
+		{"truncated mid-record", `{"scientific_name":"Turdus merula","taxonomy":{"class":"Av`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := decodeMetadataRows(strings.NewReader(tt.jsonl), func(string, Meta) error { return nil })
+			require.Error(t, err)
+		})
+	}
+}

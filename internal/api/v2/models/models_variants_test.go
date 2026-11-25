@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -152,4 +153,29 @@ func TestBuildVariantResponses_LegacyHiddenUnlessInstalled(t *testing.T) {
 			assert.False(t, v.Installed)
 		}
 	}
+}
+
+// TestBuildVariantResponses_NoLatency verifies the variant response carries no
+// latency. The catalog's benchmarks are measured on a few named devices; a number
+// taken from another device (an x86 laptop shown on a Raspberry Pi) misleads, so
+// the gallery shows none.
+func TestBuildVariantResponses_NoLatency(t *testing.T) {
+	t.Parallel()
+
+	entry := &classifier.CatalogEntry{
+		ID: "x",
+		Variants: []classifier.CatalogVariant{{
+			ID:      "fp32",
+			Default: true,
+			Files:   []classifier.CatalogFile{{LocalName: "m.onnx", Role: classifier.RoleModel, SizeBytes: 10}},
+			Benchmarks: []classifier.Benchmark{
+				{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 253},
+				{Device: "x86-i7-1260P", Backend: "onnxruntime-cpu", LatencyMs: 49},
+			},
+		}},
+	}
+
+	body, err := json.Marshal(buildVariantResponses(entry, false, "", nil, ""))
+	require.NoError(t, err)
+	assert.NotContains(t, strings.ToLower(string(body)), "latency")
 }

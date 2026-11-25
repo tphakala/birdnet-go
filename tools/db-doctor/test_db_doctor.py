@@ -448,7 +448,7 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
             result.details,
         )
 
-    def test_detections_recreation_keeps_clip_sample_rate_and_spectrogram_name(self):
+    def test_detections_recreation_keeps_clip_and_original_label_columns(self):
         conn = sqlite3.connect(self.path)
         conn.execute(
             "CREATE TABLE detections (id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -456,13 +456,15 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
             "detected_at INTEGER, begin_time INTEGER, end_time INTEGER, "
             "confidence REAL, latitude REAL, longitude REAL, "
             "clip_name VARCHAR(500), spectrogram_clip_name VARCHAR(500), "
-            "clip_sample_rate INTEGER, processing_time_ms INTEGER, "
+            "clip_sample_rate INTEGER, clip_denoised NUMERIC, "
+            "original_label_id INTEGER, processing_time_ms INTEGER, "
             "unlikely NUMERIC, legacy_id INTEGER, created_at DATETIME)"
         )
         conn.execute(
             "INSERT INTO detections (model_id, label_id, detected_at, "
-            "confidence, unlikely, spectrogram_clip_name, clip_sample_rate) "
-            "VALUES (1, 1, 1000, 0.9, 0, 'a.png', 48000)"
+            "confidence, unlikely, spectrogram_clip_name, clip_sample_rate, "
+            "clip_denoised, original_label_id) "
+            "VALUES (1, 1, 1000, 0.9, 0, 'a.png', 48000, 1, 7)"
         )
         conn.commit()
         conn.close()
@@ -476,13 +478,55 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
         try:
             fix = doctor._fix_schema_contamination(conn, report)
             row = conn.execute(
-                "SELECT spectrogram_clip_name, clip_sample_rate FROM detections"
+                "SELECT spectrogram_clip_name, clip_sample_rate, clip_denoised, "
+                "original_label_id "
+                "FROM detections"
             ).fetchone()
         finally:
             conn.close()
 
         self.assertEqual(fix.status, "applied", fix.details)
-        self.assertEqual(row, ("a.png", 48000))
+        self.assertEqual(row, ("a.png", 48000, 1, 7))
+
+    def test_missing_original_label_column_is_added_by_fix(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TABLE detections (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "model_id INTEGER, label_id INTEGER, source_id INTEGER, "
+            "detected_at INTEGER, begin_time INTEGER, end_time INTEGER, "
+            "confidence REAL, latitude REAL, longitude REAL, "
+            "clip_name VARCHAR(500), spectrogram_clip_name VARCHAR(500), "
+            "clip_sample_rate INTEGER, clip_denoised NUMERIC, "
+            "processing_time_ms INTEGER, unlikely NUMERIC, legacy_id INTEGER)"
+        )
+        conn.execute(
+            "INSERT INTO detections (model_id, label_id, detected_at, "
+            "confidence, unlikely) VALUES (1, 1, 1000, 0.9, 0)"
+        )
+        conn.commit()
+        conn.close()
+
+        doctor, report, check = self._check("_check_schema_contamination")
+        self.assertEqual(check.status, "fail")
+        self.assertTrue(check.fixable)
+        report.checks.append(check)
+
+        conn = sqlite3.connect(self.path)
+        try:
+            fix = doctor._fix_schema_contamination(conn, report)
+            # PRAGMA table_info columns: (cid, name, type, notnull, dflt_value, pk)
+            columns = {
+                row[1]: row for row in conn.execute("PRAGMA table_info(detections)")
+            }
+            rows = conn.execute("SELECT COUNT(*) FROM detections").fetchone()[0]
+        finally:
+            conn.close()
+
+        self.assertEqual(fix.status, "applied", fix.details)
+        self.assertEqual(
+            columns["original_label_id"][2:4], ("INTEGER", 0)
+        )
+        self.assertEqual(rows, 1)
 
     def test_privacy_rollup_fk_orphan_is_reported(self):
         conn = sqlite3.connect(self.path)
@@ -535,6 +579,96 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
              "1 orphaned reference(s)",
              "privacy_filter_discards.source_id -> audio_sources.id: "
              "1 orphaned reference(s)"],
+        )
+
+
+class OrphanedLabelFixTest(unittest.TestCase):
+    """The orphaned label repair must keep detections.model_id and the label's
+    model_id paired: labels are per model, so a name can exist in several."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "birdnet.db")
+
+    def _run_fix(self, labels, detections):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TABLE labels (id INTEGER PRIMARY KEY, "
+            "scientific_name TEXT NOT NULL, model_id INTEGER NOT NULL, "
+            "UNIQUE (scientific_name, model_id))"
+        )
+        conn.execute(
+            "CREATE TABLE detections (id INTEGER PRIMARY KEY, "
+            "model_id INTEGER NOT NULL, label_id INTEGER NOT NULL, "
+            "legacy_id INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE notes (id INTEGER PRIMARY KEY, scientific_name TEXT)"
+        )
+        conn.execute("INSERT INTO notes VALUES (1, 'Parus major')")
+        conn.executemany("INSERT INTO labels VALUES (?, ?, ?)", labels)
+        conn.executemany("INSERT INTO detections VALUES (?, ?, ?, ?)", detections)
+        conn.commit()
+        conn.close()
+
+        doctor = db_doctor.DatabaseDoctor(self.path)
+        report = db_doctor.DiagnosticReport(db_path=self.path)
+        ro = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        try:
+            report.tables_present = doctor._get_tables(ro)
+            report.checks.append(doctor._check_foreign_keys(ro, report))
+        finally:
+            ro.close()
+
+        conn = sqlite3.connect(self.path)
+        try:
+            result = doctor._fix_orphaned_labels(conn, report)
+            label_id = conn.execute(
+                "SELECT label_id FROM detections WHERE id = 1"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        return result, label_id
+
+    def test_repair_picks_the_label_of_the_detections_model(self):
+        # The other model's label has the lower id and the lower model_id,
+        # so an unrestricted lookup picks it by rowid or by index order.
+        result, label_id = self._run_fix(
+            labels=[(10, "Parus major", 1), (20, "Parus major", 2)],
+            detections=[(1, 2, 999, 1)],
+        )
+        self.assertEqual(label_id, 20)
+        self.assertEqual(result.rows_affected, 1)
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(result.message, "recovered 1 via legacy notes")
+
+    def test_repair_leaves_the_row_orphaned_when_only_another_model_has_the_label(self):
+        result, label_id = self._run_fix(
+            labels=[(10, "Parus major", 2)],
+            detections=[(1, 1, 999, 1)],
+        )
+        self.assertEqual(label_id, 999)
+        self.assertEqual(result.rows_affected, 0)
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(
+            result.message, "1 still orphaned (manual intervention needed)"
+        )
+
+    def test_repair_counts_rows_of_a_model_without_the_label_as_remaining(self):
+        # Detection 1 (model 2) has a label of its own model; detection 2
+        # (model 3) does not, so only detection 1 is repaired.
+        result, label_id = self._run_fix(
+            labels=[(10, "Parus major", 1), (20, "Parus major", 2)],
+            detections=[(1, 2, 999, 1), (2, 3, 998, 1)],
+        )
+        self.assertEqual(label_id, 20)
+        self.assertEqual(result.rows_affected, 1)
+        self.assertEqual(result.status, "applied")
+        self.assertEqual(
+            result.message,
+            "recovered 1 via legacy notes; 1 still orphaned "
+            "(manual intervention needed)",
         )
 
 

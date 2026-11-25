@@ -25,7 +25,7 @@ const (
 	// seekWindowFrames is the length of the windows the seek tests read.
 	seekWindowFrames = 3000
 	// opusPreRollFrames is how far go-opus's SeekToSample decodes before its
-	// target in v1.3.0 (1.28 s at 48 kHz). The window starts below use it to sit around the
+	// target (1.28 s at 48 kHz). The window starts below use it to sit around the
 	// positions where a seek would land on a page.
 	opusPreRollFrames = 61440
 	// opusMinAudioPages is the number of audio pages the Opus window test needs to

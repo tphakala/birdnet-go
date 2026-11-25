@@ -20,7 +20,9 @@ import (
 	"github.com/tphakala/go-hls/aachls"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 const (
@@ -624,4 +626,35 @@ func TestWaitForHLSPlaylistDispatchesOnNative(t *testing.T) {
 	assert.True(t, ok, "a native stream with segments must be reported ready")
 	assert.Less(t, elapsed, hlsPlaylistWaitTimeout,
 		"readiness must come from the muxer, not from waiting out the file-poll timeout")
+}
+
+// TestNativeStreamIsDroppedWhenRouterRemovesRoutes is the end-to-end form of
+// #5255: a source restart makes the engine remove the source's routes, and the
+// live stream built on them must be cancelled and unregistered instead of
+// serving stale segments until the container restarts.
+func TestNativeStreamIsDroppedWhenRouterRemovesRoutes(t *testing.T) {
+	h, _ := newNativeTestHandler(t)
+	eng := engine.New(t.Context(), &engine.Config{}, nil)
+	t.Cleanup(eng.Stop)
+	h.Engine.Store(eng)
+	const sourceID = "native_restart_src"
+
+	stream, err := h.createNativeHLSStream(sourceID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		stream.cancel()
+		_ = removeStreamFromManager(sourceID)
+	})
+	require.True(t, eng.Router().HasConsumers(sourceID), "the stream must have registered its route")
+
+	eng.Router().RemoveAllRoutes(sourceID)
+
+	testutil.WaitForChannel(t, stream.ctx.Done(), testutil.DefaultTestTimeout,
+		"the stream must be cancelled once the router removes its route")
+	require.Eventually(t, func() bool {
+		hlsMgr.streamsMu.RLock()
+		defer hlsMgr.streamsMu.RUnlock()
+		_, registered := hlsMgr.streams[sourceID]
+		return !registered
+	}, testutil.DefaultTestTimeout, 10*time.Millisecond, "the cancelled stream must be unregistered")
 }

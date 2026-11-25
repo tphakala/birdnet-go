@@ -315,6 +315,7 @@ func TestModelSpec_RegistryBufferGeometry(t *testing.T) {
 		{"Bat", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
 		{"BirdNET_V2.4", 288000, 288000, 0, 288000, 144000, 144000, 3 * time.Second},
 		{"BirdNET_V3.0", 320000, 320000, 0, 320000, 96000, 224000, 5 * time.Second},
+		{"BirdNET_Plus_V3.0", 320000, 320000, 0, 320000, 96000, 224000, 5 * time.Second},
 		{"Perch_V2", 320000, 320000, 0, 320000, 96000, 224000, 5 * time.Second},
 	}
 	require.Len(t, ModelRegistry, len(want), "a registry entry was added or removed: add its geometry here")

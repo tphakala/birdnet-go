@@ -5,7 +5,7 @@ taxonomic metadata, backed by a vendored, gzipped snapshot of the
 [OpenFauna](https://github.com/tphakala/openfauna) dataset embedded directly into the binary.
 
 OpenFauna is the upstream **data** repository (it maps scientific names to common names, taxonomy,
-and educational links for birds and bats). This package is the birdnet-go **consumer**: openfauna
+and educational links for birds, bats and the other animals the classifiers detect). This package is the birdnet-go **consumer**: openfauna
 ships no Go code for lookups; that lives here.
 
 ## Consuming the package
@@ -44,7 +44,7 @@ embeds its other large data assets:
 | `data/metadata.jsonl.gz`   | one JSON object per species: `scientific_name`, nested `taxonomy` (`class,order,family,family_common`), and `links` map (source id -> `{id, url?}`; `url` is an optional override) |
 | `data/sources.json`        | external-link source registry: source id -> `{name, order, icon, url}` template (`{id}`/`{lang}` placeholders)                                                                     |
 | `data/manifest.json`       | `schema_version` (gated on major 2), `species_count`, `alias_count`                                                                                                                |
-| `data/aliases.json`        | legacy scientific name -> canonical (embedded; applied by `CanonicalName`, e.g. legacy v2.4 labels -> current eBird/Clements names)                                                |
+| `data/aliases.json`        | taxonomic alias map: a legacy or renamed scientific name to the canonical name the geomodel uses (applied by `CanonicalName`)                                                      |
 | `data/locales.txt`         | sorted distinct locale codes, one per line                                                                                                                                         |
 | `data/SOURCE.txt`          | provenance: the openfauna commit + date the snapshot was generated from                                                                                                            |
 
@@ -52,12 +52,16 @@ embeds its other large data assets:
 
 ## Refreshing the vendored data
 
-When openfauna changes, regenerate the snapshot from a checkout of the openfauna repo:
+When openfauna changes, regenerate the snapshot from a checkout of the openfauna repo at a release
+tag (the script records whatever the checkout's HEAD is):
 
 ```bash
 ./refresh-data.sh /path/to/openfauna/checkout
 ```
 
-This rebuilds the translations CSV and metadata JSONL with openfauna's compiler, copies the `sources.json`/`manifest.json`/`aliases.json` registries, gzips the large files deterministically (`gzip -n`, so an
-unchanged dataset yields an identical blob and a clean diff), regenerates `locales.txt`, and
-records the source commit in `data/SOURCE.txt`. Commit the resulting `data/` changes.
+This rebuilds the dataset with openfauna's compiler, refuses a build schema major it does not
+support, gzips `translations.csv` and `metadata.jsonl` unmodified and deterministically (`gzip -n`,
+so an unchanged dataset yields an identical blob and a clean diff), copies the
+`sources.json`/`manifest.json`/`aliases.json` registries, regenerates `locales.txt`, records the
+source commit in `data/SOURCE.txt`, and regenerates the species dictionaries in
+`internal/speciesdict/data`. Commit the resulting `data/` and speciesdict changes.

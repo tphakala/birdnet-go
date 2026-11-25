@@ -393,7 +393,7 @@
                    the guide's most glanceable facts, so they get prominence rather
                    than being the quietest thing in the panel. -->
               <span
-                class="badge badge-sm border-0 bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium"
+                class="badge badge-sm border-0 bg-[var(--color-primary)]/10 text-[var(--text-primary)] font-medium"
               >
                 {t(`analytics.species.guide.expectedness.${guide.expectedness}`)}
               </span>
@@ -435,7 +435,7 @@
             {#if descClampable}
               <button
                 type="button"
-                class="mt-1 text-xs font-medium text-[var(--color-primary)] hover:underline"
+                class="mt-1 text-xs font-medium text-[var(--text-primary)] underline hover:decoration-2"
                 aria-expanded={descExpanded}
                 aria-controls={`${uid}-description`}
                 onclick={() => (descExpanded = !descExpanded)}

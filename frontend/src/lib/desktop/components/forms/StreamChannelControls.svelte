@@ -90,9 +90,9 @@
 <div class="space-y-2">
   <!-- Detected audio format -->
   <p class="text-xs text-[var(--color-base-content)]/70">
-    <span class="font-medium text-[var(--color-base-content)]"
-      >{t('settings.audio.streams.format.label')}:</span
-    >
+    <span class="font-medium text-[var(--color-base-content)]">
+      {t('settings.audio.streams.format.label')}:
+    </span>
     {channels < 1 ? t('settings.audio.streams.format.untested') : formatText}
   </p>
 
@@ -113,7 +113,7 @@
     <div
       class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
     >
-      <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--color-success)]" />
+      <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--text-success)]" />
       <span>{t('settings.audio.streams.channelMode.monoNoSelection')}</span>
     </div>
   {/if}
@@ -138,11 +138,11 @@
       <div class="space-y-1 text-xs">
         {#each analysisResult.energy as ch (ch.channel)}
           <div class="flex items-center gap-2">
-            <span class="w-20 text-[var(--color-base-content)]/70"
-              >{ch.channel === 0
+            <span class="w-20 text-[var(--color-base-content)]/70">
+              {ch.channel === 0
                 ? t('settings.audio.streams.channelMode.energyLeft')
-                : t('settings.audio.streams.channelMode.energyRight')}:</span
-            >
+                : t('settings.audio.streams.channelMode.energyRight')}:
+            </span>
             <div class="flex-1 h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full {(ch.channel === 0 ? 'left' : 'right') ===
@@ -158,13 +158,13 @@
                 )}%"
               ></div>
             </div>
-            <span class="font-mono w-16 text-right"
-              >{(ch.rmsDbfs ?? -DBFS_RANGE).toFixed(1)} dBFS</span
-            >
+            <span class="font-mono w-16 text-right">
+              {(ch.rmsDbfs ?? -DBFS_RANGE).toFixed(1)} dBFS
+            </span>
           </div>
         {/each}
         {#if analysisResult.recommended !== 'downmix'}
-          <p class="text-[var(--color-success)] font-medium">
+          <p class="text-[var(--text-success)] font-medium">
             {t('settings.audio.streams.channelMode.recommended', {
               channel:
                 analysisResult.recommended === 'left'
@@ -177,7 +177,7 @@
     {/if}
 
     {#if analysisError}
-      <p class="text-xs text-[var(--color-error)]" role="alert">
+      <p class="text-xs text-[var(--text-error)]" role="alert">
         {t('settings.audio.streams.channelMode.analyzeError')}: {analysisError}
       </p>
     {/if}
@@ -186,14 +186,14 @@
       <div
         class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
       >
-        <AlertTriangle class="size-4 shrink-0 mt-0.5 text-[var(--color-warning)]" />
+        <AlertTriangle class="size-4 shrink-0 mt-0.5 text-[var(--text-warning)]" />
         <span>{t('settings.audio.streams.channelMode.downmixWarning')}</span>
       </div>
     {:else}
       <div
         class="flex items-start gap-2 p-2.5 rounded-lg text-sm leading-relaxed bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]"
       >
-        <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--color-success)]" />
+        <CircleCheck class="size-4 shrink-0 mt-0.5 text-[var(--text-success)]" />
         <span>{t('settings.audio.streams.channelMode.singleChannelGood')}</span>
       </div>
     {/if}

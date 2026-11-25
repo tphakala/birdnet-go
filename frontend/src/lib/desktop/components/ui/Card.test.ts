@@ -69,4 +69,93 @@ describe('Card', () => {
     expect(screen.getByText('Custom Header')).toBeInTheDocument();
     expect(screen.queryByText('Title Prop')).not.toBeInTheDocument();
   });
+
+  it.each([
+    ['panel', false],
+    ['default', true],
+  ] as const)('%s variant renders the section title and header actions', (variant, clips) => {
+    const { container } = renderTyped(CardTestWrapper, {
+      props: { title: 'Storage', variant, actionLabel: 'Refresh' },
+    });
+
+    const heading = screen.getByRole('heading', { level: 3, name: 'Storage' });
+    const action = screen.getByRole('button', { name: 'Refresh' });
+    const body = screen.getByText('Card content');
+    // Reading order is title, then actions, then body.
+    expect(heading.compareDocumentPosition(action)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(action.compareDocumentPosition(body)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(body).not.toContainElement(action);
+    // Only the default card clips; the panel must not cut off sticky headers or popovers.
+    const overflowClasses = [...(container.firstElementChild?.classList ?? [])].filter(c =>
+      c.startsWith('overflow-')
+    );
+    expect(overflowClasses).toEqual(clips ? ['overflow-hidden'] : []);
+  });
+
+  it('renders header actions next to a custom header', () => {
+    renderTyped(CardTestWrapper, {
+      props: { variant: 'panel', showHeader: true, actionLabel: 'Refresh' },
+    });
+
+    const header = screen.getByText('Custom Header');
+    const action = screen.getByRole('button', { name: 'Refresh' });
+    expect(header.compareDocumentPosition(action)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(action.compareDocumentPosition(screen.getByText('Card content'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
+  it('panel title and description break long unbroken words', () => {
+    const longWord = 'x'.repeat(200);
+    renderCard({ variant: 'panel', title: `T${longWord}`, description: `D${longWord}` });
+
+    // The panel does not clip, so text that cannot wrap would run out of it.
+    expect(screen.getByRole('heading', { level: 3 })).toHaveClass('wrap-anywhere');
+    expect(screen.getByText(`D${longWord}`)).toHaveClass('wrap-anywhere');
+  });
+
+  it('renders header actions without a title', () => {
+    renderTyped(CardTestWrapper, {
+      props: { variant: 'panel', actionLabel: 'Create backup' },
+    });
+
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create backup' })).toBeInTheDocument();
+  });
+  // The body wrapper's classes for each variant, header source and padding setting: each of
+  // title, description, header snippet and header actions alone counts as a header, and
+  // bodyClassName is always appended.
+  it.each([
+    ['default', 'none', true, 'p-6'],
+    ['default', 'title', true, 'px-6 pb-6'],
+    ['default', 'actions', true, 'px-6 pb-6'],
+    ['default', 'description', true, 'px-6 pb-6'],
+    ['default', 'header', true, 'px-6 pb-6'],
+    ['default', 'title', false, ''],
+    ['panel', 'none', true, 'flex-1 min-h-0 p-4'],
+    ['panel', 'title', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'actions', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'description', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'header', true, 'flex-1 min-h-0 px-4 pb-4'],
+    ['panel', 'actions', false, 'flex-1 min-h-0'],
+  ] as const)(
+    '%s variant with header %s and padding %s gives the body "%s" plus bodyClassName',
+    (variant, headerSource, padding, expected) => {
+      renderTyped(CardTestWrapper, {
+        props: {
+          variant,
+          padding,
+          bodyClassName: 'gap-3',
+          title: headerSource === 'title' ? 'Storage' : '',
+          actionLabel: headerSource === 'actions' ? 'Refresh' : '',
+          description: headerSource === 'description' ? 'Disk usage' : undefined,
+          showHeader: headerSource === 'header',
+        },
+      });
+
+      const body = screen.getByText('Card content');
+      const classes = [...body.classList].sort();
+      expect(classes).toEqual([...expected.split(' ').filter(Boolean), 'gap-3'].sort());
+    }
+  );
 });

@@ -514,7 +514,7 @@
               showDetectionLabels = !showDetectionLabels;
             }}
             class="rounded p-1 transition-colors {showDetectionLabels
-              ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
+              ? 'bg-[var(--color-primary)]/20 text-[var(--text-primary)]'
               : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
             aria-label={t('spectrogram.labels.toggle')}
             aria-pressed={showDetectionLabels}

@@ -354,14 +354,14 @@ func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) 
 	assert.False(t, getImportStatus(t, c).Running, "rejected db-audio request must not occupy the import slot")
 }
 
-// makeTempDBWithRow creates a temporary BirdNET-Pi SQLite file in dir with a single
-// detection row using the supplied date, common name, and clip file name. It returns the
-// directory holding the database. Used by the db-audio test so the row's audio path
-// components are known and a matching source clip tree can be created.
-func makeTempDBWithRow(t *testing.T, date, comName, fileName string) (dir string) {
+// makeBirdsDBAt creates a BirdNET-Pi SQLite database with a single detection
+// row at path, creating its directory. The schema matches the one the
+// BirdNET-Pi adapter validates; the row's audio path components are the given
+// date, common name and clip file name, so a matching source clip tree can be
+// created.
+func makeBirdsDBAt(t *testing.T, path, date, comName, fileName string) {
 	t.Helper()
-	dir = t.TempDir()
-	path := filepath.Join(dir, "birds.db")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 
 	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
@@ -386,8 +386,6 @@ func makeTempDBWithRow(t *testing.T, date, comName, fileName string) (dir string
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	require.NoError(t, sqlDB.Close())
-
-	return dir
 }
 
 // TestStartBirdNETPiImport_ModeDBAudio_CopiesClip verifies that db-audio mode actually
@@ -417,10 +415,11 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	c.Repo = mockRepo
 
-	// Database directory doubles as the BirdNET-Pi audio source root: the handler sets
-	// AudioSourceDir to filepath.Dir(resolvedPath), so the Extracted/By_Date tree must
-	// live next to birds.db.
-	sourceRoot := makeTempDBWithRow(t, date, comName, fileName)
+	// The database directory doubles as the BirdNET-Pi audio root: the tree next to
+	// birds.db is one of the places the handler searches, and here it is also the
+	// import source root.
+	sourceRoot := t.TempDir()
+	makeBirdsDBAt(t, filepath.Join(sourceRoot, "birds.db"), date, comName, fileName)
 	c.importSourceRoot = sourceRoot
 
 	clipDir := filepath.Join(sourceRoot, "Extracted", "By_Date", date, comName)

@@ -18,6 +18,14 @@ func TestImportElevationDefaultsOn(t *testing.T) {
 		"in-app elevation must default to enabled")
 }
 
+func TestBatDiscardUnlikelyDefaultsOff(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	setDefaultConfig()
+	require.False(t, viper.GetBool("bat.ultrasonicfilter.discardunlikely"),
+		"discarding unlikely bat detections must be opt-in")
+}
+
 func TestEqualizerDefaultsShipBypassed(t *testing.T) {
 	t.Cleanup(viper.Reset)
 	viper.Reset()
@@ -163,28 +171,25 @@ func TestAlternateMinConfidenceDefault(t *testing.T) {
 }
 
 // TestModelConsensusDefaultsShipOff pins the viper defaults of the model
-// consensus filter: off, with the default minimum. Reading the viper keys
-// directly matters because Load normalizes an unset minimum, which would hide a
-// missing or misspelled default.
+// consensus filter: off, with no default for the removed keys. A default for one of
+// them would be read by the version 4 migration as a value the user chose.
 func TestModelConsensusDefaultsShipOff(t *testing.T) {
 	t.Cleanup(viper.Reset)
 	viper.Reset()
 	setDefaultConfig()
 
-	require.False(t, viper.GetBool("realtime.modelconsensus.allspecies"))
-	require.False(t, viper.GetBool("realtime.modelconsensus.listedspecies"))
-	require.False(t, viper.GetBool("realtime.modelconsensus.alleligible"))
 	require.False(t, viper.GetBool("realtime.modelconsensus.debug"))
-	require.Empty(t, viper.GetStringSlice("realtime.modelconsensus.species"))
-	require.True(t, viper.IsSet("realtime.modelconsensus.minmodels"), "minmodels must have a viper default")
-	require.Equal(t, DefaultModelConsensusMinModels, viper.GetInt("realtime.modelconsensus.minmodels"))
+	require.Empty(t, viper.Get("realtime.modelconsensus.rules"))
+	for _, legacy := range []string{"allspecies", "listedspecies", "species", "minmodels", "alleligible"} {
+		require.False(t, viper.IsSet("realtime.modelconsensus."+legacy),
+			"%s must have no viper default, the migration decodes it as a user value", legacy)
+	}
 }
 
 // TestModelConsensusTemplateShipsOff pins the model consensus block of the
-// embedded config.yaml that new installs receive. The scalar fields are pointers
-// so a deleted or renamed key fails instead of reading as the zero value; the
-// species list is a plain slice, because a missing list and an empty one behave
-// the same.
+// embedded config.yaml that new installs receive. The debug field is a pointer so
+// a deleted or renamed key fails instead of reading as the zero value, and rules
+// is decoded to a map to tell a present empty list from a missing key.
 func TestModelConsensusTemplateShipsOff(t *testing.T) {
 	t.Parallel()
 
@@ -193,30 +198,19 @@ func TestModelConsensusTemplateShipsOff(t *testing.T) {
 
 	var probe struct {
 		Realtime struct {
-			ModelConsensus struct {
-				AllSpecies    *bool    `yaml:"allspecies"`
-				ListedSpecies *bool    `yaml:"listedspecies"`
-				Species       []string `yaml:"species"`
-				MinModels     *int     `yaml:"minmodels"`
-				AllEligible   *bool    `yaml:"alleligible"`
-				Debug         *bool    `yaml:"debug"`
-			} `yaml:"modelconsensus"`
+			ModelConsensus map[string]any `yaml:"modelconsensus"`
 		} `yaml:"realtime"`
 	}
 	require.NoError(t, yaml.Unmarshal(template, &probe))
 
 	mc := probe.Realtime.ModelConsensus
-	require.NotNil(t, mc.AllSpecies, "allspecies must be present in the template")
-	require.NotNil(t, mc.ListedSpecies, "listedspecies must be present in the template")
-	require.NotNil(t, mc.MinModels, "minmodels must be present in the template")
-	require.NotNil(t, mc.AllEligible, "alleligible must be present in the template")
-	require.NotNil(t, mc.Debug, "debug must be present in the template")
-	require.False(t, *mc.AllSpecies)
-	require.False(t, *mc.ListedSpecies)
-	require.False(t, *mc.AllEligible)
-	require.False(t, *mc.Debug)
-	require.Empty(t, mc.Species)
-	require.Equal(t, DefaultModelConsensusMinModels, *mc.MinModels)
+	require.Contains(t, mc, "debug", "debug must be present in the template")
+	require.Contains(t, mc, "rules", "rules must be present in the template")
+	require.Equal(t, false, mc["debug"])
+	require.Empty(t, mc["rules"])
+	for _, legacy := range []string{"allspecies", "listedspecies", "species", "minmodels", "alleligible"} {
+		require.NotContains(t, mc, legacy)
+	}
 }
 
 // TestModelConsensusYAMLKeys pins the key names written when the settings are
@@ -226,16 +220,28 @@ func TestModelConsensusYAMLKeys(t *testing.T) {
 	t.Parallel()
 
 	out, err := yaml.Marshal(ModelConsensusSettings{
-		AllSpecies: true, ListedSpecies: true, Species: []string{"Parus major"},
-		MinModels: DefaultModelConsensusMinModels, AllEligible: true, Debug: true,
+		Rules: []ModelConsensusRule{{
+			Species: []string{"Parus major"}, Models: []string{"perch_v2"},
+			MinModels: DefaultModelConsensusMinModels, AllEligible: true,
+		}},
+		Debug: true,
 	})
 	require.NoError(t, err)
 
-	var keys map[string]any
+	var keys struct {
+		Debug bool             `yaml:"debug"`
+		Rules []map[string]any `yaml:"rules"`
+	}
 	require.NoError(t, yaml.Unmarshal(out, &keys))
+	require.True(t, keys.Debug)
+	require.Len(t, keys.Rules, 1)
 	require.ElementsMatch(t,
-		[]string{"allspecies", "listedspecies", "species", "minmodels", "alleligible", "debug"},
-		slices.Collect(maps.Keys(keys)))
+		[]string{"species", "models", "minmodels", "alleligible"},
+		slices.Collect(maps.Keys(keys.Rules[0])))
+
+	var top map[string]any
+	require.NoError(t, yaml.Unmarshal(out, &top))
+	require.ElementsMatch(t, []string{"debug", "rules"}, slices.Collect(maps.Keys(top)))
 }
 
 // TestModuleLogLevelTemplateMatchesCodeDefaults pins the module log levels of the

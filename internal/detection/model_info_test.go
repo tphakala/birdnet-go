@@ -23,6 +23,7 @@ func TestResolveModelType(t *testing.T) {
 		{"bsg-bat is bat", ModelNameBSGBat, "0.21", entities.ModelTypeBat},
 		{"perch is multi", "Perch", "V2", entities.ModelTypeMulti},
 		{"birdnet 3.0 is multi", "BirdNET", "3.0", entities.ModelTypeMulti},
+		{"birdnet plus 3.0 is multi", ModelNameBirdNETPlus, "3.0", entities.ModelTypeMulti},
 		{"birdnet 2.4 is bird", "BirdNET", "2.4", entities.ModelTypeBird},
 		{"bsg finland is bird", "BSG", "4.4", entities.ModelTypeBird},
 		{"unknown is bird", "SomethingElse", "", entities.ModelTypeBird},

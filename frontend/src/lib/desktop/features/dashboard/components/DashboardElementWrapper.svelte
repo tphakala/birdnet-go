@@ -106,14 +106,14 @@
         >
           {#if currentWidth === 'half'}
             <Square class="size-3.5 text-[var(--color-base-content)]/60" />
-            <span class="text-[var(--color-base-content)]/60"
-              >{t('dashboard.editMode.widthFull')}</span
-            >
+            <span class="text-[var(--color-base-content)]/60">
+              {t('dashboard.editMode.widthFull')}
+            </span>
           {:else}
             <Columns2 class="size-3.5 text-[var(--color-base-content)]/60" />
-            <span class="text-[var(--color-base-content)]/60"
-              >{t('dashboard.editMode.widthHalf')}</span
-            >
+            <span class="text-[var(--color-base-content)]/60">
+              {t('dashboard.editMode.widthHalf')}
+            </span>
           {/if}
         </button>
       {:else if isFullWidthOnly}
@@ -133,7 +133,7 @@
         {#if element.enabled}
           <EyeOff class="size-4 text-[var(--color-base-content)]/60" />
         {:else}
-          <Eye class="size-4 text-[var(--color-success)]" />
+          <Eye class="size-4 text-[var(--text-success)]" />
         {/if}
       </button>
 
@@ -177,7 +177,7 @@
         class="rounded-md p-1.5 transition-colors hover:bg-[var(--color-error)]/10"
         aria-label={t('dashboard.editMode.deleteElement')}
       >
-        <Trash2 class="size-4 text-[var(--color-error)]/60" />
+        <Trash2 class="size-4 text-[var(--text-error)]" />
       </button>
     </div>
 

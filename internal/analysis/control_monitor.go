@@ -505,7 +505,8 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 // valid). LoadModel/UnloadModel each rebuild the range filter and sync the acoustic-model
 // notice, so on any actual topology change this only needs to run the same SSE broadcast and
 // debounced audio-source reconfigure a gallery install does, so the newly loaded models start
-// receiving audio without a restart.
+// receiving audio without a restart. When nothing changed because every change failed, it
+// only broadcasts the SSE event, so model lists show the failed state.
 func (cm *ControlMonitor) handleReconcileModels() {
 	if cm.bn == nil {
 		GetLogger().Warn("Cannot reconcile enabled models: orchestrator not initialized")
@@ -520,6 +521,13 @@ func (cm *ControlMonitor) handleReconcileModels() {
 	if len(loaded) == 0 && len(unloaded) == 0 {
 		if err == nil {
 			GetLogger().Info("Enabled models already match the loaded set; nothing to reconcile")
+			return
+		}
+		// Nothing loaded or unloaded and at least one change failed. A failed load still
+		// changes what the model list reports (pending becomes failed), so tell open lists;
+		// no audio reconfigure is needed because the loaded set is unchanged.
+		if cm.apiController != nil {
+			cm.apiController.BroadcastInferenceTopologyChanged()
 		}
 		return
 	}

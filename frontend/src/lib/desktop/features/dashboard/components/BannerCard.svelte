@@ -151,18 +151,18 @@
           size={28}
           title={weatherData.hourly.weather_desc ?? ''}
         />
-        <span class="font-semibold"
-          >{Math.round(
+        <span class="font-semibold">
+          {Math.round(
             convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
-          )}{getTemperatureSymbol(temperatureUnit)}</span
-        >
+          )}{getTemperatureSymbol(temperatureUnit)}
+        </span>
       </div>
       {#if weatherData.hourly.wind_speed !== undefined}
         {@render sep()}
-        <span
-          >{convertWindSpeed(weatherData.hourly.wind_speed, temperatureUnit).toFixed(1)}
-          {getWindSpeedUnit(temperatureUnit)}</span
-        >
+        <span>
+          {convertWindSpeed(weatherData.hourly.wind_speed, temperatureUnit).toFixed(1)}
+          {getWindSpeedUnit(temperatureUnit)}
+        </span>
       {/if}
       {#if weatherData.moon}
         {@render sep()}
@@ -204,16 +204,16 @@
           title={weatherData.hourly.weather_desc ?? ''}
         />
         <span>
-          <span class="font-semibold"
-            >{Math.round(
+          <span class="font-semibold">
+            {Math.round(
               convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
-            )}{getTemperatureSymbol(temperatureUnit)}</span
-          >
-          <span class="text-[var(--color-base-content)]/60"
-            >{translateWeatherCondition(
+            )}{getTemperatureSymbol(temperatureUnit)}
+          </span>
+          <span class="text-[var(--color-base-content)]/60">
+            {translateWeatherCondition(
               weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
-            )}</span
-          >
+            )}
+          </span>
         </span>
       </div>
       {@render sep()}
@@ -221,17 +221,15 @@
         {@const windSpeed = weatherData.hourly.wind_speed}
         <div class="flex items-center gap-1.5">
           <WeatherSvgIcon icon="wind" size={28} title={t('detections.weather.labels.wind')} />
-          <span
-            >{convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
+          <span>
+            {convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
             {getWindSpeedUnit(
               temperatureUnit
             )}{#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
-              <span class="text-[var(--color-base-content)]/50"
-                >({convertWindSpeed(weatherData.hourly.wind_gust, temperatureUnit).toFixed(
-                  1
-                )})</span
-              >{/if}</span
-          >
+              <span class="text-[var(--color-base-content)]/50">
+                ({convertWindSpeed(weatherData.hourly.wind_gust, temperatureUnit).toFixed(1)})
+              </span>{/if}
+          </span>
         </div>
         {@render sep()}
       {/if}
@@ -257,12 +255,12 @@
             size={24}
             title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phase_name)}`)}
           />
-          <span
-            >{t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phase_name)}`)}
-            <span class="text-[var(--color-base-content)]/50"
-              >{Math.round(weatherData.moon.illumination)}%</span
-            ></span
-          >
+          <span>
+            {t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phase_name)}`)}
+            <span class="text-[var(--color-base-content)]/50">
+              {Math.round(weatherData.moon.illumination)}%
+            </span>
+          </span>
         </div>
       {/if}
     </div>
@@ -292,7 +290,7 @@
               value={config.title}
               placeholder={t('dashboard.banner.titlePlaceholder')}
               aria-label={t('dashboard.banner.titlePlaceholder')}
-              class="w-full border-0 border-b-2 border-transparent bg-transparent text-xl font-bold text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
+              class="w-full border-0 border-b-2 border-transparent bg-transparent text-xl font-bold text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/30 focus-ring"
               oninput={e => update({ title: inputValue(e) })}
             />
 
@@ -301,7 +299,7 @@
               value={config.description}
               placeholder={t('dashboard.banner.descriptionPlaceholder')}
               aria-label={t('dashboard.banner.descriptionPlaceholder')}
-              class="w-full resize-y border-0 border-b-2 border-transparent bg-transparent text-sm leading-relaxed text-[var(--color-base-content)]/70 placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
+              class="w-full resize-y border-0 border-b-2 border-transparent bg-transparent text-sm leading-relaxed text-[var(--color-base-content)]/70 placeholder:text-[var(--color-base-content)]/30 focus-ring"
               rows="2"
               oninput={e => update({ description: textareaValue(e) })}></textarea>
 

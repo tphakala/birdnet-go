@@ -96,7 +96,7 @@
       <div
         class="w-20 h-20 rounded-full bg-gradient-to-b from-[var(--surface-200)] to-[var(--color-base-100)] flex items-center justify-center border border-[var(--border-100)]"
       >
-        <Bug class="size-10 text-[var(--color-primary)]" />
+        <Bug class="size-10 text-[var(--text-primary)]" />
       </div>
       <div class="mt-3">
         <h1 class="text-3xl font-bold">{t('reportBug.title')}</h1>
@@ -115,42 +115,42 @@
 
     <div class="rounded-lg bg-[var(--color-base-200)] p-4 font-mono text-sm space-y-1">
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.version')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.version')}:
+        </span>
         <span class="ml-2">{systemInfo.version || '...'}</span>
       </div>
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.buildDate')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.buildDate')}:
+        </span>
         <span class="ml-2">{systemInfo.buildDate || '...'}</span>
       </div>
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.os')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.os')}:
+        </span>
         <span class="ml-2">{systemInfo.os || '...'}</span>
       </div>
       <div>
-        <span class="text-[var(--color-base-content)] opacity-60"
-          >{t('reportBug.systemInfo.architecture')}:</span
-        >
+        <span class="text-[var(--color-base-content)] opacity-60">
+          {t('reportBug.systemInfo.architecture')}:
+        </span>
         <span class="ml-2">{systemInfo.architecture || '...'}</span>
       </div>
       {#if systemInfo.hardware}
         <div>
-          <span class="text-[var(--color-base-content)] opacity-60"
-            >{t('reportBug.systemInfo.hardware')}:</span
-          >
+          <span class="text-[var(--color-base-content)] opacity-60">
+            {t('reportBug.systemInfo.hardware')}:
+          </span>
           <span class="ml-2">{systemInfo.hardware}</span>
         </div>
       {/if}
       {#if systemInfo.environment}
         <div>
-          <span class="text-[var(--color-base-content)] opacity-60"
-            >{t('reportBug.systemInfo.environment')}:</span
-          >
+          <span class="text-[var(--color-base-content)] opacity-60">
+            {t('reportBug.systemInfo.environment')}:
+          </span>
           <span class="ml-2">{systemInfo.environment}</span>
         </div>
       {/if}
@@ -162,7 +162,7 @@
         class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all bg-[var(--color-base-200)] text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
       >
         {#if copied}
-          <CheckCircle class="size-4 text-[var(--color-success)]" />
+          <CheckCircle class="size-4 text-[var(--text-success)]" />
           {t('reportBug.systemInfo.copied')}
         {:else}
           <ClipboardCopy class="size-4" />
@@ -261,7 +261,7 @@
     <div
       class="flex items-start gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] mb-4"
     >
-      <Info class="size-5 shrink-0 text-[var(--color-info)]" />
+      <Info class="size-5 shrink-0 text-[var(--text-info)]" />
       <p class="text-sm text-[var(--color-base-content)] opacity-80">
         {t('reportBug.supportDump.description')}
       </p>

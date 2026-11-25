@@ -242,6 +242,10 @@ type Orchestrator struct {
 	// (N = 0, model de-privilege epic Phase 4); see syncAcousticModelsNotice.
 	acousticNotice notification.PersistentNotice
 
+	// geomodelNotice latches the single persistent "BirdNET Geomodel missing" bell
+	// notification; see syncGeomodelNotice for its triggers and lock rule.
+	geomodelNotice notification.PersistentNotice
+
 	// inferenceHealth latches the per-model "fails every analysis" bell notices and
 	// the observer of the failing set; see syncInferenceHealth.
 	inferenceHealth inferenceHealthState
@@ -299,6 +303,8 @@ func (o *Orchestrator) updateSettings(s *conf.Settings) {
 // NewOrchestrator creates a new Orchestrator with BirdNET as the primary model
 // and loads any additional models from configuration.
 // This is the primary constructor - callers should use this instead of NewBirdNET.
+// The range filter service it builds re-evaluates the BirdNET Geomodel notice after
+// every reload, including the ones during construction.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Build o with an empty models map; the models load below through the same
 	// modelLoaders path the secondaries use. The primary's identity is resolved
@@ -354,6 +360,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Build the orchestrator-owned range-filter service with EMPTY state; its
 	// backend is built against the v2.4 anchor once the model is loaded, below.
 	o.rangeFilter = newRangeFilterService(o.rangeFilterDebug)
+	o.rangeFilter.afterReload = o.syncGeomodelNotice
 
 	// Pre-compute the per-model thread allocation so each loader receives its share.
 	threadAlloc := o.computeThreadAllocation(settings)
@@ -370,10 +377,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// snapshot to go stale.
 
 	// Build the range-filter backend from the loaded participant set now that the
-	// models are loaded, independent of BirdNET v2.4: a Perch-only or v3.0-only install
-	// with the geomodel builds a real backend. reload snapshots the participant view
-	// under its own lock. A build failure is non-fatal: the process starts without
-	// species filtering and the user can fix it via Settings > Species.
+	// models are loaded, independent of BirdNET v2.4: an install running Perch v2,
+	// BirdNET v3.0 or BirdNET+ v3.0 without BirdNET v2.4 loaded builds a real backend
+	// with the geomodel. reload snapshots the participant view under its own lock. A
+	// build failure is non-fatal: the process starts without species filtering and the
+	// user can fix it via Settings > Species.
 	if err := o.rangeFilter.reload(settings, o.rangeFilterView); err != nil {
 		GetLogger().Warn("Range filter initialization failed, starting without species filtering (fix via Settings > Species)",
 			logger.Error(err),
@@ -646,7 +654,7 @@ func (o *Orchestrator) instanceFor(modelID string) ModelInstance {
 // returns the triplet from one consistent snapshot, the status card never
 // observes a mixed-generation triplet when a reload completes mid-read.
 //
-// device is the live execution provider ("CPU"/"GPU"), falling back to
+// device is the live execution provider ("CPU", "GPU" or a concrete "GPU.<n>"), falling back to
 // deviceUnknown when the model is not loaded or its instance has been torn down.
 // backend (BackendTFLite/BackendONNX/BackendOpenVINO) and precision
 // ("INT8"/"FP16"/"FP32") come from the loaded instance, so an ONNX model executed
@@ -1002,9 +1010,9 @@ func (o *Orchestrator) rangeFilterReady() (rfs *rangeFilterService, ok bool) {
 	// loaded. The service is created once in NewOrchestrator and never reassigned, so
 	// the read needs no lock; whether a backend is actually loaded (and thus whether
 	// filtering is active) is decided per call inside the service. Decoupling readiness
-	// from v2.4 is what lets a Perch-only or v3.0-only install with the geomodel filter,
-	// and lets an N=0 runtime fail open over an empty label set instead of dropping
-	// every detection.
+	// from v2.4 is what lets an install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0
+	// without BirdNET v2.4 loaded filter with the geomodel, and lets an N=0 runtime fail
+	// open over an empty label set instead of dropping every detection.
 	rfs = o.rangeFilter
 	return rfs, rfs != nil
 }
@@ -1418,7 +1426,8 @@ func (o *Orchestrator) EnrichResultWithTaxonomy(speciesLabel string) (scientific
 }
 
 // RangeFilterStatus returns introspection data about the range filter,
-// including per-classifier geomodel coverage for all active non-bat models.
+// including per-classifier geomodel coverage for all active non-bat models and a
+// diagnosis of why a loaded Perch, BirdNET v3.0 or BirdNET+ v3.0 model is not served by the geomodel.
 func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	settings := o.CurrentSettings()
 	rf := settings.BirdNET.RangeFilter
@@ -1432,6 +1441,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		mappedSpecies int
 		kind          = rfKindNone
 		state         *rangeFilterState
+		reloadFailed  bool
 	)
 	if rfs := o.rangeFilter; rfs != nil {
 		// Take ONE state snapshot for the whole response so active, fellBack, kind, the
@@ -1440,6 +1450,7 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		state = rfs.loadState()
 		active = state.backend != nil
 		fellBack = state.fellBack
+		reloadFailed = state.reloadFailed
 		if kind = state.kind; kind == "" {
 			kind = rfKindNone // normalize the zero value, mirroring backendKind()
 		}
@@ -1499,8 +1510,16 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 
 	// Per-participant coverage, built from the same rangeFilterView the backend build
 	// consumes. Bat/BSG are not range-filter participants, so rangeFilterView never
-	// includes them; a Perch-only or v3.0-only install is reported without a v2.4 gate.
+	// includes them; an install running Perch v2, BirdNET v3.0 or BirdNET+ v3.0 without
+	// BirdNET v2.4 loaded is reported without a v2.4 gate.
 	classifiers := buildClassifierViews(view, geoLabels)
+	// A geomodel backend kept by a failed reload was built before any participant that
+	// loaded since, so it does not serve those. A reload still in flight is not flagged,
+	// so the diagnosis does not flicker during a normal model load.
+	geomodelServing := kind == rfKindGeomodelV3 &&
+		(!reloadFailed || !geomodelParticipantMissing(view.participants, state))
+	// The stat runs only when a geomodel-needing participant is not served by the geomodel.
+	stockPresent := view.wantsGeomodel && !geomodelServing && geomodelFilesPresent(view.modelsDir)
 	resp := RangeFilterStatusResponse{
 		Geomodel:            geomodel,
 		Classifiers:         make([]ClassifierCoverage, 0, len(classifiers)),
@@ -1513,6 +1532,8 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 		MappedSpecies:       mappedSpecies,
 		Backend:             string(kind),
 		ParticipantsLoaded:  len(view.participants) > 0,
+		GeomodelIssue:       geomodelIssueFor(&rf, view.wantsGeomodel, geomodelServing, stockPresent),
+		ReloadFailed:        reloadFailed,
 	}
 	for _, cm := range classifiers {
 		name := cm.id
@@ -1535,6 +1556,18 @@ func (o *Orchestrator) RangeFilterStatus() RangeFilterStatusResponse {
 	})
 
 	return resp
+}
+
+// geomodelParticipantMissing reports whether a loaded participant that needs the geomodel
+// is absent from the participant set the backend state was built over.
+func geomodelParticipantMissing(participants []participantLabels, state *rangeFilterState) bool {
+	for i := range participants {
+		id := participants[i].id
+		if rangeFilterCompatFor(id) == rangeFilterCompatGeomodel && (state == nil || !state.hasParticipant(id)) {
+			return true
+		}
+	}
+	return false
 }
 
 // RangeFilterActive reports whether a range-filter backend is loaded (filtering is being
@@ -1560,8 +1593,8 @@ func (o *Orchestrator) ReloadRangeFilter() error {
 	}
 	GetLogger().Info("Reloading range filter from updated settings")
 	// reload snapshots the participant view under its own lock, so this is not gated on
-	// v2.4: applyInstalledGeomodelConfig on a Perch-only or v3.0-only install can now
-	// light up the geomodel here.
+	// v2.4: applyInstalledGeomodelConfig on an install running Perch v2, BirdNET v3.0 or
+	// BirdNET+ v3.0 without BirdNET v2.4 loaded can now light up the geomodel here.
 	if err := rfs.reload(o.CurrentSettings(), o.rangeFilterView); err != nil {
 		return err
 	}
@@ -1830,7 +1863,12 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 }
 
 // Delete releases all resources held by the Orchestrator and its models.
-// After calling Delete, the Orchestrator must not be used.
+// After calling Delete, the Orchestrator must not be used. It also clears the bell
+// notices that describe the loaded models (inference failures, BirdNET Geomodel missing).
+// The geomodel latch is not stopped: with no model loaded its status has no geomodel issue,
+// so a later sync can only delete the notice, and a delete that fails here is retried on
+// the latch's bounded timer instead of leaving the notice behind. The acoustic-model latch
+// is stopped instead, because "no model loaded" is exactly the state that raises its notice.
 func (o *Orchestrator) Delete() {
 	// Stop the acoustic-model latch first, before o.mu (its sync takes the latch lock
 	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
@@ -1897,6 +1935,9 @@ func (o *Orchestrator) Delete() {
 	// Clear the failure notices of the models just closed and stop their latches
 	// (no model is loaded now; a latch whose delete fails is kept for a retry).
 	o.syncInferenceHealth()
+	// No model is loaded now, so the status has no geomodel issue and this deletes the
+	// notice; if the delete fails, the latch's retry timer repeats it.
+	o.syncGeomodelNotice()
 
 	CloseHeatmapService()
 }
@@ -1926,11 +1967,12 @@ func (o *Orchestrator) IsModelLoaded(registryID string) bool {
 // this map are recognized but not yet implemented; callers log a warning
 // and skip. Adding a new loader only requires one entry here.
 var modelLoaders = map[string]func(o *Orchestrator, threads int) error{
-	RegistryIDBirdNETV24: (*Orchestrator).loadBirdNETV24,
-	RegistryIDBirdNETV3:  (*Orchestrator).loadBirdNETV3,
-	RegistryIDPerchV2:    (*Orchestrator).loadPerch,
-	RegistryIDBat:        (*Orchestrator).loadBat,
-	RegistryIDBSGBat:     (*Orchestrator).loadBSGBat,
+	RegistryIDBirdNETV24:    (*Orchestrator).loadBirdNETV24,
+	RegistryIDBirdNETV3:     (*Orchestrator).loadBirdNETV3,
+	RegistryIDBirdNETPlusV3: (*Orchestrator).loadBirdNETPlusV3,
+	RegistryIDPerchV2:       (*Orchestrator).loadPerch,
+	RegistryIDBat:           (*Orchestrator).loadBat,
+	RegistryIDBSGBat:        (*Orchestrator).loadBSGBat,
 }
 
 // entryBuilder constructs (but does not register) a fresh model instance from a
@@ -1954,7 +1996,15 @@ var openvinoCapableSecondaryBuilders = map[string]entryBuilder{
 		// The path resolution is deliberately discarded: a backend or device swap
 		// must never rewrite the user's configured paths, so the reload path does
 		// not call queuePathCorrection.
-		m, _, err := o.buildBirdNETV3(settings, threads)
+		m, _, err := o.buildBirdNETV3(settings, RegistryIDBirdNETV3, threads)
+		if err != nil {
+			return nil, err
+		}
+		return m, nil
+	},
+	RegistryIDBirdNETPlusV3: func(o *Orchestrator, settings *conf.Settings, threads int) (ModelInstance, error) {
+		// Same typed-nil and path-resolution rules as the BirdNET v3.0 entry above.
+		m, _, err := o.buildBirdNETV3(settings, RegistryIDBirdNETPlusV3, threads)
 		if err != nil {
 			return nil, err
 		}
@@ -2592,31 +2642,28 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 // (fallbackTargets), which must stay v2.4 so an upgrade never swaps a misconfigured
 // source onto a different model, and the species_count startup read keys on element
 // 0; past the first entry the order only fixes what the status API and logs report.
+// ModelInfos already returns that order (compareModelOrder) and filtering keeps it.
 func (o *Orchestrator) DefaultTargets() []ModelInfo {
-	infos := o.ModelInfos()
-	targets := make([]ModelInfo, 0, len(infos))
-	for i := range infos {
-		if isScheduleGated(infos[i].ID) {
-			continue
-		}
-		targets = append(targets, infos[i])
-	}
+	targets := slices.DeleteFunc(o.ModelInfos(), func(m ModelInfo) bool { return isScheduleGated(m.ID) })
 	if len(targets) == 0 {
 		return nil
 	}
-	slices.SortFunc(targets, func(a, b ModelInfo) int {
-		if ra, rb := defaultTargetRank(a.ID), defaultTargetRank(b.ID); ra != rb {
-			return ra - rb
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
 	return targets
 }
 
-// defaultTargetRank orders the BirdNET v2.4 entry ahead of every other default
-// target so the first default is stable: fallbackTargets uses defaults[:1] for a
-// misconfigured source (it must stay v2.4 for I1) and the species_count startup read
-// keys on element 0; every other model shares a rank and falls back to byte order.
+// compareModelOrder is the one model order the orchestrator reports: the BirdNET
+// v2.4 entry first (defaultTargetRank), then byte order by registry ID. ModelInfos
+// sorts by it, so DefaultTargets and every other list of loaded models built from
+// ModelInfos read the same way.
+func compareModelOrder(aID, bID string) int {
+	if ra, rb := defaultTargetRank(aID), defaultTargetRank(bID); ra != rb {
+		return ra - rb
+	}
+	return strings.Compare(aID, bID)
+}
+
+// defaultTargetRank ranks the BirdNET v2.4 entry ahead of every other model, which
+// share one rank; DefaultTargets explains why v2.4 must lead.
 func defaultTargetRank(registryID string) int {
 	if registryID == RegistryIDBirdNETV24 {
 		return 0
@@ -2653,7 +2700,9 @@ func (o *Orchestrator) ResolvedModelPathForID(registryID string) string {
 // implements it; secondaries fall through to the registry template.
 type liveModelInfoProvider interface{ LiveModelInfo() ModelInfo }
 
-// ModelInfos returns ModelInfo for all registered models. Thread-safe.
+// ModelInfos returns ModelInfo for all registered models, in a stable order: the
+// BirdNET v2.4 entry first, then byte order by registry ID (compareModelOrder), so
+// repeated calls list the same models the same way. Thread-safe.
 // Used by the pipeline to build ModelTarget lists for buffer fan-out.
 // For an instance that reports a live identity (liveModelInfoProvider), that live
 // ModelInfo is returned rather than the static registry template, so the reported
@@ -2672,6 +2721,8 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		refs = append(refs, entryRef{id: id, entry: entry})
 	}
 	o.mu.RUnlock()
+	// The models live in a map, whose iteration order is randomized per call.
+	slices.SortFunc(refs, func(a, b entryRef) int { return compareModelOrder(a.id, b.id) })
 
 	// Resolve overlap against the published cadence plan (else the configured
 	// overlap), so every returned ModelInfo carries the effective overlap used for

@@ -3,8 +3,8 @@ name: Sync Wiki
 # Publishes doc/wiki/ to the GitHub project wiki. The repository is the single
 # source of truth; the wiki is a generated mirror. The cmd/wiki-export tool
 # remaps page names to wiki slugs, rewrites intra-doc links, and injects a
-# "do not edit" banner. See doc/wiki/building.md (section "Publishing the wiki")
-# for the one-time deploy-key setup required to enable pushes.
+# "do not edit" banner. See doc/wiki/building.md (section "Publishing the Wiki")
+# for details.
 
 on:
   push:
@@ -15,11 +15,10 @@ on:
       - '.github/workflows/wiki-sync.yml'
   workflow_dispatch:
 
-# The default GITHUB_TOKEN cannot authenticate to the *.wiki.git repository, so
-# this job pushes with a dedicated SSH deploy key (secret WIKI_SSH_DEPLOY_KEY)
-# and needs only read access to the main repository.
+# Pushing to the companion *.wiki.git repository requires contents: write on
+# the built-in GITHUB_TOKEN (and at least one existing wiki page).
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: wiki-sync-${{ github.ref }}
@@ -33,51 +32,21 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: 'go.mod'
-          cache: true
+        uses: ./.github/actions/setup-go
 
       - name: Generate wiki pages
         run: go run ./cmd/wiki-export doc/wiki "${RUNNER_TEMP}/wiki-staging"
 
-      - name: Check for deploy key
-        id: guard
-        env:
-          WIKI_SSH_DEPLOY_KEY: ${{ secrets.WIKI_SSH_DEPLOY_KEY }}
-        run: |
-          if [ -z "${WIKI_SSH_DEPLOY_KEY}" ]; then
-            {
-              echo "### Wiki sync skipped"
-              echo "The \`WIKI_SSH_DEPLOY_KEY\` secret is not configured, so the"
-              echo "generated pages were not pushed. See doc/wiki/building.md for setup."
-            } >> "${GITHUB_STEP_SUMMARY}"
-            echo "enabled=false" >> "${GITHUB_OUTPUT}"
-          else
-            echo "enabled=true" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Configure SSH for the wiki repository
-        if: steps.guard.outputs.enabled == 'true'
-        env:
-          WIKI_SSH_DEPLOY_KEY: ${{ secrets.WIKI_SSH_DEPLOY_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${WIKI_SSH_DEPLOY_KEY}" > ~/.ssh/wiki_deploy_key
-          chmod 600 ~/.ssh/wiki_deploy_key
-          ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
-          cat > ~/.ssh/config <<'EOF'
-          Host github.com
-            IdentityFile ~/.ssh/wiki_deploy_key
-            IdentitiesOnly yes
-          EOF
-
       - name: Clone the wiki repository
-        if: steps.guard.outputs.enabled == 'true'
-        run: git clone "git@github.com:${GITHUB_REPOSITORY}.wiki.git" "${RUNNER_TEMP}/wiki"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          auth_header="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
+          echo "::add-mask::${auth_header}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            clone "https://github.com/${GITHUB_REPOSITORY}.wiki.git" "${RUNNER_TEMP}/wiki"
 
       - name: Stage generated pages
-        if: steps.guard.outputs.enabled == 'true'
         run: |
           staging="${RUNNER_TEMP}/wiki-staging"
           wiki="${RUNNER_TEMP}/wiki"
@@ -103,8 +72,9 @@ jobs:
           done
 
       - name: Commit and push
-        if: steps.guard.outputs.enabled == 'true'
         working-directory: ${{ runner.temp }}/wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -114,5 +84,8 @@ jobs:
             exit 0
           fi
           git commit -m "docs: sync wiki from doc/wiki @ ${GITHUB_SHA:0:7}"
-          git push origin HEAD
+          auth_header="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
+          echo "::add-mask::${auth_header}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            push origin HEAD
           echo "Wiki synced from doc/wiki @ ${GITHUB_SHA:0:7}." >> "${GITHUB_STEP_SUMMARY}"

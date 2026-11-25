@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -201,13 +202,19 @@ type depHarness struct {
 
 func newDepHarness(t *testing.T) *depHarness {
 	t.Helper()
+	return newDepHarnessWithCatalog(t, dependencyTestCatalog())
+}
+
+// newDepHarnessWithCatalog is newDepHarness over a caller-supplied active catalog.
+func newDepHarnessWithCatalog(t *testing.T, catalog []CatalogEntry) *depHarness {
+	t.Helper()
 	isolateTestConfig(t)
 	orig := conf.GetSettings()
 	t.Cleanup(func() { conf.StoreSettings(orig) })
 	settings := conftest.GetTestSettings()
 	conf.StoreSettings(settings)
 
-	setActiveCatalog(dependencyTestCatalog())
+	setActiveCatalog(catalog)
 	t.Cleanup(func() { setActiveCatalog(nil) })
 
 	h := &depHarness{t: t, modelsDir: t.TempDir(), srv: newDepServer(t)}
@@ -277,13 +284,19 @@ func installedSnapshot(mm *ModelManager) map[string]InstalledModel {
 
 // scanFresh returns what a fresh manager derives from disk, as ScanInstalled would
 // at startup (no orchestrator, no settings writes). The permanent entry is always
-// reported by a scan, so it is dropped unless the harness manager has a record for it.
+// reported by a scan, so every permanent entry is dropped unless the harness manager
+// has a record for it.
 func (h *depHarness) scanFresh() map[string]InstalledModel {
 	mm := NewModelManager(h.modelsDir, nil, nil)
 	mm.ScanInstalled()
 	out := installedSnapshot(mm)
-	if _, has := installedSnapshot(h.mm)[depIDP]; !has {
-		delete(out, depIDP)
+	mine := installedSnapshot(h.mm)
+	for id := range out {
+		if e, ok := GetCatalogEntry(id); ok && IsPermanentEntry(&e) {
+			if _, has := mine[id]; !has {
+				delete(out, id)
+			}
+		}
 	}
 	return out
 }
@@ -308,4 +321,30 @@ func requireSameRecords(t *testing.T, want, got map[string]InstalledModel, msg s
 		return out
 	}
 	assert.Equal(t, strip(want), strip(got), msg)
+}
+
+// downloadableEmbeddedCatalog returns a copy of EmbeddedCatalog whose files carry the
+// checksum and size of the depServer payload for their remote path, so the shipped
+// entries can be installed against the test server.
+func downloadableEmbeddedCatalog(t *testing.T) []CatalogEntry {
+	t.Helper()
+	rewrite := func(files []CatalogFile) []CatalogFile {
+		cp := slices.Clone(files)
+		for i := range cp {
+			payload := depPayload(cp[i].RemotePath)
+			cp[i].SHA256 = sha256Hex(payload)
+			cp[i].SizeBytes = int64(len(payload))
+		}
+		return cp
+	}
+	out := slices.Clone(EmbeddedCatalog)
+	for i := range out {
+		out[i].Files = rewrite(out[i].Files)
+		out[i].Variants = slices.Clone(out[i].Variants)
+		for j := range out[i].Variants {
+			out[i].Variants[j].Files = rewrite(out[i].Variants[j].Files)
+		}
+	}
+	require.NoError(t, validateCatalog(out))
+	return out
 }

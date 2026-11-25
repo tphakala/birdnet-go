@@ -159,7 +159,9 @@
     "fellBack": false,
     "mappedSpecies": 0,
     "backend": "mdata_v2",
-    "participantsLoaded": true
+    "participantsLoaded": true,
+    "geomodelIssue": "none",
+    "reloadFailed": false
   },
   "RarityFilterActive": false,
   "SpeciesIndexSHA256": "ae19a2708465237e4662fe7a0221ac648993b436264f6a8fb5177a464402ee83",

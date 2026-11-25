@@ -7,6 +7,7 @@ import type {
   CatalogResponse,
   DownloadProgress,
   InstalledModel,
+  ModelDocument,
   ModelRegionsResponse,
 } from '$lib/types/models';
 import { api } from '$lib/utils/api';
@@ -23,6 +24,16 @@ const BASE = '/api/v2/models';
  * another model operation runs.
  */
 export const MODEL_OPERATION_IN_PROGRESS_KEY = 'analysis.gallery.errors.operationInProgress';
+
+/** error_key of the 409 for a cancel that can no longer be honoured (the download finished or activation began). */
+export const MODEL_CANCEL_UNAVAILABLE_KEY = 'analysis.gallery.errors.cancelUnavailable';
+
+/**
+ * The error_key of the 409 the install and reinstall endpoints return while a
+ * requires-agreement document of the entry has no recorded agreement. Its
+ * error_params carry `{name, documents: [{repo, kind, sha256}]}`.
+ */
+export const MODEL_AGREEMENT_REQUIRED_KEY = 'analysis.gallery.errors.agreementRequired';
 
 /** Fetch the full model catalog with install/compatibility status. */
 export async function fetchCatalog(): Promise<CatalogResponse> {
@@ -58,10 +69,33 @@ export async function fetchRegionCoverageMap(slug: string): Promise<string> {
  * Start an asynchronous model install. Returns once the server accepts the
  * request. When `variantId` is given the server installs (or switches to) that
  * hardware/regional variant; omitting it installs the entry's default variant.
+ * `acceptedDocuments` lists the sha256 of each document the user agreed to.
+ * Without a variant or an accepted document no body is sent.
  */
-export async function installModel(id: string, variantId?: string): Promise<void> {
-  const body = variantId ? { variantId } : undefined;
-  await api.post(`${BASE}/install/${encodeURIComponent(id)}`, body);
+export async function installModel(
+  id: string,
+  variantId?: string,
+  acceptedDocuments?: string[]
+): Promise<void> {
+  const body = {
+    ...(variantId ? { variantId } : {}),
+    ...(acceptedDocuments?.length ? { acceptedDocuments } : {}),
+  };
+  await api.post(
+    `${BASE}/install/${encodeURIComponent(id)}`,
+    Object.keys(body).length > 0 ? body : undefined
+  );
+}
+
+/**
+ * Ask the server to cancel the install or variant swap running for a model. The
+ * outcome (cancelled) arrives over the progress stream. A cancel sent after
+ * activation started is refused and the install completes. Rejects with an ApiError, errorKey
+ * 'analysis.gallery.errors.cancelUnavailable' when the download can no longer be
+ * cancelled.
+ */
+export async function cancelInstall(id: string): Promise<void> {
+  await api.post(`${BASE}/install/${encodeURIComponent(id)}/cancel`);
 }
 
 /** Remove an installed model from disk. */
@@ -69,9 +103,24 @@ export async function uninstallModel(id: string): Promise<void> {
   await api.delete(`${BASE}/installed/${encodeURIComponent(id)}`);
 }
 
-/** Reinstall an already-installed model, re-downloading missing or corrupt files. */
-export async function reinstallModel(id: string): Promise<void> {
-  await api.post(`${BASE}/reinstall/${encodeURIComponent(id)}`);
+/**
+ * Reinstall an already-installed model, re-downloading missing or corrupt files.
+ * `acceptedDocuments` lists the sha256 of each document the user agreed to; a
+ * body is sent only when it is not empty.
+ */
+export async function reinstallModel(id: string, acceptedDocuments?: string[]): Promise<void> {
+  const body = acceptedDocuments?.length ? { acceptedDocuments } : undefined;
+  await api.post(`${BASE}/reinstall/${encodeURIComponent(id)}`, body);
+}
+
+/**
+ * Fetch the verified text of a hosted licence or policy document by its sha256.
+ * Rejects with an ApiError whose errorKey is
+ * 'analysis.gallery.errors.documentUnavailable' when the server could not fetch
+ * and verify the text.
+ */
+export async function fetchModelDocument(sha256: string): Promise<ModelDocument> {
+  return api.get<ModelDocument>(`${BASE}/documents/${encodeURIComponent(sha256)}`);
 }
 
 // The server reports model-download failures as raw strings (EnhancedError.Error()
@@ -94,7 +143,8 @@ export function isNetworkDownloadError(message: string): boolean {
 }
 
 /**
- * Subscribe to SSE progress events for an ongoing model install.
+ * Subscribe to SSE progress events for an ongoing model install. `onCancelled` is
+ * called when the install ended because the user cancelled it.
  *
  * Returns a cleanup function that closes the EventSource connection.
  */
@@ -102,7 +152,8 @@ export function subscribeInstallProgress(
   id: string,
   onProgress: (state: DownloadProgress) => void,
   onComplete: () => void,
-  onError: (err: string) => void
+  onError: (err: string) => void,
+  onCancelled: () => void
 ): () => void {
   const url = buildAppUrl(`${BASE}/install/${encodeURIComponent(id)}/progress`);
   const source = new ReconnectingEventSource(url, {
@@ -134,6 +185,13 @@ export function subscribeInstallProgress(
     } else if (data.status === 'failed') {
       terminalReceived = true;
       onError(data.error ?? 'Unknown error');
+      source.close();
+    } else if (data.status === 'cancelled') {
+      // A user cancel is not an error: it never reaches onError, so the mirror hint
+      // (isNetworkDownloadError) is never consulted. The handler is required so that
+      // every subscriber sees its operation end.
+      terminalReceived = true;
+      onCancelled();
       source.close();
     }
   });

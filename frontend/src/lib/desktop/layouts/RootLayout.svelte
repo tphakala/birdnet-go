@@ -11,6 +11,8 @@
   import OfflineBanner from '$lib/desktop/components/ui/OfflineBanner.svelte';
   import RestartBanner from '$lib/desktop/components/ui/RestartBanner.svelte';
   import { fetchRestartStatus } from '$lib/stores/restart.svelte';
+  import { shortcuts } from '$lib/stores/shortcuts.svelte';
+  import KeyboardShortcutsModal from '$lib/desktop/components/modals/KeyboardShortcutsModal.svelte';
 
   interface Props {
     title?: string;
@@ -60,13 +62,6 @@
 
     // SSE notifications are auto-initialized when imported
 
-    // Set theme from localStorage
-    const savedTheme = globalThis.localStorage.getItem('theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-      document.documentElement.setAttribute('data-theme-controller', savedTheme);
-    }
-
     // Handle HTTPS redirect if configured
     if (
       window.location.protocol !== 'https:' &&
@@ -112,7 +107,16 @@
     className
   )}
 >
-  <input id="my-drawer" type="checkbox" class="drawer-toggle" bind:checked={drawerOpen} />
+  <!-- State holder for the CSS drawer. The header button is the real control, so this
+       checkbox stays out of the tab order and the accessibility tree. -->
+  <input
+    id="my-drawer"
+    type="checkbox"
+    class="drawer-toggle"
+    tabindex="-1"
+    aria-hidden="true"
+    bind:checked={drawerOpen}
+  />
 
   <div class="drawer-content">
     <!-- Header -->
@@ -124,6 +128,7 @@
           {securityEnabled}
           {accessAllowed}
           showSidebarToggle={true}
+          sidebarOpen={drawerOpen}
           showSearch={currentPage === 'dashboard' || currentPage === 'detections'}
           onSidebarToggle={handleSidebarToggle}
           onSearch={handleSearch}
@@ -182,6 +187,12 @@
 <!-- Global Toast Container -->
 <ToastContainer />
 
+<!-- Keyboard shortcuts: one key listener for every page, and the status region that says
+     why a shortcut did nothing. The region stays rendered so a change of its text is announced. -->
+<svelte:window onkeydown={shortcuts.handleKeydown} />
+<div role="status" class="sr-only">{shortcuts.announcement}</div>
+<KeyboardShortcutsModal />
+
 <style>
   /* =================================================================
      Drawer Layout Styles
@@ -208,24 +219,24 @@
   /* Desktop drawer layout (≥1024px) */
   @media (min-width: 1024px) {
     :global(.drawer.lg\:drawer-open) {
-      grid-template-columns: 256px 1fr;
+      grid-template-columns: 16rem 1fr;
       transition: grid-template-columns 0.2s ease-in-out;
     }
 
     :global(.drawer.lg\:drawer-open.sidebar-collapsed) {
-      grid-template-columns: 64px 1fr;
+      grid-template-columns: 4rem 1fr;
     }
 
     :global(.drawer.lg\:drawer-open .drawer-side) {
       display: block;
       position: sticky;
-      width: 256px;
+      width: 16rem;
       transition: width 0.2s ease-in-out;
       overflow: visible;
     }
 
     :global(.drawer.lg\:drawer-open.sidebar-collapsed .drawer-side) {
-      width: 64px;
+      width: 4rem;
       overflow: visible;
     }
 

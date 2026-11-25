@@ -67,22 +67,22 @@
       </p>
       <div class="text-sm space-y-1 mt-2">
         <div class="flex justify-between">
-          <span class="text-[var(--color-base-content)] opacity-60"
-            >{t('analytics.species.card.detections')}</span
-          >
+          <span class="text-[var(--color-base-content)] opacity-60">
+            {t('analytics.species.card.detections')}
+          </span>
           <span class="font-semibold">{species.count}</span>
         </div>
         <div class="flex justify-between">
-          <span class="text-[var(--color-base-content)] opacity-60"
-            >{t('analytics.species.card.confidence')}</span
-          >
+          <span class="text-[var(--color-base-content)] opacity-60">
+            {t('analytics.species.card.confidence')}
+          </span>
           <span class="font-semibold">{formatPercentage(species.avg_confidence)}</span>
         </div>
         {#if species.first_heard}
           <div class="flex justify-between">
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('analytics.species.card.first')}</span
-            >
+            <span class="text-[var(--color-base-content)] opacity-60">
+              {t('analytics.species.card.first')}
+            </span>
             <span class="text-xs">{formatDate(species.first_heard)}</span>
           </div>
         {/if}

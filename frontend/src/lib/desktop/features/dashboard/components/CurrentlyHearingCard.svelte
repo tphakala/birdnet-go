@@ -310,13 +310,10 @@ Props:
           {#if detection.status === 'approved'}
             <Check
               aria-label={t('dashboard.approved')}
-              class="ml-1 h-4 w-4 text-[var(--color-success)]"
+              class="ml-1 h-4 w-4 text-[var(--text-success)]"
             />
           {:else if detection.status === 'rejected'}
-            <X
-              aria-label={t('dashboard.rejected')}
-              class="ml-1 h-4 w-4 text-[var(--color-error)]"
-            />
+            <X aria-label={t('dashboard.rejected')} class="ml-1 h-4 w-4 text-[var(--text-error)]" />
           {/if}
         </svelte:element>
       {/each}

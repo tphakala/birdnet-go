@@ -430,7 +430,7 @@ func (ix *Index) CommonName(scientific string) (string, bool) {
 	return v, ok
 }
 
-// Meta returns taxonomy/link metadata for a scientific name, if present. A nil
+// Meta returns taxonomy metadata for a scientific name, if present. A nil
 // Index reports not-found rather than panicking.
 func (ix *Index) Meta(scientific string) (Meta, bool) {
 	if ix == nil {

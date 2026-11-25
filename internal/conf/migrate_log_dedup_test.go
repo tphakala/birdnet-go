@@ -51,12 +51,12 @@ func TestMigrateLogDeduplicationDefaults_ThroughLoad(t *testing.T) {
 		settings, configPath := loadConfigFromYAML(t, cfg)
 		assert.True(t, settings.Realtime.LogDeduplication.Enabled)
 		assert.Equal(t, DefaultLogDeduplicationHealthCheckSeconds, settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds)
-		assert.Equal(t, configVersionLogDeduplicationDefaults, settings.ConfigVersion)
+		assert.Equal(t, currentConfigVersion, settings.ConfigVersion)
 
 		persisted := readPersistedSettings(t, configPath)
 		assert.True(t, persisted.Realtime.LogDeduplication.Enabled, "the repair must be written back")
 		assert.Equal(t, DefaultLogDeduplicationHealthCheckSeconds, persisted.Realtime.LogDeduplication.HealthCheckIntervalSeconds)
-		assert.Equal(t, configVersionLogDeduplicationDefaults, persisted.ConfigVersion)
+		assert.Equal(t, currentConfigVersion, persisted.ConfigVersion)
 
 		viper.Reset()
 		ConfigPath = configPath
@@ -64,7 +64,7 @@ func TestMigrateLogDeduplicationDefaults_ThroughLoad(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, reloaded.Realtime.LogDeduplication.Enabled)
 		assert.Equal(t, DefaultLogDeduplicationHealthCheckSeconds, reloaded.Realtime.LogDeduplication.HealthCheckIntervalSeconds)
-		assert.Equal(t, configVersionLogDeduplicationDefaults, reloaded.ConfigVersion)
+		assert.Equal(t, currentConfigVersion, reloaded.ConfigVersion)
 	})
 
 	t.Run("a zero block written after version 3 is kept", func(t *testing.T) {
@@ -84,6 +84,6 @@ func TestMigrateLogDeduplicationDefaults_ThroughLoad(t *testing.T) {
 		assert.False(t, settings.Realtime.LogDeduplication.Enabled,
 			"the interval viper default must keep a hand-edited disable out of the zero pair")
 		assert.Equal(t, DefaultLogDeduplicationHealthCheckSeconds, settings.Realtime.LogDeduplication.HealthCheckIntervalSeconds)
-		assert.Equal(t, configVersionLogDeduplicationDefaults, settings.ConfigVersion)
+		assert.Equal(t, currentConfigVersion, settings.ConfigVersion)
 	})
 }

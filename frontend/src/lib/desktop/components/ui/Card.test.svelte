@@ -1,23 +1,51 @@
-<script>
+<script lang="ts">
+  import type { ComponentProps } from 'svelte';
   import Card from './Card.svelte';
 
-  let { title = '', showHeader = false, showFooter = false } = $props();
+  interface Props {
+    title?: string;
+    description?: string;
+    variant?: ComponentProps<typeof Card>['variant'];
+    showHeader?: boolean;
+    showFooter?: boolean;
+    actionLabel?: string;
+    padding?: boolean;
+    bodyClassName?: string;
+  }
+
+  let {
+    title = '',
+    description,
+    variant = 'default',
+    showHeader = false,
+    showFooter = false,
+    actionLabel = '',
+    padding = true,
+    bodyClassName = '',
+  }: Props = $props();
 </script>
 
-<Card {title}>
-  {#snippet header()}
-    {#if showHeader}
-      <div>Custom Header</div>
-    {/if}
-  {/snippet}
+{#snippet header()}
+  <div>Custom Header</div>
+{/snippet}
 
-  {#snippet children()}
-    Card content
-  {/snippet}
+{#snippet headerActions()}
+  <button type="button">{actionLabel}</button>
+{/snippet}
 
-  {#snippet footer()}
-    {#if showFooter}
-      <div>Footer content</div>
-    {/if}
-  {/snippet}
+{#snippet footer()}
+  <div>Footer content</div>
+{/snippet}
+
+<Card
+  {title}
+  {description}
+  {variant}
+  {padding}
+  {bodyClassName}
+  header={showHeader ? header : undefined}
+  headerActions={actionLabel ? headerActions : undefined}
+  footer={showFooter ? footer : undefined}
+>
+  Card content
 </Card>

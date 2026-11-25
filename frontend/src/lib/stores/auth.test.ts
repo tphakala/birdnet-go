@@ -20,6 +20,8 @@ vi.mock('$lib/utils/logger', () => ({
 }));
 
 import { auth } from './auth';
+import { unsavedChanges } from './unsavedChanges.svelte';
+import { loggers } from '$lib/utils/logger';
 
 describe('Auth Store', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -109,6 +111,40 @@ describe('Auth Store', () => {
       });
     });
 
+    it('does not let the native leave prompt hold the redirect after a successful logout', async () => {
+      // The prompt would run when the page is told to go, so the stand-in location fires
+      // beforeunload at that moment and records whether the page would have been held.
+      const prevented: boolean[] = [];
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: {
+          pathname: '/ui/dashboard',
+          set href(_url: string) {
+            const event = new Event('beforeunload', { cancelable: true });
+            window.dispatchEvent(event);
+            prevented.push(event.defaultPrevented);
+          },
+        },
+      });
+      // The earlier logout tests set the allowance on the singleton; start from a clean one.
+      unsavedChanges.resetForTesting();
+      const unregister = unsavedChanges.register({ isDirty: () => true });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true }),
+      });
+
+      try {
+        await auth.logout();
+      } finally {
+        unregister();
+        unsavedChanges.resetForTesting();
+      }
+
+      expect(prevented).toEqual([false]);
+    });
+
     it('should clear auth state on successful logout', async () => {
       // Set initial logged in state
       auth.setLoggedIn(true);
@@ -154,6 +190,48 @@ describe('Auth Store', () => {
       await auth.logout();
 
       expect(window.location.href).toBe('https://idp.example.com/logout?id_token_hint=abc');
+    });
+
+    it('should redirect to an http providerLogoutUrl, which the server only sends for an http issuer', async () => {
+      const providerLogoutUrl = 'http://idp.example.com/logout?id_token_hint=abc';
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true, providerLogoutUrl }),
+      });
+
+      await auth.logout();
+
+      expect(window.location.href).toBe(providerLogoutUrl);
+    });
+
+    it('should warn without the URL and redirect to /ui/ when providerLogoutUrl is not a web URL', async () => {
+      const providerLogoutUrl = 'javascript:alert(1)//id_token_hint=secret-token';
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true, providerLogoutUrl }),
+      });
+
+      await auth.logout();
+
+      expect(window.location.href).toBe('/ui/');
+      expect(loggers.auth.warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(vi.mocked(loggers.auth.warn).mock.calls)).not.toContain('secret-token');
+    });
+
+    it('should warn and redirect to /ui/ when providerLogoutUrl is not a URL', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true, providerLogoutUrl: 'not a url' }),
+      });
+
+      await auth.logout();
+
+      expect(window.location.href).toBe('/ui/');
+      expect(loggers.auth.warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(vi.mocked(loggers.auth.warn).mock.calls)).not.toContain('not a url');
     });
 
     it('should treat 401 as successful logout (expired session)', async () => {

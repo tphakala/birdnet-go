@@ -39,6 +39,8 @@
     'aria-describedby'?: string;
     /** Marks the native input invalid for assistive technology; omitted when unset. */
     'aria-invalid'?: HTMLInputAttributes['aria-invalid'];
+    /** Marks the native input required for assistive technology without the native required validation; omitted when unset. */
+    'aria-required'?: HTMLInputAttributes['aria-required'];
     onchange?: (_value: string) => void;
     oninput?: (_value: string) => void;
     /** Called when the input loses focus, with the current value. */
@@ -67,6 +69,7 @@
     reserveErrorSpace = false,
     'aria-describedby': ariaDescribedBy,
     'aria-invalid': ariaInvalid,
+    'aria-required': ariaRequired,
     onchange,
     oninput,
     onblur,
@@ -135,14 +138,14 @@
       <span class="label-text capitalize">
         {label}
         {#if required}
-          <span class="text-[var(--color-error)] ml-1">*</span>
+          <span class="text-[var(--text-error)] ml-1">*</span>
         {/if}
       </span>
 
       {#if tooltip}
         <button
           type="button"
-          class="help-icon ml-1 text-[var(--color-info)] hover:text-[var(--color-info-hover)] transition-colors"
+          class="help-icon ml-1 text-[var(--text-info)] transition-colors"
           onmouseenter={() => (showTooltip = true)}
           onmouseleave={() => (showTooltip = false)}
           onfocus={() => (showTooltip = true)}
@@ -171,6 +174,7 @@
     {autocomplete}
     aria-describedby={describedBy}
     aria-invalid={error ? 'true' : ariaInvalid}
+    aria-required={ariaRequired}
     class={cn(
       'input  w-full',
       safeGet(sizeClasses, size, ''),
@@ -183,7 +187,7 @@
   />
 
   {#if !isValid && touched}
-    <span class="text-sm text-[var(--color-error)] mt-1">
+    <span class="text-sm text-[var(--text-error)] mt-1">
       {validationMessage || `Please enter a valid ${label || 'value'}`}
     </span>
   {/if}

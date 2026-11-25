@@ -456,9 +456,9 @@
                 class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
                 aria-hidden="true"
               ></span>
-              <span class="text-sm text-[var(--color-base-content)]"
-                >{t('common.ui.loadingMap')}</span
-              >
+              <span class="text-sm text-[var(--color-base-content)]">
+                {t('common.ui.loadingMap')}
+              </span>
             </div>
           </div>
         {/if}
@@ -474,7 +474,7 @@
         {@render zoomControls('inline')}
       </div>
     {/if}
-    <p class="text-xs text-[var(--color-info)] mt-2">
+    <p class="text-xs text-[var(--text-info)] mt-2">
       {t('common.ui.mapZoomHelp')}
     </p>
   {/if}
@@ -527,15 +527,15 @@
       <div class="mb-4 p-3 bg-[var(--color-base-200)]/50 rounded-lg">
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.latitude.label')}</span
-            >
+            <span class="text-[var(--color-base-content)] opacity-60">
+              {t('settings.main.sections.rangeFilter.latitude.label')}
+            </span>
             <span class="font-medium ml-2">{latitude}</span>
           </div>
           <div>
-            <span class="text-[var(--color-base-content)] opacity-60"
-              >{t('settings.main.sections.rangeFilter.longitude.label')}</span
-            >
+            <span class="text-[var(--color-base-content)] opacity-60">
+              {t('settings.main.sections.rangeFilter.longitude.label')}
+            </span>
             <span class="font-medium ml-2">{longitude}</span>
           </div>
         </div>

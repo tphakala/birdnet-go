@@ -3,8 +3,8 @@ package classifier
 import (
 	"os"
 	"runtime"
-	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -26,6 +26,7 @@ const (
 	ovReasonNotBuilt          = "binary not built with OpenVINO support"
 	ovReasonBackendONNX       = "backend is set to onnx"
 	ovReasonGPUUnavailable    = "gpu device requested but not available"
+	ovReasonGPUDeviceMissing  = "configured gpu device is not present"
 	ovReasonCPUUnsupported    = "cpu device not supported on this host (needs an ARMv8.2+/A76 CPU with native f16)"
 	ovReasonNoDevice          = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
 	ovReasonORTPreferredARM64 = "ONNX Runtime is preferred on arm64 CPUs; set birdnet.backend to openvino to use the OpenVINO CPU"
@@ -42,7 +43,8 @@ const (
 
 // openVINOPlan describes how a model should run on the OpenVINO backend.
 type openVINOPlan struct {
-	device      string // inference.OVDeviceCPU or inference.OVDeviceGPU
+	device      string // OpenVINO compile target: inference.OVDeviceCPU, inference.OVDeviceGPU (the GPU alias) or a concrete "GPU.<n>"
+	deviceName  string // adapter name (FULL_DEVICE_NAME) of the planned GPU; "" for the CPU or when the probe could not read it
 	outputIndex int    // logits output port index
 	precision   string // INFERENCE_PRECISION_HINT; "" = backend default (f16)
 }
@@ -53,7 +55,7 @@ type openVINOPlan struct {
 // when accepted), so callers can log why instead of falling back silently.
 //
 //   - backendPref:  settings.BirdNET.Backend ("auto"/"onnx"/"openvino").
-//   - devicePref:   settings.BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu").
+//   - devicePref:   settings.BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu", or a concrete "GPU.<n>").
 //   - modelID:      the model registry identity (drives the precision policy).
 //   - libraryPath:  settings.BirdNET.OpenVINOPath (libopenvino_c location).
 //   - outputIndex:  the logits output port for this model.
@@ -65,7 +67,7 @@ type openVINOPlan struct {
 // of the auto path (a non-win); an explicit "cpu" device is still allowed on amd64
 // for benchmarking/advanced use. On arm64 the auto backend declines the OpenVINO
 // CPU before any OpenVINO library is loaded (see autoDeclinesOpenVINOCPU); backend
-// "openvino" or device "cpu" opts back in. Perch, bat and v3.0 require ONNX
+// "openvino" or device "cpu" opts back in. Perch, bat, v3.0 and BirdNET+ v3.0 require ONNX
 // Runtime before they plan (their builders call checkORTOrFail), so this entry
 // point passes ONNX Runtime as available and auto always declines the arm64 CPU
 // for them; BirdNET v2.4 plans through birdnetV24BasePlan, which passes the live
@@ -81,12 +83,13 @@ func openVINOPlanWithHost(backendPref, devicePref, modelID string, outputIndex i
 	if !openvinoBackendAvailable {
 		return openVINOPlan{}, false, ovReasonNotBuilt
 	}
-	device, ok, reason := planOpenVINODevice(backendPref, devicePref, host)
+	device, deviceName, ok, reason := planOpenVINODevice(backendPref, devicePref, host)
 	if !ok {
 		return openVINOPlan{}, false, reason
 	}
 	return openVINOPlan{
 		device:      device,
+		deviceName:  deviceName,
 		outputIndex: outputIndex,
 		precision:   openVINOPrecisionFor(modelID, device),
 	}, true, ""
@@ -96,10 +99,10 @@ func openVINOPlanWithHost(backendPref, devicePref, modelID string, outputIndex i
 // is a lazy closure because it loads the OpenVINO library and spawns a child
 // process, so it must run only on the branches that need it.
 type ovHostFacts struct {
-	goarch       string      // runtime.GOARCH
-	nativeF16    bool        // cpuspec.HasNativeF16()
-	ortAvailable bool        // ONNX Runtime is available for this model's settings
-	gpuAvailable func() bool // an OpenVINO GPU device is present
+	goarch       string                            // runtime.GOARCH
+	nativeF16    bool                              // cpuspec.HasNativeF16()
+	ortAvailable bool                              // ONNX Runtime is available for this model's settings
+	gpus         func() []inference.OpenVINODevice // the OpenVINO GPU devices present, empty when none
 }
 
 // liveOVHostFacts returns the facts of the running host with the given ONNX
@@ -109,29 +112,40 @@ func liveOVHostFacts(libraryPath string, ortAvailable bool) *ovHostFacts {
 		goarch:       runtime.GOARCH,
 		nativeF16:    cpuspec.HasNativeF16(),
 		ortAvailable: ortAvailable,
-		gpuAvailable: func() bool { return openVINOGPUAvailable(libraryPath) },
+		gpus:         func() []inference.OpenVINODevice { return openVINOGPUs(libraryPath) },
 	}
 }
 
 // planOpenVINODevice picks the OpenVINO device for the settings and host facts,
-// or declines with a reason. It is pure apart from the lazy probes and reads
-// nothing cached, so a settings change takes effect on the next call.
-func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (device string, ok bool, reason string) {
+// or declines with a reason. deviceName is the adapter name of a planned GPU
+// (empty for the CPU, or when the probe could not read it). It is pure apart from
+// the lazy probes and reads nothing cached, so a settings change takes effect on
+// the next call.
+//
+// "gpu" and "auto" plan OpenVINO's own "GPU" alias, which is the first GPU: the
+// planner never prefers one adapter over another. A concrete "GPU.<n>" plans that
+// name when the host enumerates exactly it (see planConcreteGPU).
+func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (device, deviceName string, ok bool, reason string) {
 	if backendPref == conf.BackendPrefONNX {
-		return "", false, ovReasonBackendONNX
+		return "", "", false, ovReasonBackendONNX
+	}
+
+	if conf.IsOVGPUDeviceName(devicePref) {
+		return planConcreteGPU(devicePref, host.gpus())
 	}
 
 	switch devicePref {
 	case conf.OVDeviceGPU:
-		if !host.gpuAvailable() {
-			return "", false, ovReasonGPUUnavailable
+		gpus := host.gpus()
+		if len(gpus) == 0 {
+			return "", "", false, ovReasonGPUUnavailable
 		}
-		return inference.OVDeviceGPU, true, ""
+		return inference.OVDeviceGPU, aliasGPUName(gpus), true, ""
 	case conf.OVDeviceCPU:
 		if !host.cpuAllowed(devicePref) {
-			return "", false, ovReasonCPUUnsupported
+			return "", "", false, ovReasonCPUUnsupported
 		}
-		return inference.OVDeviceCPU, true, ""
+		return inference.OVDeviceCPU, "", true, ""
 	default: // "auto" or ""
 		// Decline before the GPU probe so this decision neither loads
 		// libopenvino_c nor spawns the probe child. On a CPU without native f16 the
@@ -139,19 +153,88 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 		// telling the user to set backend=openvino would not help.
 		if backendPref != conf.BackendPrefOpenVINO && autoDeclinesOpenVINOCPU(host.goarch, host.nativeF16, host.ortAvailable) {
 			if !host.nativeF16 {
-				return "", false, ovReasonNoDevice
+				return "", "", false, ovReasonNoDevice
 			}
-			return "", false, ovReasonORTPreferredARM64
+			return "", "", false, ovReasonORTPreferredARM64
 		}
-		switch {
-		case host.gpuAvailable():
-			return inference.OVDeviceGPU, true, ""
-		case host.cpuAllowed(devicePref):
-			return inference.OVDeviceCPU, true, ""
-		default:
-			return "", false, ovReasonNoDevice
+		if gpus := host.gpus(); len(gpus) > 0 {
+			return inference.OVDeviceGPU, aliasGPUName(gpus), true, ""
+		}
+		if host.cpuAllowed(devicePref) {
+			return inference.OVDeviceCPU, "", true, ""
+		}
+		return "", "", false, ovReasonNoDevice
+	}
+}
+
+// openVINODeviceFields returns the log fields naming the planned device: the
+// compile target, and the adapter name when the probe reported one, so a log
+// line shows which physical GPU "GPU", "GPU.0" or "GPU.1" is.
+func openVINODeviceFields(plan openVINOPlan) []logger.Field {
+	fields := []logger.Field{logger.String("device", plan.device)}
+	if plan.deviceName != "" {
+		fields = append(fields, logger.String("device_name", plan.deviceName))
+	}
+	return fields
+}
+
+// aliasGPUName returns the adapter name of the device OpenVINO's "GPU" alias
+// resolves to: the bare "GPU" entry of a single-GPU host, else "GPU.0". It is ""
+// when the list has neither or the probe did not report a name.
+func aliasGPUName(gpus []inference.OpenVINODevice) string {
+	for _, g := range gpus {
+		if g.Name == inference.OVDeviceGPU {
+			return g.FullName
 		}
 	}
+	for _, g := range gpus {
+		if g.Name == ovFirstGPUName {
+			return g.FullName
+		}
+	}
+	return ""
+}
+
+// ovFirstGPUName is the concrete name of the first GPU on a multi-GPU host, the
+// device OpenVINO's "GPU" alias resolves to there.
+const ovFirstGPUName = inference.OVDeviceGPU + ".0"
+
+// planConcreteGPU plans a stored "GPU.<n>" preference. The device runs only when
+// the host enumerates exactly that name: the index can shift when hardware
+// changes (an iGPU disabled makes the Arc a plain "GPU"), and running on whatever
+// adapter now holds another index, or guessing that "GPU.0" means the lone "GPU",
+// would put the work somewhere the user did not choose. A missing device declines
+// like an unavailable "gpu" (ONNX Runtime takes over) and is logged once.
+func planConcreteGPU(devicePref string, gpus []inference.OpenVINODevice) (device, deviceName string, ok bool, reason string) {
+	for _, g := range gpus {
+		if g.Name == devicePref {
+			return devicePref, g.FullName, true, ""
+		}
+	}
+	warnGPUDeviceMissing(devicePref, gpus)
+	return "", "", false, ovReasonGPUDeviceMissing
+}
+
+// ovGPUMissingWarned records the (preference, enumerated GPUs) combinations whose
+// missing-device Warn was already logged (value: struct{}), so the per-model plans
+// of one reload, and every later reload on unchanged hardware, log it once. A
+// change of hardware changes the key and warns again.
+var ovGPUMissingWarned sync.Map
+
+// warnGPUDeviceMissing logs, once per (preference, enumerated GPU names), that the
+// configured OpenVINO GPU is not present, naming the GPUs the host does have.
+func warnGPUDeviceMissing(devicePref string, gpus []inference.OpenVINODevice) {
+	names := make([]string, 0, len(gpus))
+	for _, g := range gpus {
+		names = append(names, g.Name)
+	}
+	found := strings.Join(names, ",")
+	if _, seen := ovGPUMissingWarned.LoadOrStore(devicePref+"|"+found, struct{}{}); seen {
+		return
+	}
+	GetLogger().Warn("configured OpenVINO GPU is not present; using ONNX Runtime until another device is chosen",
+		logger.String("configured_device", devicePref),
+		logger.String("gpus_found", found))
 }
 
 // openVINOPrecisionFor returns the INFERENCE_PRECISION_HINT for a (model, device)
@@ -174,10 +257,11 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 // Perch v2 is likewise forced to f32 on the GPU. Its f16-GPU path was validated
 // on an Iris Xe iGPU, but on an Intel Arc A380 (dGPU) the f16 kernel returns
 // all-NaN logits for every window, which the pipeline then promoted to bogus
-// detections. The plan carries only the device class ("GPU"), not the adapter,
-// so the override necessarily covers every Intel GPU; f32 costs some throughput
-// on adapters where f16 worked, but stays well within real time. Do NOT relax it
-// to f16 without validating on a discrete Arc part.
+// detections. The policy keys on the device class (the "GPU" alias or any
+// "GPU.<n>"), never on the adapter, so the override covers every Intel GPU
+// whichever index it has; f32 costs some throughput on adapters where f16 worked,
+// but stays well within real time. Do NOT relax it to f16 without validating on a
+// discrete Arc part.
 //
 // The bat embedding model is forced to f32 on EVERY device:
 // its embedding head overflows at f16 on genuine f16 hardware (the A76 CPU's f16 NEON
@@ -185,8 +269,12 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 // flipping detections. Unlike Perch v2 this is not GPU-only. Do NOT relax it to
 // f16 without re-running the bat embedding parity check.
 //
-// BirdNET v3.0 is likewise forced to f32 on EVERY device. Its EfficientNetV2-S
-// backbone is numerically unstable at f16 wherever genuine f16 kernels run (the Intel
+// BirdNET v3.0 and BirdNET+ v3.0 (same architecture) are likewise forced to f32 on
+// EVERY device. The measurements below are for the BirdNET v3.0 preview. BirdNET+ v3.0
+// was measured separately on its published fp32 files: at f16 its scores differed from
+// ONNX Runtime by up to about 0.75 with top-1 changes on the A76 CPU and on Intel GPUs,
+// while f32 stayed within about 3.4e-4 with no top-1 change. The
+// EfficientNetV2-S backbone is numerically unstable at f16 wherever genuine f16 kernels run (the Intel
 // GPU always, and the A76 CPU's native f16), independent of the model file's weight
 // precision. On fp16-weight regional tiles, f16 execution overflows to NaN (Sentry
 // BIRDNET-GO-2H6: the 800-class north-america-east tile, "non-finite score (index 0
@@ -200,10 +288,10 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 // inference/openvino_parity_functional_test.go on a genuine f16 device (the Intel GPU
 // and the A76 CPU) with an fp16-weight regional tile.
 func openVINOPrecisionFor(modelID, device string) string {
-	if modelID == DefaultModelVersion || modelID == RegistryIDBat || modelID == RegistryIDBirdNETV3 {
+	if modelID == DefaultModelVersion || modelID == RegistryIDBat || modelID == RegistryIDBirdNETV3 || modelID == RegistryIDBirdNETPlusV3 {
 		return inference.OVPrecisionF32
 	}
-	if device == inference.OVDeviceGPU && modelID == RegistryIDPerchV2 {
+	if inference.OpenVINOIsGPUDevice(device) && modelID == RegistryIDPerchV2 {
 		return inference.OVPrecisionF32
 	}
 	return ""
@@ -272,11 +360,22 @@ func (h *ovHostFacts) cpuAllowed(devicePref string) bool {
 	return devicePref == conf.OVDeviceCPU && h.goarch == goarchAMD64
 }
 
-// openVINOGPUAvailable reports whether an OpenVINO GPU device (Intel iGPU/dGPU via
-// the Intel GPU plugin) is present. It loads the OpenVINO core first (InitOpenVINO
-// is idempotent and fast on repeat); a load failure means no usable OV at all.
-func openVINOGPUAvailable(libraryPath string) bool {
-	if err := inference.InitOpenVINO(libraryPath); err != nil {
+// Seams for openVINOGPUs, replaced in tests: the core load, the probe, and the
+// lookup of the library path the core loaded.
+var (
+	ovInitCore          = inference.InitOpenVINO
+	ovProbeDeviceInfo   = inference.OpenVINOProbeDeviceInfo
+	ovLoadedLibraryPath = inference.OpenVINOLoadedLibraryPath
+)
+
+// openVINOGPUs lists the OpenVINO GPU devices (Intel iGPU/dGPU via the Intel GPU
+// plugin) present, under either the bare "GPU" name or indexed "GPU.<n>" names
+// (hosts with several GPUs list only the indexed ones), with the adapter name and
+// type the probe reported. The list is empty when there is no GPU or OpenVINO is
+// unusable. It loads the OpenVINO core first (InitOpenVINO is idempotent and fast
+// on repeat); a load failure means no usable OV at all.
+func openVINOGPUs(libraryPath string) []inference.OpenVINODevice {
+	if err := ovInitCore(libraryPath); err != nil {
 		// A merely-absent OpenVINO library is the expected CPU-only case, not a
 		// fault: device planning falls back to ONNX Runtime and logs that fallback
 		// at INFO (logOpenVINODeclined). Log the absent case at Debug so a recurring
@@ -292,7 +391,7 @@ func openVINOGPUAvailable(libraryPath string) bool {
 			GetLogger().Warn("OpenVINO library load failed during device planning; treating GPU as unavailable",
 				logger.Error(err))
 		}
-		return false
+		return nil
 	}
 	// Enumerate devices in a short-lived child process rather than in-process:
 	// ov_core_get_available_devices walks the vendor driver stack, and a fault
@@ -300,14 +399,16 @@ func openVINOGPUAvailable(libraryPath string) bool {
 	// SIGABRT during cgo, issue #4236 - a systemd crash-loop on the first GPU
 	// enablement). A crashing probe child degrades to the ordinary ORT
 	// fallback instead. The probe result is cached per process, so this costs
-	// one child run per library path.
-	devices, err := inference.OpenVINOProbeDevices(libraryPath)
+	// one child run per library path. Probe the library the core was loaded from,
+	// not the configured path: with nothing configured, the loader may have
+	// discovered one, and the child must describe that same library.
+	devices, err := ovProbeDeviceInfo(ovLoadedLibraryPath())
 	if err != nil {
 		GetLogger().Warn("OpenVINO device probe failed; treating GPU as unavailable",
 			logger.Error(err))
-		return false
+		return nil
 	}
-	return slices.Contains(devices, inference.OVDeviceGPU)
+	return inference.FilterOpenVINOGPUs(devices)
 }
 
 // isLibraryAbsent reports whether err indicates the OpenVINO shared library is
@@ -349,7 +450,7 @@ func isLibraryAbsent(err error) bool {
 // false to use ORT. The primary classifier path applies sigmoid post-processing,
 // so only the BirdNET v2.4 identity is valid here; Perch (softmax) runs its own
 // OpenVINO path in the Perch ModelInstance (perch_onnx.go), never through this
-// primary path. The plan carries the device (CPU/GPU), logits output index, and
+// primary path. The plan carries the device (CPU, GPU or GPU.<n>), logits output index, and
 // the precision hint (f32 on every device for BirdNET v2.4, see openVINOPrecisionFor;
 // INT8 or unrecognized weights are declined on auto and run at f32 on an explicit
 // openvino backend, see applyOpenVINOQuantizationPolicy). The weight precision is
@@ -379,8 +480,8 @@ func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization, ortAvai
 
 // birdnetV24BasePlan is the device and precision plan birdnetV24OpenVINOPlan
 // starts from, before the quantization policy is applied. BirdNET v2.4 is the one
-// model with a live ONNX Runtime-missing case on arm64 auto (Perch, bat and v3.0
-// require ONNX Runtime first), so it takes the ONNX Runtime answer from its
+// model with a live ONNX Runtime-missing case on arm64 auto (Perch, bat, v3.0 and BirdNET+
+// V3.0 require ONNX Runtime first), so it takes the ONNX Runtime answer from its
 // caller. It is a variable only so tests can replace it: in the default (untagged)
 // build openVINOPlanWithHost always declines with ovReasonNotBuilt, which would
 // leave the policy unreachable through the production entry points.
@@ -469,7 +570,7 @@ func openVINOPrecisionLabel(precision string) string {
 // shared Quantization vocabulary ("FP16"/"FP32"). An empty hint means the backend
 // default, which is f16 (see openVINOPrecisionFor), so it maps to FP16; the
 // explicit override OVPrecisionF32 (Perch v2 on the GPU, and BirdNET v2.4, the bat
-// embedding model and BirdNET v3.0 on every device) maps to FP32.
+// embedding model, BirdNET v3.0 and BirdNET+ v3.0 on every device) maps to FP32.
 func openVINOEffectivePrecision(precisionHint string) string {
 	if precisionHint == inference.OVPrecisionF32 {
 		return string(QuantizationFP32)
@@ -550,17 +651,16 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 	}
 
 	bn.classifier = classifier
-	// Publish the concrete OpenVINO device (CPU/GPU) the classifier bound to plus
+	// Publish the concrete OpenVINO device (CPU, GPU or GPU.<n>) the classifier bound to plus
 	// the live backend and effective runtime precision, so the status card reports
 	// "OpenVINO" + the real compute precision (FP32 for BirdNET v2.4 on every
 	// device, see openVINOPrecisionFor) and the real device rather than the
 	// static ONNX file metadata.
 	bn.setRuntimeInfo(plan.device, BackendOpenVINO, openVINOEffectivePrecision(plan.precision))
-	log.Info("OpenVINO model initialized",
-		logger.String("model", modelPath),
-		logger.String("device", plan.device),
+	log.Info("OpenVINO model initialized", append(append([]logger.Field{logger.String("model", modelPath)},
+		openVINODeviceFields(plan)...),
 		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
-		logger.String("init_time", time.Since(start).String()))
+		logger.String("init_time", time.Since(start).String()))...)
 	return nil
 }

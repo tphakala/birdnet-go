@@ -29,22 +29,23 @@
 
 <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 mt-4">
   <div class="flex items-center gap-2 mb-3">
-    <ShieldCheck class="w-4 h-4 text-[var(--color-success)]" />
+    <ShieldCheck class="w-4 h-4 text-[var(--text-success)]" />
     <span class="text-sm font-medium">{t('components.tls.certificateInstalled')}</span>
   </div>
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
     {#if certInfo.subject}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.subject')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.subject')}
+        </span>
         <p class="font-mono text-xs">{certInfo.subject}</p>
       </div>
     {/if}
     {#if certInfo.issuer}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60">{t('components.tls.issuer')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.issuer')}
+        </span>
         <p class="font-mono text-xs">{certInfo.issuer}</p>
       </div>
     {/if}
@@ -56,21 +57,18 @@
     {/if}
     {#if certInfo.notAfter}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.validUntil')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.validUntil')}
+        </span>
         <p class="font-mono text-xs">{certInfo.notAfter}</p>
       </div>
     {/if}
     {#if certInfo.daysUntilExpiry !== undefined}
       <div>
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.daysRemaining')}</span
-        >
-        <p
-          class="font-mono text-xs"
-          class:text-[var(--color-error)]={certInfo.daysUntilExpiry < 30}
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.daysRemaining')}
+        </span>
+        <p class="font-mono text-xs" class:text-[var(--text-error)]={certInfo.daysUntilExpiry < 30}>
           {certInfo.daysUntilExpiry}
           {#if certInfo.daysUntilExpiry < 30}
             <AlertTriangle class="w-3 h-3 inline ml-1" />
@@ -80,9 +78,9 @@
     {/if}
     {#if certInfo.fingerprint}
       <div class="sm:col-span-2">
-        <span class="text-xs text-[var(--color-base-content)]/60"
-          >{t('components.tls.fingerprint')}</span
-        >
+        <span class="text-xs text-[var(--color-base-content)]/60">
+          {t('components.tls.fingerprint')}
+        </span>
         <p class="font-mono text-xs break-all">{certInfo.fingerprint}</p>
       </div>
     {/if}
@@ -124,7 +122,7 @@
       {#if onDelete}
         <button
           type="button"
-          class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--text-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={deleteLoading}
           onclick={onDelete}
         >

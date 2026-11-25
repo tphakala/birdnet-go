@@ -37,6 +37,10 @@
 
   const logger = loggers.ui;
 
+  /** Mode card look; the selected state follows the checked radio inside the label. */
+  const MODE_CARD_CLASS =
+    'flex items-start gap-3 p-4 rounded-lg border border-[var(--color-base-300)] cursor-pointer transition-colors hover:border-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_4%,transparent)] has-[:checked]:border-[var(--color-primary)] has-[:checked]:bg-[color-mix(in_srgb,var(--color-primary)_5%,transparent)]';
+
   interface Props {
     onClose: () => void;
     /** Fires when the wizard starts a new import job (start or elevate). */
@@ -504,13 +508,13 @@
           </div>
         {/each}
       </div>
-      <span class="sr-only" aria-live="polite"
-        >{t('system.importExport.stepAnnouncement', {
+      <span class="sr-only" aria-live="polite">
+        {t('system.importExport.stepAnnouncement', {
           current: String(currentStepIndex + 1),
           total: String(stepLabels.length),
           name: t(`system.importExport.steps.${currentStep}`),
-        })}</span
-      >
+        })}
+      </span>
     </div>
   {/snippet}
 
@@ -540,7 +544,7 @@
                   {t('system.importExport.source.manualValidating')}
                 </p>
               {:else if validateStatus === 'invalid'}
-                <p id="manual-path-error" role="alert" class="text-sm text-[var(--color-error)]">
+                <p id="manual-path-error" role="alert" class="text-sm text-[var(--text-error)]">
                   {validateResp?.reason === 'not_found'
                     ? t('system.importExport.source.manualNotFound')
                     : validateResp?.reason === 'permission_denied'
@@ -610,7 +614,7 @@
                       </p>
                     {/if}
                     {#if isUnreadable(cand)}
-                      <p class="text-xs font-medium text-[var(--color-warning)] mt-1">
+                      <p class="text-xs font-medium text-[var(--text-warning)] mt-1">
                         {t('system.importExport.source.unreadableTitle')}
                       </p>
                       <p class="text-xs text-[var(--color-base-content)]/60 mt-0.5">
@@ -647,7 +651,7 @@
             {/each}
             <button
               type="button"
-              class="text-sm text-[var(--color-primary)] hover:underline"
+              class="text-sm text-[var(--text-primary)] underline hover:decoration-2"
               onclick={() => (showManualEntry = !showManualEntry)}
             >
               {t('system.importExport.source.manualEntryLink')}
@@ -673,12 +677,14 @@
                   <li class="flex items-start gap-2">
                     <span
                       class="flex-shrink-0 text-xs font-medium text-[var(--color-base-content)]/60 mt-0.5"
-                      >{i + 1}.</span
                     >
+                      {i + 1}.
+                    </span>
                     <code
                       class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
-                      >{step}</code
                     >
+                      {step}
+                    </code>
                   </li>
                 {/each}
               </ol>
@@ -696,7 +702,7 @@
             </Button>
             <button
               type="button"
-              class="text-sm text-[var(--color-primary)] hover:underline"
+              class="text-sm text-[var(--text-primary)] underline hover:decoration-2"
               onclick={() => (showManualEntry = !showManualEntry)}
             >
               {t('system.importExport.source.manualEntryLink')}
@@ -722,9 +728,7 @@
           </p>
 
           <!-- db-only option -->
-          <label
-            class="flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors border-[var(--color-primary)] bg-[color-mix(in_srgb,var(--color-primary)_5%,transparent)]"
-          >
+          <label class={MODE_CARD_CLASS}>
             <input
               type="radio"
               name="import-mode"
@@ -734,9 +738,9 @@
               class="mt-1"
             />
             <div>
-              <span class="font-medium text-[var(--color-base-content)]"
-                >{t('system.importExport.mode.dbOnly.label')}</span
-              >
+              <span class="font-medium text-[var(--color-base-content)]">
+                {t('system.importExport.mode.dbOnly.label')}
+              </span>
               <p class="text-sm text-[var(--color-base-content)]/70 mt-0.5">
                 {t('system.importExport.mode.dbOnly.description')}
               </p>
@@ -744,9 +748,7 @@
           </label>
 
           <!-- db-audio option -->
-          <label
-            class="flex items-start gap-3 p-4 rounded-lg border border-[var(--color-base-300)] cursor-pointer hover:border-[var(--color-primary)] hover:bg-[color-mix(in_srgb,var(--color-primary)_4%,transparent)] transition-colors"
-          >
+          <label class={MODE_CARD_CLASS}>
             <input
               type="radio"
               name="import-mode"
@@ -757,9 +759,9 @@
             />
             <div>
               <div class="flex items-center gap-2">
-                <span class="font-medium text-[var(--color-base-content)]"
-                  >{t('system.importExport.mode.dbAudio.label')}</span
-                >
+                <span class="font-medium text-[var(--color-base-content)]">
+                  {t('system.importExport.mode.dbAudio.label')}
+                </span>
               </div>
               <p class="text-sm text-[var(--color-base-content)]/70 mt-0.5">
                 {t('system.importExport.mode.dbAudio.description')}
@@ -853,7 +855,7 @@
                     id="elevation-password"
                     type="password"
                     bind:value={sudoPassword}
-                    class="block w-full px-3 py-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-sm text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
+                    class="block w-full px-3 py-2 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-sm text-[var(--color-base-content)] focus-ring"
                     autocomplete="current-password"
                   />
                 </div>
@@ -884,7 +886,7 @@
                 <!-- C19: showCommandsLabel as a <details> collapsible around fallback commands -->
                 <details class="space-y-2">
                   <summary
-                    class="cursor-pointer text-sm font-medium text-[var(--color-primary)] hover:underline"
+                    class="cursor-pointer text-sm font-medium text-[var(--text-primary)] underline hover:decoration-2"
                   >
                     {t('system.importExport.source.showCommandsLabel')}
                   </summary>
@@ -893,8 +895,9 @@
                       <li class="flex items-start gap-2">
                         <code
                           class="text-xs bg-[var(--color-base-300)] px-2 py-1 rounded text-[var(--color-base-content)] font-mono break-all select-all"
-                          >{cmd}</code
                         >
+                          {cmd}
+                        </code>
                       </li>
                     {/each}
                   </ol>
@@ -987,7 +990,7 @@
         <!-- Done step -->
         <div class="space-y-4 text-center">
           {#if importComplete && !importError && !importCancelled}
-            <CheckCircle2 class="size-12 mx-auto text-[var(--color-success)]" aria-hidden="true" />
+            <CheckCircle2 class="size-12 mx-auto text-[var(--text-success)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.successTitle')}
@@ -1021,14 +1024,14 @@
                 <a
                   href={buildDetectionsFilterUrl()}
                   onclick={() => onClose()}
-                  class="inline-flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:underline"
+                  class="inline-flex items-center gap-1.5 text-sm text-[var(--text-primary)] underline hover:decoration-2"
                 >
                   {t('system.importExport.done.viewDetectionsLink')}
                 </a>
               </div>
             {/if}
           {:else if importCancelled}
-            <XCircle class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
+            <XCircle class="size-12 mx-auto text-[var(--text-warning)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.cancelledTitle')}
@@ -1045,7 +1048,7 @@
               </p>
             {/if}
           {:else if importError}
-            <XCircle class="size-12 mx-auto text-[var(--color-error)]" aria-hidden="true" />
+            <XCircle class="size-12 mx-auto text-[var(--text-error)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.errorTitle')}
@@ -1053,7 +1056,7 @@
               <p class="text-sm text-[var(--color-base-content)]/70 mt-1">{importError}</p>
             </div>
           {:else if importInterrupted}
-            <Unplug class="size-12 mx-auto text-[var(--color-warning)]" aria-hidden="true" />
+            <Unplug class="size-12 mx-auto text-[var(--text-warning)]" aria-hidden="true" />
             <div>
               <h4 class="text-lg font-semibold text-[var(--color-base-content)]">
                 {t('system.importExport.done.interruptedTitle')}
@@ -1066,7 +1069,7 @@
               <a
                 href={buildDetectionsFilterUrl()}
                 onclick={() => onClose()}
-                class="inline-flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:underline"
+                class="inline-flex items-center gap-1.5 text-sm text-[var(--text-primary)] underline hover:decoration-2"
               >
                 {t('system.importExport.done.viewDetectionsLink')}
               </a>

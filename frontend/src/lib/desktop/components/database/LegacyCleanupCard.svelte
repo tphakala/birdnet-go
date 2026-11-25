@@ -49,7 +49,7 @@
     {:else if isCompleted}
       <!-- Success state -->
       <div
-        class="p-3 rounded-lg bg-[var(--color-success)]/10 text-[var(--color-success)] flex items-start gap-3"
+        class="p-3 rounded-lg bg-[var(--color-success)]/10 text-[var(--text-success)] flex items-start gap-3"
         role="status"
         aria-live="polite"
       >
@@ -81,9 +81,9 @@
         <!-- Description -->
         <p class="text-sm text-[var(--color-base-content)]/70">
           {t('system.database.legacy.cleanup.description')}
-          <span class="font-medium text-[var(--color-base-content)] ml-1"
-            >{t('system.database.legacy.cleanup.recommendation')}</span
-          >
+          <span class="font-medium text-[var(--color-base-content)] ml-1">
+            {t('system.database.legacy.cleanup.recommendation')}
+          </span>
         </p>
 
         <!-- Database info -->
@@ -104,9 +104,9 @@
             <span class="text-[var(--color-base-content)]/70">
               {t('system.database.legacy.cleanup.size')}
             </span>
-            <span class="font-medium text-[var(--color-base-content)]"
-              >{formatBytes(status.size_bytes)}</span
-            >
+            <span class="font-medium text-[var(--color-base-content)]">
+              {formatBytes(status.size_bytes)}
+            </span>
           </div>
 
           {#if status.total_records > 0}
@@ -126,16 +126,16 @@
               <span class="text-[var(--color-base-content)]/70">
                 {t('system.database.legacy.cleanup.lastModified')}
               </span>
-              <span class="font-medium text-[var(--color-base-content)]"
-                >{formatDate(status.last_modified)}</span
-              >
+              <span class="font-medium text-[var(--color-base-content)]">
+                {formatDate(status.last_modified)}
+              </span>
             </div>
           {/if}
         </div>
 
         <!-- Warning -->
         <div
-          class="p-3 rounded-lg bg-[var(--color-warning)]/10 text-[var(--color-warning)] flex items-start gap-3"
+          class="p-3 rounded-lg bg-[var(--color-warning)]/10 text-[var(--text-warning)] flex items-start gap-3"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -152,14 +152,14 @@
           </svg>
           <div>
             <p class="font-medium text-sm">{t('system.database.legacy.cleanup.warning')}</p>
-            <p class="text-sm opacity-80">{t('system.database.legacy.cleanup.backupReminder')}</p>
+            <p class="text-sm">{t('system.database.legacy.cleanup.backupReminder')}</p>
           </div>
         </div>
       </div>
     {:else if status?.exists && !status?.can_cleanup}
       <!-- Cannot cleanup - show reason -->
       <div
-        class="p-3 rounded-lg bg-[var(--color-info)]/10 text-[var(--color-info)] flex items-start gap-3"
+        class="p-3 rounded-lg bg-[var(--color-info)]/10 text-[var(--text-info)] flex items-start gap-3"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -176,7 +176,7 @@
         </svg>
         <div>
           <p class="font-medium text-sm">{t('system.database.legacy.cleanup.notAvailable')}</p>
-          <p class="text-sm opacity-80">{status.reason}</p>
+          <p class="text-sm">{status.reason}</p>
         </div>
       </div>
     {/if}

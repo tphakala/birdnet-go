@@ -15,6 +15,7 @@
   Props:
   - title: Section title (required)
   - description: Optional section description
+  - icon: Optional icon component shown before the title (optional)
   - defaultOpen: Whether section starts expanded (optional)
   - className: Additional CSS classes (optional)
   - originalData: Original data for change detection (optional)
@@ -32,11 +33,12 @@
 <script lang="ts">
   import SettingsCard from '$lib/desktop/features/settings/components/SettingsCard.svelte';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import type { Snippet } from 'svelte';
+  import type { ComponentProps, Snippet } from 'svelte';
 
   interface Props {
     title: string;
     description?: string;
+    icon?: ComponentProps<typeof SettingsCard>['icon'];
     defaultOpen?: boolean;
     className?: string;
     originalData?: unknown;
@@ -48,6 +50,7 @@
   let {
     title,
     description,
+    icon,
     className = '',
     originalData,
     currentData,
@@ -66,7 +69,7 @@
   );
 </script>
 
-<SettingsCard {title} {description} {className} hasChanges={sectionHasChanges} {...rest}>
+<SettingsCard {title} {description} {icon} {className} hasChanges={sectionHasChanges} {...rest}>
   {#if children}
     {@render children()}
   {/if}

@@ -53,6 +53,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Component names used for the warnings recorded below. They become the prefix of
@@ -96,9 +97,11 @@ func (s *Settings) recordValidationWarning(component, format string, args ...any
 
 // normalizeIncompleteFeatures disables or defaults settings that are enabled but
 // not configured enough to have any effect, recording a warning for each. See the
-// file comment for the policy and its one security exception.
+// file comment for the policy and its one security exception. A security.baseUrl
+// that cannot be used is the one thing it warns about and keeps (normalizeBaseURL).
 func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeOAuthProviders()
+	s.normalizeBaseURL()
 	s.normalizeQuietHours()
 	s.normalizeEqualizers()
 	s.normalizeAudioExport()
@@ -114,6 +117,22 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeAlternateMinConfidence()
 	s.normalizeModelConsensus()
 	s.normalizeUltrasonicFilter()
+}
+
+// normalizeBaseURL warns about a security.baseUrl that is set but not a usable
+// absolute http(s) URL with a host and no credentials. The value is kept: the settings page then shows it for
+// correction, and GetHostnameForCertificates still reads the AutoTLS hostname from
+// it, so clearing it could turn a scheme typo into a startup failure. Every origin
+// producer already treats it as unusable (see OAuthOrigin and GetBaseURL), and the
+// one fatal case, a credentialed OAuth provider that depends on it, stays with
+// validateOAuthRedirects.
+func (s *Settings) normalizeBaseURL() {
+	if !s.Security.hasUnusableBaseURL() {
+		return
+	}
+	s.recordValidationWarning(warnComponentSecurity,
+		"security.baseUrl %q is not an absolute http(s) URL with a host and without credentials, so links and OAuth callbacks cannot be built from it; it is ignored until corrected",
+		privacy.RedactURLUserinfo(s.Security.BaseURL))
 }
 
 // normalizeUltrasonicFilter resets invalid or unwritten ultrasonic STFT settings
@@ -159,7 +178,7 @@ func (s *Settings) normalizeUltrasonicFilter() {
 }
 
 // normalizeModelThresholds resets an out-of-range per-model confidence threshold
-// (bat, perch, birdnetv3, bsgbat) to the documented default on load, recording a warning.
+// (bat, perch, birdnetv3, birdnetplus, bsgbat) to the documented default on load, recording a warning.
 // Unlike a never-written zero, an out-of-range or NaN/Inf threshold changes
 // detection gating, so ValidateSettings rejects it. But ValidateSettings is fatal
 // on Load (storage.go), and refusing to boot over a threshold takes away the web
@@ -180,6 +199,7 @@ func (s *Settings) normalizeModelThresholds() {
 	reset("bat", &s.Bat.Threshold)
 	reset("perch", &s.Perch.Threshold)
 	reset("birdnetv3", &s.BirdNETV3.Threshold)
+	reset("birdnetplus", &s.BirdNETPlus.Threshold)
 	reset("bsgbat", &s.BSGBat.Threshold)
 }
 
@@ -226,31 +246,90 @@ func (s *Settings) normalizeAlternateMinConfidence() {
 	}
 }
 
-// normalizeModelConsensus resets an unset or out-of-range
-// realtime.modelconsensus.minmodels to the default on load, recording a warning,
-// for the same reason as normalizeAlternateMinConfidence: ValidateSettings is
-// fatal on Load and the value is not editable in the web UI. It runs whether or not
-// the filter is on, because viper drops the nested default when the parent key is
-// present, and a later enable through the API must not fail on a field the operator
-// never saw. A zero value is unwritten, so it only warns when the filter is on. The
-// settings API path does not run this pass; it rejects the value via
-// validateModelConsensusSettings.
+// normalizeModelConsensus repairs the model consensus rules on load, recording a
+// warning for each repair, for the same reason as normalizeAlternateMinConfidence:
+// ValidateSettings is fatal on Load and the rules are not editable in the web UI yet.
+// Blank species and model entries are dropped, which changes no verdict because a
+// blank entry never matches; a rule whose non-empty list held only blanks is dropped,
+// never kept with an empty list, which would widen it to every species or any model.
+// Model aliases this build does not know are kept (inert), with a warning. A rule
+// that names models loses a minmodels and alleligible it cannot use; a rule with no
+// models gets the default minmodels when its value is unset or out of range. The
+// settings API path does not run this pass; it rejects these values via
+// validateModelConsensusSettings. Warnings name a rule by its 0-based position in
+// the file.
 func (s *Settings) normalizeModelConsensus() {
-	m := &s.Realtime.ModelConsensus
-	if m.MinModels == 0 {
-		if m.Enabled() {
-			s.recordValidationWarning(warnComponentRealtime,
-				"model consensus minmodels is not set; using the default %d", DefaultModelConsensusMinModels)
-		}
-		m.MinModels = DefaultModelConsensusMinModels
+	rules := s.Realtime.ModelConsensus.Rules
+	if len(rules) == 0 {
 		return
 	}
-	if !validModelConsensusMinModels(m.MinModels) {
-		s.recordValidationWarning(warnComponentRealtime,
-			"model consensus minmodels %d is outside %d to %d; using the default %d",
-			m.MinModels, MinModelConsensusMinModels, MaxModelConsensusMinModels, DefaultModelConsensusMinModels)
-		m.MinModels = DefaultModelConsensusMinModels
+	var kept []ModelConsensusRule
+	for i := range rules {
+		if rule, ok := s.normalizeModelConsensusRule(i, rules[i]); ok {
+			kept = append(kept, rule)
+		}
 	}
+	s.Realtime.ModelConsensus.Rules = kept
+}
+
+// normalizeModelConsensusRule repairs one rule at position i and reports whether to
+// keep it.
+func (s *Settings) normalizeModelConsensusRule(i int, rule ModelConsensusRule) (ModelConsensusRule, bool) {
+	species := dropBlankEntries(rule.Species)
+	if len(rule.Species) > 0 && len(species) == 0 {
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] lists only blank species; it matched nothing and is ignored", i)
+		return rule, false
+	}
+	models := dropBlankEntries(rule.Models)
+	if len(rule.Models) > 0 && len(models) == 0 {
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] lists only blank models; it is ignored", i)
+		return rule, false
+	}
+	rule.Species = species
+	rule.Models = models
+
+	for _, alias := range rule.Models {
+		if !ValidAudioModels[strings.ToLower(alias)] {
+			s.recordValidationWarning(warnComponentRealtime,
+				"model consensus rules[%d] model %q is not a known model ID; it is ignored", i, alias)
+		}
+	}
+
+	if len(rule.Models) > 0 {
+		if rule.MinModels != 0 || rule.AllEligible {
+			s.recordValidationWarning(warnComponentRealtime,
+				"model consensus rules[%d] names models, so minmodels and alleligible do not apply; they are cleared", i)
+			rule.MinModels = 0
+			rule.AllEligible = false
+		}
+		return rule, true
+	}
+	switch {
+	case rule.MinModels == 0:
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] minmodels is not set; using the default %d", i, DefaultModelConsensusMinModels)
+		rule.MinModels = DefaultModelConsensusMinModels
+	case !validModelConsensusMinModels(rule.MinModels):
+		s.recordValidationWarning(warnComponentRealtime,
+			"model consensus rules[%d] minmodels %d is outside %d to %d; using the default %d",
+			i, rule.MinModels, MinModelConsensusMinModels, MaxModelConsensusMinModels, DefaultModelConsensusMinModels)
+		rule.MinModels = DefaultModelConsensusMinModels
+	}
+	return rule, true
+}
+
+// dropBlankEntries returns the entries of in that are not blank (empty or only
+// whitespace), as written. A nil, empty or all-blank in returns nil.
+func dropBlankEntries(in []string) []string {
+	var kept []string
+	for _, e := range in {
+		if strings.TrimSpace(e) != "" {
+			kept = append(kept, e)
+		}
+	}
+	return kept
 }
 
 // normalizeProfiling zeroes negative pprof sampling rates on load. A negative rate
@@ -288,11 +367,22 @@ func (s *Settings) normalizeProfiling() {
 // A provider that does have credentials is never disabled here, however broken the
 // rest of its configuration: it counts towards IsAuthenticationEnabled, so turning
 // it off would drop authentication from a server the operator meant to protect.
+//
+// That includes an entry whose provider ID is blank or unknown: it is kept as it
+// is and only warned about, because no sign-in can use it yet, while enabled with
+// credentials it still makes authentication required. The PUT and PATCH settings
+// handlers refuse to save such an entry (ValidateOAuthProviderIDs), so the warning
+// is the way to learn that the file needs fixing.
 func (s *Settings) normalizeOAuthProviders() {
 	sec := &s.Security
 
 	for i := range sec.OAuthProviders {
 		p := &sec.OAuthProviders[i]
+		if !IsKnownOAuthProviderID(NormalizeOAuthProviderID(p.Provider)) {
+			s.recordValidationWarning(warnComponentSecurity,
+				"security.oauthProviders[%d] has provider %q, which is not a supported provider (supported: %s); the entry is kept, and while it is enabled with credentials it still requires sign-in although nobody can sign in with it. Remove it or correct provider",
+				i, p.Provider, strings.Join(KnownOAuthProviderIDs(), ", "))
+		}
 		if !p.Enabled {
 			continue
 		}
@@ -324,9 +414,9 @@ func (s *Settings) normalizeOAuthProviders() {
 		name     string
 		provider SocialProvider
 	}{
-		{"security.googleauth", providerGoogle, sec.GoogleAuth},
-		{"security.githubauth", providerGitHub, sec.GithubAuth},
-		{"security.microsoftauth", providerMicrosoft, sec.MicrosoftAuth},
+		{"security.googleauth", OAuthProviderGoogle, sec.GoogleAuth},
+		{"security.githubauth", OAuthProviderGitHub, sec.GithubAuth},
+		{"security.microsoftauth", OAuthProviderMicrosoft, sec.MicrosoftAuth},
 	}
 	for _, l := range legacy {
 		if !l.provider.Enabled {

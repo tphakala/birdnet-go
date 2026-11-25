@@ -35,7 +35,7 @@
   let { id, className = '', icon, children }: Props = $props();
 </script>
 
-<div {id} class="mt-4 p-4 bg-[var(--color-base-200)] text-sm rounded-lg {className}">
+<div {id} class="mt-4 p-4 bg-[var(--note-bg)] text-sm rounded-lg {className}">
   {#if icon}
     <div class="flex gap-3">
       <div class="shrink-0">

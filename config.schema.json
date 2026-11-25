@@ -381,7 +381,7 @@
         },
         "accesstokenexp": {
           "type": "string",
-          "description": "duration for access token",
+          "description": "no longer sets how long a browser stays signed in",
           "examples": [
             "10s",
             "5m",
@@ -496,7 +496,7 @@
         },
         "openvinopath": {
           "type": "string",
-          "description": "path to libopenvino_c shared library (OpenVINO image variants only)"
+          "description": "path to the OpenVINO C runtime (libopenvino_c.so, or openvino_c.dll on Windows); empty uses the default library name, and on Windows first searches the known install locations"
         },
         "backend": {
           "type": "string",
@@ -504,7 +504,7 @@
         },
         "openvinodevice": {
           "type": "string",
-          "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", or \"gpu\""
+          "description": "OpenVINO device preference: \"auto\" (default), \"cpu\", \"gpu\", or a concrete GPU such as \"GPU.1\" on a host with several GPUs"
         },
         "huggingfaceendpoint": {
           "type": "string",
@@ -521,6 +521,33 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "BirdNETPlusConfig": {
+      "properties": {
+        "modelpath": {
+          "type": "string",
+          "description": "path to BirdNET+ v3.0 ONNX model file"
+        },
+        "labelpath": {
+          "type": "string",
+          "description": "path to BirdNET+ v3.0 label file"
+        },
+        "overridethreshold": {
+          "type": "boolean",
+          "description": "when true, gate BirdNET+ v3.0 detections on Threshold instead of following BirdNET.Threshold"
+        },
+        "threshold": {
+          "type": "number",
+          "description": "confidence threshold for detections (applied only when OverrideThreshold is true)"
+        },
+        "locale": {
+          "type": "string",
+          "description": "locale for species label translation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "BirdNETPlusConfig holds configuration for the BirdNET+ v3.0 acoustic classifier."
     },
     "BirdNETV3Config": {
       "properties": {
@@ -680,7 +707,7 @@
         },
         "defaultaudiogain": {
           "type": "number",
-          "description": "Default playback gain in dB (0-24)"
+          "description": "Default playback gain in dB (-12 to 24)"
         },
         "livespectrogram": {
           "type": "boolean",
@@ -693,6 +720,10 @@
         "playbackdenoise": {
           "$ref": "#/$defs/DenoiseSettings",
           "description": "denoise clips when they are played or downloaded; stored clips stay unchanged"
+        },
+        "playback": {
+          "$ref": "#/$defs/PlaybackDefaults",
+          "description": "further playback defaults"
         }
       },
       "additionalProperties": false,
@@ -1335,39 +1366,52 @@
       "type": "object",
       "description": "MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections"
     },
-    "ModelConsensusSettings": {
+    "ModelConsensusRule": {
       "properties": {
-        "allspecies": {
-          "type": "boolean",
-          "description": "true to require consensus for every species; takes precedence over listedspecies"
-        },
-        "listedspecies": {
-          "type": "boolean",
-          "description": "true to require consensus for the species in species"
-        },
         "species": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "species that need consensus when listedspecies is on; scientific names keep working after a locale change"
+          "description": "species the rule covers, scientific names keep working after a locale change; empty covers every species"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "config model IDs as in models.enabled; empty means any model"
         },
         "minmodels": {
           "type": "integer",
-          "description": "agreeing models required, 2 to 4, capped at the number of eligible models"
+          "description": "agreeing models required, 2 to 4, for a rule with no models; 0 for a rule that names models"
         },
         "alleligible": {
           "type": "boolean",
-          "description": "true to require every eligible model instead of minmodels"
-        },
-        "debug": {
-          "type": "boolean",
-          "description": "true to log each consensus discard at info level, with the agreeing and eligible models"
+          "description": "true to require every eligible model instead of minmodels, for a rule with no models"
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "ModelConsensusSettings configures the model consensus false positive filter."
+      "description": "ModelConsensusRule is one model consensus rule."
+    },
+    "ModelConsensusSettings": {
+      "properties": {
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/ModelConsensusRule"
+          },
+          "type": "array",
+          "description": "consensus rules; each has species (empty: every species), models (config IDs as in models.enabled; empty: any model, needing minmodels agreeing models or every eligible one with alleligible; non-empty: a detection heard only by these models needs a second model outside the list), and minmodels (2 to 4) and alleligible, which apply only when models is empty"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "true to log each consensus discard at info level, with the failed rule and the agreeing and eligible models"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ModelConsensusSettings configures the model consensus false positive filter as a list of rules."
     },
     "ModelsConfig": {
       "properties": {
@@ -1552,6 +1596,10 @@
           },
           "type": "array",
           "description": "Custom OAuth scopes (OIDC default: openid, profile, email)"
+        },
+        "postLogoutRedirect": {
+          "type": "boolean",
+          "description": "PostLogoutRedirect sends the browser back to the instance after sign-out at\nthe identity provider. OIDC only. The return URL must be registered there."
         }
       },
       "additionalProperties": false,
@@ -1626,6 +1674,17 @@
       "additionalProperties": false,
       "type": "object",
       "description": "PirateWeatherSettings contains settings for Pirate Weather integration."
+    },
+    "PlaybackDefaults": {
+      "properties": {
+        "highpasshz": {
+          "type": "integer",
+          "description": "high-pass cutoff in Hz applied in the browser while a clip plays; 0 is off"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "PlaybackDefaults holds the values a clip player starts with."
     },
     "PrivacyFilterSettings": {
       "properties": {
@@ -1925,7 +1984,7 @@
         },
         "model": {
           "type": "string",
-          "description": "range filter model version: \"legacy\" for v1, \"v3\" for geomodel v3.0, or empty/default for v2"
+          "description": "range filter model version: \"legacy\" for v1, \"v3\" for geomodel v3.0, or empty/default for v2; an installed geomodel replaces the stock v1 and v2 models"
         },
         "modelpath": {
           "type": "string",
@@ -2270,7 +2329,7 @@
         },
         "sessionduration": {
           "type": "string",
-          "description": "duration for browser session cookies",
+          "description": "lifetime of the OAuth handshake cookie; no longer sets how long a browser stays signed in",
           "examples": [
             "10s",
             "5m",
@@ -2334,6 +2393,10 @@
         "birdnetv3": {
           "$ref": "#/$defs/BirdNETV3Config",
           "description": "BirdNET v3.0 acoustic classifier configuration"
+        },
+        "birdnetplus": {
+          "$ref": "#/$defs/BirdNETPlusConfig",
+          "description": "BirdNET+ v3.0 acoustic classifier configuration"
         },
         "bat": {
           "$ref": "#/$defs/BatConfig",
@@ -2801,6 +2864,10 @@
         "enabled": {
           "type": "boolean",
           "description": "enable ultrasonic validation filter"
+        },
+        "discardunlikely": {
+          "type": "boolean",
+          "description": "discard detections tagged unlikely instead of saving them; applies only while enabled"
         },
         "cvthreshold": {
           "type": "number",

@@ -16,7 +16,7 @@ const (
 // ortTelemetryTruthyTokens are the values ONNX Runtime treats as "disable
 // telemetry", matched case-insensitively after trimming ASCII whitespace
 // (IsTelemetryDisabledByEnvironment in
-// onnxruntime/core/platform/telemetry_environment.h, tag v1.31.0).
+// onnxruntime/core/platform/telemetry_environment.h, tag v1.32.0).
 var ortTelemetryTruthyTokens = []string{"1", "true", "yes", "on", "y"}
 
 // TelemetryOptOut reports the state of the ONNX Runtime telemetry opt-out.

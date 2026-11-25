@@ -286,9 +286,9 @@
              as muted technical detail on the line below. -->
         <span class="font-medium">{variantHardwareLabel(variant)}</span>
         {#if variant.recommended}
-          <span class="badge badge-primary badge-sm"
-            >{t('analysis.gallery.variants.recommended')}</span
-          >
+          <span class="badge badge-primary badge-sm">
+            {t('analysis.gallery.variants.recommended')}
+          </span>
         {/if}
         {#if variant.installed}
           <span class="badge badge-info badge-sm">{t('analysis.gallery.variants.installed')}</span>
@@ -304,14 +304,11 @@
         {/if}
         <span>{formatBytes(variant.sizeBytes)}</span>
         {#if variant.speciesCount > 0}
-          <span
-            >{t('analysis.gallery.species', {
+          <span>
+            {t('analysis.gallery.species', {
               count: formatNumber(variant.speciesCount),
-            })}</span
-          >
-        {/if}
-        {#if variant.headlineLatencyMs && variant.headlineLatencyMs > 0}
-          <span>{t('analysis.gallery.variants.latency', { ms: variant.headlineLatencyMs })}</span>
+            })}
+          </span>
         {/if}
       </div>
 
@@ -320,7 +317,7 @@
         <!-- Render every surfaced reason as a list item under a labeled heading: a
              list announces "N items" to a screen reader, so the second reason is
              unambiguously a second reason rather than an unrelated line. -->
-        <div class="text-xs text-primary/90">
+        <div class="text-xs text-[var(--text-primary)]">
           <p class="font-medium">
             {t('analysis.gallery.variants.recommendedForHardware')}:
           </p>

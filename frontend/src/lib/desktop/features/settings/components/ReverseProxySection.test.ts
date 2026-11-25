@@ -53,8 +53,8 @@ function rows(): HTMLElement[] {
   );
 }
 
-function cloudflareCheckbox(): HTMLInputElement {
-  return screen.getByRole<HTMLInputElement>('checkbox', { name: /reverseProxy\.cloudflareLabel/ });
+function cloudflareSwitch(): HTMLInputElement {
+  return screen.getByRole<HTMLInputElement>('switch', { name: /reverseProxy\.cloudflareLabel/ });
 }
 
 describe('ReverseProxySection', () => {
@@ -74,7 +74,7 @@ describe('ReverseProxySection', () => {
     vi.restoreAllMocks();
   });
 
-  it('lists the addresses without the Cloudflare token and checks the box for any spelling', () => {
+  it('lists the addresses without the Cloudflare token and turns the switch on for any spelling', () => {
     const list = ['10.0.0.1', 'CLOUDFLARE', '172.18.0.0/16'];
     renderSection({ trustedProxies: list, savedTrustedProxies: list });
 
@@ -82,7 +82,7 @@ describe('ReverseProxySection', () => {
       '10.0.0.1',
       '172.18.0.0/16',
     ]);
-    expect(cloudflareCheckbox().checked).toBe(true);
+    expect(cloudflareSwitch().checked).toBe(true);
   });
 
   it('names Cloudflare in the empty state when only the preset is saved', () => {
@@ -109,11 +109,11 @@ describe('ReverseProxySection', () => {
       onUpdate,
     });
 
-    await fireEvent.click(cloudflareCheckbox());
+    await fireEvent.click(cloudflareSwitch());
     expect(onUpdate).toHaveBeenLastCalledWith(['10.0.0.1', '10.0.0.2']);
 
     await rerender({ trustedProxies: ['10.0.0.1', '10.0.0.2'] });
-    await fireEvent.click(cloudflareCheckbox());
+    await fireEvent.click(cloudflareSwitch());
     expect(onUpdate).toHaveBeenLastCalledWith(saved);
   });
 
@@ -322,7 +322,7 @@ describe('ReverseProxySection', () => {
   });
 
   it('focuses the card and drops the hash when opened through the cross-link', async () => {
-    const redirect = vi.spyOn(navigation, 'redirect').mockImplementation(() => {});
+    const redirect = vi.spyOn(navigation, 'redirect').mockResolvedValue(true);
     // jsdom has no scrollIntoView
     const scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
@@ -344,7 +344,7 @@ describe('ReverseProxySection', () => {
   });
 
   it('leaves focus alone without the hash', async () => {
-    const redirect = vi.spyOn(navigation, 'redirect').mockImplementation(() => {});
+    const redirect = vi.spyOn(navigation, 'redirect').mockResolvedValue(true);
 
     renderSection();
     await tick();

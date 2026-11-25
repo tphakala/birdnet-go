@@ -170,3 +170,57 @@ describe('DetectionCard playback denoise default', () => {
     });
   });
 });
+
+describe('DetectionCard playback gain and high-pass defaults', () => {
+  const SETTINGS_BUTTON = 'media.audio.settings';
+  const RESET_BUTTON = 'common.reset';
+  const DEFAULT_GAIN_DB = -6.5;
+  const DEFAULT_CUTOFF_HZ = 300;
+  const MOVED_CUTOFF_HZ = 1000;
+
+  beforeEach(() => {
+    appState.playbackDefaults = { gainDb: DEFAULT_GAIN_DB, highPassHz: DEFAULT_CUTOFF_HZ };
+  });
+
+  afterEach(() => {
+    appState.playbackDefaults = { gainDb: 0, highPassHz: 0 };
+  });
+
+  function sliders(container: HTMLElement) {
+    const [gain, filter] = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="range"]')
+    );
+    return { gain, filter };
+  }
+
+  it('starts on the defaults without the modified dot', async () => {
+    const { container } = render(DetectionCard, {
+      props: { detection: createDetection({ clipName: 'clip_654.wav' }) },
+    });
+    const trigger = screen.getByRole('button', { name: SETTINGS_BUTTON });
+    expect(container.querySelector('.settings-indicator')).toBeNull();
+
+    await fireEvent.click(trigger);
+
+    expect(sliders(container).gain.value).toBe(String(DEFAULT_GAIN_DB));
+    expect(sliders(container).filter.value).toBe(String(DEFAULT_CUTOFF_HZ));
+  });
+
+  it('shows the dot once the filter moves and Reset returns to the defaults', async () => {
+    const { container } = render(DetectionCard, {
+      props: { detection: createDetection({ clipName: 'clip_654.wav' }) },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: SETTINGS_BUTTON }));
+
+    await fireEvent.input(sliders(container).filter, {
+      target: { value: String(MOVED_CUTOFF_HZ) },
+    });
+    expect(container.querySelector('.settings-indicator')).not.toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: RESET_BUTTON }));
+
+    expect(sliders(container).filter.value).toBe(String(DEFAULT_CUTOFF_HZ));
+    expect(sliders(container).gain.value).toBe(String(DEFAULT_GAIN_DB));
+    expect(container.querySelector('.settings-indicator')).toBeNull();
+  });
+});

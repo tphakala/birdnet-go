@@ -1,0 +1,2405 @@
+{
+  "schema": 2,
+  "repo": "tphakala/BattyBirdNET-onnx",
+  "family": "battybirdnet",
+  "updated": "2026-11-16",
+  "family_meta": {
+    "display_name": "BattyBirdNET",
+    "description": "Regional bat-species classifiers built on BirdNET v2.4 embeddings via transfer learning; identify bats from 256 kHz ultrasonic echolocation recordings. Species count varies per regional head (11-38).",
+    "author": "R.D. Zinck",
+    "license": "CC-BY-NC-SA-4.0",
+    "commercial_use": false,
+    "documents": [
+      {
+        "kind": "license",
+        "requires_agreement": false,
+        "url": "https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode"
+      }
+    ],
+    "channel": "stable",
+    "upstream_url": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+    "species_count": null,
+    "version": "1.0",
+    "heads": {
+      "BattyBirdNET-Bavaria-256kHz": {
+        "display_name": "BattyBirdNET Bavaria",
+        "region": "Bavaria",
+        "description": "Bat species detection for Bavaria using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-Bavaria-256kHz-high": {
+        "display_name": "BattyBirdNET Bavaria (High)",
+        "region": "Bavaria",
+        "description": "Bat species detection for Bavaria using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-EU-256kHz": {
+        "display_name": "BattyBirdNET EU",
+        "region": "Europe",
+        "description": "Bat species detection for Europe using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-Scotland-256kHz": {
+        "display_name": "BattyBirdNET Scotland",
+        "region": "Scotland",
+        "description": "Bat species detection for Scotland using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-SouthWales-256kHz": {
+        "display_name": "BattyBirdNET South Wales",
+        "region": "South Wales",
+        "description": "Bat species detection for South Wales using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-Sweden-256kHz": {
+        "display_name": "BattyBirdNET Sweden",
+        "region": "Sweden",
+        "description": "Bat species detection for Sweden using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-UK-256kHz": {
+        "display_name": "BattyBirdNET UK",
+        "region": "UK",
+        "description": "Bat species detection for UK using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-USA-256kHz": {
+        "display_name": "BattyBirdNET USA",
+        "region": "USA",
+        "description": "Bat species detection for USA using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-USA-EAST-256kHz": {
+        "display_name": "BattyBirdNET USA East",
+        "region": "USA East",
+        "description": "Bat species detection for USA East using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-USA-EAST-256kHz-high": {
+        "display_name": "BattyBirdNET USA East (High)",
+        "region": "USA East",
+        "description": "Bat species detection for USA East using BirdNET v2.4 embeddings"
+      },
+      "BattyBirdNET-USA-WEST-256kHz": {
+        "display_name": "BattyBirdNET USA West",
+        "region": "USA West",
+        "description": "Bat species detection for USA West using BirdNET v2.4 embeddings"
+      }
+    }
+  },
+  "requirements_note": "requirements.min_ram_mb is a conservative, high-biased RAM floor: measured peak RSS + 15% where a benchmark exists, else a size-derived estimate biased high (a too-low floor risks OOM; a too-high floor only over-excludes on the smallest devices). Measured values will replace the estimates over time.",
+  "naming": "legacy names, frozen; new files follow <family>-<upstream>[-<region>]-<variant>-b<build>.<ext>",
+  "selection": {
+    "embedding/x86-64/openvino-cpu": "birdnet-v2.4-embeddings-fp32-dfttrunc.onnx",
+    "embedding/aarch64/onnxruntime": "birdnet-v2.4-embeddings-fp32-dfttrunc.onnx",
+    "head/default": "fp32/<region>_fp32.onnx"
+  },
+  "notes": "Two-stage pipeline: a shared embedding backbone plus a tiny per-region head. The embedding model MUST stay FP32: at FP16 the 1024-d embedding overflows and detections flip. The _dfttrunc embedding build is bit-exact and faster. Heads are published at fp32/fp16/int8 but are so small that fp32 is the default choice.",
+  "models": [
+    {
+      "path": "birdnet-v2.4-embeddings-fp32.onnx",
+      "family": "battybirdnet",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 6522,
+      "labels": null,
+      "input": {
+        "sample_rate": 48000,
+        "window_seconds": 3,
+        "samples": 144000,
+        "shape": [
+          "batch",
+          144000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "b6b8f24dc9c3d43f2deb14a6f2c7b5b233e7477b6baf1b52341291e714903fb0",
+      "size_bytes": 66932350,
+      "superseded_by": null,
+      "role": "embedding",
+      "requirements": {
+        "min_ram_mb": 350
+      }
+    },
+    {
+      "path": "birdnet-v2.4-embeddings-fp32-dfttrunc.onnx",
+      "family": "battybirdnet",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 6522,
+      "labels": null,
+      "input": {
+        "sample_rate": 48000,
+        "window_seconds": 3,
+        "samples": 144000,
+        "shape": [
+          "batch",
+          144000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "b91139d3c63d55d742779a56531078bc88366a09bcc9bd6a9b703d425914c380",
+      "size_bytes": 58763257,
+      "superseded_by": null,
+      "role": "embedding",
+      "optimizations": [
+        "dft-truncated"
+      ],
+      "requirements": {
+        "min_ram_mb": 350
+      }
+    },
+    {
+      "path": "birdnet-v24-embeddings.onnx",
+      "family": "battybirdnet",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": null,
+      "classes": 6522,
+      "labels": null,
+      "input": {
+        "sample_rate": 48000,
+        "window_seconds": 3,
+        "samples": 144000,
+        "shape": [
+          "batch",
+          144000
+        ],
+        "dtype": "float32"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "b6b8f24dc9c3d43f2deb14a6f2c7b5b233e7477b6baf1b52341291e714903fb0",
+      "size_bytes": 66932350,
+      "superseded_by": null,
+      "role": "embedding",
+      "alias_of": "birdnet-v2.4-embeddings-fp32.onnx",
+      "requirements": {
+        "min_ram_mb": 350
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-Bavaria-256kHz-high_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-Bavaria-256kHz-high",
+      "classes": 24,
+      "labels": "labels/BattyBirdNET-Bavaria-256kHz-high_Labels.txt",
+      "labels_sha256": "26bc12ecf6c5ca9ce8837cd1bebe6e1cb2ce95f0261355a827383c85a0dd9d96",
+      "labels_size_bytes": 904,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "eb3ec7d55ccda59c8dcfb8ec741be793e9cadb29b955049f64bb6c17dccd33a8",
+      "size_bytes": 50167,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-Bavaria-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-Bavaria-256kHz",
+      "classes": 32,
+      "labels": "labels/BattyBirdNET-Bavaria-256kHz_Labels.txt",
+      "labels_sha256": "ff4a3f9a351f202c8712c807c6bb8b29df0b1c75ddab48e543ec76a88a42715c",
+      "labels_size_bytes": 966,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "9607c44c07a9e814b78df1931b7a5c4c9f391485ef229ad4dcc3bbe8d6f31712",
+      "size_bytes": 66567,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-EU-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-EU-256kHz",
+      "classes": 30,
+      "labels": "labels/BattyBirdNET-EU-256kHz_Labels.txt",
+      "labels_sha256": "9ad705d4bcd93040929a059854df968acebefee9f7513e97a558871c3997e65e",
+      "labels_size_bytes": 1081,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "b8c55ea4a6f1d27f22307ef5a275dee917785d524cb219b95b4f13f2229cf4f6",
+      "size_bytes": 62467,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-Scotland-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-Scotland-256kHz",
+      "classes": 11,
+      "labels": "labels/BattyBirdNET-Scotland-256kHz_Labels.txt",
+      "labels_sha256": "3dc657a38f691c20f351fa19e36b9919927aec2e30dc32f61ae9fd9bb319331b",
+      "labels_size_bytes": 356,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "0c2a04eaeb43d6136a4273e607da8b659c3bd7a561ae4eb2555ee39925b5d296",
+      "size_bytes": 23517,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-SouthWales-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-SouthWales-256kHz",
+      "classes": 29,
+      "labels": "labels/BattyBirdNET-SouthWales-256kHz_Labels.txt",
+      "labels_sha256": "fc7ed8bd55c28b66cdcecc8d8acb8ea05850d9301aa65467fd5d192ee00e8214",
+      "labels_size_bytes": 1072,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "bd7e1c1aecdde8d5ded51a97f8394a1e1abe10611b963517c3bc9de48ccad28c",
+      "size_bytes": 60417,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-Sweden-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-Sweden-256kHz",
+      "classes": 23,
+      "labels": "labels/BattyBirdNET-Sweden-256kHz_Labels.txt",
+      "labels_sha256": "c43042ebd458eed4cc7258fcd6526e0299a61e27146e3ca989300f696d1f2e02",
+      "labels_size_bytes": 737,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "e83c5c0e9ea3661de5968a610bb8c6946d2018ac4261a355f294e4403571a557",
+      "size_bytes": 48117,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-UK-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-UK-256kHz",
+      "classes": 20,
+      "labels": "labels/BattyBirdNET-UK-256kHz_Labels.txt",
+      "labels_sha256": "4cc63b7cfd0a8e4380857fc3f5d576e8ec48d80cbdc9060873abb20c4ef78740",
+      "labels_size_bytes": 649,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "66727d308a9d5a84ba76389059d3bc02a4c3a9523a9ee82253cea8abbe37c59c",
+      "size_bytes": 41967,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-USA-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-USA-256kHz",
+      "classes": 38,
+      "labels": "labels/BattyBirdNET-USA-256kHz_Labels.txt",
+      "labels_sha256": "3cf597702b5f0f558b227df3a01648da7eb52cc632ec70a148fd159763ba4399",
+      "labels_size_bytes": 1222,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "ce2e97c2cee53c541f3eba2f9e904296259891ee50b23474ecb188dcc3324ea0",
+      "size_bytes": 78867,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-USA-EAST-256kHz-high_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-USA-EAST-256kHz-high",
+      "classes": 17,
+      "labels": "labels/BattyBirdNET-USA-EAST-256kHz-high_Labels.txt",
+      "labels_sha256": "438b01d917b3833f707cdf9e9d13f0b13eee2318ad23eeb34089b76b9f22e566",
+      "labels_size_bytes": 613,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "15bb5171c27c241ee082294521b9a8bf1fa50a75202117edf83a9c6a60a36fa6",
+      "size_bytes": 35817,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-USA-EAST-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-USA-EAST-256kHz",
+      "classes": 23,
+      "labels": "labels/BattyBirdNET-USA-EAST-256kHz_Labels.txt",
+      "labels_sha256": "db88ade98f2680af786911f1de49e5c29425335bbbc814c4a40c1e71ef888713",
+      "labels_size_bytes": 663,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "92eebbf58e6830ccb1a0003d7f889357f2d3c0f6d820c701ab7eb6a96eac68be",
+      "size_bytes": 48117,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/BattyBirdNET-USA-WEST-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "BattyBirdNET-USA-WEST-256kHz",
+      "classes": 28,
+      "labels": "labels/BattyBirdNET-USA-WEST-256kHz_Labels.txt",
+      "labels_sha256": "f01a993b749f455636de5811e6ab9de96537f05dc191ec1919acf4365a6e6386",
+      "labels_size_bytes": 867,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "3fef1087f874164f901613a88d5d35bbaf1f2f7ab67b946638d74ec2e2400ccf",
+      "size_bytes": 58367,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/CUSTOM-BAT-256kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "CUSTOM-BAT-256kHz",
+      "classes": 31,
+      "labels": "labels/CUSTOM-BAT-256kHz_Labels.txt",
+      "labels_sha256": "e2d5eb2382c3d1311e2a8a18857fc3046ea0dedee73477db388263297a090c72",
+      "labels_size_bytes": 913,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "275306567c8faf3923c78161971b942d20ffc32adaf1275c02839fa5195ff6c5",
+      "size_bytes": 64517,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp16/CUSTOM-BIRD-48kHz_fp16.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp16",
+      "precision": "fp16",
+      "region": "CUSTOM-BIRD-48kHz",
+      "classes": 31,
+      "labels": "labels/CUSTOM-BIRD-48kHz_Labels.txt",
+      "labels_sha256": "e2d5eb2382c3d1311e2a8a18857fc3046ea0dedee73477db388263297a090c72",
+      "labels_size_bytes": 913,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "275306567c8faf3923c78161971b942d20ffc32adaf1275c02839fa5195ff6c5",
+      "size_bytes": 64517,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 350,
+        "excludes": [
+          "openvino-gpu-intel-gen12"
+        ]
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-Bavaria-256kHz-high_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-Bavaria-256kHz-high",
+      "classes": 24,
+      "labels": "labels/BattyBirdNET-Bavaria-256kHz-high_Labels.txt",
+      "labels_sha256": "26bc12ecf6c5ca9ce8837cd1bebe6e1cb2ce95f0261355a827383c85a0dd9d96",
+      "labels_size_bytes": 904,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "3d1d5bc174ed70bfc22a53439fe468a2a4aa317b755600d1e193cefbae307a30",
+      "size_bytes": 99026,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-Bavaria-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-Bavaria-256kHz",
+      "classes": 32,
+      "labels": "labels/BattyBirdNET-Bavaria-256kHz_Labels.txt",
+      "labels_sha256": "ff4a3f9a351f202c8712c807c6bb8b29df0b1c75ddab48e543ec76a88a42715c",
+      "labels_size_bytes": 966,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "7ee3936621d180b9fe42f3732703339662b154135ce205f711797bca7daa44ea",
+      "size_bytes": 131827,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-EU-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-EU-256kHz",
+      "classes": 30,
+      "labels": "labels/BattyBirdNET-EU-256kHz_Labels.txt",
+      "labels_sha256": "9ad705d4bcd93040929a059854df968acebefee9f7513e97a558871c3997e65e",
+      "labels_size_bytes": 1081,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "f316073482ab95f48d65ca76e8b2aaa572019b3d286ab07a68ba57cea52d12f7",
+      "size_bytes": 123626,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-Scotland-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-Scotland-256kHz",
+      "classes": 11,
+      "labels": "labels/BattyBirdNET-Scotland-256kHz_Labels.txt",
+      "labels_sha256": "3dc657a38f691c20f351fa19e36b9919927aec2e30dc32f61ae9fd9bb319331b",
+      "labels_size_bytes": 356,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "003e3da16d3607d52dd5c963d71eec89fdfd58224dccc02bc6a27d58d21cbd85",
+      "size_bytes": 45725,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-SouthWales-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-SouthWales-256kHz",
+      "classes": 29,
+      "labels": "labels/BattyBirdNET-SouthWales-256kHz_Labels.txt",
+      "labels_sha256": "fc7ed8bd55c28b66cdcecc8d8acb8ea05850d9301aa65467fd5d192ee00e8214",
+      "labels_size_bytes": 1072,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "14534d34fc54b0bc267ba07a6eaddc10e360195b11d0c4b5f47460a4f1d5aea4",
+      "size_bytes": 119526,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-Sweden-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-Sweden-256kHz",
+      "classes": 23,
+      "labels": "labels/BattyBirdNET-Sweden-256kHz_Labels.txt",
+      "labels_sha256": "c43042ebd458eed4cc7258fcd6526e0299a61e27146e3ca989300f696d1f2e02",
+      "labels_size_bytes": 737,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "85fe47431c275b5370e0c8d0aa9b049f54d32035f736afcec4ac5d62c1adb591",
+      "size_bytes": 94926,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-UK-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-UK-256kHz",
+      "classes": 20,
+      "labels": "labels/BattyBirdNET-UK-256kHz_Labels.txt",
+      "labels_sha256": "4cc63b7cfd0a8e4380857fc3f5d576e8ec48d80cbdc9060873abb20c4ef78740",
+      "labels_size_bytes": 649,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "aa9d45a5e3e64b6c28a131d16a98346ee1095c2d4c9f4785e2ff1d5a6e4b27b6",
+      "size_bytes": 82625,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-USA-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-USA-256kHz",
+      "classes": 38,
+      "labels": "labels/BattyBirdNET-USA-256kHz_Labels.txt",
+      "labels_sha256": "3cf597702b5f0f558b227df3a01648da7eb52cc632ec70a148fd159763ba4399",
+      "labels_size_bytes": 1222,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "9230fb49c87b9953f311fa1d408eac8359a1c8761264204f51b796406bcfcc63",
+      "size_bytes": 156427,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-USA-EAST-256kHz-high_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-USA-EAST-256kHz-high",
+      "classes": 17,
+      "labels": "labels/BattyBirdNET-USA-EAST-256kHz-high_Labels.txt",
+      "labels_sha256": "438b01d917b3833f707cdf9e9d13f0b13eee2318ad23eeb34089b76b9f22e566",
+      "labels_size_bytes": 613,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "cb3fd538fb8adc87f775fad4fe5f9b3e1f56e78c5c7acd9abed4da7034e39772",
+      "size_bytes": 70325,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-USA-EAST-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-USA-EAST-256kHz",
+      "classes": 23,
+      "labels": "labels/BattyBirdNET-USA-EAST-256kHz_Labels.txt",
+      "labels_sha256": "db88ade98f2680af786911f1de49e5c29425335bbbc814c4a40c1e71ef888713",
+      "labels_size_bytes": 663,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "403901ce25c3daecdbd4d83017da8ff54c802f0feb78fc66355677f5c8905241",
+      "size_bytes": 94926,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/BattyBirdNET-USA-WEST-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "BattyBirdNET-USA-WEST-256kHz",
+      "classes": 28,
+      "labels": "labels/BattyBirdNET-USA-WEST-256kHz_Labels.txt",
+      "labels_sha256": "f01a993b749f455636de5811e6ab9de96537f05dc191ec1919acf4365a6e6386",
+      "labels_size_bytes": 867,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "d1d3573a379e9e8561a66dc27ab768342d7d3823268440ec9ab624b8fb4640fa",
+      "size_bytes": 115426,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/CUSTOM-BAT-256kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "CUSTOM-BAT-256kHz",
+      "classes": 31,
+      "labels": "labels/CUSTOM-BAT-256kHz_Labels.txt",
+      "labels_sha256": "e2d5eb2382c3d1311e2a8a18857fc3046ea0dedee73477db388263297a090c72",
+      "labels_size_bytes": 913,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "ae595245624d3b1e8280e166cdd55df976b5358ef0ef138f734b053ddc1817e5",
+      "size_bytes": 127726,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "fp32/CUSTOM-BIRD-48kHz_fp32.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "fp32",
+      "precision": "fp32",
+      "region": "CUSTOM-BIRD-48kHz",
+      "classes": 31,
+      "labels": "labels/CUSTOM-BIRD-48kHz_Labels.txt",
+      "labels_sha256": "e2d5eb2382c3d1311e2a8a18857fc3046ea0dedee73477db388263297a090c72",
+      "labels_size_bytes": 913,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": true,
+      "sha256": "ae595245624d3b1e8280e166cdd55df976b5358ef0ef138f734b053ddc1817e5",
+      "size_bytes": 127726,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-Bavaria-256kHz-high_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-Bavaria-256kHz-high",
+      "classes": 24,
+      "labels": "labels/BattyBirdNET-Bavaria-256kHz-high_Labels.txt",
+      "labels_sha256": "26bc12ecf6c5ca9ce8837cd1bebe6e1cb2ce95f0261355a827383c85a0dd9d96",
+      "labels_size_bytes": 904,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "e62a504ab8edf4dbf3fd7b1b028eb263bb4e277d6f2537ed8ea5060574318c8d",
+      "size_bytes": 26173,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-Bavaria-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-Bavaria-256kHz",
+      "classes": 32,
+      "labels": "labels/BattyBirdNET-Bavaria-256kHz_Labels.txt",
+      "labels_sha256": "ff4a3f9a351f202c8712c807c6bb8b29df0b1c75ddab48e543ec76a88a42715c",
+      "labels_size_bytes": 966,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "203dd61bf334d7e2ac396c32e984aea6ed60ff34b2fbe7da1d7cfd4e4bf799d7",
+      "size_bytes": 34398,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-EU-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-EU-256kHz",
+      "classes": 30,
+      "labels": "labels/BattyBirdNET-EU-256kHz_Labels.txt",
+      "labels_sha256": "9ad705d4bcd93040929a059854df968acebefee9f7513e97a558871c3997e65e",
+      "labels_size_bytes": 1081,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "9e8fc9933daf0409ba53109a23d768bc6d945b7b2c7595891a0c10b745e38f6c",
+      "size_bytes": 32341,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-Scotland-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-Scotland-256kHz",
+      "classes": 11,
+      "labels": "labels/BattyBirdNET-Scotland-256kHz_Labels.txt",
+      "labels_sha256": "3dc657a38f691c20f351fa19e36b9919927aec2e30dc32f61ae9fd9bb319331b",
+      "labels_size_bytes": 356,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "cb25a24e522e5a656c2a89012d8cfffc76a3b237fb0a1d7c4789d564b440e90a",
+      "size_bytes": 12805,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-SouthWales-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-SouthWales-256kHz",
+      "classes": 29,
+      "labels": "labels/BattyBirdNET-SouthWales-256kHz_Labels.txt",
+      "labels_sha256": "fc7ed8bd55c28b66cdcecc8d8acb8ea05850d9301aa65467fd5d192ee00e8214",
+      "labels_size_bytes": 1072,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "eb58d9f7bd15fb1703962a131741da3ec6ae9e73ae18fa39be5b088125f3fa87",
+      "size_bytes": 31313,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-Sweden-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-Sweden-256kHz",
+      "classes": 23,
+      "labels": "labels/BattyBirdNET-Sweden-256kHz_Labels.txt",
+      "labels_sha256": "c43042ebd458eed4cc7258fcd6526e0299a61e27146e3ca989300f696d1f2e02",
+      "labels_size_bytes": 737,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "72b4e707f82092a4d7c9167f063dd2fc38c14b97292527ea26e18be5e1b47601",
+      "size_bytes": 25145,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-UK-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-UK-256kHz",
+      "classes": 20,
+      "labels": "labels/BattyBirdNET-UK-256kHz_Labels.txt",
+      "labels_sha256": "4cc63b7cfd0a8e4380857fc3f5d576e8ec48d80cbdc9060873abb20c4ef78740",
+      "labels_size_bytes": 649,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "2a2ae8a29c0ef1caf87781f766aeb357a30ce5578201bd97c9c56c26eda53d98",
+      "size_bytes": 22060,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-USA-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-USA-256kHz",
+      "classes": 38,
+      "labels": "labels/BattyBirdNET-USA-256kHz_Labels.txt",
+      "labels_sha256": "3cf597702b5f0f558b227df3a01648da7eb52cc632ec70a148fd159763ba4399",
+      "labels_size_bytes": 1222,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "bc03c136d268b0979f1db28f116f369647183022dbe6aafab57f47ed90db2b91",
+      "size_bytes": 40566,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-USA-EAST-256kHz-high_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-USA-EAST-256kHz-high",
+      "classes": 17,
+      "labels": "labels/BattyBirdNET-USA-EAST-256kHz-high_Labels.txt",
+      "labels_sha256": "438b01d917b3833f707cdf9e9d13f0b13eee2318ad23eeb34089b76b9f22e566",
+      "labels_size_bytes": 613,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "3cdf6b220aa60f5c97e2be6d884426fc6d393022bcfbcf7cbc855d4d100a67a3",
+      "size_bytes": 18976,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-USA-EAST-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-USA-EAST-256kHz",
+      "classes": 23,
+      "labels": "labels/BattyBirdNET-USA-EAST-256kHz_Labels.txt",
+      "labels_sha256": "db88ade98f2680af786911f1de49e5c29425335bbbc814c4a40c1e71ef888713",
+      "labels_size_bytes": 663,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "f37fe07e5731f7c23b0e1493ec2823895fe99b290cb31a37c2bcf00689b0c415",
+      "size_bytes": 25145,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/BattyBirdNET-USA-WEST-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "BattyBirdNET-USA-WEST-256kHz",
+      "classes": 28,
+      "labels": "labels/BattyBirdNET-USA-WEST-256kHz_Labels.txt",
+      "labels_sha256": "f01a993b749f455636de5811e6ab9de96537f05dc191ec1919acf4365a6e6386",
+      "labels_size_bytes": 867,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "75aa2fb3252f35a722044d5ea857e1297ee38450f8cb5744da594ce451b8d8aa",
+      "size_bytes": 30285,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/CUSTOM-BAT-256kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "CUSTOM-BAT-256kHz",
+      "classes": 31,
+      "labels": "labels/CUSTOM-BAT-256kHz_Labels.txt",
+      "labels_sha256": "e2d5eb2382c3d1311e2a8a18857fc3046ea0dedee73477db388263297a090c72",
+      "labels_size_bytes": 913,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "e211c313ea0d98a95753c4ea7e51bd3f5e42486a3b7ee229bfb54110ac3972ba",
+      "size_bytes": 33369,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    },
+    {
+      "path": "int8/CUSTOM-BIRD-48kHz_int8.onnx",
+      "family": "battybirdnet",
+      "role": "head",
+      "upstream_version": "2.4-bat",
+      "channel": "stable",
+      "upstream_source": "https://github.com/rdz-oss/BattyBirdNET-Analyzer",
+      "build": 1,
+      "legacy": true,
+      "variant": "int8",
+      "precision": "int8",
+      "region": "CUSTOM-BIRD-48kHz",
+      "classes": 31,
+      "labels": "labels/CUSTOM-BIRD-48kHz_Labels.txt",
+      "labels_sha256": "e2d5eb2382c3d1311e2a8a18857fc3046ea0dedee73477db388263297a090c72",
+      "labels_size_bytes": 913,
+      "input": {
+        "shape": [
+          "batch",
+          1024
+        ],
+        "dtype": "float32",
+        "note": "consumes the embedding model's 1024-d output"
+      },
+      "backends": {
+        "onnxruntime-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-cpu": {
+          "supported": true,
+          "recommended": true
+        },
+        "openvino-gpu": {
+          "supported": true,
+          "recommended": false
+        },
+        "cuda": {
+          "supported": true,
+          "recommended": false
+        },
+        "tensorrt": {
+          "supported": true,
+          "recommended": false
+        }
+      },
+      "backend_support_verified": false,
+      "sha256": "e211c313ea0d98a95753c4ea7e51bd3f5e42486a3b7ee229bfb54110ac3972ba",
+      "size_bytes": 33369,
+      "superseded_by": null,
+      "requirements": {
+        "min_ram_mb": 250
+      }
+    }
+  ],
+  "warnings": [
+    "FP16 is unsafe for the bat embedding backbone: the 1024-d embedding overflows and detections flip. Keep the embedding at FP32."
+  ]
+}

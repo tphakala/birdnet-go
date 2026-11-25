@@ -631,7 +631,7 @@
 </script>
 
 <!-- Centered container with proper spacing -->
-<div class="w-full flex justify-center py-4" bind:this={containerElement}>
+<div class="w-full flex justify-center pt-4" bind:this={containerElement}>
   <div
     class="flex flex-col gap-3 focus:outline-none"
     style:width="{canvasWidth}px"
@@ -674,9 +674,9 @@
           <div class="font-semibold">{tooltip.freq} Hz</div>
           <div
             class={tooltip.gain > 0
-              ? 'text-[var(--color-success)]'
+              ? 'text-[var(--text-success)]'
               : tooltip.gain < -12
-                ? 'text-[var(--color-error)]'
+                ? 'text-[var(--text-error)]'
                 : ''}
           >
             {tooltip.gain > 0 ? '+' : ''}{tooltip.gain} dB
@@ -685,6 +685,9 @@
       {/if}
     </div>
 
+    <!-- One reserved line holds the status and the clipped-peak caption, so the
+         editor below does not shift when the caption appears or goes, as long as
+         the text fits on one line. -->
     <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
       {#if graphState.status === 'loading' && graphState.previous}
         <span data-testid="eq-graph-updating" aria-hidden="true">
@@ -697,9 +700,6 @@
           })}
         </span>
       {/if}
-    </p>
-
-    <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
       {#if clippedText}
         <span data-testid="eq-graph-clipped" aria-hidden="true">{clippedText}</span>
       {/if}

@@ -27,7 +27,7 @@
   @component
 -->
 <script lang="ts">
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -38,6 +38,7 @@
   import NetworkAddressListInput from '$lib/desktop/components/forms/NetworkAddressListInput.svelte';
   import ReverseProxySection from '$lib/desktop/features/settings/components/ReverseProxySection.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
+  import SettingsGroupLabel from '$lib/desktop/features/settings/components/SettingsGroupLabel.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -63,7 +64,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
-  import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, TriangleAlert } from '@lucide/svelte';
+  import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, TriangleAlert, LogIn, ShieldOff, SquareTerminal } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import { onDestroy, type Component } from 'svelte';
@@ -364,6 +365,7 @@
     enabled: boolean;
     issuerUrl: string;
     scopesText: string;
+    postLogoutRedirect: boolean;
   }>({
     clientId: '',
     clientSecret: '',
@@ -371,6 +373,7 @@
     enabled: true,
     issuerUrl: '',
     scopesText: '',
+    postLogoutRedirect: false,
   });
 
   // Available providers (filter out already configured ones)
@@ -405,6 +408,10 @@
   let exceptionsHasChanges = $derived(
     subnetBypassHasChanges || publicAccessHasChanges || privateModeHasChanges
   );
+
+  // Page the identity provider returns to after sign-out. The backend appends the
+  // same path to the OAuth origin (postLogoutReturnPath in internal/api/auth).
+  const POST_LOGOUT_RETURN_PATH = '/ui/';
 
   // Canonical base URL for redirect URIs (uses configured host/baseUrl)
   // This is what gets persisted to config.yaml for OAuth callbacks
@@ -498,6 +505,7 @@
       enabled: true,
       issuerUrl: '',
       scopesText: '',
+      postLogoutRedirect: false,
     };
     showProviderForm = true;
   }
@@ -516,6 +524,7 @@
       enabled: provider.enabled,
       issuerUrl: provider.issuerUrl ?? '',
       scopesText: provider.scopes?.join(', ') ?? '',
+      postLogoutRedirect: provider.postLogoutRedirect ?? false,
     };
     showProviderForm = true;
   }
@@ -561,6 +570,7 @@
       // OIDC-specific fields
       ...(selectedProvider === 'oidc' && {
         issuerUrl: providerFormData.issuerUrl.trim(),
+        postLogoutRedirect: providerFormData.postLogoutRedirect || undefined,
         scopes: (() => {
           const parsed = providerFormData.scopesText.split(',').map(s => s.trim()).filter(Boolean);
           return parsed.length > 0 ? parsed : undefined;
@@ -805,6 +815,7 @@
     <!-- Server Configuration Card -->
     <SettingsSection
       title={t('settings.security.serverConfiguration.title')}
+      icon={Server}
       description={t('settings.security.serverConfiguration.description')}
       originalData={{
         baseUrl: store.originalData.security?.baseUrl,
@@ -852,7 +863,7 @@
       />
 
       <div class="border-t border-[var(--border-100)] pt-4 mt-4">
-        <h4 class="text-lg font-medium mb-2">{t('settings.security.tls.title')}</h4>
+        <SettingsGroupLabel class="mb-2">{t('settings.security.tls.title')}</SettingsGroupLabel>
         <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
           {t('settings.security.tls.description')}
         </p>
@@ -1039,7 +1050,7 @@
             loading={certLoading}
             error={certError}
             {certInfo}
-            downloadUrl="/api/v2/tls/certificate/download"
+            downloadUrl={buildAppUrl('/api/v2/tls/certificate/download')}
             onRegenerate={settings.tlsMode === 'selfsigned' ? handleGenerateCert : undefined}
             onDelete={handleDeleteCert}
             regenerateLoading={generateLoading}
@@ -1062,14 +1073,14 @@
           </div>
         {/if}
 
-        <!-- Redirect to HTTPS checkbox -->
+        <!-- Redirect to HTTPS switch -->
         {#if settings.tlsMode !== ''}
           <div class="mt-4">
-            <Checkbox
-              checked={settings.redirectToHttps}
+            <ToggleField
+              value={settings.redirectToHttps}
               label={t('settings.security.tls.redirectToHttps')}
               disabled={store.isLoading || store.isSaving}
-              onchange={updateRedirectToHttps}
+              onUpdate={updateRedirectToHttps}
             />
           </div>
         {/if}
@@ -1103,16 +1114,17 @@
     <!-- Basic Authentication Card -->
     <SettingsSection
       title={t('settings.security.basicAuthentication.title')}
+      icon={KeyRound}
       description={t('settings.security.basicAuthentication.description')}
       originalData={store.originalData.security?.basicAuth}
       currentData={store.formData.security?.basicAuth}
     >
       <form class="space-y-4" onsubmit={(e) => e.preventDefault()} autocomplete="off">
-        <Checkbox
-          checked={settings.basicAuth.enabled}
+        <ToggleField
+          value={settings.basicAuth.enabled}
           label={t('settings.security.basicAuthentication.enableLabel')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateBasicAuthEnabled}
+          onUpdate={updateBasicAuthEnabled}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -1153,6 +1165,7 @@
     <!-- OAuth2 Social Authentication Card -->
     <SettingsSection
       title={t('settings.security.oauth.title')}
+      icon={LogIn}
       description={t('settings.security.oauth.description')}
       originalData={store.originalData.security?.oauthProviders}
       currentData={store.formData.security?.oauthProviders}
@@ -1231,7 +1244,7 @@
                     {#if hasExplicitBaseUrl}
                       <code class="text-xs bg-[var(--color-base-200)] px-2 py-1 rounded-sm break-all">{getConfigRedirectURI(selectedProvider)}</code>
                     {:else}
-                      <p class="text-xs text-[var(--color-warning)] italic">{t('settings.security.oauth.redirectUriNotConfigured')}</p>
+                      <p class="text-xs text-[var(--text-warning)] italic">{t('settings.security.oauth.redirectUriNotConfigured')}</p>
                     {/if}
                   </div>
                   {#if getCredentialsUrl(selectedProvider)}
@@ -1239,7 +1252,7 @@
                       href={getCredentialsUrl(selectedProvider)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      class="text-sm text-[var(--color-primary)] hover:opacity-80 inline-flex items-center gap-1 mt-2"
+                      class="text-sm text-[var(--text-primary)] underline hover:decoration-2 inline-flex items-center gap-1 mt-2"
                     >
                       {t('settings.security.oauth.getCredentialsLabel', { provider: getProviderDisplayName(selectedProvider) })}
                       <ExternalLink class="size-4" />
@@ -1260,7 +1273,7 @@
                     onchange={(value) => (providerFormData.issuerUrl = value)}
                   />
                   {#if oidcValidationError}
-                    <p class="text-xs text-[var(--color-error)] -mt-2">{oidcValidationError}</p>
+                    <p class="text-xs text-[var(--text-error)] -mt-2">{oidcValidationError}</p>
                   {/if}
                 {/if}
 
@@ -1298,6 +1311,18 @@
                     disabled={store.isLoading || store.isSaving}
                     onchange={(value) => (providerFormData.scopesText = value)}
                   />
+
+                  <ToggleField
+                    value={providerFormData.postLogoutRedirect}
+                    label={t('settings.security.oauth.oidc.postLogoutRedirectLabel')}
+                    description={configuredBaseUrl
+                      ? t('settings.security.oauth.oidc.postLogoutRedirectHelpText', {
+                          url: `${configuredBaseUrl}${POST_LOGOUT_RETURN_PATH}`,
+                        })
+                      : t('settings.security.oauth.oidc.postLogoutRedirectNoBaseUrl')}
+                    disabled={store.isLoading || store.isSaving}
+                    onUpdate={(enabled) => (providerFormData.postLogoutRedirect = enabled)}
+                  />
                 {/if}
 
                 <TextInput
@@ -1315,7 +1340,7 @@
                      match the providers-list badge and avoid noise for draft/disabled providers. -->
                 {#if providerFormData.enabled && hasNoAllowedUsers(providerFormData.userId)}
                   <p
-                    class="text-xs text-[var(--color-warning)] -mt-2 flex items-start gap-1.5"
+                    class="text-xs text-[var(--text-warning)] -mt-2 flex items-start gap-1.5"
                     role="status"
                   >
                     <TriangleAlert class="size-3.5 shrink-0 mt-0.5" />
@@ -1323,11 +1348,11 @@
                   </p>
                 {/if}
 
-                <Checkbox
-                  checked={providerFormData.enabled}
+                <ToggleField
+                  value={providerFormData.enabled}
                   label={t('settings.security.oauth.enableProviderLabel')}
                   disabled={store.isLoading || store.isSaving}
-                  onchange={(enabled) => (providerFormData.enabled = enabled)}
+                  onUpdate={(enabled) => (providerFormData.enabled = enabled)}
                 />
 
                 <!-- Form Actions -->
@@ -1369,7 +1394,7 @@
         <!-- Providers List -->
         {#if oauthProviders.length > 0}
           <div class="space-y-2">
-            {#each oauthProviders as provider, index (provider.provider)}
+            {#each oauthProviders as provider, index (`${provider.provider}-${index}`)}
               {@const providerType = provider.provider as OAuthProviderType}
               {@const IconComponent = getProviderIcon(providerType)}
               <div
@@ -1405,7 +1430,7 @@
                                can log in with them (issue #3381). -->
                           {#if provider.enabled && hasNoAllowedUsers(provider.userId)}
                             <div
-                              class="text-xs text-[var(--color-warning)] flex items-center gap-1 mt-0.5"
+                              class="text-xs text-[var(--text-warning)] flex items-center gap-1 mt-0.5"
                               role="status"
                             >
                               <TriangleAlert class="size-3 shrink-0" />
@@ -1429,7 +1454,7 @@
                       </button>
                       <button
                         onclick={() => deleteProvider(index)}
-                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center justify-center p-1 aspect-square rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-[var(--text-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                         title={t('settings.security.oauth.providers.deleteButton')}
                         aria-label={t('settings.security.oauth.providers.deleteButton')}
                         disabled={showProviderForm}
@@ -1461,16 +1486,17 @@
     <!-- Bypass Authentication Card -->
     <SettingsSection
       title={t('settings.security.bypassAuthentication.title')}
+      icon={ShieldOff}
       description={t('settings.security.bypassAuthentication.description')}
       originalData={store.originalData.security?.allowSubnetBypass}
       currentData={store.formData.security?.allowSubnetBypass}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.allowSubnetBypass.enabled}
+        <ToggleField
+          value={settings.allowSubnetBypass.enabled}
           label={t('settings.security.allowSubnetBypassLabel')}
           disabled={store.isLoading || store.isSaving}
-          onchange={updateSubnetBypassEnabled}
+          onUpdate={updateSubnetBypassEnabled}
         />
 
         <!-- Outside the fieldset so the link stays usable while the bypass is off -->
@@ -1481,7 +1507,7 @@
             <a
               href={buildAppUrl(SETTINGS_ROUTES.securityReverseProxy)}
               onclick={handleAppLinkClick}
-              class="text-[var(--color-primary)] underline"
+              class="text-[var(--text-primary)] underline"
             >
               {t('settings.security.bypassProxyLink')}
             </a>
@@ -1535,26 +1561,31 @@
     <!-- Public Access section -->
     <SettingsSection
       title={t('settings.security.publicAccess.title')}
+      icon={Globe}
       description={t('settings.security.publicAccess.description')}
       originalData={store.originalData.security?.publicAccess}
       currentData={store.formData.security?.publicAccess}
     >
       <div class="space-y-4">
-        <Checkbox
-          checked={settings.privateMode ?? false}
-          label={t('settings.security.privateMode.label')}
-          helpText={t('settings.security.privateMode.help')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updatePrivateMode}
-        />
+        <div class="divide-y divide-[var(--border-100)]">
+          <ToggleField
+            className="pb-4"
+            value={settings.privateMode ?? false}
+            label={t('settings.security.privateMode.label')}
+            description={t('settings.security.privateMode.help')}
+            disabled={store.isLoading || store.isSaving}
+            onUpdate={updatePrivateMode}
+          />
 
-        <Checkbox
-          checked={settings.publicAccess?.liveAudio ?? false}
-          label={t('settings.security.publicAccess.liveAudioLabel')}
-          helpText={t('settings.security.publicAccess.liveAudioHelp')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updatePublicLiveAudio}
-        />
+          <ToggleField
+            className="pt-4"
+            value={settings.publicAccess?.liveAudio ?? false}
+            label={t('settings.security.publicAccess.liveAudioLabel')}
+            description={t('settings.security.publicAccess.liveAudioHelp')}
+            disabled={store.isLoading || store.isSaving}
+            onUpdate={updatePublicLiveAudio}
+          />
+        </div>
 
         <ErrorAlert type="warning">
           {#snippet children()}
@@ -1571,17 +1602,17 @@
 
 {#snippet terminalTabContent()}
   <div class="space-y-6">
-    <SettingsSection title={t('settings.security.terminal.title')}>
+    <SettingsSection title={t('settings.security.terminal.title')} icon={SquareTerminal}>
       <ErrorAlert type="warning" className="mb-4">
         {#snippet children()}
           {t('settings.security.terminal.securityWarning')}
         {/snippet}
       </ErrorAlert>
-      <Checkbox
+      <ToggleField
         label={t('settings.security.terminal.enableLabel')}
-        helpText={t('settings.security.terminal.enableHelpText')}
-        checked={enableTerminal}
-        onchange={handleTerminalToggle}
+        description={t('settings.security.terminal.enableHelpText')}
+        value={enableTerminal}
+        onUpdate={handleTerminalToggle}
         disabled={store.isLoading || store.isSaving}
       />
     </SettingsSection>

@@ -26,12 +26,16 @@
     options = [],
     disabled = false,
     onChange,
+    'aria-invalid': ariaInvalid = false,
+    'aria-describedby': ariaDescribedBy,
   }: {
     value?: string | string[];
     label?: string;
     options?: Option[];
     disabled?: boolean;
     onChange?: (_value: string | string[]) => void;
+    'aria-invalid'?: boolean;
+    'aria-describedby'?: string;
   } = $props();
 
   const selected = $derived(Array.isArray(value) ? (value[0] ?? '') : value);
@@ -41,6 +45,8 @@
   data-testid={`${SELECT_TESTID_PREFIX}${label}`}
   value={selected}
   {disabled}
+  aria-invalid={ariaInvalid || undefined}
+  aria-describedby={ariaDescribedBy}
   onchange={e => onChange?.((e.currentTarget as HTMLSelectElement).value)}
 >
   {#each options as opt (opt.value)}

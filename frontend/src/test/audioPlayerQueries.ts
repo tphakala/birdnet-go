@@ -13,3 +13,6 @@ export const OVERLAY_ONLY = { ignore: '[role="status"], script, style' };
  * with the same key but have no space after it, so they do not match.
  */
 export const DENOISE_BUTTON_NAME = /^components\.audioPlayer\.processing\.denoise /;
+
+/** Accessible name of the Export trigger in the toolbar. */
+export const EXPORT_BUTTON_NAME = 'components.audioPlayer.processing.export';

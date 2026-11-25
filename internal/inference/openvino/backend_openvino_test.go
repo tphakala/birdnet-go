@@ -79,7 +79,7 @@ func TestOpenVINOPerchRoundTrip(t *testing.T) {
 	if device == DeviceGPU {
 		devs, err := AvailableDevices()
 		require.NoError(t, err)
-		if !slices.Contains(devs, DeviceGPU) {
+		if !slices.ContainsFunc(devs, IsGPUDevice) {
 			t.Skipf("no GPU device enumerated (have %v)", devs)
 		}
 	}
@@ -119,4 +119,55 @@ func TestOpenVINOAvailableDevices(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, devs, DeviceCPU, "CPU device must always be enumerated")
 	t.Logf("OpenVINO devices: %v", devs)
+
+	// FULL_DEVICE_NAME is supported by every plugin; a failed read here means the
+	// ov_core_get_property binding is broken, not that the device lacks a name.
+	for _, dev := range devs {
+		name, err := DeviceProperty(dev, "FULL_DEVICE_NAME")
+		require.NoErrorf(t, err, "FULL_DEVICE_NAME of %s", dev)
+		assert.NotEmptyf(t, name, "FULL_DEVICE_NAME of %s", dev)
+		devType, typeErr := DeviceProperty(dev, "DEVICE_TYPE")
+		t.Logf("%s: name=%q type=%q (type error: %v)", dev, name, devType, typeErr)
+	}
+}
+
+// TestOpenVINONewClassifierDeviceNames pins which device names NewClassifier
+// accepts: CPU, the GPU alias and a concrete GPU.<n>. The model path does not
+// exist, so an accepted name fails later, at reading the model, which proves the
+// name check let it through. Lib-gated like the other tests that bind the core:
+// binding it here unconditionally would make the loader test skip itself.
+func TestOpenVINONewClassifierDeviceNames(t *testing.T) {
+	if os.Getenv("OV_TEST_MODEL") == "" && os.Getenv("OV_TEST_PERCH_MODEL") == "" {
+		t.Skip("set OV_TEST_MODEL or OV_TEST_PERCH_MODEL to run (needs libopenvino_c)")
+	}
+	require.NoError(t, InitOV(os.Getenv("OV_TEST_LIB")))
+	t.Cleanup(func() { _ = DestroyOV() })
+
+	const (
+		unsupported = "unsupported device"
+		readModelOp = "ov_core_read_model"
+	)
+	for _, device := range []string{"", DeviceCPU, DeviceGPU, "GPU.0", "GPU.12"} {
+		_, err := NewClassifier("/nonexistent/model.onnx", Options{Device: device})
+		require.Errorf(t, err, "device %q", device)
+		assert.NotContainsf(t, err.Error(), unsupported, "device %q must pass the name check", device)
+		assert.Containsf(t, err.Error(), readModelOp, "device %q must reach the model read", device)
+	}
+	for _, device := range []string{"NPU", "gpu.1", "GPU.", "GPU.x", "AUTO"} {
+		_, err := NewClassifier("/nonexistent/model.onnx", Options{Device: device})
+		require.Errorf(t, err, "device %q", device)
+		assert.Containsf(t, err.Error(), unsupported, "device %q must be rejected", device)
+		assert.Containsf(t, err.Error(), `"GPU.<n>"`, "device %q: the message must show the accepted indexed form", device)
+	}
+}
+
+// TestScrubLibraryPaths_LongestFirst pins that a resolved absolute path is
+// redacted whole even when the configured relative path is its suffix.
+func TestScrubLibraryPaths_LongestFirst(t *testing.T) {
+	t.Parallel()
+	configured := `ov\openvino_c.dll`
+	resolved := `C:\Users\someone\birdnet\ov\openvino_c.dll`
+	got := scrubLibraryPaths("cannot load "+resolved, configured, resolved)
+	assert.Equal(t, "cannot load <path>", got)
+	assert.NotContains(t, got, "someone")
 }

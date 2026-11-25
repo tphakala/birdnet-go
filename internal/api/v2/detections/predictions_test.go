@@ -421,3 +421,259 @@ func TestGetDetectionPredictions_PublicRoute(t *testing.T) {
 	e.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusConflict, rec.Code)
 }
+
+const (
+	predTestOrigConf      = 0.55
+	predTestOrigCommon    = "Eurasian Blackbird"
+	predTestOrigCode      = "eurbla"
+	predTestHumanClass    = "Human vocal"
+	predTestCough         = "Cough"
+	predTestDoveCommon    = "Laughing Dove"
+	predTestTzacatl       = "Amazilia tzacatl"
+	predTestTzacatlCommon = "Amazilia Tzacatl"
+)
+
+// changedPrimary is a detection whose species was changed from original to current.
+func changedPrimary(current string, original detection.Species, conf float64) *detection.Result {
+	r := predictionsPrimary(current, predTestModelType)
+	r.OriginalSpecies = original
+	r.Confidence = conf
+	return r
+}
+
+// TestGetDetectionPredictions_OriginalPick verifies the entry for the model's own
+// pick of a detection whose species a reviewer changed: it carries the detection's
+// confidence, is exempt from the human and dog filters, takes only missing metadata
+// from stored rows of its species, and never changes how the other rows are handled.
+func TestGetDetectionPredictions_OriginalPick(t *testing.T) {
+	blackbird := detection.Species{ScientificName: predTestBlackbird, CommonName: predTestOrigCommon, Code: predTestOrigCode}
+	bare := detection.Species{ScientificName: predTestBlackbird}
+	origEntry := func(conf float64) PredictionResponse {
+		return PredictionResponse{
+			ScientificName: predTestBlackbird, CommonName: predTestOrigCommon, SpeciesCode: predTestOrigCode,
+			Confidence: conf, Original: true,
+		}
+	}
+
+	tests := []struct {
+		name     string
+		current  string
+		original detection.Species
+		conf     float64
+		rows     []detection.AdditionalResult
+		want     []PredictionResponse
+	}{
+		{
+			name: "listed once with the detection's confidence", current: predTestMallard, original: blackbird, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{origEntry(predTestOrigConf), {ScientificName: predTestRaven, Confidence: predTestMid}},
+		},
+		{
+			name: "stored rows of its species fill missing metadata and never set the confidence", current: predTestMallard, original: bare, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestBlackbird, "", "", predTestHigh),
+				predRow(predTestBlackbird, predTestOrigCommon, predTestOrigCode, predTestLow2),
+			},
+			want: []PredictionResponse{origEntry(predTestOrigConf)},
+		},
+		{
+			name: "a stored row with a higher confidence does not win", current: predTestMallard, original: blackbird, conf: predTestLow,
+			rows: []detection.AdditionalResult{predRow(predTestBlackbird, "", "", predTestHigh), predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}, origEntry(predTestLow)},
+		},
+		{
+			name: "an alias spelling and another case merge into the entry", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryNew}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryOld, "", predTestDoveCode, predTestLow),
+				predRow("spilopelia SENEGALENSIS", "", "", predTestLow2),
+			},
+			want: []PredictionResponse{{ScientificName: predTestPrimaryNew, SpeciesCode: predTestDoveCode, Confidence: predTestOrigConf, Original: true}},
+		},
+		{
+			// The datastore falls back to the scientific name as the common name of a
+			// name it cannot resolve, such as a legacy alias.
+			name: "an unresolved common name is taken from the stored row of the canonical spelling", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, predTestDoveCommon, predTestDoveCode, predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon, SpeciesCode: predTestDoveCode,
+				Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			// The higher ranked row carries the stand-in too, so it must not block the
+			// lower ranked row that has the real name.
+			name: "a stored row that only repeats its scientific name does not block a real common name", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, predTestPrimaryNew, "", predTestMid),
+				predRow("spilopelia senegalensis", predTestDoveCommon, "", predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon,
+				Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			// No stored row: the entry's name is rewritten to the canonical spelling, so
+			// the stand-in common name follows it.
+			name: "an alias original without a stored row gets the canonical name as its stand-in common name", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{
+				{ScientificName: predTestPrimaryNew, CommonName: predTestPrimaryNew, Confidence: predTestOrigConf, Original: true},
+				{ScientificName: predTestRaven, Confidence: predTestMid},
+			},
+		},
+		{
+			// A localized name that differs from the scientific name only in case is a
+			// real name; only the verbatim scientific name is a stand-in.
+			name: "a resolved original common name differing only in case is kept", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestTzacatl, CommonName: predTestTzacatlCommon}, conf: predTestOrigConf,
+			want: []PredictionResponse{{
+				ScientificName: predTestTzacatl, CommonName: predTestTzacatlCommon, Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			name: "a stored row common name differing only in case is a resolved name", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestTzacatl, CommonName: predTestTzacatl}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestTzacatl, predTestTzacatlCommon, "", predTestLow)},
+			want: []PredictionResponse{{
+				ScientificName: predTestTzacatl, CommonName: predTestTzacatlCommon, Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			name: "a whitespace only original common name stays empty", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryNew, CommonName: "  "}, conf: predTestOrigConf,
+			want: []PredictionResponse{{ScientificName: predTestPrimaryNew, Confidence: predTestOrigConf, Original: true}},
+		},
+		{
+			name: "a whitespace only row common name neither fills nor blocks", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryOld, CommonName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, "  ", "", predTestMid),
+				predRow(predTestPrimaryNew, predTestDoveCommon, "", predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon, Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			name: "a resolved common name is not overwritten by a stored row", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestPrimaryNew, "Another Name", predTestDoveCode, predTestLow),
+			},
+			want: []PredictionResponse{{
+				ScientificName: predTestPrimaryNew, CommonName: predTestDoveCommon, SpeciesCode: predTestDoveCode,
+				Confidence: predTestOrigConf, Original: true,
+			}},
+		},
+		{
+			name: "a human sound class is listed and its stored rows are not dropped", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestHumanClass}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{
+				predRow(predTestHumanClass, "", "", predTestLow),
+				predRow(predTestCough, "", "", predTestHigh),
+				predRow(predTestRaven, "", "", predTestMid),
+			},
+			want: []PredictionResponse{
+				{ScientificName: predTestHumanClass, Confidence: predTestOrigConf, Original: true},
+				{ScientificName: predTestRaven, Confidence: predTestMid},
+			},
+		},
+		{
+			name: "a dog class below every other row is listed", current: predTestMallard,
+			original: detection.Species{ScientificName: predTestDog}, conf: predTestDog1,
+			rows: []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{
+				{ScientificName: predTestRaven, Confidence: predTestMid},
+				{ScientificName: predTestDog, Confidence: predTestDog1, Original: true},
+			},
+		},
+		{
+			name: "the entry does not count in the dog comparison", current: predTestMallard, original: blackbird, conf: predTestDog1 / 2,
+			rows: []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid), predRow(predTestDog, "", "", predTestDog1)},
+			want: []PredictionResponse{
+				{ScientificName: predTestRaven, Confidence: predTestMid},
+				{ScientificName: predTestBlackbird, CommonName: predTestOrigCommon, SpeciesCode: predTestOrigCode, Confidence: predTestDog1 / 2, Original: true},
+			},
+		},
+		{
+			name: "changed back: no entry and the stored row is the current species", current: predTestBlackbird, original: blackbird, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestBlackbird, "", "", predTestLow), predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}},
+		},
+		{
+			name: "changed back under another spelling: no entry", current: predTestPrimaryNew,
+			original: detection.Species{ScientificName: predTestPrimaryOld}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestPrimaryNew, "", "", predTestLow), predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}},
+		},
+		{
+			name: "changed back under the legacy spelling of the current species: no entry", current: predTestPrimaryOld,
+			original: detection.Species{ScientificName: predTestPrimaryNew}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestPrimaryOld, "", "", predTestLow), predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}},
+		},
+		{
+			name: "no species part in the stored name: no entry", current: predTestMallard,
+			original: detection.Species{ScientificName: "_Eurasian Blackbird"}, conf: predTestOrigConf,
+			rows: []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{{ScientificName: predTestRaven, Confidence: predTestMid}},
+		},
+		{
+			name: "non-finite detection confidence: no entry and the stored rows stay", current: predTestMallard, original: blackbird, conf: math.NaN(),
+			rows: []detection.AdditionalResult{predRow(predTestBlackbird, "", "", predTestLow), predRow(predTestRaven, "", "", predTestMid)},
+			want: []PredictionResponse{
+				{ScientificName: predTestRaven, Confidence: predTestMid},
+				{ScientificName: predTestBlackbird, Confidence: predTestLow},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, repo, h := predictionsFixture(t)
+			expectReads(repo, changedPrimary(tt.current, tt.original, tt.conf), tt.rows)
+			code, body := getPredictions(t, e, h, predTestID)
+			require.Equal(t, http.StatusOK, code)
+			resp := decodePredictions(t, body)
+			require.Len(t, resp.ModelPredictions, 1)
+			assert.Equal(t, tt.want, resp.ModelPredictions[0].Predictions)
+		})
+	}
+
+	t.Run("an unchanged detection has no original key", func(t *testing.T) {
+		e, repo, h := predictionsFixture(t)
+		expectReads(repo, predictionsPrimary(predTestMallard, predTestModelType), []detection.AdditionalResult{predRow(predTestRaven, "", "", predTestMid)})
+		_, body := getPredictions(t, e, h, predTestID)
+		assert.NotContains(t, body, `"original"`)
+	})
+
+	t.Run("input order does not matter", func(t *testing.T) {
+		rows := []detection.AdditionalResult{
+			predRow(predTestBlackbird, "", "first", predTestMid),
+			predRow("turdus merula", "", "second", predTestLow),
+			predRow(predTestRaven, "", "", predTestLow2),
+		}
+		var first string
+		for i, p := range permutations(rows) {
+			e, repo, h := predictionsFixture(t)
+			expectReads(repo, changedPrimary(predTestMallard, bare, predTestOrigConf), p)
+			_, body := getPredictions(t, e, h, predTestID)
+			if i == 0 {
+				first = body
+				resp := decodePredictions(t, body)
+				require.Len(t, resp.ModelPredictions, 1)
+				assert.Equal(t, []PredictionResponse{
+					{ScientificName: predTestBlackbird, SpeciesCode: "first", Confidence: predTestOrigConf, Original: true},
+					{ScientificName: predTestRaven, Confidence: predTestLow2},
+				}, resp.ModelPredictions[0].Predictions)
+			}
+			assert.Equal(t, first, body, "permutation %d", i)
+		}
+	})
+}

@@ -1,100 +1,103 @@
 <!--
-  DetectionDetail.svelte - Single Detection View Component
+  DetectionDetail.svelte - Single Detection View
 
-  Purpose: Display comprehensive details for a single bird detection
+  Purpose: everything about one detection on a single page, without tabs.
 
-  Features:
-  - Editorial hero section with large species thumbnail and display typography
-  - Horizontal metadata stat bar (confidence, date/time, weather, download)
-  - Audio player with large spectrogram visualization
-  - Tabbed content: overview, taxonomy, history, notes, review
-  - Weather and environmental context
-  - Species rarity and taxonomy information
+  Layout, top to bottom:
+  - navigation bar: breadcrumb, older/newer for all detections and for the species
+  - identity and review beside the time and conditions card
+  - recording and spectrogram, with the recording's facts and download
+  - models and activity log beside species statistics
+
+  The model's other predictions open in a dialog from the identity card; the same
+  dialog is where a reviewer changes the species.
+
+  The panels live in features/detections/components/detail/. This view loads the
+  data and hands it to them.
 
   Props:
   - detectionId: string - The ID of the detection to display
 -->
 <script lang="ts">
-  import ConfidenceCircle from '$lib/desktop/components/data/ConfidenceCircle.svelte';
-  import WeatherDetails from '$lib/desktop/components/data/WeatherDetails.svelte';
-  import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
-  import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
-  import VerificationBadges from '$lib/desktop/components/ui/VerificationBadges.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
-  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import { t } from '$lib/i18n';
-  import type { Detection, ImageAttribution } from '$lib/types/detection.types';
-  import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
-  import { formatLocalDateTime } from '$lib/utils/date';
-  import { buildAppUrl, getCurrentPathWithQuery } from '$lib/utils/urlHelpers';
-  import { loggers } from '$lib/utils/logger';
-  import { audioUrlFor, getPlaybackDenoiseDefault } from '$lib/utils/playbackDenoise';
-  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
-  import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
+  import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
+  import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
   import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
   import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
-  import { speciesGuideStoreSettings } from '$lib/stores/settings';
-  import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
+  import ActivityLog from '$lib/desktop/features/detections/components/detail/ActivityLog.svelte';
+  import ConditionsCard from '$lib/desktop/features/detections/components/detail/ConditionsCard.svelte';
+  import DetailCard from '$lib/desktop/features/detections/components/detail/DetailCard.svelte';
+  import DetailNavBar from '$lib/desktop/features/detections/components/detail/DetailNavBar.svelte';
+  import IdentityCard from '$lib/desktop/features/detections/components/detail/IdentityCard.svelte';
+  import ModelsCard from '$lib/desktop/features/detections/components/detail/ModelsCard.svelte';
+  import RecordingCard from '$lib/desktop/features/detections/components/detail/RecordingCard.svelte';
+  import ReviewPanel from '$lib/desktop/features/detections/components/detail/ReviewPanel.svelte';
+  import SpeciesChangeDialog from '$lib/desktop/features/detections/components/detail/SpeciesChangeDialog.svelte';
+  import SpeciesStatsCard from '$lib/desktop/features/detections/components/detail/SpeciesStatsCard.svelte';
+  import { formatModelLabel } from '$lib/desktop/features/detections/components/detail/detailFormat';
   import {
-    Download,
-    Camera,
-    Clock,
-    History,
-    StickyNote,
-    Sun,
-    Moon,
-    Sunrise,
-    Sunset,
-  } from '@lucide/svelte';
-
-  // Interface definitions for API responses
-  interface SpeciesRarity {
-    status: string;
-    score: number;
-    location_based: boolean;
-    // Optional: the API omits these when no location is configured (they are *float64
-    // with omitempty server-side). The backend sends them whenever location_based is
-    // true, but callers must still guard before toFixed() as defense in depth against
-    // a contract violation.
-    latitude?: number;
-    longitude?: number;
-  }
-
-  interface SpeciesInfo {
-    rarity?: SpeciesRarity;
-    [key: string]: unknown;
-  }
-
-  interface TaxonomyHierarchy {
-    kingdom: string;
-    phylum: string;
-    class: string;
-    order: string;
-    family: string;
-    family_common?: string;
-    genus: string;
-    species: string;
-  }
-
-  interface Subspecies {
-    scientific_name: string;
-    common_name?: string;
-  }
-
-  interface TaxonomyInfo {
-    taxonomy?: TaxonomyHierarchy;
-    subspecies?: Subspecies[];
-  }
-
-  // ReviewCard component type (Svelte 5 component)
-  type ReviewCardComponent =
-    typeof import('$lib/desktop/components/review/ReviewCard.svelte').default;
+    DETAIL_SHORTCUT_IDS,
+    DETAIL_SHORTCUT_SCOPE,
+    createDetailShortcuts,
+  } from '$lib/desktop/features/detections/components/detail/detailShortcuts';
+  import {
+    isDailyCounts,
+    isDetectionDetail,
+    isDetectionNeighbors,
+    isDetectionPredictions,
+    isDetectionWeather,
+    isHourlyBuckets,
+    isSpeciesRarity,
+    isSpeciesStats,
+    isSunTimes,
+    isTaxonomy,
+    parseImageAttribution,
+  } from '$lib/desktop/features/detections/components/detail/detailGuards';
+  import {
+    dailyWindowStart,
+    detectionMinute,
+    nearestSunEvent,
+    sunEventTimes,
+    wallClockMinutes,
+  } from '$lib/desktop/features/detections/components/detail/detailTime';
+  import type {
+    DailyCounts,
+    DetectionDetailData,
+    DetectionNeighbors,
+    DetectionPredictions,
+    DetectionWeather,
+    HourlyBucket,
+    ReviewControls,
+    SavedChange,
+    SpeciesRarity,
+    SpeciesStats,
+    SunTimes,
+    TaxonomyHierarchy,
+  } from '$lib/desktop/features/detections/components/detail/detailTypes';
+  import { t } from '$lib/i18n';
+  import { navigation } from '$lib/stores/navigation.svelte';
+  import { speciesGuideStoreSettings } from '$lib/stores/settings';
+  import { shortcuts } from '$lib/stores/shortcuts.svelte';
+  import type { ImageAttribution } from '$lib/types/detection.types';
+  import type { PlaybackControls } from '$lib/utils/audio';
+  import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
+  import { isPlainObject } from '$lib/utils/security';
+  import { getLocalDateString } from '$lib/utils/date';
+  import { loggers } from '$lib/utils/logger';
+  import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { useShortcuts } from '$lib/utils/useShortcuts.svelte';
 
   const logger = loggers.ui;
 
-  // Constants
-  const TAB_FOCUS_DELAY_MS = 50;
-  type TabType = 'overview' | 'history' | 'notes' | 'review';
+  // Days of daily counts shown in the species statistics, ending on the detection's day.
+  const DAILY_WINDOW_DAYS = 30;
+  // Earliest date asked of the hour-of-day distribution: before any stored detection.
+  const ACTIVITY_START_DATE = '2000-01-01';
+  // Answer of the routes that need the current database format when it is not in use.
+  const HTTP_CONFLICT = 409;
+  const HTTP_SERVICE_UNAVAILABLE = 503;
 
   interface Props {
     detectionId?: string;
@@ -102,12 +105,69 @@
 
   const { detectionId: detectionIdProp }: Props = $props();
 
-  // Resolved detection ID - initialized by $effect below, not directly from prop
-  // to ensure reactive updates work correctly
+  // Resolved detection ID - set by the $effect below so prop changes are followed.
   let resolvedDetectionId = $state<string | undefined>(undefined);
 
-  // State
-  let activeTab = $state<TabType>('overview');
+  let canReview = $derived($hasReviewPermission);
+
+  let detection = $state<DetectionDetailData | null>(null);
+  let isLoadingDetection = $state(true);
+  let detectionError = $state<string | null>(null);
+
+  // Data loaded beside the detection. Each is null until its request answers.
+  let rarity = $state<SpeciesRarity | null>(null);
+  let taxonomy = $state<TaxonomyHierarchy | null>(null);
+  let imageAttribution = $state<ImageAttribution | null>(null);
+  // The weather and sun answers by what they belong to (the detection's id, its date), so a
+  // detection never shows the previous one's. A key with a null value answered "none".
+  let weatherAnswers = $state<Record<string, DetectionWeather | null>>({});
+  let sunAnswers = $state<Record<string, SunTimes | null>>({});
+  let neighbors = $state<DetectionNeighbors | null>(null);
+  let predictions = $state<DetectionPredictions | null>(null);
+  let hourlyActivity = $state<HourlyBucket[] | null>(null);
+  let dailyCounts = $state<DailyCounts | null>(null);
+  let speciesStats = $state<SpeciesStats | null>(null);
+  // The species whose data the page holds; empty before the first load.
+  let speciesDataFor = '';
+
+  // Which requests are out, so a card can tell "still loading" from "not recorded".
+  let loading = $state({
+    weather: false,
+    sun: false,
+    hourly: false,
+    rarity: false,
+    stats: false,
+    daily: false,
+  });
+  type LoadingKey = keyof typeof loading;
+
+  // True when the neighbours request failed for the detection shown.
+  let neighborsFailed = $state(false);
+  // Whether the server runs the current database format; null until a route that
+  // depends on it has answered. Kept across detections: it does not change.
+  let enhancedDatabase = $state<boolean | null>(null);
+  // The server can step between detections, except on the legacy database format,
+  // where the navigation groups are left out.
+  let steppingAvailable = $derived(enhancedDatabase !== false);
+
+  // AbortControllers, one per lifetime:
+  // - detection: the detection itself;
+  // - related: weather and sun times, tied to the detection and its date;
+  // - lists: neighbours, predictions and daily counts, which also change with the species;
+  // - species and attribution: tied to the species, kept while stepping within one species;
+  // - stats and hourly: the species statistics and hourly activity, also asked for again
+  //   after a save changed them.
+  let detectionController: AbortController | null = null;
+  let relatedController: AbortController | null = null;
+  let listsController: AbortController | null = null;
+  let speciesController: AbortController | null = null;
+  let statsController: AbortController | null = null;
+  let hourlyController: AbortController | null = null;
+  let attributionController: AbortController | null = null;
+
+  let displayName = $derived(
+    detection ? localizeSpeciesName(detection.scientificName, detection.commonName) : ''
+  );
 
   // Species guide config (gated on settings). The panel itself collapses in place
   // inside SpeciesComparison. Gating must work for unauthenticated guests too — the
@@ -120,159 +180,282 @@
   let showSimilarSpecies = $derived(guideConfig.showSimilarSpecies);
   let showNotes = $derived(guideConfig.showNotes);
 
-  // Dynamic review component loading
-  let ReviewCard: ReviewCardComponent | null = $state(null);
+  // The species dialog: the model's other predictions, and the place to change the species.
+  let speciesDialogOpen = $state(false);
 
-  // Use the existing auth store pattern (same as DesktopSidebar)
-  let canReview = $derived($hasReviewPermission);
-  let clipExtractionEnabled = $derived($isAuthenticated);
-  let detection = $state<Detection | null>(null);
-  let speciesInfo = $state<SpeciesInfo | null>(null);
-  let taxonomyInfo = $state<TaxonomyInfo | null>(null);
-  let isLoadingDetection = $state(true);
-  let isLoadingTaxonomy = $state(false);
-  let detectionError = $state<string | null>(null);
-  let imageAttribution = $state<ImageAttribution | null>(null);
+  // The dialog belongs to the detection it was opened on; another detection closes it.
+  $effect(() => {
+    void resolvedDetectionId;
+    speciesDialogOpen = false;
+  });
 
-  // Derived state for subspecies with proper typing
-  let subspeciesList = $derived<Subspecies[]>(
-    taxonomyInfo?.subspecies && Array.isArray(taxonomyInfo.subspecies)
-      ? taxonomyInfo.subspecies
-      : []
+  // The detecting model's predictions; it is the one model that stores them.
+  let predictionSet = $derived(predictions?.modelPredictions?.at(0) ?? null);
+  let alternates = $derived(predictionSet?.predictions ?? []);
+  let predictionModel = $derived(
+    predictionSet
+      ? formatModelLabel(
+          predictionSet.modelName,
+          predictionSet.modelVersion,
+          predictionSet.modelVariant
+        )
+      : ''
   );
+  // How many other predictions there are; null while the request is out. A legacy
+  // database stores none.
+  let predictionCount = $derived.by(() => {
+    if (predictions) return alternates.length;
+    return enhancedDatabase === false ? 0 : null;
+  });
 
-  // AbortController for preventing race conditions
-  let detectionController: AbortController | null = null;
-  let speciesController: AbortController | null = null;
-  let taxonomyController: AbortController | null = null;
-  let attributionController: AbortController | null = null;
+  // Why the species cannot be changed, the most pressing reason first; empty when it can.
+  // The review panel shows the same reason as its status line.
+  // The database format is known once the neighbours route has answered; a change is not
+  // offered before that, since the legacy database refuses it.
+  let speciesBlockedReason = $derived.by(() => {
+    if (!canReview) return t('detections.detail.review.loginRequired');
+    if (detection?.locked) return t('detections.detail.review.lockedHelp');
+    if (enhancedDatabase === false) return t('detections.detail.review.legacyHelp');
+    if (enhancedDatabase === null) {
+      return neighborsFailed
+        ? t('detections.detail.review.databaseUnknown')
+        : t('detections.detail.review.databaseChecking');
+    }
+    return '';
+  });
 
-  // Validate detection ID to prevent path traversal attacks
-  // Only allow alphanumeric characters, hyphens, and underscores
+  // The answers that belong to the detection shown; null while they are out or when there are none.
+  let shownWeather = $derived(detection ? (weatherAnswers[String(detection.id)] ?? null) : null);
+  let shownSun = $derived(detection ? (sunAnswers[detection.date] ?? null) : null);
+
+  let sunOffset = $derived.by(() => {
+    if (!detection) return null;
+    const times = sunEventTimes(shownSun, shownWeather, detection.timestamp);
+    return nearestSunEvent(
+      detectionMinute(detection),
+      wallClockMinutes(times.sunrise),
+      wallClockMinutes(times.sunset)
+    );
+  });
+
+  // Keyboard shortcuts. The review panel and the player hand over their controls on mount;
+  // these are plain variables, read only when a key is pressed and never by the template.
+  let reviewControls: ReviewControls | null = null;
+  let playbackControls: PlaybackControls | null = null;
+
+  // A control set is cleared only while the slot still holds it, so the teardown of a panel
+  // replaced by the next detection's cannot clear the new panel's controls.
+  function attachReviewControls(controls: ReviewControls): () => void {
+    reviewControls = controls;
+    return () => {
+      if (reviewControls === controls) reviewControls = null;
+    };
+  }
+
+  function attachPlaybackControls(controls: PlaybackControls): () => void {
+    playbackControls = controls;
+    return () => {
+      if (playbackControls === controls) playbackControls = null;
+    };
+  }
+
+  useShortcuts({
+    id: DETAIL_SHORTCUT_SCOPE,
+    label: () => t('pageTitle.detectionDetails'),
+    definitions: createDetailShortcuts({
+      settled: () => detection !== null && !isLoadingDetection,
+      loading: () => isLoadingDetection,
+      canReview: () => canReview,
+      steppingAvailable: () => steppingAvailable,
+      neighbors: () => neighbors,
+      neighborsFailed: () => neighborsFailed,
+      speciesName: () => displayName,
+      review: () => reviewControls,
+      playback: () => playbackControls,
+      go: path => navigation.navigate(path),
+    }),
+  });
+
+  // How each shortcut is shown on the controls; null while shortcuts are off.
+  let stepHints = $derived({
+    older: shortcuts.hint(DETAIL_SHORTCUT_IDS.older),
+    newer: shortcuts.hint(DETAIL_SHORTCUT_IDS.newer),
+    olderSpecies: shortcuts.hint(DETAIL_SHORTCUT_IDS.olderSpecies),
+    newerSpecies: shortcuts.hint(DETAIL_SHORTCUT_IDS.newerSpecies),
+  });
+  let reviewHints = $derived({
+    correct: shortcuts.hint(DETAIL_SHORTCUT_IDS.correct),
+    falsePositive: shortcuts.hint(DETAIL_SHORTCUT_IDS.falsePositive),
+    wrongSpecies: shortcuts.hint(DETAIL_SHORTCUT_IDS.wrongSpecies),
+    keep: shortcuts.hint(DETAIL_SHORTCUT_IDS.keep),
+  });
+  let playHint = $derived(shortcuts.hint(DETAIL_SHORTCUT_IDS.playPause));
+
+  // Only alphanumeric characters, hyphens and underscores are valid in a detection ID.
   function isValidDetectionId(id: string): boolean {
     return /^[a-zA-Z0-9_-]+$/.test(id);
   }
 
-  // Resolve detection ID from URL if not provided via prop
+  // The server reads "007" as detection 7, and the page compares ids as strings (the
+  // answers it keeps, the detection a save was made on), so a numeric id is written
+  // the way the server numbers it.
+  function canonicalDetectionId(id: string): string {
+    return /^\d+$/.test(id) ? String(Number(id)) : id;
+  }
+
+  // The detection's id: the prop, or else the address. A missing or invalid id leaves
+  // nothing to load, so the page drops what it shows and says why instead of loading.
   $effect(() => {
-    if (!detectionIdProp) {
+    let candidate = detectionIdProp;
+    if (!candidate) {
       const pathParts = window.location.pathname.split('/');
       const detectionIndex = pathParts.indexOf('detections');
-      if (detectionIndex !== -1 && pathParts[detectionIndex + 1]) {
-        const candidateId = pathParts[detectionIndex + 1];
-        if (isValidDetectionId(candidateId)) {
-          resolvedDetectionId = candidateId;
-        } else {
-          detectionError = t('detections.errors.noIdProvided');
-        }
-      }
-    } else if (isValidDetectionId(detectionIdProp)) {
-      resolvedDetectionId = detectionIdProp;
-    } else {
-      detectionError = t('detections.errors.noIdProvided');
+      candidate = detectionIndex === -1 ? undefined : pathParts.at(detectionIndex + 1);
     }
+    if (candidate && isValidDetectionId(candidate)) {
+      resolvedDetectionId = canonicalDetectionId(candidate);
+      return;
+    }
+    resolvedDetectionId = undefined;
+    detection = null;
+    isLoadingDetection = false;
+    detectionError = t('detections.errors.noIdProvided');
   });
 
-  // Initialize tab from URL query parameter (with permission check for review tab)
+  // A blocked-key reason is about the detection it was said on: stepping away clears it.
   $effect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tabParam = urlParams.get('tab');
-    const validTabs: TabType[] = ['overview', 'history', 'notes', 'review'];
-    if (tabParam && validTabs.includes(tabParam as TabType)) {
-      activeTab = tabParam === 'review' && !canReview ? 'overview' : (tabParam as TabType);
-    }
+    void resolvedDetectionId;
+    shortcuts.clearAnnouncement();
   });
 
-  // Fetch detection data when resolvedDetectionId changes
+  // Load the detection whenever the ID changes. Stepping to another detection
+  // cancels what belongs to the one left behind, but not the species data: a step
+  // within one species keeps it, and loadSpeciesData replaces it on a species change.
   $effect(() => {
     if (resolvedDetectionId) {
-      fetchDetection();
+      void fetchDetection(resolvedDetectionId, false);
     }
 
     return () => {
       detectionController?.abort();
+      relatedController?.abort();
+      listsController?.abort();
+    };
+  });
+
+  // Everything else stops when the page closes.
+  $effect(() => {
+    return () => {
       speciesController?.abort();
-      taxonomyController?.abort();
+      statsController?.abort();
+      hourlyController?.abort();
       attributionController?.abort();
       cancelAttributionRetry();
     };
   });
 
-  // Fetch detection data
-  async function fetchDetection() {
-    if (!resolvedDetectionId) {
-      detectionError = t('detections.errors.noIdProvided');
-      isLoadingDetection = false;
-      return;
+  function errorMessageForStatus(status: number): string {
+    switch (status) {
+      case 404:
+        return t('detections.errors.notFound');
+      case 403:
+        return t('detections.errors.noPermission');
+      case 401:
+        return t('detections.errors.loginRequired');
+      case 500:
+      case 502:
+      case 503:
+        return t('detections.errors.serverError');
+      default:
+        return t('detections.errors.loadFailed', { status });
     }
+  }
 
-    detectionController?.abort();
-    const controller = new AbortController();
-    detectionController = controller;
+  /** True when a request ended because it was cancelled, not because it failed. */
+  function isAbort(error: unknown, signal: AbortSignal): boolean {
+    return signal.aborted || (error instanceof Error && error.name === 'AbortError');
+  }
+
+  /** Replaces a controller with a fresh one, cancelling the requests of the old one. */
+  function renew(controller: AbortController | null): AbortController {
+    controller?.abort();
+    return new AbortController();
+  }
+
+  /**
+   * Loads a detection. A refresh (after a review, lock, note or species change)
+   * reloads the same detection in place; otherwise the page keeps showing the
+   * previous detection until the new one arrives, so stepping through detections
+   * does not flash a skeleton.
+   *
+   * What does not need the detection's answer (weather, neighbours, predictions)
+   * is requested at once beside it; what needs its date or species follows it.
+   *
+   * Resolves false when the request failed, true when it loaded or a newer load took
+   * its place.
+   */
+  async function fetchDetection(id: string, refresh: boolean): Promise<boolean> {
+    detectionController = renew(detectionController);
+    const controller = detectionController;
     const { signal } = controller;
 
-    isLoadingDetection = true;
-    detectionError = null;
-    // Reset the detail and its dependent data so a newer detection never briefly
-    // shows the previously viewed one's species/taxonomy/attribution while the
-    // secondary fetches are still in flight.
-    detection = null;
-    speciesInfo = null;
-    taxonomyInfo = null;
-    imageAttribution = null;
+    // The signals of the requests started beside this detection, for those that follow it.
+    let related: AbortSignal | null = null;
+    let lists: AbortSignal | null = null;
+    if (!refresh) {
+      isLoadingDetection = true;
+      detectionError = null;
+      relatedController = renew(relatedController);
+      listsController = renew(listsController);
+      related = relatedController.signal;
+      lists = listsController.signal;
+      loadWeather(id, related);
+      loadLists(id, lists);
+    }
 
     try {
-      const response = await fetch(buildAppUrl(`/api/v2/detections/${resolvedDetectionId}`), {
-        signal,
-      });
-
+      const response = await fetch(buildAppUrl(`/api/v2/detections/${id}`), { signal });
       // Check the captured signal, not the shared controller: a newer request may
-      // have replaced detectionController with a fresh, non-aborted instance, and
-      // checking that would let this stale response overwrite newer data.
-      if (signal.aborted) return;
+      // have replaced detectionController, and this stale response must not win.
+      if (signal.aborted) return true;
+      if (!response.ok) {
+        throw new Error(errorMessageForStatus(response.status));
+      }
+      const body: unknown = await response.json();
+      if (signal.aborted) return true;
+      if (!isDetectionDetail(body)) {
+        throw new Error(t('detections.errors.loadFailed', { status: response.status }));
+      }
+      const data = body;
 
-      if (response.ok) {
-        const data = (await response.json()) as Detection;
-        if (signal.aborted) return;
-        detection = data;
-      } else {
-        let errorMessage: string;
-        switch (response.status) {
-          case 404:
-            errorMessage = t('detections.errors.notFound');
-            break;
-          case 403:
-            errorMessage = t('detections.errors.noPermission');
-            break;
-          case 401:
-            errorMessage = t('detections.errors.loginRequired');
-            break;
-          case 500:
-          case 502:
-          case 503:
-            errorMessage = t('detections.errors.serverError');
-            break;
-          default:
-            errorMessage = t('detections.errors.loadFailed', { status: response.status });
-        }
-        throw new Error(errorMessage);
+      const speciesChanged = speciesDataFor !== data.scientificName;
+      detection = data;
+      pruneAnswers(data);
+
+      if (related && lists) {
+        loadSun(data, related);
+        loadDaily(data, lists);
+      } else if (speciesChanged) {
+        // A reviewer changed the species: the lists that depend on it are stale.
+        // Weather and sun times belong to the detection and its date, and stay.
+        listsController = renew(listsController);
+        loadLists(id, listsController.signal);
+        loadDaily(data, listsController.signal);
       }
 
-      if (detection) {
-        fetchSpeciesInfo();
-        fetchTaxonomy();
-        fetchImageAttribution();
-      }
+      // The species data is loaded when the species changes; a step within one species keeps it.
+      if (speciesChanged) loadSpeciesData(data);
+      return true;
     } catch (error) {
-      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-        return;
-      }
+      if (isAbort(error, signal)) return true;
+      logger.error('Error fetching detection:', error);
+      if (refresh) return false;
+      detection = null;
       detectionError =
         error instanceof Error ? error.message : t('detections.errors.loadFailed', { status: '' });
-      logger.error('Error fetching detection:', error);
+      return false;
     } finally {
-      // Only the request that still owns the controller may reset shared state; a
-      // superseded request must not clear a newer request's loading flag/controller.
+      // Only the request that still owns the controller may reset shared state.
       if (detectionController === controller) {
         isLoadingDetection = false;
         detectionController = null;
@@ -281,17 +464,279 @@
   }
 
   /**
+   * A change was saved on a detection. The statistics of the species it touched (its
+   * species, and for a species change also the new one) are loaded again when the page
+   * holds that species' data, whichever detection is shown now. After a species change
+   * the page holds no species until the changed detection's reload lands, so a reload that
+   * fails or is cut short by a step leaves the next detection to load its species data
+   * afresh. The detection itself is reloaded only when it is the one the page is on:
+   * - shown and settled: reloaded in place, keeping what is on screen if that fails;
+   * - being stepped to: the step's request may have been sent before the save went
+   *   through, so the whole step starts again, with its sun times and daily counts;
+   * - already left: nothing to reload, a step brings its own detection.
+   * Resolves false when the reload failed, so a panel can show what the page holds.
+   */
+  function onSaved(change: SavedChange): Promise<boolean> {
+    const touched = [change.scientificName, change.changedTo];
+    if (change.speciesStats && speciesDataFor && touched.includes(speciesDataFor)) {
+      loadStats(speciesDataFor);
+      // A species change moved a detection into or out of the species on screen, so its
+      // hourly activity changed too.
+      if (change.changedTo) loadHourly(speciesDataFor);
+    }
+    if (!resolvedDetectionId || String(change.detectionId) !== resolvedDetectionId) {
+      return Promise.resolve(true);
+    }
+    if (change.changedTo) speciesDataFor = '';
+    return fetchDetection(resolvedDetectionId, !isLoadingDetection);
+  }
+
+  /** Drops the answers of detections and days the page has moved on from. */
+  function pruneAnswers(shown: DetectionDetailData) {
+    const id = String(shown.id);
+    for (const key of Object.keys(weatherAnswers)) {
+      // eslint-disable-next-line security/detect-object-injection -- key comes from Object.keys
+      if (key !== id) delete weatherAnswers[key];
+    }
+    for (const key of Object.keys(sunAnswers)) {
+      // eslint-disable-next-line security/detect-object-injection -- key comes from Object.keys
+      if (key !== shown.date) delete sunAnswers[key];
+    }
+  }
+
+  /**
+   * GET a JSON document; null when the request fails, the server has no answer or the
+   * answer is not the shape `isShape` accepts.
+   * Plain fetch on purpose: the shared API client reports every unexpected answer
+   * to error tracking, and these routes answer 404 (no weather for the time, a species
+   * the lookup does not know) and 409 (statistics on the legacy database) in normal use.
+   */
+  async function loadJson<T>(
+    path: string,
+    signal: AbortSignal,
+    isShape: (_value: unknown) => _value is T
+  ): Promise<T | null> {
+    try {
+      const response = await fetch(buildAppUrl(path), { signal });
+      if (signal.aborted || !response.ok) return null;
+      const body: unknown = await response.json();
+      if (isShape(body)) return body;
+      logger.error('Unexpected shape of detection detail data', undefined, { path });
+      return null;
+    } catch (error) {
+      if (!isAbort(error, signal)) {
+        logger.error('Error loading detection detail data:', error, { path });
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Requests a JSON document and hands its answer (null when there is none) to
+   * `assign`, unless a newer request has replaced it. With a `key`, the matching
+   * loading flag is set while the request is out.
+   */
+  function load<T>(
+    path: string,
+    signal: AbortSignal,
+    isShape: (_value: unknown) => _value is T,
+    assign: (_value: T | null) => void,
+    key?: LoadingKey
+  ) {
+    // eslint-disable-next-line security/detect-object-injection -- key is a typed union
+    if (key) loading[key] = true;
+    void loadJson(path, signal, isShape).then(value => {
+      if (signal.aborted) return;
+      assign(value);
+      // eslint-disable-next-line security/detect-object-injection -- key is a typed union
+      if (key) loading[key] = false;
+    });
+  }
+
+  /**
+   * The weather at the detection. The detection shown keeps the weather it has until
+   * its own answer arrives; the next detection shows placeholders instead of it.
+   */
+  function loadWeather(id: string, signal: AbortSignal) {
+    load(
+      `/api/v2/weather/detection/${id}`,
+      signal,
+      isDetectionWeather,
+      value => {
+        // eslint-disable-next-line security/detect-object-injection -- id passed isValidDetectionId
+        weatherAnswers[id] = value;
+      },
+      'weather'
+    );
+  }
+
+  /** Sunrise and sunset of the detection's day. */
+  function loadSun(det: DetectionDetailData, signal: AbortSignal) {
+    const { date } = det;
+    load(
+      `/api/v2/weather/sun/${date}`,
+      signal,
+      isSunTimes,
+      value => {
+        // eslint-disable-next-line security/detect-object-injection -- date comes from the detection's date field
+        sunAnswers[date] = value;
+      },
+      'sun'
+    );
+  }
+
+  /**
+   * Neighbours and predictions. Both feed actions (stepping, picking a species),
+   * so stale ones are cleared at once instead of being kept on screen.
+   */
+  function loadLists(id: string, signal: AbortSignal) {
+    neighbors = null;
+    neighborsFailed = false;
+    predictions = null;
+    void loadNeighbors(id, signal);
+    load(
+      `/api/v2/detections/${id}/predictions`,
+      signal,
+      isDetectionPredictions,
+      value => (predictions = value)
+    );
+  }
+
+  /** The species' detections per day for the weeks up to the detection. */
+  function loadDaily(det: DetectionDetailData, signal: AbortSignal) {
+    // Counts for another window or species are not shown while these load.
+    dailyCounts = null;
+    const species = encodeURIComponent(det.scientificName);
+    const start = dailyWindowStart(det.date, DAILY_WINDOW_DAYS);
+    load(
+      `/api/v2/analytics/time/daily?start_date=${start}&end_date=${det.date}&species=${species}`,
+      signal,
+      isDailyCounts,
+      value => (dailyCounts = value),
+      'daily'
+    );
+  }
+
+  /**
+   * Loads the neighbours used by the older and newer links. The route needs the
+   * current database format and answers 409 without it; that answer also tells
+   * the page that changing a detection's species is not possible there.
+   */
+  async function loadNeighbors(id: string, signal: AbortSignal) {
+    try {
+      const response = await fetch(buildAppUrl(`/api/v2/detections/${id}/neighbors`), { signal });
+      if (signal.aborted) return;
+      // Only the legacy database cannot step at all; another failed answer leaves the
+      // links in place, blocked, so the one in focus stays.
+      if (response.status === HTTP_CONFLICT) {
+        enhancedDatabase = false;
+        return;
+      }
+      if (!response.ok) {
+        neighborsFailed = true;
+        return;
+      }
+      const body: unknown = await response.json();
+      if (signal.aborted) return;
+      if (!isDetectionNeighbors(body)) {
+        logger.error('Unexpected shape of detection neighbours');
+        neighborsFailed = true;
+        return;
+      }
+      neighbors = body;
+      enhancedDatabase = true;
+    } catch (error) {
+      if (isAbort(error, signal)) return;
+      logger.error('Error loading detection neighbours:', error);
+      neighborsFailed = true;
+    }
+  }
+
+  /**
+   * The species' all-time statistics. A newer request (after a verdict, or for another
+   * species) cancels the one still out, so the latest answer is the one shown; the
+   * statistics on screen stay until it arrives, and stay when it fails. A change of
+   * species clears them before asking (loadSpeciesData).
+   */
+  function loadStats(scientificName: string) {
+    statsController = renew(statsController);
+    load(
+      `/api/v2/species/stats?scientific_name=${encodeURIComponent(scientificName)}`,
+      statsController.signal,
+      isSpeciesStats,
+      value => {
+        speciesStats = value ?? speciesStats;
+      },
+      'stats'
+    );
+  }
+
+  /**
+   * Loads the data tied to the detection's species. Called only when the species
+   * changes, so stepping through detections of one species keeps what is loaded.
+   */
+  function loadSpeciesData(det: DetectionDetailData) {
+    speciesController = renew(speciesController);
+    const { signal } = speciesController;
+    speciesDataFor = det.scientificName;
+
+    rarity = null;
+    taxonomy = null;
+    imageAttribution = null;
+    hourlyActivity = null;
+    speciesStats = null;
+
+    const species = encodeURIComponent(det.scientificName);
+
+    load(
+      `/api/v2/species?scientific_name=${species}`,
+      signal,
+      isPlainObject,
+      value => (rarity = isSpeciesRarity(value?.rarity) ? value.rarity : null),
+      'rarity'
+    );
+    load(
+      `/api/v2/species/taxonomy?scientific_name=${species}`,
+      signal,
+      isPlainObject,
+      value => (taxonomy = isTaxonomy(value?.taxonomy) ? value.taxonomy : null)
+    );
+    loadHourly(det.scientificName);
+    loadStats(det.scientificName);
+    void fetchImageAttribution(det.scientificName);
+  }
+
+  /**
+   * The species' detections by hour of day, all time. Like loadStats, a newer request (after
+   * a change, or for another species) cancels the one still out, so the latest answer is
+   * the one shown; the activity on screen stays until it arrives, and stays when it fails.
+   * A change of species clears it before asking (loadSpeciesData).
+   */
+  function loadHourly(scientificName: string) {
+    hourlyController = renew(hourlyController);
+    const species = encodeURIComponent(scientificName);
+    load(
+      `/api/v2/analytics/time/distribution/hourly?start_date=${ACTIVITY_START_DATE}&end_date=${getLocalDateString()}&species=${species}`,
+      hourlyController.signal,
+      isHourlyBuckets,
+      value => {
+        hourlyActivity = value ?? hourlyActivity;
+      },
+      'hourly'
+    );
+  }
+
+  /**
    * Delays before re-requesting attribution that answered "not resolved yet".
-   * Deliberately shorter and fewer than the thumbnail's own schedule: attribution is
-   * supporting detail, and the image itself is what the user is waiting on.
+   * Attribution is supporting detail; the image itself is what the user waits on.
    */
   const ATTRIBUTION_RETRY_DELAYS_MS = [5000, 15000, 40000];
 
   /**
-   * Pending 503 retry. Tracked separately from attributionController because the
-   * controller is released as soon as its request settles: without this the scheduled
-   * retry would still fire after the view was unmounted or navigated to a different
-   * detection, since aborting the (already-nulled) controller could no longer reach it.
+   * Pending 503 retry. Tracked apart from attributionController because the
+   * controller is released as soon as its request settles: without this a
+   * scheduled retry would still fire after the view was unmounted or moved to
+   * another species.
    */
   let attributionRetryTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
@@ -303,44 +748,45 @@
   }
 
   // Fetch image attribution metadata
-  async function fetchImageAttribution(attempt = 0) {
-    if (!detection?.scientificName?.trim()) return;
+  async function fetchImageAttribution(scientificName: string, attempt = 0) {
+    if (!scientificName.trim()) return;
 
-    attributionController?.abort();
     cancelAttributionRetry();
-    const controller = new AbortController();
-    attributionController = controller;
+    attributionController = renew(attributionController);
+    const controller = attributionController;
     const { signal } = controller;
 
     try {
       const url = buildAppUrl(
-        `/api/v2/media/species-image/info?name=${encodeURIComponent(detection.scientificName)}`
+        `/api/v2/media/species-image/info?name=${encodeURIComponent(scientificName)}`
       );
       const response = await fetch(url, { signal });
       if (signal.aborted) return;
       if (response.ok) {
-        const data = await response.json();
+        const body: unknown = await response.json();
         if (signal.aborted) return;
-        imageAttribution = data as ImageAttribution;
+        imageAttribution = parseImageAttribution(body);
         return;
       }
-      // 503 means the image is still being resolved in the background, not that it
-      // has no attribution. Without a retry the CC-BY/CC-BY-SA photo that the
-      // thumbnail's own retry recovers seconds later would be displayed with no
-      // author or licence credit, which is a licensing problem and not merely a
-      // cosmetic one.
-      if (response.status === 503 && attempt < ATTRIBUTION_RETRY_DELAYS_MS.length) {
+      // 503 means the image is still being resolved in the background, not that
+      // it has no attribution. Without a retry a CC-BY photo that the thumbnail's
+      // own retry recovers seconds later would be shown with no author or licence
+      // credit, which is a licensing problem and not merely a cosmetic one.
+      if (
+        response.status === HTTP_SERVICE_UNAVAILABLE &&
+        attempt < ATTRIBUTION_RETRY_DELAYS_MS.length
+      ) {
         const delay = ATTRIBUTION_RETRY_DELAYS_MS.at(attempt) ?? 0;
         attributionRetryTimer = globalThis.setTimeout(() => {
           attributionRetryTimer = undefined;
-          if (!signal.aborted) void fetchImageAttribution(attempt + 1);
+          if (!signal.aborted) void fetchImageAttribution(scientificName, attempt + 1);
         }, delay);
-        // Return before the finally block releases the controller, so this request's
-        // signal stays reachable and an abort can still cancel the pending retry.
+        // The finally block still releases the controller; the pending retry is
+        // cancelled through attributionRetryTimer (cancelAttributionRetry).
         return;
       }
     } catch (error) {
-      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) return;
+      if (isAbort(error, signal)) return;
       // Attribution is non-critical - fail silently
     } finally {
       if (attributionController === controller) {
@@ -348,1353 +794,308 @@
       }
     }
   }
-
-  // Fetch species information (public data - no auth required)
-  async function fetchSpeciesInfo() {
-    if (!detection?.scientificName?.trim()) return;
-
-    speciesController?.abort();
-    const controller = new AbortController();
-    speciesController = controller;
-    const { signal } = controller;
-
-    try {
-      const response = await fetch(
-        buildAppUrl(
-          `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`
-        ),
-        { signal }
-      );
-      if (signal.aborted) return;
-      if (response.ok) {
-        const data = await response.json();
-        if (signal.aborted) return;
-        speciesInfo = data;
-      }
-    } catch (error) {
-      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-        return;
-      }
-      logger.error('Error fetching species info:', error);
-    } finally {
-      if (speciesController === controller) {
-        speciesController = null;
-      }
-    }
-  }
-
-  // Fetch taxonomy information (public data - no auth required)
-  async function fetchTaxonomy() {
-    if (!detection?.scientificName?.trim()) return;
-
-    taxonomyController?.abort();
-    const controller = new AbortController();
-    taxonomyController = controller;
-    const { signal } = controller;
-
-    isLoadingTaxonomy = true;
-    try {
-      const response = await fetch(
-        buildAppUrl(
-          `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`
-        ),
-        { signal }
-      );
-      if (signal.aborted) return;
-      if (response.ok) {
-        const data = await response.json();
-        if (signal.aborted) return;
-        taxonomyInfo = data;
-      }
-    } catch (error) {
-      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
-        return;
-      }
-      logger.error('Error fetching taxonomy info:', error);
-    } finally {
-      if (taxonomyController === controller) {
-        isLoadingTaxonomy = false;
-        taxonomyController = null;
-      }
-    }
-  }
-
-  // Dynamically load review component when user has review permission
-  $effect(() => {
-    if (canReview && !ReviewCard) {
-      import('$lib/desktop/components/review/ReviewCard.svelte')
-        .then(module => {
-          ReviewCard = module.default;
-          logger.debug('ReviewCard component loaded for authenticated user');
-        })
-        .catch(error => {
-          logger.error('Failed to load ReviewCard component:', error);
-        });
-    }
-  });
-
-  // Handle review card completion
-  function handleReviewComplete() {
-    if (resolvedDetectionId) {
-      fetchDetection();
-    }
-  }
-
-  // Keyboard navigation handler for tab buttons
-  function handleTabKeydown(e: KeyboardEvent) {
-    const tabs: TabType[] = ['overview', 'history', 'notes'];
-    if (canReview) tabs.push('review');
-
-    const currentIndex = tabs.indexOf(activeTab);
-    if (currentIndex === -1) return;
-
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      activeTab = tabs[(currentIndex + 1) % tabs.length];
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      activeTab = tabs[(currentIndex - 1 + tabs.length) % tabs.length];
-    }
-  }
-
-  // Focus management for tab switching
-  $effect(() => {
-    const activePanel = document.getElementById(`tab-panel-${activeTab}`);
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    if (activePanel && document.activeElement?.getAttribute('role') === 'tab') {
-      timeoutId = setTimeout(() => {
-        activePanel.focus();
-      }, TAB_FOCUS_DELAY_MS);
-    }
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  });
-
-  // URL state management - update URL when tab changes
-  $effect(() => {
-    if (typeof window !== 'undefined' && resolvedDetectionId) {
-      const url = new URL(window.location.href);
-
-      if (activeTab === 'overview') {
-        url.searchParams.delete('tab');
-      } else {
-        url.searchParams.set('tab', activeTab);
-      }
-
-      const newUrl = url.pathname + url.search;
-      if (newUrl !== getCurrentPathWithQuery()) {
-        window.history.replaceState(null, '', newUrl);
-      }
-    }
-  });
-
-  // Handle browser back/forward navigation
-  $effect(() => {
-    if (typeof window !== 'undefined') {
-      function handlePopState() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const tabParam = urlParams.get('tab');
-        const validTabs = ['overview', 'history', 'notes', 'review'] as const;
-
-        if (tabParam && validTabs.includes(tabParam as typeof activeTab)) {
-          if (tabParam === 'review' && !canReview) {
-            activeTab = 'overview';
-          } else {
-            activeTab = tabParam as typeof activeTab;
-          }
-        } else {
-          activeTab = 'overview';
-        }
-      }
-
-      window.addEventListener('popstate', handlePopState);
-
-      return () => {
-        window.removeEventListener('popstate', handlePopState);
-      };
-    }
-  });
 </script>
 
-<!-- Snippets for better organization -->
+<!-- A skeleton line: one bar inside a box of the loaded line's height. -->
+{#snippet line(boxClass: string, barClass: string)}
+  <div class="flex items-center {boxClass}"><Skeleton className={barClass} /></div>
+{/snippet}
 
-{#snippet heroSection(det: Detection)}
-  {@const displayName = localizeSpeciesName(det.scientificName, det.commonName)}
-  <section class="detection-hero-grid" aria-labelledby="species-heading">
-    <!-- Identity Card -->
-    <div class="hero-card hero-identity-card">
-      <h3 class="section-heading">{t('detections.detail.species')}</h3>
-      <div class="hero-identity-row">
-        <!-- Species thumbnail with credit overlay -->
-        <div class="hero-thumbnail">
-          <img
-            src={buildAppUrl(
-              `/api/v2/media/species-image?name=${encodeURIComponent(det.scientificName)}`
-            )}
-            alt={displayName}
-            class="w-full h-full object-contain"
-            onerror={handleBirdImageError}
-            loading="eager"
-          />
-          {#if imageAttribution?.authorName}
-            <div
-              class="thumbnail-credit"
-              aria-label={t('common.aria.imageCredit', { name: imageAttribution.authorName })}
-            >
-              <Camera size={10} class="credit-icon" />
-              <span class="credit-text">{imageAttribution.authorName}</span>
-              {#if imageAttribution.licenseName}
-                <span class="credit-separator">·</span>
-                {#if imageAttribution.licenseURL}
-                  <a
-                    href={imageAttribution.licenseURL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="credit-license">{imageAttribution.licenseName}</a
-                  >
-                {:else}
-                  <span class="credit-license">{imageAttribution.licenseName}</span>
-                {/if}
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Species identity -->
-        <div class="hero-species">
-          <h1 id="species-heading" class="species-display-name">
-            {displayName}
-            <span class="sr-only">{t('detections.detail.aria.speciesHeadingSuffix')}</span>
-          </h1>
-          <p class="species-scientific-name">
-            <span class="sr-only"
-              >{t('detections.detail.aria.scientificName')}:
-            </span>{det.scientificName}
-          </p>
-          <div class="mt-3" aria-label={t('detections.detail.aria.classificationBadges')}>
-            <VerificationBadges detection={det} size="sm" />
-          </div>
-        </div>
-
-        <!-- Confidence -->
-        <div
-          class="hero-confidence"
-          aria-label={t('detections.detail.aria.confidence', {
-            confidence: Math.round((det.confidence ?? 0) * 100),
-          })}
-        >
-          <ConfidenceCircle confidence={det.confidence} size="xl" />
-        </div>
-      </div>
-    </div>
-
-    <!-- Taxonomy Card -->
-    {#if isLoadingTaxonomy || taxonomyInfo?.taxonomy}
-      <div class="hero-card hero-taxonomy-card" aria-labelledby="hero-taxonomy-heading">
-        <h3 id="hero-taxonomy-heading" class="section-heading">
-          {t('species.taxonomy.hierarchy')}
-        </h3>
-        {#if isLoadingTaxonomy}
-          <div class="animate-pulse space-y-2.5">
-            {#each Array(5) as _, i (i)}
-              <div class="flex items-center gap-2" style:padding-left="{i * 1.25}rem">
-                <div class="h-3 rounded bg-[var(--color-base-300)]/60 w-12"></div>
-                <div class="h-3 rounded bg-[var(--color-base-300)]/60 w-20"></div>
-              </div>
-            {/each}
-          </div>
-        {:else if taxonomyInfo?.taxonomy}
-          <div class="taxonomy-tree">
-            {#each [{ key: 'class', value: taxonomyInfo.taxonomy.class, depth: 0 }, { key: 'order', value: taxonomyInfo.taxonomy.order, depth: 1 }, { key: 'family', value: taxonomyInfo.taxonomy.family, depth: 2 }, { key: 'genus', value: taxonomyInfo.taxonomy.genus, depth: 3 }, { key: 'species', value: taxonomyInfo.taxonomy.species, depth: 4 }] as rank, i (rank.key)}
-              <div class="taxonomy-node" style:--depth={rank.depth}>
-                {#if i > 0}
-                  <div class="taxonomy-connector" aria-hidden="true">
-                    <div class="connector-vert"></div>
-                    <div class="connector-horiz"></div>
-                  </div>
-                {/if}
-                <span class="taxonomy-rank-label">
-                  {t(`species.taxonomy.labels.${rank.key}`)}
-                </span>
-                <span class="taxonomy-rank-value" class:italic={rank.key === 'species'}>
-                  {rank.value}
-                </span>
-              </div>
-            {/each}
-          </div>
-
-          {#if subspeciesList.length > 0}
-            <div class="taxonomy-subspecies">
-              <h4 class="taxonomy-subspecies-heading">{t('species.taxonomy.subspecies')}</h4>
-              <div class="taxonomy-subspecies-list">
-                {#each subspeciesList as subspecies, index (`${subspecies.scientific_name}_${index}`)}
-                  <div class="taxonomy-subspecies-item">
-                    <span class="italic">{subspecies.scientific_name}</span>
-                    {#if subspecies.common_name}
-                      <span class="taxonomy-subspecies-common"
-                        >{localizeSpeciesName(
-                          subspecies.scientific_name,
-                          subspecies.common_name
-                        )}</span
-                      >
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-            </div>
-          {/if}
-        {/if}
-      </div>
+<div class="col-span-12 dd-page">
+  <!-- Announces the loaded detection. While it loads, the visible label in the
+       skeleton says so. -->
+  <div role="status" class="sr-only">
+    {#if !isLoadingDetection && detection}
+      {t('detections.aria.loaded', { species: displayName })}
     {/if}
+  </div>
 
-    <!-- Metadata Card -->
+  {#if detection}
+    <DetailNavBar
+      speciesName={displayName}
+      date={detection.date}
+      time={detection.time}
+      {neighbors}
+      failed={neighborsFailed}
+      available={steppingAvailable}
+      stale={isLoadingDetection}
+      shortcutHints={stepHints}
+    />
+
+    <!-- While the next detection loads, the previous one stays on screen, dimmed and
+         inert, so no review lands on a detection the user has left. -->
     <div
-      class="hero-card hero-metadata-card"
-      role="region"
-      aria-label={t('detections.detail.aria.metadata')}
+      class="dd-grid dd-grid-top"
+      class:dd-switching={isLoadingDetection}
+      inert={isLoadingDetection}
+      aria-busy={isLoadingDetection}
     >
-      <h3 class="section-heading">{t('detections.detail.observation')}</h3>
-      <!-- Date & Time -->
-      <div class="meta-section">
-        <div class="meta-date">{det.date}</div>
-        <div class="meta-time-row">
-          <Clock class="w-3.5 h-3.5" />
-          <span>{det.time}</span>
-          {#if det.timeOfDay}
-            {@const tod = det.timeOfDay.toLowerCase()}
-            <span class="time-of-day-badge tod-{tod}">
-              {#if tod === 'day'}
-                <Sun size={12} />
-              {:else if tod === 'night'}
-                <Moon size={12} />
-              {:else if tod === 'sunrise'}
-                <Sunrise size={12} />
-              {:else if tod === 'sunset'}
-                <Sunset size={12} />
-              {/if}
-              <span>{t(`detections.timeOfDay.${tod}`)}</span>
-            </span>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Audio Source -->
-      {#if det.source}
-        <div class="meta-section">
-          <SourceBadge detection={det} variant="inline" />
-        </div>
-      {/if}
-
-      <!-- Weather -->
-      {#if det.weather}
-        <div
-          class="meta-section hero-weather"
-          aria-label={t('detections.detail.aria.weatherConditions')}
-        >
-          <WeatherDetails
-            weatherIcon={det.weather.weatherIcon}
-            weatherDescription={det.weather.description}
-            timeOfDay={det.timeOfDay?.toLowerCase() === 'night' ? 'night' : 'day'}
-            temperature={det.weather.temperature}
-            windSpeed={det.weather.windSpeed}
-            windGust={det.weather.windGust}
-            units={det.weather.units}
-            size="md"
+      <div class="dd-column">
+        <IdentityCard
+          {detection}
+          {displayName}
+          {taxonomy}
+          {rarity}
+          {imageAttribution}
+          {sunOffset}
+          {predictionCount}
+          onShowPredictions={() => (speciesDialogOpen = true)}
+        />
+        <!-- One panel per detection: a draft, an error or a save still out belongs to the
+             detection it was made on and does not carry over to the next. -->
+        {#key detection.id}
+          <ReviewPanel
+            {detection}
+            speciesName={displayName}
+            {canReview}
+            {speciesBlockedReason}
+            grow
+            onWrongSpecies={() => (speciesDialogOpen = true)}
+            onChanged={onSaved}
+            onControls={attachReviewControls}
+            shortcutHints={reviewHints}
           />
-        </div>
-      {/if}
-
-      <!-- Download -->
-      {#if det.clipName}
-        <div class="meta-section">
-          <a
-            href={audioUrlFor(det.id, getPlaybackDenoiseDefault())}
-            download
-            class="meta-download"
-            aria-label={t('detections.detail.aria.downloadAudioClip', { name: displayName })}
-          >
-            <Download class="w-4 h-4" />
-            <span>{t('media.audio.download')}</span>
-          </a>
-        </div>
-      {/if}
+        {/key}
+      </div>
+      <ConditionsCard
+        {detection}
+        weather={shownWeather}
+        sun={shownSun}
+        {hourlyActivity}
+        weatherLoading={loading.weather || loading.sun}
+        activityLoading={loading.hourly}
+        speciesName={displayName}
+      />
     </div>
-  </section>
-{/snippet}
 
-{#snippet overviewTab(det: Detection)}
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-    <!-- Species Rarity -->
-    {#if speciesInfo?.rarity}
-      <section aria-labelledby="rarity-heading">
-        <h3 id="rarity-heading" class="section-heading">{t('species.rarity.title')}</h3>
-        <div class="content-panel">
-          <div class="flex items-center gap-3 mb-1">
-            <span class="rarity-label"
-              >{t(`species.rarity.statuses.${speciesInfo.rarity.status}`)}</span
-            >
-            <span class="rarity-score">
-              {(speciesInfo.rarity.score * 100).toFixed(0)}%
-            </span>
-          </div>
-          {#if speciesInfo.rarity.location_based && speciesInfo.rarity.latitude != null && speciesInfo.rarity.longitude != null}
-            <p class="text-xs text-[var(--color-base-content)]/40">
-              {t('species.rarity.basedOnLocation', {
-                latitude: speciesInfo.rarity.latitude.toFixed(2),
-                longitude: speciesInfo.rarity.longitude.toFixed(2),
-              })}
-            </p>
-          {/if}
-        </div>
-      </section>
-    {/if}
-
-    <!-- Species Tracking -->
-    {#if det.isNewSpecies || det.isNewThisYear || det.isNewThisSeason || (det.daysSinceFirstSeen != null && det.daysSinceFirstSeen > 0)}
-      <section aria-labelledby="tracking-heading">
-        <h3 id="tracking-heading" class="section-heading">{t('species.tracking.title')}</h3>
-        <div class="content-panel">
-          <dl class="metadata-list">
-            {#if det.isNewSpecies}
-              <div class="metadata-row">
-                <dt>{t('species.tracking.newSpecies')}</dt>
-                <dd class="text-[var(--color-success)] font-medium">{t('common.values.yes')}</dd>
-              </div>
-            {/if}
-            {#if det.isNewThisYear}
-              <div class="metadata-row">
-                <dt>{t('species.tracking.newThisYear')}</dt>
-                <dd class="text-[var(--color-success)] font-medium">{t('common.values.yes')}</dd>
-              </div>
-            {/if}
-            {#if det.isNewThisSeason && det.currentSeason}
-              <div class="metadata-row">
-                <dt>{t('species.tracking.newThisSeason')}</dt>
-                <dd class="capitalize">{det.currentSeason}</dd>
-              </div>
-            {/if}
-            {#if det.daysSinceFirstSeen != null && det.daysSinceFirstSeen > 0}
-              <div class="metadata-row">
-                <dt>{t('species.tracking.daysSinceFirst')}</dt>
-                <dd>{det.daysSinceFirstSeen}</dd>
-              </div>
-            {/if}
-          </dl>
-        </div>
-      </section>
-    {/if}
-  </div>
-{/snippet}
-
-{#snippet historyTab()}
-  <section class="empty-state-section" aria-labelledby="history-heading">
-    <History class="empty-state-icon" />
-    <h3 id="history-heading" class="empty-state-heading">{t('detections.history.title')}</h3>
-    <p class="empty-state-text" role="status">
-      {t('detections.history.comingSoon')}
-    </p>
-  </section>
-{/snippet}
-
-{#snippet notesTab(det: Detection)}
-  <section aria-labelledby="notes-heading">
-    <h3 id="notes-heading" class="section-heading">{t('detections.notes.title')}</h3>
-    {#if det.comments && det.comments.length > 0}
-      <div class="space-y-3" role="list" aria-label={t('detections.detail.aria.comments')}>
-        {#each det.comments as comment (comment.id ?? comment.createdAt)}
-          <article class="content-panel" role="listitem">
-            <p class="text-sm leading-relaxed">
-              <span class="sr-only"
-                >{t('detections.detail.aria.commentText')}:
-              </span>{comment.entry}
-            </p>
-            <p class="text-xs text-[var(--color-base-content)]/40 mt-2">
-              <span class="sr-only"
-                >{t('detections.detail.aria.commentTimestamp')}:
-              </span>{formatLocalDateTime(new Date(comment.createdAt))}
-            </p>
-          </article>
-        {/each}
-      </div>
-    {:else}
-      <div class="empty-state-section">
-        <StickyNote class="empty-state-icon" />
-        <p class="empty-state-text" role="status">
-          {t('detections.notes.noComments')}
-        </p>
-      </div>
-    {/if}
-  </section>
-{/snippet}
-
-<!-- Main component -->
-<main class="col-span-12 detection-detail" aria-label={t('detections.detail.aria.mainRegion')}>
-  <!-- Loading state with live region -->
-  <div role="status" aria-live="polite" class="sr-only">
-    {#if isLoadingDetection}
-      {t('detections.aria.loading')}
-    {:else if detection}
-      {t('detections.aria.loaded', {
-        species: localizeSpeciesName(detection.scientificName, detection.commonName),
-      })}
-    {:else if detectionError}
-      {t('detections.aria.error', { error: detectionError })}
-    {/if}
-  </div>
-
-  {#if isLoadingDetection}
-    <!-- Loading skeleton matching real layout structure (decorative, AT uses live region above) -->
-    <div class="detection-hero-grid" aria-hidden="true">
-      <!-- Identity card skeleton -->
-      <div class="hero-card hero-identity-card">
-        <div class="skeleton-line w-20 h-3 mb-4"></div>
-        <div class="hero-identity-row">
-          <div class="hero-thumbnail skeleton-block"></div>
-          <div class="hero-species">
-            <div class="skeleton-line w-48 h-6 mb-2"></div>
-            <div class="skeleton-line w-32 h-4 mb-3"></div>
-            <div class="flex gap-2">
-              <div class="skeleton-line w-16 h-5 rounded-full"></div>
-              <div class="skeleton-line w-16 h-5 rounded-full"></div>
-            </div>
-          </div>
-          <div class="hero-confidence">
-            <div class="skeleton-block w-20 h-20 rounded-full"></div>
-          </div>
-        </div>
-      </div>
-      <!-- Metadata card skeleton -->
-      <div class="hero-card hero-metadata-card">
-        <div class="skeleton-line w-24 h-3 mb-4"></div>
-        <div class="space-y-3">
-          <div class="skeleton-line w-28 h-5"></div>
-          <div class="skeleton-line w-20 h-4"></div>
-          <div class="skeleton-line w-full h-12 mt-4"></div>
-        </div>
-      </div>
-    </div>
-    <!-- Media section skeleton -->
-    <div class="surface-card">
-      <div class="p-5 md:p-6">
-        <div class="skeleton-line w-32 h-4 mb-4"></div>
-        <div class="skeleton-block w-full" style:aspect-ratio="2 / 1"></div>
-      </div>
-    </div>
-    <!-- Tabs skeleton -->
-    <div class="surface-card">
-      <div class="p-5 md:p-6">
-        <div class="flex gap-4 mb-6">
-          <div class="skeleton-line w-20 h-8 rounded-md"></div>
-          <div class="skeleton-line w-20 h-8 rounded-md"></div>
-          <div class="skeleton-line w-20 h-8 rounded-md"></div>
-        </div>
-        <div class="space-y-3">
-          <div class="skeleton-line w-full h-4"></div>
-          <div class="skeleton-line w-3/4 h-4"></div>
-          <div class="skeleton-line w-1/2 h-4"></div>
-        </div>
-      </div>
-    </div>
-  {:else if detectionError}
-    <!-- Error state -->
-    <div class="surface-card p-6">
-      <div role="alert" aria-live="assertive">
-        <ErrorAlert message={detectionError} />
-      </div>
-    </div>
-  {:else if detection}
-    <!-- Hero Section -->
-    {@render heroSection(detection)}
-
-    <!-- Media Section (shown when this detection has a clip, or a kept spectrogram image
-         after retention removed its audio) -->
+    <!-- The clip, or the kept spectrogram image after retention removed its audio.
+         Dimmed and inert with the grids while the next detection loads. -->
     {#if detection.clipName || detection.spectrogramOnly}
-      <section class="surface-card" aria-labelledby="media-heading">
-        <div class="p-5 md:p-6">
-          <h2 id="media-heading" class="section-heading !mb-0">
-            {t('detections.media.title')}
-          </h2>
-          {#if clipExtractionEnabled && detection.clipName}
-            <p class="text-sm text-[var(--color-base-content)]/60 mt-0.5 mb-4">
-              {t('detections.media.clipHint')}
-            </p>
-          {:else}
-            <div class="mb-3"></div>
-          {/if}
-          <div
-            role="region"
-            aria-label={detection.clipName
-              ? t('detections.detail.aria.audioRecordingFor', {
-                  name: localizeSpeciesName(detection.scientificName, detection.commonName),
-                })
-              : t('components.audio.spectrogramForSpecies', {
-                  species: localizeSpeciesName(detection.scientificName, detection.commonName),
-                })}
-          >
-            <div class="detail-audio-container">
-              {#if detection.clipName}
-                <AudioPlayer
-                  audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
-                  detectionId={detection.id.toString()}
-                  showSpectrogram={true}
-                  spectrogramSize="lg"
-                  spectrogramRaw={false}
-                  responsive={true}
-                  className="w-full"
-                  enableClipExtraction={clipExtractionEnabled}
-                  clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
-                  modelType={detection.modelType}
-                  clipSampleRate={detection.clipSampleRate}
-                  spectrogramFollowsDenoise={true}
-                />
-              {:else}
-                <SpectrogramImage
-                  detectionId={detection.id.toString()}
-                  size="lg"
-                  raw={false}
-                  className="w-full"
-                />
-              {/if}
-            </div>
-          </div>
-        </div>
-      </section>
+      <div
+        class:dd-switching={isLoadingDetection}
+        inert={isLoadingDetection}
+        aria-busy={isLoadingDetection}
+      >
+        <RecordingCard
+          {detection}
+          speciesName={displayName}
+          onPlaybackControls={attachPlaybackControls}
+          playShortcut={playHint}
+        />
+      </div>
     {/if}
 
     <!-- Species Guide panel (opt-in; gated on settings). The comparison mounts
          whenever the guide is enabled: description and enrichments are part of
          the guide feature itself, while the similar-species section inside it is
-         gated separately by showSimilarSpecies. -->
+         gated separately by showSimilarSpecies. Dimmed and inert with the grids
+         while the next detection loads. -->
     {#if guideEnabled}
-      <section class="surface-card" aria-labelledby="species-guide-heading">
-        <div class="p-5 md:p-6 space-y-6">
-          <h2 id="species-guide-heading" class="sr-only">
-            {t('analytics.species.guide.title')}
-          </h2>
-          <!-- Key on the species so the guide + notes remount (and refetch) when
-               navigating between detections of different species in place. -->
-          {#key detection.scientificName}
-            <!-- Pass an explicit "Species guide" heading so the collapsible bar
-                 describes the section rather than repeating the bird's name (already
-                 shown in the page header). -->
-            <SpeciesComparison
-              scientificName={detection.scientificName}
-              commonName={localizeSpeciesName(detection.scientificName, detection.commonName)}
-              heading={t('analytics.species.guide.speciesGuide')}
-              {showSimilarSpecies}
-            />
-            {#if showNotes && $isAuthenticated}
-              <SpeciesNotes scientificName={detection.scientificName} />
-            {/if}
-          {/key}
-        </div>
-      </section>
+      <div
+        class:dd-switching={isLoadingDetection}
+        inert={isLoadingDetection}
+        aria-busy={isLoadingDetection}
+      >
+        <DetailCard padding="even">
+          <div class="space-y-6">
+            <h2 class="sr-only">{t('analytics.species.guide.title')}</h2>
+            <!-- Key on the species so the guide + notes remount (and refetch) when
+                 stepping between detections of different species in place. -->
+            {#key detection.scientificName}
+              <!-- Pass an explicit "Species guide" heading so the collapsible bar
+                   describes the section rather than repeating the bird's name (already
+                   shown in the identity card). -->
+              <SpeciesComparison
+                scientificName={detection.scientificName}
+                commonName={displayName}
+                heading={t('analytics.species.guide.speciesGuide')}
+                {showSimilarSpecies}
+              />
+              {#if showNotes && $isAuthenticated}
+                <SpeciesNotes scientificName={detection.scientificName} />
+              {/if}
+            {/key}
+          </div>
+        </DetailCard>
+      </div>
     {/if}
 
-    <!-- Tabbed Content -->
-    <section class="surface-card" aria-labelledby="tabs-heading">
-      <div class="p-5 md:p-6">
-        <h2 id="tabs-heading" class="sr-only">{t('detections.detail.aria.tabsHeading')}</h2>
-
-        <!-- Tab Navigation -->
-        <div class="tab-nav" role="tablist" aria-label={t('detections.detail.aria.tabList')}>
-          {#each ['overview', 'history', 'notes'] as tab (tab)}
-            <button
-              type="button"
-              id="tab-{tab}"
-              role="tab"
-              class="tab-button"
-              class:tab-active={activeTab === tab}
-              aria-selected={activeTab === tab}
-              aria-controls="tab-panel-{tab}"
-              tabindex={activeTab === tab ? 0 : -1}
-              onclick={() => (activeTab = tab as TabType)}
-              onkeydown={handleTabKeydown}
-            >
-              {t(`detections.tabs.${tab}`)}
-            </button>
-          {/each}
-          {#if canReview}
-            <button
-              type="button"
-              id="tab-review"
-              role="tab"
-              class="tab-button"
-              class:tab-active={activeTab === 'review'}
-              aria-selected={activeTab === 'review'}
-              aria-controls="tab-panel-review"
-              tabindex={activeTab === 'review' ? 0 : -1}
-              onclick={() => (activeTab = 'review')}
-              onkeydown={handleTabKeydown}
-            >
-              {t('common.actions.review')}
-            </button>
-          {/if}
-        </div>
-
-        <!-- Tab Content -->
-        <div class="mt-6">
-          {#if activeTab === 'overview'}
-            <div
-              role="tabpanel"
-              id="tab-panel-overview"
-              aria-labelledby="tab-overview"
-              aria-hidden="false"
-              tabindex="0"
-            >
-              {@render overviewTab(detection)}
-            </div>
-          {:else if activeTab === 'history'}
-            <div
-              role="tabpanel"
-              id="tab-panel-history"
-              aria-labelledby="tab-history"
-              aria-hidden="false"
-              tabindex="0"
-            >
-              {@render historyTab()}
-            </div>
-          {:else if activeTab === 'notes'}
-            <div
-              role="tabpanel"
-              id="tab-panel-notes"
-              aria-labelledby="tab-notes"
-              aria-hidden="false"
-              tabindex="0"
-            >
-              {@render notesTab(detection)}
-            </div>
-          {:else if activeTab === 'review' && canReview && ReviewCard}
-            <div
-              role="tabpanel"
-              id="tab-panel-review"
-              aria-labelledby="tab-review"
-              aria-hidden="false"
-              tabindex="0"
-            >
-              <ReviewCard {detection} onSaveComplete={handleReviewComplete} />
-            </div>
-          {/if}
-        </div>
+    <div
+      class="dd-grid"
+      class:dd-switching={isLoadingDetection}
+      inert={isLoadingDetection}
+      aria-busy={isLoadingDetection}
+    >
+      <div class="dd-column">
+        <ModelsCard contributions={detection.modelContributions} detectedAt={detection.timestamp} />
+        {#key detection.id}
+          <ActivityLog {detection} speciesName={displayName} {canReview} onChanged={onSaved} />
+        {/key}
       </div>
-    </section>
+      <div class="dd-column">
+        <SpeciesStatsCard
+          {detection}
+          speciesName={displayName}
+          {rarity}
+          stats={speciesStats}
+          daily={dailyCounts}
+          dailyDays={DAILY_WINDOW_DAYS}
+          {loading}
+        />
+      </div>
+    </div>
+
+    <!-- One dialog per detection, like the review panels: a save still out belongs to
+         the detection it was made on. -->
+    {#key detection.id}
+      <SpeciesChangeDialog
+        isOpen={speciesDialogOpen}
+        {detection}
+        speciesName={displayName}
+        {alternates}
+        {predictionModel}
+        blockedReason={speciesBlockedReason}
+        onClose={() => (speciesDialogOpen = false)}
+        onChanged={onSaved}
+      />
+    {/key}
+  {:else if isLoadingDetection}
+    <!-- First load: the loaded page's grid and card chrome, with bars for content. The
+         one visible loading label sits where the breadcrumb will be. -->
+    <div class="dd-skeleton-nav">
+      <SkeletonStatus label={t('detections.aria.loading')} className="text-sm" />
+    </div>
+    <div class="dd-grid dd-grid-top">
+      <div class="dd-column">
+        <DetailCard padding="even">
+          <div class="flex gap-5">
+            <!-- The photo is 13.5rem wide, 10.5rem in a window of 900 px or less (IdentityCard). -->
+            <Skeleton className="aspect-[4/3] w-54 shrink-0 max-[900px]:w-42" />
+            <div class="flex min-w-0 flex-1 flex-col justify-between gap-2">
+              <div class="flex justify-between gap-4">
+                <div class="min-w-0">
+                  {@render line('h-9', 'h-7 w-56')}
+                  {@render line('h-6', 'h-4 w-40')}
+                  {@render line('mt-1 h-4.5', 'h-3 w-64')}
+                </div>
+                <!-- The confidence ring and its label, which set the height of this row. -->
+                <div class="flex shrink-0 flex-col items-center gap-1">
+                  <Skeleton className="size-18 rounded-full" />
+                  {@render line('h-3.75', 'h-2.5 w-14')}
+                </div>
+              </div>
+              {@render line('h-6.5', 'h-5 w-48 rounded-full')}
+              {@render line('h-7.5', 'h-7.5 w-36')}
+            </div>
+          </div>
+          <div class="mt-3 border-t border-[var(--border-100)] pt-2.5">
+            {@render line('h-6.5', 'h-4 w-3/4')}
+          </div>
+        </DetailCard>
+        <DetailCard title={t('detections.detail.review.title')} padding="snug" grow={true}>
+          {@render line('h-6', 'h-4 w-48')}
+          <div class="mt-2 flex gap-2">
+            {#each ['w-28', 'w-32', 'w-36'] as width (width)}
+              <Skeleton className="h-9.5 {width}" />
+            {/each}
+          </div>
+          <div class="mt-3 border-t border-[var(--border-100)] pt-2.5">
+            {@render line('h-10', 'h-5 w-64')}
+          </div>
+        </DetailCard>
+      </div>
+      <DetailCard title={t('detections.detail.conditions.title')} fill={true}>
+        <Skeleton className="min-h-22 w-full flex-1" />
+        {@render line('mt-1 h-15', 'h-3 w-3/4')}
+        <div class="mt-2.5 border-t border-[var(--border-100)] pt-2.5">
+          {@render line('h-14', 'h-10 w-40')}
+        </div>
+        <div class="mt-2.5 grid grid-cols-3 gap-1.5">
+          {#each { length: 6 } as _, index (index)}
+            <Skeleton className="h-11.5 w-full rounded-lg" />
+          {/each}
+        </div>
+        {@render line('mt-2 h-4', 'h-2.5 w-48')}
+      </DetailCard>
+    </div>
+    <DetailCard title={t('detections.media.title')}>
+      <Skeleton className="aspect-[2/1] w-full" />
+    </DetailCard>
+  {:else if detectionError}
+    <DetailCard padding="even">
+      <ErrorAlert message={detectionError} />
+    </DetailCard>
   {/if}
-</main>
+</div>
 
 <style>
-  /* ===========================================
-     DETECTION DETAIL - Editorial Design System
-     =========================================== */
-
-  .detection-detail {
+  /* The page is the container its layout switches on: the width it gets, not the
+     window's, which also holds the sidebar when it is open. */
+  .dd-page {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    width: 100%;
-  }
-
-  /* ----- Surface card (replaces DaisyUI card) ----- */
-  .surface-card {
-    background-color: var(--color-base-100);
-    border-radius: var(--radius-box);
-    border: 1px solid var(--border-100);
-  }
-
-  /* ----- Hero Section: Two-card grid ----- */
-  .detection-hero-grid {
-    display: grid;
-    grid-template-columns: 1fr;
     gap: 1rem;
-  }
-
-  /* Two columns: identity + metadata, taxonomy spans below */
-  @media (min-width: 1024px) {
-    .detection-hero-grid {
-      grid-template-columns: 1fr minmax(220px, 280px);
-    }
-
-    .hero-identity-card {
-      grid-column: 1;
-      grid-row: 1;
-    }
-
-    .hero-metadata-card {
-      grid-column: 2;
-      grid-row: 1;
-    }
-
-    .hero-taxonomy-card {
-      grid-column: 1 / -1;
-    }
-  }
-
-  /* Three columns: all cards in one row */
-  @media (min-width: 1440px) {
-    .detection-hero-grid {
-      grid-template-columns: 1fr auto minmax(220px, 280px);
-    }
-
-    .hero-identity-card {
-      grid-column: 1;
-      grid-row: 1;
-    }
-
-    .hero-taxonomy-card {
-      grid-column: 2;
-      grid-row: 1;
-    }
-
-    .hero-metadata-card {
-      grid-column: 3;
-      grid-row: 1;
-    }
-  }
-
-  .hero-card {
-    background-color: var(--color-base-100);
-    border-radius: var(--radius-box);
-    border: 1px solid var(--border-100);
-    padding: 1.5rem;
-  }
-
-  @media (min-width: 768px) {
-    .hero-card {
-      padding: 2rem;
-    }
-  }
-
-  /* Identity card row: thumbnail + species + confidence */
-  .hero-identity-row {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-  }
-
-  @media (min-width: 768px) {
-    .hero-identity-row {
-      flex-direction: row;
-      align-items: flex-start;
-      gap: 1.5rem;
-    }
-  }
-
-  .hero-confidence {
-    flex-shrink: 0;
-  }
-
-  @media (min-width: 768px) {
-    .hero-confidence {
-      margin-left: auto;
-      padding-left: 1.5rem;
-      border-left: 1px solid var(--border-100);
-    }
-  }
-
-  /* Metadata card - vertical stacked sections */
-  .hero-metadata-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .meta-section {
-    padding: 0.875rem 0;
-  }
-
-  .meta-section:first-child {
-    padding-top: 0;
-  }
-
-  .meta-section:last-child {
-    padding-bottom: 0;
-  }
-
-  .meta-section + .meta-section {
-    border-top: 1px solid var(--border-100);
-  }
-
-  /* Date - prominent visual anchor for the time section */
-  .meta-date {
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--color-base-content);
-    letter-spacing: -0.01em;
-  }
-
-  /* Time + time-of-day badge - inline, secondary */
-  .meta-time-row {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    margin-top: 0.25rem;
-    font-size: 0.9375rem;
-    font-weight: 500;
-    color: var(--color-base-content);
-    opacity: 0.7;
-  }
-
-  .meta-time-row .time-of-day-badge {
-    margin-top: 0;
-    margin-left: 0.125rem;
-  }
-
-  .meta-download {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--color-base-content);
-    opacity: 0.6;
-    transition: opacity 0.15s ease;
-  }
-
-  .meta-download:hover {
-    opacity: 1;
-  }
-
-  /* Species thumbnail - 4:3 to match avicommons 320×240 source images */
-  .hero-thumbnail {
-    position: relative;
     width: 100%;
-    aspect-ratio: 4 / 3;
-    max-height: 160px;
-    border-radius: 0.75rem;
-    overflow: hidden;
-    background: linear-gradient(135deg, var(--color-base-200), var(--color-base-300));
-    box-shadow: var(--shadow-md);
-    flex-shrink: 0;
-  }
-
-  @media (min-width: 768px) {
-    .hero-thumbnail {
-      width: 220px;
-      min-width: 220px;
-      max-height: none;
-    }
-  }
-
-  /* Photo credit - bottom-right corner of thumbnail */
-  .thumbnail-credit {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    gap: 0.2rem;
-    padding: 0.2rem 0.4rem;
-    background: oklch(10% 0 0deg / 0.55);
-    border-top-left-radius: 0.375rem;
-  }
-
-  .credit-icon {
-    color: oklch(85% 0 0deg);
-    flex-shrink: 0;
-  }
-
-  .credit-text {
-    font-size: 0.5625rem;
-    color: oklch(95% 0 0deg);
-    line-height: 1;
-    white-space: nowrap;
-  }
-
-  .credit-separator {
-    font-size: 0.5625rem;
-    color: oklch(70% 0 0deg);
-    flex-shrink: 0;
-    line-height: 1;
-  }
-
-  .credit-license {
-    font-size: 0.5625rem;
-    color: oklch(80% 0 0deg);
-    text-decoration: none;
-    line-height: 1;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-
-  a.credit-license:hover {
-    color: white;
-    text-decoration: underline;
-  }
-
-  /* Species identity - takes available space */
-  .hero-species {
-    flex: 1;
     min-width: 0;
-    padding-top: 0.125rem;
+    container: dd-page / inline-size;
   }
 
-  /* Species display name - refined Inter typography */
-  .species-display-name {
-    font-family: 'Inter Variable', Inter, ui-sans-serif, sans-serif;
-    font-size: 1.5rem;
-    font-weight: 650;
-    line-height: 1.2;
-    letter-spacing: -0.025em;
-    color: var(--color-base-content);
-    margin: 0;
+  /* The page's two-column rows: the top row (identity and review beside time and
+     conditions) and the lower row (models and activity log beside species
+     statistics). In the top row the left column sets the height with content that
+     is the same for every detection, and the conditions card fills that height
+     with its sky strip, so neither column ends in an empty tail. */
+  .dd-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(21rem, 1fr);
+    gap: 1rem;
+    align-items: start;
   }
 
-  @media (min-width: 768px) {
-    .species-display-name {
-      font-size: 1.875rem;
+  .dd-grid-top {
+    align-items: stretch;
+  }
+
+  .dd-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  /* Shown while the next detection loads over the current one. */
+  .dd-switching {
+    opacity: 0.6;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .dd-switching {
+      transition: opacity 150ms ease;
     }
   }
 
-  .species-scientific-name {
-    font-style: italic;
-    font-size: 0.875rem;
-    font-weight: 400;
-    color: var(--color-base-content);
-    opacity: 0.5;
-    margin-top: 0.125rem;
-    letter-spacing: 0.01em;
-  }
-
-  /* Time of day badge - theme-safe via alpha transparency */
-  .time-of-day-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.6875rem;
-    font-weight: 550;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.2rem 0.5rem;
-    border-radius: 9999px;
-    margin-top: 0.5rem;
-    line-height: 1;
-    color: var(--color-base-content);
-  }
-
-  .tod-day {
-    background: oklch(80% 0.1 85deg / 0.4);
-  }
-
-  .tod-night {
-    background: oklch(50% 0.08 270deg / 0.25);
-  }
-
-  .tod-sunrise {
-    background: oklch(80% 0.12 55deg / 0.4);
-  }
-
-  .tod-sunset {
-    background: oklch(78% 0.12 30deg / 0.4);
-  }
-
-  /* Weather in metadata card - consistent typographic scale */
-  .hero-weather :global(.wd-container) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
-  }
-
-  .hero-weather :global(.wd-weather-row),
-  .hero-weather :global(.wd-temperature-row),
-  .hero-weather :global(.wd-wind-row) {
-    gap: 0.375rem;
-    font-size: 0.8125rem;
-  }
-
-  .hero-weather :global(.wd-weather-icon) {
-    font-size: 1.125rem;
-  }
-
-  .hero-weather :global(.wd-wind-row) {
-    opacity: 0.55;
-  }
-
-  /* ----- Section Heading ----- */
-  .section-heading {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--color-base-content);
-    opacity: 0.65;
-    margin-bottom: 0.75rem;
-  }
-
-  /* ----- Content Panel (inner blocks) ----- */
-  .content-panel {
-    background-color: var(--color-base-200);
-    border-radius: var(--radius-field);
-    border: 1px solid var(--border-100);
-    padding: 1rem;
-  }
-
-  /* ----- Metadata list (key-value pairs) ----- */
-  .metadata-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.625rem;
-  }
-
-  .metadata-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-size: 0.875rem;
-  }
-
-  .metadata-row dt {
-    color: var(--color-base-content);
-    opacity: 0.5;
-  }
-
-  .metadata-row dd {
-    font-weight: 500;
-    color: var(--color-base-content);
-  }
-
-  /* ----- Rarity display ----- */
-  .rarity-label {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: var(--color-base-content);
-    text-transform: capitalize;
-  }
-
-  .rarity-score {
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--color-base-content);
-    opacity: 0.65;
-  }
-
-  /* ----- Taxonomy tree with connector lines ----- */
-
-  .taxonomy-tree {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .taxonomy-node {
+  /* The navigation bar's line: 2rem step links inside a 1px border. */
+  .dd-skeleton-nav {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding-left: calc(var(--depth) * 1.25rem);
-    min-height: 2rem;
-    position: relative;
+    height: calc(2rem + 2px);
   }
 
-  /* Connector lines */
-  .taxonomy-connector {
-    position: absolute;
-    left: calc(var(--depth) * 1.25rem - 0.75rem);
-    top: 0;
-    width: 0.75rem;
-    height: 100%;
-    pointer-events: none;
-  }
-
-  .connector-vert {
-    position: absolute;
-    left: 0;
-    top: -0.25rem;
-    width: 1px;
-    height: calc(50% + 0.25rem);
-    background-color: var(--border-200);
-  }
-
-  .connector-horiz {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    width: 100%;
-    height: 1px;
-    background-color: var(--border-200);
-  }
-
-  .taxonomy-rank-label {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-base-content);
-    opacity: 0.35;
-    flex-shrink: 0;
-    min-width: 3.5rem;
-  }
-
-  .taxonomy-rank-value {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--color-base-content);
-  }
-
-  /* Subspecies section */
-  .taxonomy-subspecies {
-    margin-top: 1rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--border-100);
-  }
-
-  .taxonomy-subspecies-heading {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-base-content);
-    opacity: 0.35;
-    margin-bottom: 0.5rem;
-  }
-
-  .taxonomy-subspecies-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .taxonomy-subspecies-item {
-    display: flex;
-    align-items: baseline;
-    gap: 0.375rem;
-    font-size: 0.8125rem;
-    color: var(--color-base-content);
-    padding: 0.25rem 0.625rem;
-    background-color: var(--color-base-100);
-    border: 1px solid var(--border-100);
-    border-radius: var(--radius-field);
-  }
-
-  .taxonomy-subspecies-common {
-    font-size: 0.75rem;
-    opacity: 0.5;
-  }
-
-  /* ----- Tab Navigation ----- */
-  .tab-nav {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--border-100);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .tab-nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .tab-button {
-    position: relative;
-    padding: 0.625rem 1rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--color-base-content);
-    opacity: 0.55;
-    background: none;
-    border: none;
-    cursor: pointer;
-    white-space: nowrap;
-    transition:
-      opacity 0.15s ease,
-      color 0.15s ease;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-  }
-
-  .tab-button:hover {
-    opacity: 0.85;
-  }
-
-  .tab-button:focus-visible {
-    outline: 2px solid var(--color-primary);
-    outline-offset: -2px;
-    border-radius: var(--radius-selector);
-  }
-
-  .tab-button.tab-active {
-    opacity: 1;
-    color: var(--color-primary);
-    border-bottom-color: var(--color-primary);
-    font-weight: 600;
-  }
-
-  /* ----- Audio Container ----- */
-  .detail-audio-container {
-    width: 100%;
-  }
-
-  .detail-audio-container :global(.group) {
-    position: relative;
-  }
-
-  .detail-audio-container :global(img) {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
-
-  /* ----- Empty States ----- */
-  .empty-state-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 1.5rem;
-    text-align: center;
-  }
-
-  .empty-state-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    color: var(--color-base-content);
-    opacity: 0.2;
-    margin-bottom: 1rem;
-  }
-
-  .empty-state-heading {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: var(--color-base-content);
-    opacity: 0.55;
-    margin-bottom: 0.5rem;
-  }
-
-  .empty-state-text {
-    font-size: 0.875rem;
-    color: var(--color-base-content);
-    opacity: 0.4;
-    font-style: italic;
-  }
-
-  /* ----- Skeleton loading primitives ----- */
-  .skeleton-line,
-  .skeleton-block {
-    background: var(--color-base-300);
-    border-radius: var(--radius-selector);
-    animation: skeleton-pulse 1.5s ease-in-out infinite;
-  }
-
-  .skeleton-block {
-    border-radius: var(--radius-box);
-  }
-
-  @keyframes skeleton-pulse {
-    0%,
-    100% {
-      opacity: 1;
+  /* Page breakpoint: one column when the page is narrower than 64rem. Below that the
+     left column leaves the identity card too little room for a species name, its chips
+     and the review buttons on one row. DetailNavBar puts its trail and step links on
+     separate lines at the same width. */
+  @container dd-page (width < 64rem) {
+    .dd-grid {
+      grid-template-columns: minmax(0, 1fr);
     }
 
-    50% {
-      opacity: 0.5;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .skeleton-line,
-    .skeleton-block {
-      animation: none;
+    /* The navigation bar's two lines at this width: the trail (a line of 0.875rem text in
+       a link with 0.25rem padding), a 0.5rem gap, then the step links. */
+    .dd-skeleton-nav {
+      align-items: flex-start;
+      height: calc(0.875rem * 1.5 + 0.5rem + 0.5rem + 2rem + 2px);
+      padding-top: 0.25rem;
     }
   }
 </style>

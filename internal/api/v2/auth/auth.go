@@ -108,6 +108,10 @@ type AuthRequest struct {
 	Password    string `json:"password"`
 	RedirectURL string `json:"redirectUrl,omitempty"` // Optional redirect URL after successful login
 	BasePath    string `json:"basePath,omitempty"`    // Optional base path where UI is hosted (e.g., "/ui", "/app", or "/")
+	// RememberBrowser is the "Remember this browser" choice: true keeps the
+	// browser signed in with a persistent cookie, false uses a browser-session
+	// cookie with an idle limit.
+	RememberBrowser bool `json:"rememberBrowser,omitempty"`
 }
 
 // AuthResponse represents the login response structure
@@ -286,7 +290,7 @@ func (c *Handler) Login(ctx echo.Context) error {
 	}
 
 	// Authenticate using basic auth - now returns auth code directly
-	authCode, authErr := authService.AuthenticateBasic(ctx, req.Username, req.Password)
+	authCode, authErr := authService.AuthenticateBasic(ctx, req.Username, req.Password, req.RememberBrowser)
 
 	if authErr != nil {
 		// Add a short, randomized delay to mitigate brute force/timing attacks
@@ -401,7 +405,7 @@ func (c *Handler) Logout(ctx echo.Context) error {
 
 	// IMPORTANT: Get provider logout URL BEFORE clearing the session.
 	// Logout() destroys the session data needed to build the end-session URL.
-	providerLogoutURL := authService.GetProviderLogoutURL(ctx, "")
+	providerLogoutURL := authService.GetProviderLogoutURL(ctx)
 
 	// Try to perform logout via auth service
 	if err := authService.Logout(ctx); err != nil {

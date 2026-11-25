@@ -10,19 +10,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-)
-
-// Provider IDs used in security.oauthProviders, and by the deprecated
-// googleAuth/githubAuth/microsoftAuth blocks that MigrateOAuthConfig converts into
-// it. These must stay equal to the values internal/security dispatches on
-// (ConfigGoogle, ConfigGitHub, ConfigMicrosoft, ConfigOIDC in
-// internal/security/constants.go). They are duplicated rather than shared because
-// security imports conf, so the dependency cannot run the other way.
-const (
-	providerGoogle    = "google"
-	providerGitHub    = "github"
-	providerMicrosoft = "microsoft"
-	providerOIDC      = "oidc"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // validateSecuritySettings validates the security-specific settings.
@@ -32,7 +20,8 @@ const (
 // because the alternative is a server that will not boot and therefore serves no
 // UI in which to fix the provider. The exception is a provider that can still
 // force authentication on while being unable to complete a sign-in; see
-// validateOAuthRedirects and validateOIDCProviders.
+// validateOAuthRedirects and validateOIDCProviders. Two entries with the same
+// provider ID are rejected by validateOAuthProviderDuplicates.
 func validateSecuritySettings(settings *Security) error {
 	// TLS mode validation
 	if err := validateTLSMode(settings); err != nil {
@@ -104,6 +93,13 @@ func validateSecuritySettings(settings *Security) error {
 		settings.SessionDuration = DefaultSessionDuration // 7 days, matches viper default
 	}
 
+	// Reject two entries with the same provider ID, enabled or not, for every
+	// kind. Runs first so a duplicate is always reported with its index, ahead
+	// of any per-entry rule the duplicate also breaks.
+	if err := validateOAuthProviderDuplicates(settings); err != nil {
+		return err
+	}
+
 	// Reject providers that would force authentication on without being able to
 	// complete a sign-in. Runs before validateOIDCProviders so that the reason an
 	// operator cannot get in is reported ahead of the OIDC-only issuer rules.
@@ -146,44 +142,42 @@ func oauthRedirectProblem(p *OAuthProviderConfig, originProblem string) string {
 // oauthOriginProblem describes why security.host and security.baseUrl cannot
 // produce a redirect origin, or returns "" when they can.
 //
-// Presence is not enough: computeBaseURL returns baseUrl verbatim, so a value that
-// is not an absolute http(s) URL yields a callback the identity provider will
-// reject, which is the same lock-out as having no origin at all. baseUrl also wins
-// outright when set, so a valid host cannot rescue a malformed one.
+// It is empty exactly when OAuthOrigin is usable, which is what keeps this check
+// from drifting away from the code that builds the callback. Presence is not
+// enough: a baseUrl that is not an absolute http(s) URL yields a callback the
+// identity provider will reject, which is the same lock-out as having no origin at
+// all, and baseUrl wins outright when set, so a valid host cannot rescue it.
 //
-// This mirrors computeBaseURL in internal/security/oauth.go, including its rule
-// that a host without a scheme is assumed to be https. The logic is duplicated
-// rather than shared for the same reason as the provider name constants above:
-// security imports conf, so the dependency cannot run the other way.
-//
-// A malformed baseUrl is only reported through this path, when a credentialed
-// provider actually depends on it. Rejecting one that nothing consumes would be the
-// kind of inert-config failure this pass exists to remove.
+// A malformed baseUrl is only fatal through this path, when a credentialed provider
+// actually depends on it. One that nothing consumes is warned about on load
+// (normalizeBaseURL) and rejected on save (ValidateSecurityBaseURL).
 func oauthOriginProblem(settings *Security) string {
-	var origin string
-	switch {
-	case settings.BaseURL != "":
-		origin = strings.TrimSuffix(settings.BaseURL, "/")
-	case settings.Host != "":
-		host := strings.TrimSuffix(settings.Host, "/")
-		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-			origin = host
-		} else {
-			origin = "https://" + host
-		}
-	default:
+	field, origin := settings.oauthOriginCandidate()
+	if origin == "" {
 		return "no redirect URL can be built; set security.host or security.baseUrl, or security.oauthProviders[].redirectUri"
 	}
-
-	parsed, err := url.Parse(origin)
-	if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
-		field := "security.host"
-		if settings.BaseURL != "" {
-			field = "security.baseUrl"
-		}
-		return fmt.Sprintf("%s does not form an absolute http(s) URL (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, origin)
+	if settings.OAuthOrigin() != "" {
+		return ""
 	}
-	return ""
+	return fmt.Sprintf("%s does not form an absolute http(s) URL without credentials (%q), so no redirect URL can be built from it; fix it or set security.oauthProviders[].redirectUri", field, privacy.RedactURLUserinfo(origin))
+}
+
+// ValidateSecurityBaseURL rejects a security.baseUrl that is set but is not an
+// absolute http(s) URL with a host and no credentials. Only the PUT and PATCH settings handlers run
+// it, so a save cannot introduce or keep such a value; it is not part of
+// ValidateSettings because config load must keep booting with one (normalizeBaseURL
+// warns instead). The error names the field and omits the value, which may carry
+// credentials.
+func ValidateSecurityBaseURL(sec *Security) error {
+	if !sec.hasUnusableBaseURL() {
+		return nil
+	}
+	return errors.Newf("security.baseUrl must be an absolute http or https URL with a host and without credentials, such as https://birds.example.com").
+		Component("conf").
+		Category(errors.CategoryValidation).
+		Context("operation", "validate_security_base_url").
+		Context("validation_type", "security-base-url").
+		Build()
 }
 
 // validateOAuthRedirects rejects an enabled OAuth provider that has credentials but
@@ -270,14 +264,59 @@ func validateTLSMode(settings *Security) error {
 	return nil
 }
 
+// validateOAuthProviderDuplicates rejects two entries with the same provider ID,
+// enabled or not, for every provider kind: lookups, the secret restore and the
+// restart detector all identify an entry by its provider ID. IDs are canonical
+// (see NormalizeOAuthProviderIDs) by the time this runs. Config load never reaches
+// it with a duplicate, because ReconcileOAuthProviderDuplicates collapses them
+// first; the settings API does, and answers with this error.
+func validateOAuthProviderDuplicates(settings *Security) error {
+	first := make(map[string]int, len(settings.OAuthProviders))
+	for i := range settings.OAuthProviders {
+		provider := &settings.OAuthProviders[i]
+		firstIndex, seen := first[provider.Provider]
+		if !seen {
+			first[provider.Provider] = i
+			continue
+		}
+		return errors.Newf("security.oauthProviders[%d]: duplicate entry for provider %q, already configured at security.oauthProviders[%d]", i, provider.Provider, firstIndex).
+			Component("conf").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_oauth_provider_duplicates").
+			Context("validation_type", "security-oauth-duplicate").
+			Context("provider", provider.Provider).
+			Build()
+	}
+	return nil
+}
+
+// ValidateOAuthProviderIDs rejects the first security.oauthProviders entry whose
+// provider ID is blank or not a supported provider, enabled or not. Only the PUT and
+// PATCH settings handlers run it, so those saves can neither introduce nor keep such
+// an entry; other settings writers do not. It is not part of ValidateSettings:
+// config load must keep booting with a stale entry (normalizeOAuthProviders warns
+// about it instead), because refusing to start leaves no UI in which to fix the
+// file.
+func ValidateOAuthProviderIDs(sec *Security) error {
+	for i := range sec.OAuthProviders {
+		id := NormalizeOAuthProviderID(sec.OAuthProviders[i].Provider)
+		if IsKnownOAuthProviderID(id) {
+			continue
+		}
+		return errors.Newf("security.oauthProviders[%d].provider %q is not a supported provider (supported: %s)", i, id, strings.Join(KnownOAuthProviderIDs(), ", ")).
+			Component("conf").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_oauth_provider_ids").
+			Context("validation_type", "security-oauth-unknown-provider").
+			Build()
+	}
+	return nil
+}
+
 // validateOIDCProviders validates OIDC-specific provider configuration.
 //
-// Only a duplicate among ENABLED entries is fatal on that count: two of those make
-// it ambiguous which one a sign-in would use, because goth registers providers by
-// name and the second silently replaces the first. A disabled second entry never
-// reaches goth (GetEnabledOAuthProviders and initializeProviders both skip it), so
-// refusing to start over a leftover is the failure this whole change exists to
-// remove.
+// Duplicate entries are rejected for every provider kind by
+// validateOAuthProviderDuplicates, which runs first.
 //
 // An unusable issuer URL stays fatal. That is worth spelling out because the rest
 // of this change moves in the other direction. Enabling OIDC is the setting that
@@ -298,36 +337,31 @@ func validateTLSMode(settings *Security) error {
 // deliberately configured, where booting into a locked door is worse than saying
 // which field is wrong.
 func validateOIDCProviders(settings *Security) error {
-	oidcCount := 0
 	for i := range settings.OAuthProviders {
 		provider := &settings.OAuthProviders[i]
-		if provider.Provider != providerOIDC || !provider.Enabled {
+		if provider.Provider != OAuthProviderOIDC || !provider.Enabled {
 			continue
 		}
-		oidcCount++
-		if oidcCount > 1 {
-			return errors.Newf("only one enabled OIDC provider (provider: %q) is allowed in security.oauthProviders, found duplicate entry", providerOIDC).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "security-oidc-duplicate").
-				Build()
-		}
 		if provider.IssuerURL == "" {
-			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is %q and enabled", providerOIDC).
+			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is %q and enabled", OAuthProviderOIDC).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-missing").
 				Build()
 		}
 		parsed, err := url.Parse(provider.IssuerURL)
 		if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
-			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid http(s) URL", provider.IssuerURL).
+			// The value may be scheme-less or opaque, which ScrubCredentialURL
+			// does not handle, so use the single-value redactor.
+			redactedIssuer := privacy.RedactURLUserinfo(provider.IssuerURL)
+			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid http(s) URL", redactedIssuer).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-invalid").
-				Context("issuer_url", provider.IssuerURL).
+				Context("issuer_url", redactedIssuer).
 				Build()
 		}
 		if parsed.Scheme == SchemeHTTP {
-			GetLogger().Warn("OIDC issuerUrl uses HTTP instead of HTTPS — acceptable for local development only",
-				logger.String("issuer_url", provider.IssuerURL))
+			GetLogger().Warn("OIDC issuerUrl uses HTTP instead of HTTPS: acceptable for local development only",
+				logger.CredentialURL("issuer_url", provider.IssuerURL))
 		}
 	}
 	return nil
@@ -348,7 +382,7 @@ var privateTLDs = []string{
 }
 
 // validateAutoTLSHostname checks that a hostname is suitable for Let's Encrypt.
-// Let's Encrypt requires a publicly resolvable FQDN — not an IP, not a private
+// Let's Encrypt requires a publicly resolvable FQDN, not an IP, not a private
 // name, and not a bare hostname without dots.
 func validateAutoTLSHostname(hostname string) error {
 	// Must not be an IP address

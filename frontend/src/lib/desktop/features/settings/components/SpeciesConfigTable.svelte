@@ -238,9 +238,9 @@
           {t('settings.species.customConfiguration.badges.customAction')}
         </span>
       {:else}
-        <span class="text-xs text-muted"
-          >{t('settings.species.customConfiguration.table.noActions')}</span
-        >
+        <span class="text-xs text-muted">
+          {t('settings.species.customConfiguration.table.noActions')}
+        </span>
       {/if}
     {:else if column.key === 'rowActions'}
       <div class="flex items-center gap-1 justify-end">
@@ -256,7 +256,7 @@
         </button>
         <button
           type="button"
-          class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-error)]/10 hover:text-[var(--text-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title={deleteTitle(item.species)}
           aria-label={deleteTitle(item.species)}
           disabled={editDisabled(item.species)}

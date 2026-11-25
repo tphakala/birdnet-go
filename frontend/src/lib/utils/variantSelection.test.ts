@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   pickPreselectedVariant,
+  familyRegionSlug,
   reasonKey,
   variantLabel,
   translateReason,
@@ -9,10 +10,18 @@ import {
   variantHardwareClass,
   variantHardwareLabel,
   optimizeOffers,
+  buildRecordFor,
+  targetBuildNotes,
   CHANNEL_STABLE,
   HARDWARE_CLASS,
 } from './variantSelection';
-import type { CatalogEntry, CatalogVariant, VariantReason } from '$lib/types/models';
+import type {
+  CatalogBuild,
+  CatalogEntry,
+  CatalogVariant,
+  RegionFamily,
+  VariantReason,
+} from '$lib/types/models';
 
 // Controlled i18n mock: only these two keys have a "translation"; every other key
 // echoes back, which is how the real t() signals an untranslated key. This lets us
@@ -130,6 +139,123 @@ describe('pickPreselectedVariant', () => {
       variants: [variant({ id: 'fp32', default: true })],
     });
     expect(pickPreselectedVariant(e)).toBe('fp32');
+  });
+
+  // A low-RAM host where the global build does not fit: the server recommends
+  // nothing, and only regional slices (smaller) are compatible.
+  const lowRamRegional = () =>
+    entry({
+      variants: [
+        variant({ id: 'fp32', default: true, compatible: false }),
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'fp32@nordic', region: 'nordic' }),
+      ],
+    });
+
+  it('never preselects a slice of another region when nothing is recommended', () => {
+    expect(pickPreselectedVariant(lowRamRegional(), 'nordic')).toBe('fp32@nordic');
+  });
+
+  it('preselects the blocked default rather than a slice when no region is active', () => {
+    expect(pickPreselectedVariant(lowRamRegional(), '')).toBe('fp32');
+  });
+
+  it('preselects the blocked default when the active region slice does not fit either', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32', default: true, compatible: false }),
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'fp32@nordic', region: 'nordic', compatible: false }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32');
+  });
+
+  it('keeps an installed slice of another region preselected', () => {
+    const e = lowRamRegional();
+    e.installedVariantId = 'fp32@africa';
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
+  });
+
+  it('falls back to the first variant of an entry made only of other regions slices', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa', compatible: false }),
+        variant({ id: 'fp32@iberia', region: 'iberia' }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('fp32@africa');
+  });
+
+  it('prefers the first global or active region variant over an earlier slice of another region when none of them runs', () => {
+    const e = entry({
+      variants: [
+        variant({ id: 'fp32@africa', region: 'africa' }),
+        variant({ id: 'int8', compatible: false }),
+        variant({ id: 'fp32@nordic', region: 'nordic', compatible: false }),
+      ],
+    });
+    expect(pickPreselectedVariant(e, 'nordic')).toBe('int8');
+  });
+});
+
+describe('familyRegionSlug', () => {
+  const family = (catalogId: string, slug: string): RegionFamily => ({
+    catalogId,
+    repo: 'r',
+    installed: false,
+    installedVariantRegion: '',
+    resolved: { slug, source: slug ? 'auto' : 'global', ambiguous: false },
+  });
+  // BirdNET v3.0 ships no central-india tile; its own table resolves the same
+  // coordinates to south-asia-peninsular.
+  const v30 = entry({
+    id: 'v30',
+    variants: [
+      variant({ id: 'fp32' }),
+      variant({ id: 'fp32@south-asia-peninsular', region: 'south-asia-peninsular' }),
+    ],
+  });
+  const perch = entry({
+    id: 'perch',
+    variants: [variant({ id: 'g' }), variant({ id: 'b2@central-india', region: 'central-india' })],
+  });
+  const families = [family('v30', 'south-asia-peninsular'), family('perch', 'central-india')];
+
+  it('keeps the active slug for a family that ships that tile', () => {
+    expect(familyRegionSlug(perch, 'central-india', families)).toBe('central-india');
+  });
+
+  it('uses the family own resolution when it lacks the active tile', () => {
+    expect(familyRegionSlug(v30, 'central-india', families)).toBe('south-asia-peninsular');
+  });
+
+  it('is the global model when the family resolves to none', () => {
+    expect(familyRegionSlug(v30, 'central-india', [family('v30', '')])).toBe('');
+  });
+
+  it('keeps the active slug for an entry without a family record', () => {
+    expect(familyRegionSlug(v30, 'central-india', undefined)).toBe('central-india');
+    expect(familyRegionSlug(v30, 'central-india', [family('perch', 'central-india')])).toBe(
+      'central-india'
+    );
+  });
+
+  it('stays unscoped when no region is active', () => {
+    expect(familyRegionSlug(v30, '', families)).toBe('');
+  });
+
+  it('lets the preselection fall back to the family own tile', () => {
+    const bare = entry({
+      id: 'v30',
+      variants: [
+        variant({ id: 'fp32@south-asia-peninsular', region: 'south-asia-peninsular' }),
+        variant({ id: 'fp32@other', region: 'other', default: true }),
+      ],
+    });
+    expect(pickPreselectedVariant(bare, familyRegionSlug(bare, 'central-india', families))).toBe(
+      'fp32@south-asia-peninsular'
+    );
   });
 });
 
@@ -365,6 +491,38 @@ describe('optimizeOffers', () => {
     expect(optimizeOffers([e])).toHaveLength(0);
   });
 
+  it('makes no offer for an entry superseded by a visible successor', () => {
+    // The superseded notice already tells the user to move to the successor, so the
+    // entry gets no prompt to switch builds of itself. The API omits supersededBy
+    // when the successor is hidden, so the field is the visibility signal.
+    const e = v24Entry({ supersededBy: { id: 'birdnet-plus', name: 'BirdNET+' } });
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('makes no offer for an entry whose installed build has a newer release to update to', () => {
+    // The update notice and the card Update action cover this entry, so it gets
+    // no Optimize offer on top of them (one model, one notice and one card action).
+    const e = v24Entry({
+      update: {
+        variantId: 'fp32-dfttrunc',
+        fromVersion: '3.0',
+        toVersion: '3.0.1',
+        fromBuild: 1,
+        toBuild: 1,
+      },
+    });
+    expect(optimizeOffers([e])).toHaveLength(0);
+  });
+
+  it('keeps offering later entries after skipping a superseded one', () => {
+    const superseded = v24Entry({
+      id: 'old-model',
+      supersededBy: { id: 'birdnet-plus', name: 'BirdNET+' },
+    });
+    const offers = optimizeOffers([superseded, v24Entry()]);
+    expect(offers.map(o => o.entry.id)).toEqual(['birdnet-v2.4']);
+  });
+
   it('still offers a swap when the installed variant was dropped from the catalog', () => {
     // The installed variant id no longer matches any catalog variant (deprecated and
     // removed): the offer must still surface so the user moves off the dead variant,
@@ -439,5 +597,95 @@ describe('normalizeRegionMode', () => {
     expect(normalizeRegionMode('auto')).toBe('auto');
     expect(normalizeRegionMode('global')).toBe('global');
     expect(normalizeRegionMode('nordic')).toBe('nordic');
+  });
+});
+
+describe('buildRecordFor', () => {
+  const build1: CatalogBuild = { version: '2', build: 1, date: '2026-07-01', reason: 'First.' };
+  const build2: CatalogBuild = { version: '2', build: 2, date: '2026-11-21', notes: ['Second.'] };
+  const notes = entry({ version: '2', builds: [build1, build2] });
+
+  it('resolves a variant without a build to build 1 of its release', () => {
+    expect(buildRecordFor(notes, variant({ id: 'a', version: '2' }))).toBe(build1);
+  });
+
+  it('takes the entry release when the variant carries none', () => {
+    expect(buildRecordFor(notes, variant({ id: 'a', build: 2 }))).toBe(build2);
+  });
+
+  it('treats a record without any text as no record', () => {
+    const blank = entry({
+      version: '2',
+      builds: [
+        { version: '2', build: 2, date: '2026-11-21', reason: ' ' },
+        { version: '2', build: 3, date: '2026-11-21', notes: ['', ' '] },
+      ],
+    });
+    expect(buildRecordFor(blank, variant({ id: 'a', build: 2 }))).toBeNull();
+    expect(buildRecordFor(blank, variant({ id: 'a', build: 3 }))).toBeNull();
+  });
+
+  it('finds no record for another release or a build without one', () => {
+    expect(buildRecordFor(notes, variant({ id: 'a', version: '1', build: 2 }))).toBeNull();
+    expect(buildRecordFor(notes, variant({ id: 'a', version: '2', build: 3 }))).toBeNull();
+  });
+});
+
+describe('targetBuildNotes', () => {
+  const build2: CatalogBuild = { version: '2', build: 2, date: '2026-11-21', notes: ['Second.'] };
+  const installedB1 = variant({ id: 'x@nordic', version: '2', build: 1, installed: true });
+  const nordicB2 = variant({ id: 'x-b2@nordic', version: '2', build: 2 });
+  const alpineB2 = variant({ id: 'x-b2@alps', version: '2', build: 2 });
+
+  it('returns the notes of a different build the swap installs', () => {
+    const e = entry({
+      installed: true,
+      installedVariantId: installedB1.id,
+      builds: [build2],
+      variants: [nordicB2, installedB1],
+    });
+    expect(targetBuildNotes(e, nordicB2.id)).toBe(build2);
+  });
+
+  it('returns null for a fresh install, the installed build itself and a target without notes', () => {
+    const fresh = entry({ builds: [build2], variants: [nordicB2] });
+    expect(targetBuildNotes(fresh, nordicB2.id)).toBeNull();
+
+    // Swapping between two regions of the installed build brings nothing new.
+    const sameBuild = entry({
+      installed: true,
+      installedVariantId: nordicB2.id,
+      builds: [build2],
+      variants: [nordicB2, alpineB2],
+    });
+    expect(targetBuildNotes(sameBuild, alpineB2.id)).toBeNull();
+
+    const noNotes = entry({
+      installed: true,
+      installedVariantId: installedB1.id,
+      variants: [nordicB2, installedB1],
+    });
+    expect(targetBuildNotes(noNotes, nordicB2.id)).toBeNull();
+  });
+
+  it('returns the notes of a newer release with the same build number', () => {
+    const release3: CatalogBuild = { version: '3', build: 2, date: '2026-11-22', reason: 'New.' };
+    const e = entry({
+      installed: true,
+      installedVariantId: nordicB2.id,
+      builds: [build2, release3],
+      variants: [nordicB2, variant({ id: 'x-3-b2@nordic', version: '3', build: 2 })],
+    });
+    expect(targetBuildNotes(e, 'x-3-b2@nordic')).toBe(release3);
+  });
+
+  it('returns the target notes when the installed variant is not listed', () => {
+    const e = entry({
+      installed: true,
+      installedVariantId: 'gone@nordic',
+      builds: [build2],
+      variants: [nordicB2],
+    });
+    expect(targetBuildNotes(e, nordicB2.id)).toBe(build2);
   });
 });

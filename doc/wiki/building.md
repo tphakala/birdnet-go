@@ -20,10 +20,7 @@ For development work within VSCode, using the provided [devcontainer](https://co
 
 - All Go, CGO, TensorFlow, ONNX Runtime, and FFmpeg dependencies are pre-installed.
 - Your source code is mounted into the container.
-- An `air` development server ([`.air.toml`](../../.air.toml)) is automatically started. It watches for code changes (`.go`, `.html`, `.css`, `.js`, etc.) and triggers:
-  - Tailwind CSS recompilation.
-  - Go application rebuild.
-  - Live reload of the running application.
+- An `air` development server ([`.air.toml`](../../.air.toml)) is available for Go backend live reload (watching `.go` files and rebuilding/restarting the server on changes). Frontend changes are watched separately via `task frontend-watch`.
 - You can access the development web server at [http://localhost:8080](http://localhost:8080).
 
 **Devcontainer Notes:**
@@ -37,13 +34,13 @@ This project uses [Task](https://taskfile.dev/) (`Taskfile.yml`) as its build sy
 
 ### 1. Install Prerequisites
 
-- **Go:** Install the Go programming language (version 1.21 or later recommended). Follow the [official Go installation guide](https://golang.org/doc/install).
+- **Go:** Install the Go programming language (version 1.27 or later; see `go.mod`). Follow the [official Go installation guide](https://golang.org/doc/install).
 - **Task:** Install the `task` executable. Follow the [Task installation guide](https://taskfile.dev/installation/).
 - **Git:** Needed to clone repositories (BirdNET-Go and TensorFlow headers).
 - **wget/curl:** Needed by `task` to download TFLite libraries.
 - **Standard Build Tools:** Ensure you have `gcc`, `make`, etc. (`build-essential` on Debian/Ubuntu).
-- **(Optional) `air`:** For live-reloading development server locally (if not using the Devcontainer). Install via `go install github.com/cosmtrek/air@latest`.
-- **(Optional) Node.js/npm:** Required by `task generate-tailwindcss` and `air` for Tailwind CSS generation.
+- **(Optional) `air`:** For live-reloading the Go backend locally (if not using the Devcontainer). Install via `go install github.com/air-verse/air@latest`.
+- **(Optional) Node.js/npm:** Required for building the Svelte 5 / Tailwind CSS frontend (`task frontend-build` and `task frontend-watch`).
 - **(Optional) MinGW (for Windows Cross-Compilation):** If building the Windows binary _on Linux_, install `mingw-w64`. On Debian/Ubuntu:
   ```bash
   sudo apt update
@@ -53,7 +50,7 @@ This project uses [Task](https://taskfile.dev/) (`Taskfile.yml`) as its build sy
 ### 2. Prepare Dependencies (Handled mostly by Task)
 
 - **TensorFlow Lite C Library:** `task` will automatically download the correct pre-compiled library (from the [tphakala/tflite_c releases](https://github.com/tphakala/tflite_c/releases), at the tag set in the `TFLITE_VERSION` variable of `Taskfile.yml`) for your target OS/architecture when you run a build task. It places the library in the expected system path (e.g., `/usr/lib`, `/usr/local/lib`, `/opt/homebrew/lib`, or `/usr/x86_64-w64-mingw32/lib` for Windows cross-compile) and creates necessary symlinks.
-- **ONNX Runtime (Optional):** Needed for BirdNET v3.0 models (currently in development preview). Run `task download-onnxruntime` to automatically download and install the correct version for your platform. See [ONNX Runtime Installation](onnx-runtime-installation.md) for manual installation options.
+- **ONNX Runtime (Optional):** Needed for ONNX models (BirdNET+ v3.0, Google Perch v2, BattyBirdNET, BSG-BAT, BirdNET Geomodel v3.0, and ONNX BirdNET v2.4). Run `task download-onnxruntime` to automatically download and install the correct version for your platform. See [ONNX Runtime Installation](onnx-runtime-installation.md) for manual installation options.
 - **TensorFlow Headers:** `task` checks if TensorFlow source code (needed for C header files for CGO) is present in `.cache/tensorflow/` inside the project root. If not, it clones the tag given by the `TFLITE_VERSION` variable in `Taskfile.yml`.
 
 ### One-Command Setup
@@ -73,10 +70,10 @@ Navigate to the cloned BirdNET-Go project directory in your terminal.
 - **Build for your native OS/Architecture:**
 
   ```bash
-  task build # Or simply 'task'
+  task
   ```
 
-  This automatically detects your OS and architecture and runs the appropriate build task (e.g., `task linux_amd64`). The binary will be placed in the `bin/` directory (e.g., `bin/birdnet-go`).
+  This runs the `default` task, which detects your OS and architecture and runs the matching build target (e.g., `task linux_amd64`). The binary will be placed in the `bin/` directory (e.g., `bin/birdnet-go`).
 
 - **Cross-Compile for a specific target:**
 
@@ -129,14 +126,16 @@ Uncommitted changes do not change the string. The container build cannot read gi
 
 If you prefer local development with automatic rebuilding and restarting on changes (similar to the Devcontainer experience):
 
-1.  Ensure `air` is installed (`go install github.com/cosmtrek/air@latest`).
-2.  Ensure Node.js/npm is installed for Tailwind CSS generation.
-3.  Prepare dependencies (TensorFlow headers/library) by running a build task once (e.g., `task build`).
-4.  Start the `air` server:
+1.  Ensure `air` is installed (`go install github.com/air-verse/air@latest`).
+2.  Prepare dependencies (TensorFlow headers/library) by running `task` once.
+3.  Start the backend dev server (watches `.go` files using [`.air.toml`](../../.air.toml) and rebuilds/restarts on changes):
     ```bash
-    air
+    task dev_server
     ```
-    `air` will use the configuration in [`.air.toml`](../../.air.toml) to watch files, recompile Tailwind CSS, rebuild the Go binary, and restart the server on changes.
+4.  If you are also editing the frontend, run the frontend watcher in a second terminal (requires Node.js/npm):
+    ```bash
+    task frontend-watch
+    ```
 
 ### 6. Regenerating Generated Documentation
 
@@ -150,7 +149,7 @@ After changing any struct field, `yaml` tag, or doc comment in `internal/conf` o
 task generate-schema
 ```
 
-and commit the regenerated files. This task is intentionally not part of the default `task build`, so it does not run automatically. The `TestSchemaUpToDate` test fails CI when the committed files are stale. It is skipped on Windows because the upstream comment parser is not reproducible there, so regenerate on Linux or macOS.
+and commit the regenerated files. This task is intentionally not part of the default `task` build, so it does not run automatically. The `TestSchemaUpToDate` test fails CI when the committed files are stale. It is skipped on Windows because the upstream comment parser is not reproducible there, so regenerate on Linux or macOS.
 
 ### 7. Publishing the Wiki
 
@@ -163,16 +162,6 @@ task wiki-export        # writes ./.wiki-staging
 task wiki-export OUT=/tmp/wiki-preview
 ```
 
-The `.github/workflows/wiki-sync.yml` workflow runs the same tool on every push to `main` that touches `doc/wiki/**` (and can be triggered manually from the Actions tab). It copies the generated pages over the wiki additively, so any hand-written wiki page that the tool does not produce is left untouched.
+The `.github/workflows/wiki-sync.yml` workflow runs the same tool on every push to `main` that touches `doc/wiki/**` (and can be triggered manually from the Actions tab). It authenticates to the companion `*.wiki.git` repository with the built-in `GITHUB_TOKEN` (`contents: write`), requiring no extra secrets or deploy keys, and copies the generated pages over the wiki additively so any hand-written wiki page that the tool does not produce is left untouched.
 
-**One-time maintainer setup (required to enable pushes):** the default `GITHUB_TOKEN` cannot authenticate to the separate `*.wiki.git` repository, so the workflow uses a dedicated SSH deploy key. Until the key is configured the workflow runs but skips the push (it logs a note in the job summary). To enable it:
-
-1. Generate a key pair (no passphrase):
-   ```bash
-   ssh-keygen -t ed25519 -f wiki_deploy_key -N "" -C "birdnet-go wiki sync"
-   ```
-2. Add the **public** key (`wiki_deploy_key.pub`) under the repository's **Settings -> Deploy keys** with **Allow write access** enabled. A deploy key with write access also covers the repository's wiki.
-3. Add the **private** key (`wiki_deploy_key`) as a repository **Actions secret** named `WIKI_SSH_DEPLOY_KEY`.
-4. The wiki must contain at least one page before the first push (GitHub only creates the wiki repository after a page exists). The current wiki already satisfies this.
-
-Delete the local key files afterward.
+The only prerequisite on a fresh repository is that the GitHub wiki must contain at least one page before the first push (GitHub only creates the underlying `*.wiki.git` repository after a page exists). The current wiki already satisfies this.

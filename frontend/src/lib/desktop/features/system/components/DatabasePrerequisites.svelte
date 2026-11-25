@@ -108,10 +108,10 @@
 
   /** Status icon color classes */
   const statusIconColor: Record<PrerequisiteCheckStatus, string> = {
-    passed: 'text-[var(--color-success)]',
-    failed: 'text-[var(--color-error)]',
-    error: 'text-[var(--color-error)]',
-    warning: 'text-[var(--color-warning)]',
+    passed: 'text-[var(--text-success)]',
+    failed: 'text-[var(--text-error)]',
+    error: 'text-[var(--text-error)]',
+    warning: 'text-[var(--text-warning)]',
     skipped: 'text-muted',
   };
 
@@ -276,7 +276,7 @@
       {#if quietChecks.length > 0}
         <button
           type="button"
-          class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-primary text-muted"
+          class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-[var(--text-primary)] text-muted"
           onclick={() => (showDetails = !showDetails)}
           aria-expanded={showDetails}
           aria-controls="prerequisites-details"

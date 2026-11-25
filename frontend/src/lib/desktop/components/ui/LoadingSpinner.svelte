@@ -14,7 +14,7 @@
 
   let {
     size = 'lg',
-    color = 'text-[var(--color-primary)]',
+    color = 'text-[var(--text-primary)]',
     label,
     'aria-hidden': ariaHidden,
     ...rest

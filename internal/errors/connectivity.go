@@ -1,23 +1,15 @@
 package errors
 
 import (
-	"context"
 	"database/sql/driver"
 	"net"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
-	"sync/atomic"
-	"time"
 )
 
 const (
-	// connectivityReportCooldown is the minimum time between two connectivity
-	// events sent to Sentry from one process, shared across error classes and
-	// categories so one outage yields a bounded number of events.
-	connectivityReportCooldown = time.Hour
-
 	// mysqlInvalidConnMessage is the text of mysql.ErrInvalidConn in
 	// go-sql-driver/mysql v1.10.1. The driver returns the sentinel bare, without
 	// a driver.ErrBadConn wrapper, so it is matched as a chain leaf by message
@@ -29,26 +21,21 @@ const (
 
 	// flattenedDialPrefix is the cheap pre-check for flattened dial errors.
 	flattenedDialPrefix = "dial "
-
-	// connectivityFingerprintPrefix leads the Sentry fingerprint of every
-	// connectivity event so they group apart from code defects.
-	connectivityFingerprintPrefix = "connectivity"
-
-	// errorOriginEnvironment is the error_origin tag of connectivity events.
-	errorOriginEnvironment = "environment"
 )
 
 var (
-	// connectivityLimiter holds the window of the last connectivity event
-	// allowed through to Sentry.
-	connectivityLimiter = reportCooldown{window: connectivityReportCooldown}
-
 	// mysqlServerErrorRegex matches the "Error 1364 (HY000): ..." shape of
 	// mysql.MySQLError. GORM joins a second error into the first as
 	// "%v; %w", so a server-side defect can sit in front of a connectivity
 	// leaf, or behind a flattened dial error; such an error must stay
 	// reportable.
 	mysqlServerErrorRegex = regexp.MustCompile(`(?i)\berror \d{4}\b`)
+
+	// eofTokenRegex matches EOF as a whole word in a lowercased message, the
+	// text of a connection closed by the peer (for example an MQTT broker
+	// disconnect). A plain substring would also match words such as "geoffroy"
+	// and "typeof".
+	eofTokenRegex = regexp.MustCompile(`\beof\b`)
 
 	// connectSyscalls are the syscall names net reports for a failed connect.
 	connectSyscalls = []string{"connect", "connectex"}
@@ -192,9 +179,69 @@ func isLeafMessage(err error, msg string) bool {
 	}
 }
 
-// isConnectivityCategory reports whether errors of c are checked for
-// connectivity failures. Network categories keep their own noise filter and
-// CategoryIntegration stays excluded.
+// connectivitySignatures are lowercase transport-failure texts, matched in
+// network-category errors only. They indicate user infrastructure issues
+// (unreachable hosts, dropped connections, DNS, client-side timeouts), not
+// code bugs.
+var connectivitySignatures = []string{
+	"no route to host",
+	"connection refused",
+	"connection reset by peer",
+	"server misbehaving",    // DNS failure
+	"no such host",          // DNS failure
+	"dns resolution failed", // DNS failure (BirdWeather wrapper)
+	"network is unreachable",
+	"i/o timeout",
+	"context deadline exceeded", // Upload/request timeout
+	"tls handshake timeout",
+
+	// net/http transport and client failures. The http2 text is the transport's
+	// "client connection lost"; "client.timeout" ends the "net/http: request
+	// canceled (Client.Timeout exceeded while awaiting headers)" and body-read
+	// texts of the HTTP client timeout.
+	"http2: client connection lost",
+	"client.timeout",
+
+	// Connect failures reported by ffmpeg and the kernel: ETIMEDOUT and
+	// EHOSTDOWN texts, and the "Network unreachable" PrimaryMessage that the
+	// "network is unreachable" entry above does not match.
+	"connection timed out",
+	"host is down",
+	"network unreachable",
+
+	// MQTT client failures: paho's "connection lost before Publish/Subscribe/
+	// Unsubscribe completed", the publish wait timeout, and the connect wait
+	// failures in internal/mqtt/client.go. The too-short configured timeout
+	// message is deliberately absent: it is a configuration error.
+	"connection lost before",
+	"publish timeout after",
+	"mqtt connection failed post-wait",
+	"mqtt connection attempt actively timed out",
+	"not connected to mqtt broker", // publish attempted while the broker link is down
+
+	// imageprovider Wikipedia rate-limit / circuit-breaker noise.
+	// Wikipedia rate-limits the image fetcher (HTTP 429) and the circuit
+	// breaker then throttles further calls, so forwarding a Sentry event for
+	// each rejected request is pure noise. These are built with CategoryNetwork
+	// in internal/imageprovider/wikipedia.go. The patterns are Wikipedia-specific
+	// full signatures (not loose substrings like "rate limit exceeded") so
+	// network-category errors from other components are never collaterally
+	// suppressed, matching the rtspSilenceTimeoutSignature approach.
+	// HTTP 429 is purely environmental throttling so every occurrence is
+	// suppressed; 403/500/503 still report at least the first event because
+	// those can indicate a real problem (policy violation, server fault).
+	// Lowercase substrings of the real messages produced there:
+	//   - handleHTTPStatusError: "Wikipedia API returned status 429: <body>"
+	//   - checkCircuitBreaker:   "Wikipedia API circuit breaker open: <reason>"
+	//   - diagnostic path:       "Wikipedia rate limit exceeded: <message>"
+	"wikipedia api returned status 429",  // direct HTTP 429 from the API
+	"wikipedia api circuit breaker open", // repeated rejection while breaker is open
+	"wikipedia rate limit exceeded",      // diagnostic rate-limit error
+}
+
+// isConnectivityCategory reports whether errors of c are checked for typed
+// connectivity failures. Network categories use the text signatures instead
+// (see isNetworkCategory) and CategoryIntegration stays excluded.
 func isConnectivityCategory(c ErrorCategory) bool {
 	switch c { //nolint:exhaustive // only these four categories are gated
 	case CategoryDatabase, CategoryState, CategorySystem, CategoryImageCache:
@@ -204,45 +251,40 @@ func isConnectivityCategory(c ErrorCategory) bool {
 	}
 }
 
-// isDialDeadlineConnectivity reports whether ee is a connectivity failure whose
-// only context signal is the deadline a failed dial carries: the dial timeout
-// the net package returns is also context.DeadlineExceeded, so an unreachable
-// host would otherwise be dropped as a context interruption and never reach the
-// connectivity window. Canceled contexts, bare deadline errors and PriorityLow
-// system errors stay suppressed.
-func isDialDeadlineConnectivity(ee *EnhancedError, connectivity bool) bool {
-	if !connectivity || (ee.Category == CategorySystem && ee.GetPriority() == PriorityLow) {
-		return false
-	}
-	opErr, ok := AsType[*net.OpError](ee.Err)
-	return ok && opErr.Op == dialOp && !Is(ee.Err, context.Canceled)
-}
-
-// isGatedConnectivity reports whether ee is a connectivity failure in a gated category.
+// isGatedConnectivity reports whether ee is a typed connectivity failure in a
+// gated category.
 func isGatedConnectivity(ee *EnhancedError) bool {
 	return isConnectivityCategory(ee.Category) && IsConnectivityError(ee.Err)
 }
 
-// allowConnectivityReport lets one connectivity event through per cooldown window.
-func allowConnectivityReport() bool {
-	return connectivityLimiter.Allow(time.Now())
-}
-
-// reportCooldown lets one event through per window. It is shared by the
-// connectivity and disk-full limiters.
-type reportCooldown struct {
-	last   atomic.Int64 // Unix time of the last allowed event
-	window time.Duration
-}
-
-// Allow reports whether an event at now may be sent and, if so, starts a new
-// window. CompareAndSwap keeps concurrent errors from bypassing the window
-// (TOCTOU race): the loser of the swap is suppressed.
-func (c *reportCooldown) Allow(now time.Time) bool {
-	nowUnix := now.Unix()
-	last := c.last.Load()
-	if nowUnix-last < int64(c.window/time.Second) {
+// isNetworkCategory reports whether c is a category whose errors are checked
+// against connectivitySignatures. CategoryIntegration is deliberately
+// excluded to avoid suppressing legitimate non-transient integration errors;
+// transient network failures in integrations should use CategoryNetwork.
+func isNetworkCategory(c ErrorCategory) bool {
+	switch c { //nolint:exhaustive // only network-related categories need this filter
+	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP:
+		return true
+	default:
 		return false
 	}
-	return c.last.CompareAndSwap(last, nowUnix)
+}
+
+// isConnectivityNoise reports whether ee is a connectivity failure. These are
+// environment problems, not code defects, so telemetry never reports them. The
+// typed check (IsConnectivityError: dial, DNS, driver.ErrBadConn and the MySQL
+// "invalid connection" sentinel) applies to the database, state, system and
+// image-cache categories only: a dial error under another category can be a
+// configuration problem such as a permission or missing socket error. The text
+// signatures (connectivitySignatures plus a whole-word EOF match) apply only to
+// network categories, so a code error that happens to mention a timeout
+// elsewhere keeps reporting. lowerMsg is the lowercased message of ee.Err.
+func isConnectivityNoise(ee *EnhancedError, lowerMsg string) bool {
+	if isGatedConnectivity(ee) {
+		return true
+	}
+	if !isNetworkCategory(ee.Category) {
+		return false
+	}
+	return containsAny(lowerMsg, connectivitySignatures) || eofTokenRegex.MatchString(lowerMsg)
 }

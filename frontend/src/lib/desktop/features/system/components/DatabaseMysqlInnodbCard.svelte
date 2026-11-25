@@ -23,18 +23,18 @@
           <Gauge class="w-3.5 h-3.5 text-muted" />
           <span class="text-muted">{t('system.database.dashboard.innodb.bufferPoolHitRate')}</span>
         </div>
-        <span class="font-mono tabular-nums font-medium text-[var(--color-success)]"
-          >{details.buffer_pool_hit_rate.toFixed(1)}%</span
-        >
+        <span class="font-mono tabular-nums font-medium text-[var(--text-success)]">
+          {details.buffer_pool_hit_rate.toFixed(1)}%
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
           <HardDrive class="w-3.5 h-3.5 text-muted" />
           <span class="text-muted">{t('system.database.dashboard.innodb.bufferPoolSize')}</span>
         </div>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatBytesCompact(details.buffer_pool_size_bytes)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatBytesCompact(details.buffer_pool_size_bytes)}
+        </span>
       </div>
     </div>
 
@@ -56,30 +56,32 @@
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.deadlocks > 0
-            ? 'text-[var(--color-error)]'
-            : 'text-[var(--color-success)]'}">{formatNumber(details.deadlocks)}</span
+            ? 'text-[var(--text-error)]'
+            : 'text-[var(--text-success)]'}"
         >
+          {formatNumber(details.deadlocks)}
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
           <Timer class="w-3.5 h-3.5 text-muted" />
           <span class="text-muted">{t('system.database.dashboard.innodb.avgLockWait')}</span>
         </div>
-        <span class="font-mono tabular-nums font-medium"
-          >{details.avg_lock_wait_ms.toFixed(1)}ms</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {details.avg_lock_wait_ms.toFixed(1)}ms
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <span class="text-muted">{t('system.database.dashboard.innodb.tableLocksWaited')}</span>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatNumber(details.table_locks_waited)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatNumber(details.table_locks_waited)}
+        </span>
       </div>
       <div class="flex justify-between text-sm">
         <span class="text-muted">{t('system.database.dashboard.innodb.tableLocksImmediate')}</span>
-        <span class="font-mono tabular-nums font-medium"
-          >{formatNumber(details.table_locks_immediate)}</span
-        >
+        <span class="font-mono tabular-nums font-medium">
+          {formatNumber(details.table_locks_immediate)}
+        </span>
       </div>
     </div>
   </div>

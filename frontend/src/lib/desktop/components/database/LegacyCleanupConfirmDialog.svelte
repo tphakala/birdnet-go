@@ -57,7 +57,7 @@
         <input
           id="legacy-cleanup-confirm-checkbox"
           type="checkbox"
-          class="w-4 h-4 rounded border-[var(--color-base-300)] text-[var(--color-error)] focus:ring-[var(--color-error)]"
+          class="w-4 h-4 rounded border-[var(--color-base-300)] text-[var(--text-error)] focus:ring-[var(--color-error)]"
           bind:checked={confirmed}
           disabled={isLoading}
         />

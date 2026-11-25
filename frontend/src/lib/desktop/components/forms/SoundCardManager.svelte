@@ -1,12 +1,20 @@
 <!--
   Sound Card Manager Component
 
-  Purpose: Manage multiple sound card audio sources with add/edit/delete
-  functionality, summary bar, and empty state guidance.
+  Purpose: Manage the sound card audio sources of a tab that saves with the
+  page: source cards, an add form that appends the new source to the form,
+  delete, a summary bar and empty state guidance.
+
+  Every change goes out through onUpdateSources as the whole sources array; the
+  page's Save Changes bar persists it. Rows carry a UI-only id (never persisted)
+  that keys the cards and their expanded state. The manager remembers the
+  identity (name and device of every row) of the list it last sent; a list with
+  another identity (Reset, a reload) is foreign and gives every row a fresh id,
+  so no card state lands on a different source.
 
   Features:
-  - Display source cards with device and model info
-  - Add new sources with name, device, gain, model, equalizer, quiet hours
+  - Source cards: one source opens by default, several start closed
+  - Add new sources with name, device, gain, models, equalizer, quiet hours
   - Summary bar showing source count
   - Empty state with guidance
   - Duplicate name/device validation
@@ -16,13 +24,15 @@
 <script lang="ts">
   import { Plus, Mic, RefreshCw, ChevronDown, AlertTriangle, Info } from '@lucide/svelte';
   import { slide } from 'svelte/transition';
+  import { tick, untrack } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { t } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
   import { loggers } from '$lib/utils/logger';
   import {
     fetchDeviceCapabilities as fetchCapabilities,
     coerceSupportedRate,
   } from '$lib/utils/audio/sampleRate';
-  import { toastActions } from '$lib/stores/toast';
   import { cn } from '$lib/utils/cn';
   import {
     deviceValue,
@@ -30,17 +40,26 @@
     deviceLabel,
     type AudioDevice,
   } from '$lib/utils/audioDevices';
-  import { getAvailableModels, fetchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import {
+    getAvailableModels,
+    watchModels,
+    modelsLoading,
+    modelsFailed,
+    refreshModels,
+  } from '$lib/stores/models.svelte';
+  import { savedEqualizer } from './sourceFields';
+  import { soundCardProblems } from './sourceRules';
   import {
     acousticModelAvailability,
     subscribeAcousticModels,
   } from '$lib/stores/acousticModels.svelte';
+  import { modelLabel } from '$lib/utils/modelLabel';
   import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
   import InlineSlider from './InlineSlider.svelte';
-  import ModelCheckboxList from './ModelCheckboxList.svelte';
+  import ModelToggleList from './ModelToggleList.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -69,6 +88,7 @@
   }
 
   const logger = loggers.audio;
+  const ROW_ID_PREFIX = 'source-row';
 
   const availableModels = $derived(getAvailableModels());
   const acousticAvailability = $derived(acousticModelAvailability());
@@ -80,29 +100,35 @@
   }
 
   $effect(() => {
-    return fetchModels();
+    return watchModels();
   });
 
   $effect(() => {
     return subscribeAcousticModels();
   });
 
-  const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: m.name })));
+  const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: modelLabel(m) })));
 
   interface Props {
     sources: AudioSourceConfig[];
+    /** The saved sources, so only problems the user introduced are reported. */
+    savedSources?: AudioSourceConfig[];
     audioDevices: AudioDevice[];
     audioDevicesLoading: boolean;
     disabled?: boolean;
+    /** Why the cards are disabled, shown beside each card's delete button. */
+    disabledReason?: string;
     onUpdateSources: (_sources: AudioSourceConfig[]) => void;
     onRefreshDevices: () => void;
   }
 
   let {
     sources = [],
+    savedSources = [],
     audioDevices,
     audioDevicesLoading,
     disabled = false,
+    disabledReason,
     onUpdateSources,
     onRefreshDevices,
   }: Props = $props();
@@ -171,103 +197,122 @@
     showAddForm = true;
   }
 
-  // Add new source
+  /** Id of the reason shown beside the add form's Add button while it is disabled. */
+  const addDisabledReasonId = generateId('add-source-disabled-reason');
+  /** Id of the add form's device error, which describes the device select. */
+  const addDeviceErrorId = generateId('add-source-device-error');
+
+  // ----- Rows -----
+
+  function newRowIds(count: number): string[] {
+    return Array.from({ length: count }, () => generateId(ROW_ID_PREFIX));
+  }
+
+  let rowIds = $state<string[]>(untrack(() => newRowIds(sources.length)));
+  // One source opens by default, several start closed.
+  const expandedRows = new SvelteSet<string>(untrack(() => (rowIds.length === 1 ? rowIds : [])));
+
+  // A source is identified by its name and device, the fields a card's open
+  // state and pending device pick are about; other edits keep the identity.
+  function listIdentity(list: readonly AudioSourceConfig[]): string {
+    return JSON.stringify(list.map(source => [source.name, source.device]));
+  }
+
+  // The identity of the list this manager last held or sent.
+  let expectedIdentity = untrack(() => listIdentity(sources));
+
+  /** Sends a list to the parent and remembers its identity as the expected one. */
+  function sendSources(list: AudioSourceConfig[]) {
+    expectedIdentity = listIdentity(list);
+    onUpdateSources(list);
+  }
+
+  // A list this manager did not produce (Reset, a reload) gives every row a
+  // fresh id, so the cards are recreated and no open confirmation, pending
+  // device pick or open state lands on a different source.
+  $effect.pre(() => {
+    const identity = listIdentity(sources);
+    untrack(() => {
+      if (identity === expectedIdentity) return;
+      expectedIdentity = identity;
+      rowIds = newRowIds(sources.length);
+      expandedRows.clear();
+      if (sources.length === 1) expandedRows.add(rowIds[0]);
+    });
+  });
+
+  let problems = $derived(soundCardProblems(sources, savedSources));
+  let rows = $derived(
+    sources.map((source, index) => ({ source, index, id: rowIds.at(index) ?? `${index}` }))
+  );
+
+  function toggleRow(id: string) {
+    if (expandedRows.has(id)) expandedRows.delete(id);
+    else expandedRows.add(id);
+  }
+
+  let addButton = $state<HTMLButtonElement>();
+
+  // ----- Add -----
+
   function addSource() {
+    if (disabled) return;
     clearErrors();
 
     const trimmedName = newName.trim();
-
-    // Validate name
-    if (!trimmedName) {
-      nameError = t('settings.audio.soundCards.errors.nameRequired');
-      return;
-    }
-
-    // Check duplicate name (case-insensitive)
-    if (sources.some(s => s.name.toLowerCase() === trimmedName.toLowerCase())) {
-      nameError = t('settings.audio.soundCards.errors.duplicateName');
-      return;
-    }
-
-    // Validate device
-    if (!newDevice) {
-      deviceError = t('settings.audio.soundCards.errors.deviceRequired');
-      return;
-    }
-
-    // Check duplicate device
-    if (sources.some(s => s.device === newDevice)) {
-      deviceError = t('settings.audio.soundCards.errors.duplicateDevice');
-      return;
-    }
-
-    // Ensure at least one model is selected
-    if (newModels.length === 0) {
-      newModels = getDefaultModels();
-    }
-
-    // A disabled equalizer without filters is stored as undefined
-    const transformedEqualizer =
-      newEqualizer.enabled || newEqualizer.filters.length > 0
-        ? {
-            enabled: newEqualizer.enabled,
-            filters: newEqualizer.filters,
-          }
-        : undefined;
-
     const newSource: AudioSourceConfig = {
       name: trimmedName,
       device: newDevice,
       sampleRate: newSampleRate,
       gain: newGain,
       models: newModels,
-      equalizer: transformedEqualizer,
+      equalizer: savedEqualizer(newEqualizer),
       quietHours: newQuietHours,
     };
 
-    onUpdateSources([...sources, newSource]);
+    // The new row against the current rows only: the saved list is not a reason to accept it.
+    const problem = soundCardProblems([...sources, newSource], []).at(-1);
+    if (problem?.name) {
+      nameError =
+        problem.name === 'required'
+          ? t('settings.audio.soundCards.errors.nameRequired')
+          : t('settings.audio.soundCards.errors.duplicateName');
+      return;
+    }
+    if (problem?.device) {
+      deviceError =
+        problem.device === 'required'
+          ? t('settings.audio.soundCards.errors.deviceRequired')
+          : t('settings.audio.soundCards.errors.duplicateDevice');
+      return;
+    }
+
+    logger.debug('Adding sound card source', {
+      component: 'SoundCardManager',
+      action: 'addSource',
+    });
+    const rowId = generateId(ROW_ID_PREFIX);
+    rowIds = [...rowIds, rowId];
+    if (sources.length === 0) expandedRows.add(rowId);
+    sendSources([...sources, newSource]);
     resetAddForm();
   }
 
-  // Update source; returns boolean for success
-  function updateSource(index: number, updatedSource: AudioSourceConfig): boolean {
-    const updatedSources = [...sources];
-    if (index >= 0 && index < updatedSources.length) {
-      // Check duplicate name (excluding current, case-insensitive)
-      const nameLower = updatedSource.name.toLowerCase();
-      if (updatedSources.some((s, i) => i !== index && s.name.toLowerCase() === nameLower)) {
-        logger.warn('Duplicate sound card source name', null, {
-          component: 'SoundCardManager',
-          action: 'updateSource',
-        });
-        toastActions.error(t('settings.audio.soundCards.errors.duplicateName'));
-        return false;
-      }
+  // ----- Change and delete -----
 
-      // Check duplicate device (excluding current)
-      if (
-        updatedSource.device !== updatedSources.at(index)?.device &&
-        updatedSources.some((s, i) => i !== index && s.device === updatedSource.device)
-      ) {
-        logger.warn('Duplicate sound card device', null, {
-          component: 'SoundCardManager',
-          action: 'updateSource',
-        });
-        toastActions.error(t('settings.audio.soundCards.errors.duplicateDevice'));
-        return false;
-      }
-
-      updatedSources.splice(index, 1, updatedSource);
-      onUpdateSources(updatedSources);
-      return true;
-    }
-    return false;
+  function changeSource(index: number, updated: AudioSourceConfig) {
+    if (index < 0 || index >= sources.length) return;
+    sendSources(sources.map((source, i) => (i === index ? updated : source)));
   }
 
-  // Delete source
-  function deleteSource(index: number) {
-    const updatedSources = sources.filter((_, i) => i !== index);
-    onUpdateSources(updatedSources);
+  async function deleteSource(index: number) {
+    const id = rowIds.at(index);
+    rowIds = rowIds.filter((_, i) => i !== index);
+    if (id !== undefined) expandedRows.delete(id);
+    sendSources(sources.filter((_, i) => i !== index));
+    // The deleted card took focus with it; land on the add button instead.
+    await tick();
+    addButton?.focus();
   }
 
   function handleNewEqualizerUpdate(updated: LocalEqualizerSettings) {
@@ -365,17 +410,20 @@
     />
   {:else}
     <div class="space-y-3">
-      {#each sources as source, index (`${source.device}_${index}`)}
+      {#each rows as row (row.id)}
         <SoundCardCard
-          {source}
-          {index}
+          source={row.source}
           {sources}
           {audioDevices}
           {modelOptions}
           {availableModels}
           {disabled}
-          onUpdate={updatedSource => updateSource(index, updatedSource)}
-          onDelete={() => deleteSource(index)}
+          {disabledReason}
+          expanded={expandedRows.has(row.id)}
+          onToggleExpanded={() => toggleRow(row.id)}
+          problem={problems.at(row.index)}
+          onChange={updated => changeSource(row.index, updated)}
+          onDelete={() => void deleteSource(row.index)}
         />
       {/each}
     </div>
@@ -396,21 +444,14 @@
               <TextInput
                 id="new-soundcard-name"
                 bind:value={newName}
+                oninput={() => (nameError = null)}
                 label={t('settings.audio.soundCards.nameLabel')}
                 placeholder={t('settings.audio.soundCards.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.soundCards.nameHelp')}
+                error={nameError ?? undefined}
                 required
                 {disabled}
               />
-              {#if nameError}
-                <p
-                  role="alert"
-                  aria-live="assertive"
-                  class="text-xs text-[var(--color-error)] -mt-2"
-                >
-                  {nameError}
-                </p>
-              {/if}
             </div>
 
             <!-- Device Selection -->
@@ -422,16 +463,17 @@
                 options={deviceOptions}
                 required
                 {disabled}
-                onChange={value => (newDevice = value as string)}
+                aria-invalid={Boolean(deviceError)}
+                aria-describedby={deviceError ? addDeviceErrorId : undefined}
+                onChange={value => {
+                  newDevice = value as string;
+                  deviceError = null;
+                }}
                 groupBy={false}
                 menuSize="sm"
               />
               {#if deviceError}
-                <p
-                  role="alert"
-                  aria-live="assertive"
-                  class="text-xs text-[var(--color-error)] mt-1"
-                >
+                <p id={addDeviceErrorId} role="alert" class="text-xs text-[var(--text-error)] mt-1">
                   {deviceError}
                 </p>
               {/if}
@@ -449,19 +491,19 @@
                 menuSize="sm"
               />
               {#if !newSampleRateVerified && !newSampleRateLoading}
-                <p class="flex items-center gap-1 text-xs text-[var(--color-warning)] mt-1">
-                  <AlertTriangle class="size-3" />
+                <p class="flex items-center gap-1 text-xs text-[var(--text-warning)] mt-1">
+                  <AlertTriangle class="size-3" aria-hidden="true" />
                   {t('settings.audio.soundCards.sampleRateUnverified')}
                 </p>
               {/if}
               {#if newSampleRateLoading}
-                <p class="text-xs text-[var(--color-base-content)]/60 mt-1 animate-pulse">
+                <p class="text-xs text-muted mt-1">
                   {t('settings.audio.soundCards.sampleRateProbing')}
                 </p>
               {/if}
               {#if newSampleRate > 48000}
-                <p class="flex items-center gap-1 text-xs text-[var(--color-info)] mt-1">
-                  <Info class="size-3 shrink-0" />
+                <p class="flex items-center gap-1 text-xs text-[var(--text-info)] mt-1">
+                  <Info class="size-3 shrink-0" aria-hidden="true" />
                   {t('settings.audio.soundCards.sampleRateExclusive')}
                 </p>
               {/if}
@@ -480,21 +522,32 @@
             />
 
             <!-- Model Selection -->
-            <ModelCheckboxList
-              models={availableModels}
-              selectedModels={newModels}
-              sourceSampleRate={newSampleRate}
-              loading={modelsLoading()}
-              availability={acousticAvailability}
-              {disabled}
-              onToggle={models => (newModels = models)}
-            />
+            <div class="space-y-2">
+              <h4 id="new-soundcard-models" class="text-sm font-semibold">
+                {t('settings.audio.soundCards.modelLabel')}
+              </h4>
+              <ModelToggleList
+                models={availableModels}
+                selectedModels={newModels}
+                defaultModels={getDefaultModels()}
+                sourceName={newName.trim()}
+                sourceSampleRate={newSampleRate}
+                loading={modelsLoading()}
+                failed={modelsFailed()}
+                availability={acousticAvailability}
+                labelledBy="new-soundcard-models"
+                {disabled}
+                onChange={models => (newModels = models)}
+                onRetry={() => void refreshModels()}
+              />
+            </div>
 
             <!-- Equalizer (expandable) -->
             <div>
               <button
                 type="button"
-                class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--color-primary)] transition-colors"
+                class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--text-primary)] transition-colors"
+                aria-expanded={showNewEqualizer}
                 onclick={() => (showNewEqualizer = !showNewEqualizer)}
               >
                 <ChevronDown
@@ -526,21 +579,27 @@
             />
 
             <!-- Action Buttons -->
-            <div class="flex gap-2 justify-end pt-2">
+            <div class="flex flex-wrap items-center justify-end gap-2 pt-2">
+              {#if disabled && disabledReason}
+                <p id={addDisabledReasonId} class="mr-auto text-sm text-[var(--text-subtle)]">
+                  {disabledReason}
+                </p>
+              {/if}
               <button
                 type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-transparent text-[var(--color-base-content)] hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="btn btn-ghost btn-sm aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                 onclick={resetAddForm}
               >
                 {t('common.cancel')}
               </button>
               <button
                 type="button"
-                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                class="btn btn-primary btn-sm gap-1.5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                aria-disabled={disabled ? 'true' : undefined}
+                aria-describedby={disabled && disabledReason ? addDisabledReasonId : undefined}
                 onclick={addSource}
-                disabled={!newName.trim() || !newDevice || disabled}
               >
-                <Plus class="size-4" />
+                <Plus class="size-4" aria-hidden="true" />
                 {t('settings.audio.soundCards.addSource')}
               </button>
             </div>
@@ -550,6 +609,7 @@
     {:else}
       <!-- Add Source Button -->
       <button
+        bind:this={addButton}
         type="button"
         class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={openAddForm}

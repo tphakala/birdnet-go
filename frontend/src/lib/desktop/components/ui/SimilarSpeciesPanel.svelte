@@ -181,7 +181,7 @@
               type="button"
               class="w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors
                 {entry.scientific_name === selected
-                ? 'bg-[var(--color-primary)]/10 text-[var(--color-primary)] font-medium'
+                ? 'bg-[var(--color-primary)]/10 text-[var(--text-primary)] font-medium'
                 : 'hover:bg-[var(--color-base-200)]'}"
               title={entry.has_guide
                 ? name
@@ -280,7 +280,7 @@
                   {#if clampable}
                     <button
                       type="button"
-                      class="mt-0.5 text-xs font-medium text-[var(--color-primary)] hover:underline"
+                      class="mt-0.5 text-xs font-medium text-[var(--text-primary)] underline hover:decoration-2"
                       aria-expanded={expanded}
                       aria-controls={`${uid}-row-${row.id}`}
                       onclick={() => toggleRow(row.id)}

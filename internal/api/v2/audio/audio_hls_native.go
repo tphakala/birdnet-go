@@ -254,7 +254,9 @@ func (c *Handler) createNativeHLSStream(sourceID string) (*HLSStreamInfo, error)
 			}
 			close(stream.feedDone)
 			if stream.ctx.Err() == nil {
-				apicore.GetLogger().Warn("Native audio feed exited unexpectedly, cancelling stream",
+				// Every exit that leaves the context live (a failed write, the router
+				// closing the feed on a source restart) has already logged its cause.
+				apicore.GetLogger().Debug("Native audio feed exited, cancelling stream",
 					logger.String("source_id", sanitizedID))
 				stream.cancel()
 			}
@@ -291,7 +293,8 @@ func (c *Handler) prepareNativeAudioFeed(sourceID string) (*audioFeedResources, 
 }
 
 // runNativeAudioFeedLoop pumps PCM from the router into the muxer until the
-// stream context is cancelled or the muxer latches a failure.
+// stream context is cancelled, the muxer latches a failure, or the router closes
+// the feed (a source restart or reconfigure removing its routes).
 func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, stream *HLSStreamInfo, res *audioFeedResources) {
 	defer res.cleanup()
 
@@ -363,7 +366,10 @@ func (c *Handler) runNativeAudioFeedLoop(ctx context.Context, sourceID string, s
 			lastHeartbeatSegments = stats.Segments
 		case chunk, ok := <-res.feed.ch:
 			if !ok {
-				apicore.GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
+				// The router removed this route, so no audio will ever arrive. The
+				// goroutine's exit handler cancels the stream, which drops it and lets
+				// the next Play build a fresh one on the restarted source.
+				apicore.GetLogger().Debug("Audio channel closed by the router", logger.String("source_id", sanitizedID))
 				return
 			}
 			// Report the dequeue before anything can return early, so the

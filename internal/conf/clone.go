@@ -77,7 +77,7 @@ func CloneSettings(src *Settings) *Settings {
 	dst.Realtime.DaylightFilter.Species = slices.Clone(src.Realtime.DaylightFilter.Species)
 
 	// Realtime.ModelConsensus.
-	dst.Realtime.ModelConsensus.Species = slices.Clone(src.Realtime.ModelConsensus.Species)
+	dst.Realtime.ModelConsensus.Rules = cloneModelConsensusRules(src.Realtime.ModelConsensus.Rules)
 
 	// Realtime.RTSP.
 	dst.Realtime.RTSP.Streams = cloneStreamConfigs(src.Realtime.RTSP.Streams)
@@ -112,6 +112,22 @@ func CloneSettings(src *Settings) *Settings {
 	dst.Notification.Push.Providers = clonePushProviders(src.Notification.Push.Providers)
 
 	return &dst
+}
+
+// cloneModelConsensusRules deep-copies a slice of ModelConsensusRule so each rule's
+// Species and Models slices are independent of the input.
+func cloneModelConsensusRules(in []ModelConsensusRule) []ModelConsensusRule {
+	if in == nil {
+		return nil
+	}
+	out := make([]ModelConsensusRule, len(in))
+	for i := range in {
+		r := in[i]
+		r.Species = slices.Clone(r.Species)
+		r.Models = slices.Clone(r.Models)
+		out[i] = r
+	}
+	return out
 }
 
 // cloneAudioSources deep-copies a slice of AudioSourceConfig so that the

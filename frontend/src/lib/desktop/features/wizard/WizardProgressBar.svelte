@@ -10,7 +10,8 @@
 
   let { currentStep, totalSteps, flow }: Props = $props();
 
-  let visible = $derived(flow === 'onboarding' && totalSteps > 1);
+  // Changelog entries are pages, not steps, so they show no dots
+  let visible = $derived(flow !== 'whats-new' && totalSteps > 1);
 </script>
 
 {#if visible}
@@ -19,9 +20,9 @@
     role="group"
     aria-label={t('wizard.progressLabel')}
   >
-    <span class="sr-only"
-      >{t('wizard.progress', { current: String(currentStep + 1), total: String(totalSteps) })}</span
-    >
+    <span class="sr-only">
+      {t('wizard.progress', { current: String(currentStep + 1), total: String(totalSteps) })}
+    </span>
     {#each Array.from({ length: totalSteps }) as _, i (i)}
       {#if i === currentStep}
         <span class="size-2.5 rounded-full bg-[var(--color-primary)]" aria-hidden="true"></span>

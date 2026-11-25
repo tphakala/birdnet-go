@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -214,4 +216,119 @@ func TestSetEndpointResolver_NilDisablesFailover(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), primaryHits.Load())
 	assert.Empty(t, resolver.working(), "a cleared resolver must not be consulted")
+}
+
+// heldBodyServer answers every request with a partial body, then parks until the
+// request's context ends (the client went away). reached is closed when the first
+// request has started streaming; hits counts requests.
+func heldBodyServer(t *testing.T) (url string, reached <-chan struct{}, hits *atomic.Int64) {
+	t.Helper()
+	hits = &atomic.Int64{}
+	started := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		_, _ = w.Write([]byte("partial"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		once.Do(func() { close(started) })
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL, started, hits
+}
+
+// TestDownloadModelFile_DoesNotFailOverOnUserCancel pins that a user cancel, whose
+// cause wraps context.Canceled, is not read as an unreachable host: the mirror is
+// never asked for the file.
+func TestDownloadModelFile_DoesNotFailOverOnUserCancel(t *testing.T) {
+	t.Parallel()
+	primaryURL, reached, _ := heldBodyServer(t)
+	mirrorURL, mirrorHits := countingServer(t, http.StatusOK, []byte("mirror-bytes"))
+	mm, _ := newFailoverManager(t, []string{primaryURL, mirrorURL})
+	dest := filepath.Join(t.TempDir(), "model.onnx")
+
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	done := make(chan error, 1)
+	go func() {
+		done <- mm.downloadModelFile(ctx, "m", "owner/repo", "model.onnx", dest, sha256Hex([]byte("mirror-bytes")), 0, "")
+	}()
+	awaitSignal(t, reached, "the primary to start streaming")
+
+	cancel(ErrOperationCancelled)
+
+	err := awaitResult(t, done)
+	require.ErrorIs(t, err, ErrOperationCancelled)
+	assert.Equal(t, int64(0), mirrorHits.Load(), "a user cancel must not fail over to the mirror")
+	assert.NoFileExists(t, dest)
+}
+
+// cancelThenGatewayTransport cancels the request's operation, as a user cancel
+// racing the response would, then answers 503, a status that is otherwise retryable.
+type cancelThenGatewayTransport struct {
+	cancel context.CancelCauseFunc
+	calls  *atomic.Int64
+	// mirrorHost, when set, is the host whose requests are also counted in mirrorCalls.
+	mirrorHost  string
+	mirrorCalls *atomic.Int64
+}
+
+func (c cancelThenGatewayTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.calls.Add(1)
+	if c.mirrorCalls != nil && req.URL.Host == c.mirrorHost {
+		c.mirrorCalls.Add(1)
+	}
+	c.cancel(ErrOperationCancelled)
+	return &http.Response{
+		StatusCode: http.StatusServiceUnavailable,
+		Body:       http.NoBody,
+		Request:    req,
+	}, nil
+}
+
+// TestDownloadModelFile_DoesNotFailOverOnGatewayStatusRacingCancel pins the
+// cancelled-context guard of the failover loop: a 503 that arrives with the
+// cancel is retryable on its own, and must still not reach the mirror. It replaces
+// the package-global downloadHTTPClient, so it must stay serial (no t.Parallel) and
+// restores the client when it ends.
+func TestDownloadModelFile_DoesNotFailOverOnGatewayStatusRacingCancel(t *testing.T) {
+	const primary, mirror = "primary.invalid", "mirror.invalid"
+	mm, _ := newFailoverManager(t, []string{"http://" + primary, "http://" + mirror})
+	dest := filepath.Join(t.TempDir(), "model.onnx")
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+
+	orig := downloadHTTPClient
+	var attempts, mirrorAttempts atomic.Int64
+	downloadHTTPClient = &http.Client{Transport: cancelThenGatewayTransport{
+		cancel: cancel, calls: &attempts, mirrorHost: mirror, mirrorCalls: &mirrorAttempts,
+	}}
+	t.Cleanup(func() { downloadHTTPClient = orig })
+
+	err := mm.downloadModelFile(ctx, "m", "owner/repo", "model.onnx", dest, "", 0, "")
+
+	require.Error(t, err)
+	assert.Equal(t, int64(1), attempts.Load(), "a gateway status racing a user cancel must not be retried")
+	assert.Equal(t, int64(0), mirrorAttempts.Load(), "the mirror host must not be asked")
+}
+
+// TestGetHuggingFace_AttemptDeadlineFailsOver pins that a stalled host ended by a
+// per-attempt deadline (the document fetch) is retryable on another endpoint, while
+// a cancellation is not: only a cancelled context is an interruption.
+func TestGetHuggingFace_AttemptDeadlineFailsOver(t *testing.T) {
+	t.Parallel()
+	stall := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() }))
+	t.Cleanup(stall.Close)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	resp, err := getHuggingFace(ctx, downloadHTTPClient, stall.URL)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+
+	require.Error(t, err)
+	assert.True(t, shouldFailover(err), "a host that stalls past the attempt deadline is worth a mirror")
 }

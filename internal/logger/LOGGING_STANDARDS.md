@@ -258,6 +258,7 @@ log.Error("authentication failed", logger.String("ip", clientIP), logger.String(
 | `mqtt`                | internal/mqtt           | MQTT client                                       |
 | `notification`        | internal/notification   | Notification system                               |
 | `security`            | internal/security       | Security and authorization                        |
+| `security.oidc`       | internal/security       | OIDC discovery outcomes mirrored to console       |
 | `telemetry`           | internal/telemetry      | Error reporting and metrics                       |
 | `weather`             | internal/weather        | Weather data integration                          |
 

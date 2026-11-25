@@ -109,11 +109,11 @@
 
   function getIconClass(type: string): string {
     const classes: Record<string, string> = {
-      error: 'bg-[var(--color-error)]/20 text-[var(--color-error)]',
-      warning: 'bg-[var(--color-warning)]/20 text-[var(--color-warning)]',
-      info: 'bg-[var(--color-info)]/20 text-[var(--color-info)]',
-      detection: 'bg-[var(--color-success)]/20 text-[var(--color-success)]',
-      system: 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]',
+      error: 'bg-[var(--color-error)]/20 text-[var(--text-error)]',
+      warning: 'bg-[var(--color-warning)]/20 text-[var(--text-warning)]',
+      info: 'bg-[var(--color-info)]/20 text-[var(--text-info)]',
+      detection: 'bg-[var(--color-success)]/20 text-[var(--text-success)]',
+      system: 'bg-[var(--color-primary)]/20 text-[var(--text-primary)]',
     };
     return safeGet(classes, type, 'bg-[var(--color-base-300)]');
   }
@@ -190,9 +190,9 @@
           </span>
           <time datetime={group.latestTimestamp}>{timeRange}</time>
           {#if group.unreadCount > 0}
-            <span class="text-[var(--color-primary)] font-medium"
-              >{t('notifications.groups.unread', { count: group.unreadCount })}</span
-            >
+            <span class="text-[var(--text-primary)] font-medium">
+              {t('notifications.groups.unread', { count: group.unreadCount })}
+            </span>
           {/if}
         </div>
       </div>
@@ -218,7 +218,7 @@
         {#if onDismissAll}
           <button
             onclick={() => onDismissAll?.(allIds)}
-            class="p-1 text-[var(--color-error)] hover:text-[var(--color-error-hover)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
+            class="p-1 text-[var(--text-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
             aria-label={t('notifications.groups.dismissAll')}
           >
             <Trash2 class="size-3" />
@@ -299,7 +299,7 @@
               {#if onDelete}
                 <button
                   onclick={() => onDelete?.(notification.id)}
-                  class="p-1 text-[var(--color-error)] hover:text-[var(--color-error-hover)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
+                  class="p-1 text-[var(--text-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
                   aria-label={t('notifications.actions.delete')}
                 >
                   <Trash2 class="size-3" />

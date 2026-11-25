@@ -4,7 +4,7 @@ vars:
   BINARY_DIR: bin
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
-  ONNXRUNTIME_VERSION: '1.31.1'
+  ONNXRUNTIME_VERSION: '1.32.0'
   # golangci-lint version .golangci.yaml is written for; keep in sync with
   # .github/workflows/golangci-lint.yml, .husky/pre-commit and
   # .devcontainer/postCreateCommand.sh;
@@ -25,7 +25,8 @@ vars:
     sh: uname -s
   UNAME_M:
     sh: uname -m
-  # Go version from go.mod (single source of truth)
+  # Go language floor from go.mod, for example 1.27.0. It names the minor line
+  # to install; installs and CI build with the latest patch of that line.
   GO_VERSION:
     sh: awk '/^go /{print $2; found=1} END{if(!found) exit 1}' go.mod
   # Sentry DSN baked into the binary at link time. Read from the SENTRY_DSN
@@ -51,8 +52,8 @@ vars:
   TENSORFLOW_HEADERS_DIR: '{{.ROOT_DIR}}/.cache/tensorflow'
   # OpenVINO C API headers (used only by openvino-tagged builds). The headers are
   # architecture-independent plain C declarations, so one download serves every
-  # target arch; the runtime library is dlopen'd at execution time (the backend
-  # links only -ldl), so no per-arch .so is needed at build time. The include
+  # target arch; the runtime library is loaded at execution time (the backend
+  # links no OpenVINO library), so no per-arch runtime is needed at build time. The include
   # path below is added to CGO_CFLAGS unconditionally: GCC silently ignores a
   # missing -I directory, so non-openvino builds are unaffected when the cache
   # is absent, while openvino builds populate it via the check-openvino task.
@@ -92,8 +93,8 @@ vars:
   #   .github/workflows/golangci-lint.yml         (put it in the literal -tags; it is a
   #                                                workflow_call target and does not
   #                                                inherit the caller's env)
-  #   .github/workflows/macos-test.yml            (literal -tags)
-  #   .github/workflows/windows-test.yml          (literal -tags)
+  #   .github/workflows/macos-test.yml            (literal -tags in every go command, and TEST_TAGS in the select step)
+  #   .github/workflows/windows-test.yml          (literal -tags in every go command, and TEST_TAGS in the select step)
   BASE_BUILD_TAGS: ''
   # Emits nothing when the joined list is empty, mirroring the ${BUILD_TAGS:+...}
   # guard on the linux_amd64 / linux_arm64 build lines. (noembed_build needs no
@@ -200,12 +201,13 @@ tasks:
       - '[ -f "{{.AVICOMMONS_JSON_FILE}}" ]'
 
   sync-region-snapshots:
-    desc: Refresh the embedded region snapshots, coverage maps, and vendored model manifests from a sibling acoustic-models checkout
+    desc: Refresh the embedded region snapshots, coverage maps, vendored model manifests, and document-only manifests from a sibling acoustic-models checkout, then refresh the labels checksums and regenerate the catalog
     vars:
       ACOUSTIC_MODELS_DIR: '{{.ACOUSTIC_MODELS_DIR | default "../acoustic-models"}}'
       REGION_DATA_DIR: internal/classifier/region/data
       MAPS_DIR: internal/classifier/region/data/maps
       GEN_MANIFESTS_DIR: internal/classifier/gen/manifests
+      GEN_DOCUMENT_MANIFESTS_DIR: internal/classifier/gen/manifests/documents
     cmds:
       - |
         SRC="{{.ACOUSTIC_MODELS_DIR}}/models/manifests"
@@ -215,7 +217,7 @@ tasks:
           exit 1
         fi
         # Embedded region tables (bbox / tier / countries) read at runtime.
-        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json; do
+        for f in Perch-v2-Models.regions.json BirdNET-v3.0-Models.regions.json BirdNET-Plus-V3.0.regions.json; do
           cp "$SRC/$f" "{{.REGION_DATA_DIR}}/$f"
           echo "synced $f"
         done
@@ -224,49 +226,68 @@ tasks:
         # ./internal/classifier" joins models.json against regions.json, so a
         # stale models.json here silently regenerates the catalog against the old
         # region set (the two inputs disagree on which tiles exist).
-        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json; do
+        for f in Perch-v2-Models.models.json BirdNET-v3.0-Models.models.json BirdNET-Plus-V3.0.models.json; do
           cp "$SRC/$f" "{{.GEN_MANIFESTS_DIR}}/$f"
           echo "synced $f"
         done
-        echo "Refreshed region snapshots and model manifests. Next: run"
-        echo "  go run ./gen -update-labels-checksums   (from internal/classifier; networked)"
-        echo "  go generate ./internal/classifier"
-        echo "and if tiers changed, update golden_tier_test.go."
+        # Document-only manifests: families the catalog lists but does not generate
+        # regional variants for. The generator reads only their repo and
+        # family_meta.documents, so a new gallery entry's licence and policy
+        # documents reach the binary. They stay apart from the manifests above
+        # because the catalog consistency test compares every manifest in that
+        # directory with the catalog's models.
+        mkdir -p "{{.GEN_DOCUMENT_MANIFESTS_DIR}}"
+        for f in BirdNET-Geomodel.models.json BirdNET-v2.4.models.json BattyBirdNET-onnx.models.json BSG-BAT.models.json; do
+          cp "$SRC/$f" "{{.GEN_DOCUMENT_MANIFESTS_DIR}}/$f"
+          echo "synced $f (documents)"
+        done
+        echo "Refreshed region snapshots, model manifests and document manifests."
       - |
         # Sync per-region coverage maps (SVG). The geometry is model-family-agnostic,
         # so a tile's coverage.svg is byte-identical across families; we embed ONE set
-        # keyed by slug and cmp each primary map against its twin to enforce that
+        # keyed by slug, taken from whichever family trees ship the slug, and cmp every
+        # later copy of a slug against the first one of this run to enforce that
         # invariant loudly (a future upstream divergence must fail here, not silently).
+        # A family may ship fewer tiles than the others. Stray maps from an earlier
+        # sync are not deleted here: TestCoverageMap_NoStrayFiles names them.
         AM="{{.ACOUSTIC_MODELS_DIR}}"
-        PRIMARY="$AM/models/birdnet-v3.0-regional"
-        TWIN="$AM/models/perch-v2-regional"
-        if [ ! -d "$PRIMARY" ] || [ ! -d "$TWIN" ]; then
-          echo "regional model tree not found for both model families ($PRIMARY, $TWIN)" >&2
-          exit 1
-        fi
         mkdir -p "{{.MAPS_DIR}}"
-        rm -f "{{.MAPS_DIR}}"/*.svg
         count=0
-        for d in "$PRIMARY"/*/; do
-          slug="$(basename "$d")"
-          src="$d/coverage.svg"
-          [ -f "$src" ] || continue
-          twin="$TWIN/$slug/coverage.svg"
-          # The twin must exist AND be byte-identical: the slug-keyed embed serves
-          # one map per slug for both families, so a missing or divergent twin
-          # would silently break that invariant.
-          if [ ! -f "$twin" ]; then
-            echo "coverage.svg for '$slug' is missing from the Perch family; both families must ship it" >&2
+        seen=" "
+        for tree in perch-v2-regional birdnet-plus-v3.0.1-regional birdnet-v3.0-regional; do
+          TREE="$AM/models/$tree"
+          if [ ! -d "$TREE" ]; then
+            echo "regional model tree not found: $TREE" >&2
             exit 1
           fi
-          if ! cmp -s "$src" "$twin"; then
-            echo "coverage.svg for '$slug' differs between families; the slug-keyed embed assumes they are identical" >&2
-            exit 1
-          fi
-          cp "$src" "{{.MAPS_DIR}}/$slug.svg"
-          count=$((count + 1))
+          for d in "$TREE"/*/; do
+            slug="$(basename "$d")"
+            src="$d/coverage.svg"
+            [ -f "$src" ] || continue
+            case "$seen" in
+              *" $slug "*)
+                if ! cmp -s "$src" "{{.MAPS_DIR}}/$slug.svg"; then
+                  echo "coverage.svg for '$slug' differs between families ($tree); the slug-keyed embed assumes they are identical" >&2
+                  exit 1
+                fi
+                ;;
+              *)
+                cp "$src" "{{.MAPS_DIR}}/$slug.svg"
+                seen="$seen$slug "
+                count=$((count + 1))
+                ;;
+            esac
+          done
         done
         echo "synced $count coverage maps"
+      - |
+        # Refresh the labels checksum sidecar (networked), regenerate the catalog and
+        # run the catalog, region and generator tests, so an unacknowledged tile change
+        # (expectedRegions, goldenTiers, familyOmits) fails here. The classifier package
+        # links TensorFlow Lite, so the test needs CGO_FLAGS like task test.
+        (cd internal/classifier && go run ./gen -update-labels-checksums)
+        go generate ./internal/classifier
+        {{.CGO_FLAGS}} go test -tags noembed,skipfrontend ./internal/classifier/ ./internal/classifier/region/ ./internal/classifier/gen/
 
   generate-species-dict:
     desc: Regenerate per-locale species dictionaries from the OpenFauna dataset
@@ -344,7 +365,7 @@ tasks:
         echo "    - macOS: Homebrew must be installed first"
         echo ""
         echo "This will install:"
-        echo "  • Go {{.GO_VERSION}}"
+        echo "  • Go {{ regexFind "^[0-9]+[.][0-9]+" .GO_VERSION }}.x (the latest patch release)"
         echo "  • Node.js LTS"
         echo "  • Build tools (gcc, git, wget, etc.)"
         echo "  • Go dev tools (golangci-lint, air)"
@@ -421,7 +442,7 @@ tasks:
           INSTALL_GO=false
 
           if ! command -v go >/dev/null 2>&1; then
-            echo "📥 Go not found, installing Go ${GO_VERSION}..."
+            echo "📥 Go not found, installing the latest Go ${REQUIRED_GO_MINOR}.x..."
             INSTALL_GO=true
           else
             CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
@@ -436,7 +457,7 @@ tasks:
                 echo "   Current: ${CURRENT_GO_VERSION}"
                 echo "   Required: ${REQUIRED_GO_MINOR}.x"
                 echo ""
-                printf "   Upgrade to Go ${GO_VERSION}? (y/N) "
+                printf "   Upgrade to the latest Go ${REQUIRED_GO_MINOR}.x? (y/N) "
                 read REPLY
                 case "$REPLY" in
                   [Yy]|[Yy][Ee][Ss]) INSTALL_GO=true ;;
@@ -447,12 +468,21 @@ tasks:
           fi
 
           if [ "$INSTALL_GO" = true ]; then
-            echo "📥 Installing Go ${GO_VERSION}..."
+            echo "📥 Installing the latest Go ${REQUIRED_GO_MINOR}.x..."
             case "$(uname -m)" in
               x86_64) GO_ARCH="amd64";;
               aarch64|arm64) GO_ARCH="arm64";;
               *) echo "❌ Unsupported architecture: $(uname -m)"; exit 1;;
             esac
+            # go.mod only names the minor line (1.27.0 is the floor), so install the
+            # newest patch release of that line and fall back to the floor if the
+            # release feed cannot be read or does not answer in time. include=all
+            # keeps a minor line that has left the default feed findable; the feed
+            # lists releases newest first.
+            GO_LATEST=$(curl -fsSL --connect-timeout 10 --max-time 60 'https://go.dev/dl/?mode=json&include=all' 2>/dev/null \
+              | grep -oE "\"version\": \"go${REQUIRED_GO_MINOR}(\.[0-9]+)?\"" \
+              | head -n 1 | grep -oE '[0-9]+(\.[0-9]+)+' || true)
+            GO_VERSION="${GO_LATEST:-$GO_VERSION}"
             GO_TARBALL="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
             if ! wget "https://go.dev/dl/${GO_TARBALL}"; then
               echo "❌ Failed to download Go ${GO_VERSION} for ${GO_ARCH}"
@@ -1372,14 +1402,32 @@ tasks:
       TFLITE_LIB_DIR: /usr/x86_64-w64-mingw32/lib
       TFLITE_LIB_ARCH: windows_amd64.zip
       TARGET: windows_amd64
+      # Windows release binaries ship with the OpenVINO backend compiled in. The
+      # runtime DLL is loaded at execution time (found automatically in the
+      # known install locations) and the backend self-gates to the ONNX Runtime
+      # when it is absent, so a tagged binary runs unchanged on hosts without
+      # OpenVINO. Pass OPENVINO=false to opt out.
+      OPENVINO: '{{.OPENVINO | default "true"}}'
     cmds:
       - task: download-tflite
         vars: {TFLITE_LIB_DIR: '{{.TFLITE_LIB_DIR}}', TFLITE_LIB_ARCH: '{{.TFLITE_LIB_ARCH}}', TARGET: '{{.TARGET}}'}
+      # Fetch the OpenVINO C API headers when this is an openvino build; the task
+      # no-ops for standard builds (OPENVINO unset or "false").
+      - task: check-openvino
+        vars: {OPENVINO: '{{.OPENVINO}}'}
       - |
+        BUILD_TAGS="{{.BASE_BUILD_TAGS}}"
+        if [ "{{.OPENVINO}}" = "true" ]; then
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}openvino"
+        fi
+        EXTRA_TAGS="{{.EXTRA_BUILD_TAGS}}"
+        if [ -n "${EXTRA_TAGS}" ]; then
+          BUILD_TAGS="${BUILD_TAGS:+${BUILD_TAGS},}${EXTRA_TAGS}"
+        fi
         GOOS=windows GOARCH=amd64 {{.CGO_FLAGS}} \
         CC=x86_64-w64-mingw32-gcc \
         CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-        go build -trimpath {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
+        go build -trimpath ${BUILD_TAGS:+-tags "${BUILD_TAGS}"} {{.LDFLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}.exe
 
   darwin_amd64:
     deps: [check-tools, check-tensorflow, download-avicommons-data, frontend-build]
@@ -1488,10 +1536,10 @@ tasks:
         if [ "{{.NOTFLITE}}" = "true" ]; then
           BUILD_TAGS="${BUILD_TAGS},notflite"
         fi
-        # openvino adds the OpenVINO inference backend (dlopen'd at runtime, ORT
-        # fallback). Headers are provided by the check-openvino task above. Only
-        # the linux noembed targets set OPENVINO; windows/darwin leave it unset
-        # by design (the OpenVINO backend is linux-only here).
+        # openvino adds the OpenVINO inference backend (loaded at runtime, ORT
+        # fallback). Headers are provided by the check-openvino task above. The
+        # linux and windows/amd64 noembed targets set OPENVINO; darwin leaves it
+        # unset by design (no OpenVINO runtime for macOS).
         if [ "{{.OPENVINO}}" = "true" ]; then
           BUILD_TAGS="${BUILD_TAGS},openvino"
         fi
@@ -1565,6 +1613,10 @@ tasks:
           GOARCH: amd64
           CC: x86_64-w64-mingw32-gcc
           BINARY_SUFFIX: '.exe'
+          # The OpenVINO runtime DLL is found at execution time, so the tagged
+          # binary runs unchanged on hosts without OpenVINO. Pass OPENVINO=false
+          # to opt out.
+          OPENVINO: '{{.OPENVINO | default "true"}}'
 
   noembed_darwin_amd64:
     desc: Build Darwin AMD64 without embedded models
@@ -1644,15 +1696,19 @@ tasks:
             Linux_*) echo "{{.SYSTEM_LIB_DIR}}";;
             *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
           esac
-      ONNX_ARCHIVE:
+      ONNX_PLATFORM:
         sh: |
           case "{{.UNAME_S}}_{{.UNAME_M}}" in
-            Linux_x86_64) echo "onnxruntime-linux-x64-{{.ONNXRUNTIME_VERSION}}.tgz";;
-            Linux_aarch64|Linux_arm64) echo "onnxruntime-linux-aarch64-{{.ONNXRUNTIME_VERSION}}.tgz";;
-            Darwin_x86_64) echo "onnxruntime-osx-x86_64-{{.ONNXRUNTIME_VERSION}}.tgz";;
-            Darwin_arm64) echo "onnxruntime-osx-arm64-{{.ONNXRUNTIME_VERSION}}.tgz";;
+            Linux_x86_64) echo "linux-amd64";;
+            Linux_aarch64|Linux_arm64) echo "linux-arm64";;
+            Darwin_x86_64) echo "darwin-amd64";;
+            Darwin_arm64) echo "darwin-arm64";;
             *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
           esac
+      # Verified files and links are staged here, then copied to the system
+      # directory. The downloaded package stays in <dir>.download beside it, so
+      # a later run does not download it again. .cache/ is git-ignored.
+      ONNX_STAGE_DIR: '.cache/onnxruntime/{{.ONNXRUNTIME_VERSION}}/{{.ONNX_PLATFORM}}'
       ONNX_LIB_NAME:
         sh: |
           case "{{.UNAME_S}}" in
@@ -1661,8 +1717,9 @@ tasks:
             *) echo "unsupported: {{.UNAME_S}}" >&2; exit 1;;
           esac
       # Files to install: the library link and the versioned file it points to.
-      # The macOS archive holds libonnxruntime.dylib -> libonnxruntime.<ver>.dylib,
-      # so the pattern must match both names; the Linux pattern already does.
+      # The staged directory holds libonnxruntime.dylib -> libonnxruntime.<ver>.dylib
+      # on macOS, so the pattern must match both names; the Linux pattern already
+      # does.
       ONNX_LIB_GLOB:
         sh: |
           case "{{.UNAME_S}}" in
@@ -1672,13 +1729,13 @@ tasks:
           esac
     cmds:
       - |
-        echo "Downloading ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
-        curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v{{.ONNXRUNTIME_VERSION}}/{{.ONNX_ARCHIVE}}" \
-          -o /tmp/onnxruntime.tgz
-
-        mkdir -p /tmp/onnxruntime
-        tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1
-        rm /tmp/onnxruntime.tgz
+        # Stop at the first failure, so a failed download or pin check does not
+        # end with the success message below.
+        set -e
+        # Download, verify against the SHA-256 pins and stage the library files.
+        # scripts/fetch-onnxruntime.sh holds the download source and the pins.
+        echo "Installing ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
+        sh scripts/fetch-onnxruntime.sh install "{{.ONNXRUNTIME_VERSION}}" "{{.ONNX_PLATFORM}}" "{{.ONNX_STAGE_DIR}}"
 
         # Create target directory if needed
         if [ ! -d "{{.ONNX_LIB_DIR}}" ]; then
@@ -1689,17 +1746,15 @@ tasks:
           fi
         fi
 
-        # Install library files. -P copies the archive's symlinks as symlinks. A
+        # Install library files. -P copies the staged symlinks as symlinks. A
         # plain cp writes through an existing libonnxruntime.so -> .so.1 ->
         # .so.1.<old> chain into the old versioned file, and BirdNET-Go reads the
         # version from that file name.
         if [ -w "{{.ONNX_LIB_DIR}}" ]; then
-          cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
+          cp -P {{.ONNX_STAGE_DIR}}/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
         else
-          sudo cp -P /tmp/onnxruntime/lib/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
+          sudo cp -P {{.ONNX_STAGE_DIR}}/{{.ONNX_LIB_GLOB}} "{{.ONNX_LIB_DIR}}/"
         fi
-
-        rm -rf /tmp/onnxruntime
 
         # Update library cache on Linux
         if [ "{{.UNAME_S}}" = "Linux" ]; then

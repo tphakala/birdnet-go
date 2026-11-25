@@ -47,6 +47,27 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 			device:  inference.OVDeviceGPU,
 			want:    inference.OVPrecisionF32,
 		},
+		// A concrete GPU name is the same device class: the Arc A380 NaN failure
+		// shows up on whichever index the discrete card has, so the policy must
+		// not compare against the bare "GPU" alias.
+		{
+			name:    "perch v2 on GPU.0 is forced to f32",
+			modelID: RegistryIDPerchV2,
+			device:  "GPU.0",
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "perch v2 on GPU.1 is forced to f32",
+			modelID: RegistryIDPerchV2,
+			device:  "GPU.1",
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "birdnet v2.4 on GPU.1 is forced to f32",
+			modelID: DefaultModelVersion,
+			device:  "GPU.1",
+			want:    inference.OVPrecisionF32,
+		},
 		{
 			name:    "perch v2 on CPU keeps the f16 default",
 			modelID: RegistryIDPerchV2,
@@ -82,6 +103,19 @@ func TestOpenVINOPrecisionFor(t *testing.T) {
 		{
 			name:    "birdnet v3.0 on CPU is forced to f32 (A76 native f16 corrupts scores)",
 			modelID: RegistryIDBirdNETV3,
+			device:  inference.OVDeviceCPU,
+			want:    inference.OVPrecisionF32,
+		},
+		// BirdNET+ v3.0 shares the v3.0 architecture and is forced to f32 on both devices.
+		{
+			name:    "birdnet plus v3.0 on GPU is forced to f32",
+			modelID: RegistryIDBirdNETPlusV3,
+			device:  inference.OVDeviceGPU,
+			want:    inference.OVPrecisionF32,
+		},
+		{
+			name:    "birdnet plus v3.0 on CPU is forced to f32",
+			modelID: RegistryIDBirdNETPlusV3,
 			device:  inference.OVDeviceCPU,
 			want:    inference.OVPrecisionF32,
 		},
@@ -156,6 +190,12 @@ func TestBackendForcesFP32(t *testing.T) {
 			registryID:   RegistryIDBirdNETV3,
 			backendToken: cudaBackendToken,
 			want:         false,
+		},
+		{
+			name:         "birdnet plus v3.0 on openvino cpu is forced to f32",
+			registryID:   RegistryIDBirdNETPlusV3,
+			backendToken: hwprofile.CapOpenVINOCPU,
+			want:         true,
 		},
 		{
 			name:         "bat on openvino cpu is forced to f32",

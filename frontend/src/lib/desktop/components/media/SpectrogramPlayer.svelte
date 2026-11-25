@@ -24,8 +24,7 @@
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { audioUrlFor } from '$lib/utils/playbackDenoise';
-  import { get } from 'svelte/store';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { getPlaybackDefaults } from '$lib/utils/playbackDefaults';
   import { t } from '$lib/i18n';
   import { playButtonLabelKey } from '$lib/utils/audio';
   import { loggers } from '$lib/utils/logger';
@@ -75,12 +74,13 @@
   const initialOnPlayStart = onPlayStart;
   // svelte-ignore state_referenced_locally
   const initialOnPlayEnd = onPlayEnd;
-  const defaultGainDb = get(dashboardSettings)?.defaultAudioGain ?? 0;
+  const playbackDefaults = getPlaybackDefaults();
   const audio = useAudioPlayback({
     audioUrl: initialAudioUrl,
     playUrl: initialPlayUrl,
     detectionId: initialDetectionId,
-    defaultGainDb,
+    defaultGainDb: playbackDefaults.gainDb,
+    defaultFilterFreq: playbackDefaults.highPassHz,
     onPlayStart: initialOnPlayStart,
     onPlayEnd: initialOnPlayEnd,
   });
@@ -274,7 +274,7 @@
   <!-- Audio error -->
   {#if audio.error}
     <div class="audio-error" role="alert" aria-live="assertive">
-      <span class="text-xs text-[var(--color-error)]">{audio.error}</span>
+      <span class="text-xs text-[var(--text-error)]">{audio.error}</span>
     </div>
   {/if}
 </div>

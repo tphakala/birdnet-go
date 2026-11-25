@@ -27,11 +27,13 @@
 <script lang="ts">
   import type { Component } from 'svelte';
   import type { LucideProps } from '@lucide/svelte';
-  import { Trash2, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
+  import { Trash2, Search, Plus } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import { generateId } from '$lib/utils/uuid';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import SortableHeader from '$lib/desktop/components/ui/SortableHeader.svelte';
+  import { sortAnnouncement } from '$lib/utils/sortAnnouncement';
   import { getOptionStateClasses } from '$lib/desktop/components/forms/SelectDropdown.styles';
   import {
     activeOptionId,
@@ -41,6 +43,7 @@
   import { resolveSpeciesDisplayNames, type SpeciesNameMaps } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
   import { resolveCommonToScientificUnique } from '$lib/stores/speciesDictionary.svelte';
+  import SettingsGroupLabel from './SettingsGroupLabel.svelte';
   import {
     toLocalizedPredictions,
     filterLocalizedPredictions,
@@ -94,25 +97,28 @@
   const colorMap: Record<string, { bg: string; text: string }> = {
     emerald: {
       bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
-      text: 'text-[var(--color-success)]',
+      text: 'text-[var(--text-success)]',
     },
     red: {
       bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
-      text: 'text-[var(--color-error)]',
+      text: 'text-[var(--text-error)]',
     },
     orange: {
       bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
-      text: 'text-[var(--color-warning)]',
+      text: 'text-[var(--text-warning)]',
     },
     blue: {
       bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
-      text: 'text-[var(--color-info)]',
+      text: 'text-[var(--text-info)]',
     },
     teal: { bg: 'bg-teal-500/10', text: 'text-teal-500' },
   };
 
   // eslint-disable-next-line security/detect-object-injection -- iconColorClass is a prop with a fixed set of color values
   let colors = $derived(colorMap[iconColorClass] ?? colorMap.emerald);
+
+  // Shared cell classes of the sortable headers
+  const SORT_HEADER_CLASS = 'py-2 px-3 text-xs font-medium select-none text-muted';
 
   type SortColumn = 'commonName' | 'scientificName';
 
@@ -176,13 +182,36 @@
     return result;
   });
 
-  function toggleSort(column: SortColumn): void {
+  // Clear the sort message when no species are shown (an empty list, a search with no
+  // matches), so rows returning later do not announce a sort the user did not just make
+  $effect(() => {
+    if (filteredSpecies.length === 0) sortStatus = '';
+  });
+
+  function isSortColumn(value: string): value is SortColumn {
+    return value === 'commonName' || value === 'scientificName';
+  }
+
+  // Announced once per sort, from the handler, so first render says nothing
+  let sortStatus = $state('');
+
+  // Header labels, shared by the header cells and the sort announcement
+  const sortHeaderLabels: Record<SortColumn, () => string> = {
+    commonName: () => t('settings.species.activeSpecies.columns.commonName'),
+    scientificName: () => t('settings.species.activeSpecies.columns.scientificName'),
+  };
+
+  function toggleSort(column: string): void {
+    if (!isSortColumn(column)) return;
     if (sortColumn === column) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
       sortColumn = column;
       sortDirection = 'asc';
     }
+    // Nothing is sorted while no rows are shown, so there is nothing to announce
+    if (filteredSpecies.length === 0) return;
+    sortStatus = sortAnnouncement(sortHeaderLabels[column](), sortDirection);
   }
 
   // Ids are per instance: two cards can share an iconColorClass
@@ -314,7 +343,7 @@
       <div class="p-1.5 rounded-lg {colors.bg}">
         <Icon class="w-4 h-4 {colors.text}" />
       </div>
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h3>
+      <SettingsGroupLabel as="h3">{title}</SettingsGroupLabel>
       <span
         class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
       >
@@ -337,79 +366,40 @@
           data-1p-ignore
           data-lpignore="true"
           data-form-type="other"
-          class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus-ring"
         />
       </div>
     {/if}
   </div>
 
+  <p role="status" class="sr-only">{sortStatus}</p>
+
   <!-- Species List -->
   {#if species.length > 0}
     <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
       <table class="w-full text-sm">
+        <caption class="sr-only">{title}</caption>
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
           <tr class="border-b border-[var(--border-100)]">
-            <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-              role="columnheader"
-              tabindex="0"
-              aria-sort={sortColumn === 'commonName'
-                ? sortDirection === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none'}
-              onclick={() => toggleSort('commonName')}
-              onkeydown={(e: KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleSort('commonName');
-                }
-              }}
-            >
-              <div class="flex items-center gap-1">
-                {t('settings.species.activeSpecies.columns.commonName')}
-                {#if sortColumn === 'commonName'}
-                  {#if sortDirection === 'asc'}
-                    <ChevronUp class="w-3 h-3" />
-                  {:else}
-                    <ChevronDown class="w-3 h-3" />
-                  {/if}
-                {:else}
-                  <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                {/if}
-              </div>
+            <SortableHeader
+              label={sortHeaderLabels.commonName()}
+              field="commonName"
+              activeField={sortColumn ?? ''}
+              direction={sortDirection}
+              onSort={toggleSort}
+              className={SORT_HEADER_CLASS}
+            />
+            <SortableHeader
+              label={sortHeaderLabels.scientificName()}
+              field="scientificName"
+              activeField={sortColumn ?? ''}
+              direction={sortDirection}
+              onSort={toggleSort}
+              className={SORT_HEADER_CLASS}
+            />
+            <th scope="col" class="w-12">
+              <span class="sr-only">{t('common.actionsColumn')}</span>
             </th>
-            <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
-              role="columnheader"
-              tabindex="0"
-              aria-sort={sortColumn === 'scientificName'
-                ? sortDirection === 'asc'
-                  ? 'ascending'
-                  : 'descending'
-                : 'none'}
-              onclick={() => toggleSort('scientificName')}
-              onkeydown={(e: KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  toggleSort('scientificName');
-                }
-              }}
-            >
-              <div class="flex items-center gap-1">
-                {t('settings.species.activeSpecies.columns.scientificName')}
-                {#if sortColumn === 'scientificName'}
-                  {#if sortDirection === 'asc'}
-                    <ChevronUp class="w-3 h-3" />
-                  {:else}
-                    <ChevronDown class="w-3 h-3" />
-                  {/if}
-                {:else}
-                  <ChevronsUpDown class="w-3 h-3 opacity-30" />
-                {/if}
-              </div>
-            </th>
-            <th class="w-12"><span class="sr-only">{t('common.actionsColumn')}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -427,7 +417,7 @@
               <td class="py-2 px-3 w-12 text-right">
                 <button
                   type="button"
-                  class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--text-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                   onclick={() => onRemove(item)}
                   {disabled}
                   aria-label={t('settings.species.remove') || `Remove ${item}`}
@@ -454,10 +444,7 @@
 
   <!-- Add Species Input -->
   <div class="px-4 py-3 border-t border-[var(--border-100)]">
-    <label
-      for={inputId}
-      class="text-xs font-semibold uppercase tracking-wider text-muted mb-2 block"
-    >
+    <label for={inputId} class="label-text mb-2 block">
       {inputLabel}
     </label>
     <div class="relative">
@@ -485,7 +472,7 @@
           aria-activedescendant={activeDescendant}
           aria-haspopup="listbox"
           aria-label={inputLabel}
-          class="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus-ring disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <button
           type="button"

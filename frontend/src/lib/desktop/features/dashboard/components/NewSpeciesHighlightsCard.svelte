@@ -19,6 +19,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
   import {
     resolveNoveltyCategory,
     noveltyCategoryColorVar,
+    noveltyCategoryTextColor,
     type NoveltyCategory,
   } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
   import { AudioLines, CalendarDays, History, Leaf, Star } from '@lucide/svelte';
@@ -127,7 +128,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
 {#snippet categoryIcon(category: NoveltyCategory, season: string | undefined)}
   <span
     class="shrink-0"
-    style:color={noveltyCategoryColorVar(category)}
+    style:color={noveltyCategoryTextColor(category)}
     title={categoryLabel(category, season)}
     aria-label={categoryLabel(category, season)}
   >
@@ -189,7 +190,7 @@ Shows up to 12 species, ordered by novelty category then detection count.
             <div class="flex items-center justify-between gap-1.5">
               <span class="flex min-w-0 items-center gap-1">
                 <span
-                  class="truncate text-sm font-medium leading-tight group-hover:text-[var(--color-primary)]"
+                  class="truncate text-sm font-medium leading-tight group-hover:text-[var(--text-primary)]"
                 >
                   {displayName}
                 </span>
@@ -211,8 +212,9 @@ Shows up to 12 species, ordered by novelty category then detection count.
               class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-[var(--color-base-content)]/60"
             >
               <AudioLines class="size-3.5 shrink-0" />
-              <span>{t('dashboard.newSpeciesHighlights.detections', { count: species.count })}</span
-              >
+              <span>
+                {t('dashboard.newSpeciesHighlights.detections', { count: species.count })}
+              </span>
               {#if isToday && species.days_since_last_seen !== undefined && species.days_since_last_seen > 0}
                 <span aria-hidden="true">·</span>
                 <span class="truncate">

@@ -497,8 +497,10 @@
                 role="button"
                 tabindex="0"
                 aria-label={t('search.fields.speciesHelp')}
-                aria-describedby="speciesTooltip">ⓘ</span
+                aria-describedby="speciesTooltip"
               >
+                ⓘ
+              </span>
             </label>
             <input
               type="text"
@@ -527,8 +529,10 @@
                 role="button"
                 tabindex="0"
                 aria-label={t('search.fields.dateRangeHelp')}
-                aria-describedby="dateRangeTooltip">ⓘ</span
+                aria-describedby="dateRangeTooltip"
               >
+                ⓘ
+              </span>
             </label>
             <div class="gap-2 search-date-grid" role="group" aria-labelledby="dateRangeLabel">
               <DatePicker
@@ -567,11 +571,9 @@
             aria-expanded={advancedFilters}
             aria-controls="advancedFiltersSection"
           >
-            <span
-              >{advancedFilters
-                ? t('search.hideAdvancedFilters')
-                : t('search.showAdvancedFilters')}</span
-            >
+            <span>
+              {advancedFilters ? t('search.hideAdvancedFilters') : t('search.showAdvancedFilters')}
+            </span>
             <span
               class="transition-transform duration-200"
               class:rotate-180={advancedFilters}
@@ -636,7 +638,7 @@
               </div>
               <!-- Confidence error message -->
               {#if hasConfidenceError}
-                <div class="text-[var(--color-error)] text-sm mt-1" role="alert">
+                <div class="text-[var(--text-error)] text-sm mt-1" role="alert">
                   {t('search.errors.minMaxConfidence')}
                 </div>
               {/if}
@@ -740,9 +742,9 @@
         <!-- Results Count & Sorting -->
         {#if formSubmitted}
           <div class="flex items-center gap-4">
-            <span class="text-sm text-[var(--color-base-content)] opacity-70" aria-live="polite"
-              >{formatResultsCount(totalResults)}</span
-            >
+            <span class="text-sm text-[var(--color-base-content)] opacity-70" aria-live="polite">
+              {formatResultsCount(totalResults)}
+            </span>
             <div class="dropdown dropdown-end">
               <div
                 tabindex={isLoading ? -1 : 0}
@@ -769,16 +771,19 @@
                     class="btn btn-ghost btn-sm justify-start w-full"
                     disabled={isLoading}
                     onclick={() => changeSort('date_desc')}
-                    >{t('search.sortOptions.dateDesc')}</button
                   >
+                    {t('search.sortOptions.dateDesc')}
+                  </button>
                 </li>
                 <li role="menuitem">
                   <button
                     type="button"
                     class="btn btn-ghost btn-sm justify-start w-full"
                     disabled={isLoading}
-                    onclick={() => changeSort('date_asc')}>{t('search.sortOptions.dateAsc')}</button
+                    onclick={() => changeSort('date_asc')}
                   >
+                    {t('search.sortOptions.dateAsc')}
+                  </button>
                 </li>
                 <li role="menuitem">
                   <button
@@ -786,8 +791,9 @@
                     class="btn btn-ghost btn-sm justify-start w-full"
                     disabled={isLoading}
                     onclick={() => changeSort('species_asc')}
-                    >{t('search.sortOptions.speciesAsc')}</button
                   >
+                    {t('search.sortOptions.speciesAsc')}
+                  </button>
                 </li>
                 <li role="menuitem">
                   <button
@@ -795,8 +801,9 @@
                     class="btn btn-ghost btn-sm justify-start w-full"
                     disabled={isLoading}
                     onclick={() => changeSort('confidence_desc')}
-                    >{t('search.sortOptions.confidenceDesc')}</button
                   >
+                    {t('search.sortOptions.confidenceDesc')}
+                  </button>
                 </li>
               </ul>
             </div>
@@ -838,7 +845,7 @@
           aria-busy="true"
         >
           <span
-            class="loading loading-spinner loading-lg text-[var(--color-primary)]"
+            class="loading loading-spinner loading-lg text-[var(--text-primary)]"
             aria-hidden="true"
           ></span>
           <p class="text-[var(--color-base-content)] opacity-50 text-center mt-4">
@@ -956,9 +963,9 @@
                             style:width="{result.confidence * 100}%"
                           ></div>
                         </div>
-                        <span class="ml-1 font-semibold"
-                          >{Math.round(result.confidence * 100)}%</span
-                        >
+                        <span class="ml-1 font-semibold">
+                          {Math.round(result.confidence * 100)}%
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -1376,16 +1383,20 @@
             <button
               class="join-item btn"
               onclick={() => goToPage(currentPage - 1)}
-              disabled={currentPage <= 1}>«</button
+              disabled={currentPage <= 1}
             >
-            <button class="join-item btn"
-              >{t('search.pagination.page', { current: currentPage, total: totalPages })}</button
-            >
+              «
+            </button>
+            <button class="join-item btn">
+              {t('search.pagination.page', { current: currentPage, total: totalPages })}
+            </button>
             <button
               class="join-item btn"
               onclick={() => goToPage(currentPage + 1)}
-              disabled={currentPage >= totalPages}>»</button
+              disabled={currentPage >= totalPages}
             >
+              »
+            </button>
           </div>
         </div>
       {/if}
@@ -1542,7 +1553,7 @@
 
   .review-dropdown-item.correct:hover {
     background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
+    color: var(--text-success);
   }
 
   .review-dropdown-item.false-positive:hover {

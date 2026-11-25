@@ -37,6 +37,44 @@ func statSourceState(t *testing.T, path string) SourceState {
 	return NewSourceState(info, 0)
 }
 
+func TestStatSource(t *testing.T) {
+	t.Run("a present file yields info that matches a state built from it", func(t *testing.T) {
+		clip := filepath.Join(t.TempDir(), "clip.wav")
+		require.NoError(t, os.WriteFile(clip, make([]byte, sourceStateClipBytes), 0o600))
+
+		info, err := StatSource(clip)
+		require.NoError(t, err)
+		assert.True(t, NewSourceState(info, 0).Matches(info), "the identity is readable")
+	})
+	t.Run("a missing file keeps the stat error", func(t *testing.T) {
+		_, err := StatSource(filepath.Join(t.TempDir(), "absent.wav"))
+		require.ErrorIs(t, err, os.ErrNotExist)
+		require.NotErrorIs(t, err, ErrSourceChanged)
+	})
+}
+
+// notFileStat wraps an os.FileInfo so that os.SameFile cannot compare it.
+type notFileStat struct{ os.FileInfo }
+
+// TestSourceState_UnpinnedNeverMatches pins that NewSourceState pins an info only
+// when its identity can be read, and that a state that is not pinned matches no
+// file, the one it was built from included. A nil info or an info os.SameFile
+// cannot compare leaves a state unpinned on every OS; on Windows so does an id
+// that cannot be loaded. The Matches guard is reached only by building the state
+// directly: for those infos os.SameFile already makes Matches false.
+func TestSourceState_UnpinnedNeverMatches(t *testing.T) {
+	clip := filepath.Join(t.TempDir(), "clip.wav")
+	require.NoError(t, os.WriteFile(clip, make([]byte, sourceStateClipBytes), 0o600))
+	info, err := StatSource(clip)
+	require.NoError(t, err)
+
+	assert.True(t, NewSourceState(info, 0).pinned, "a readable identity pins the state")
+	assert.False(t, NewSourceState(nil, 0).pinned, "a nil info leaves the state unpinned")
+	assert.False(t, NewSourceState(notFileStat{info}, 0).pinned, "an info os.SameFile cannot compare leaves the state unpinned")
+	assert.True(t, NewSourceState(info, 0).Matches(info), "a pinned state matches the file it describes")
+	assert.False(t, SourceState{info: info}.Matches(info), "an unpinned state matches nothing")
+}
+
 func TestGenerateFromFile_RefusesToPublishWhenSourceChanged(t *testing.T) {
 
 	appendBytes := func(t *testing.T, path string) {

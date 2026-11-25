@@ -242,8 +242,21 @@ type Input struct {
 	// Region equals this slug is the regional match; a global variant (Region
 	// "") earns the fallback bonus whenever no regional slice matches.
 	ResolvedRegion string
+	// RegionByEntry maps a catalog entry id to the region slug resolved in that
+	// entry's own family table, since families may ship different tile sets. An
+	// entry absent from the map uses ResolvedRegion.
+	RegionByEntry map[string]string
 	// Entries is the visible catalog to evaluate.
 	Entries []classifier.CatalogEntry
+}
+
+// regionFor returns the resolved region slug for the catalog entry: its own
+// family's resolution when RegionByEntry has one, else ResolvedRegion.
+func (in *Input) regionFor(entryID string) string {
+	if slug, ok := in.RegionByEntry[entryID]; ok {
+		return slug
+	}
+	return in.ResolvedRegion
 }
 
 // DeviceClass maps a host's board tier and Go architecture to the benchmark
@@ -281,7 +294,8 @@ func Rank(in *Input) []Recommendation {
 }
 
 // rankEntry ranks the variants of a single entry, marking the top compatible
-// one Recommended.
+// one Recommended, skipping a Legacy variant and a regional slice that does not
+// match the host's resolved region (both stay listed).
 func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 	bench := benchmarkScores(entry, in)
 
@@ -290,10 +304,11 @@ func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 	// variant) keeps the global variant from earning the fallback bonus when a
 	// matching regional slice exists, and keeps a wrong-region slice from
 	// outscoring the global model on hardware terms when no slice matches.
+	resolvedRegion := in.regionFor(entry.ID)
 	hasMatchingRegion := false
-	if in.ResolvedRegion != "" {
+	if resolvedRegion != "" {
 		for j := range entry.Variants {
-			if entry.Variants[j].Region == in.ResolvedRegion {
+			if entry.Variants[j].Region == resolvedRegion {
 				hasMatchingRegion = true
 				break
 			}
@@ -303,7 +318,11 @@ func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 	scoredVariants := make([]scoredVariant, 0, len(entry.Variants))
 	for j := range entry.Variants {
 		v := &entry.Variants[j]
-		scoredVariants = append(scoredVariants, evaluateVariant(entry, v, in, bench[v.ID], hasMatchingRegion))
+		sv := evaluateVariant(entry, v, in, bench[v.ID], resolvedRegion, hasMatchingRegion)
+		// A regional slice covers only its own region's species, so it is never
+		// the recommendation for a host in another region or with none resolved.
+		sv.foreignRegion = v.Region != "" && v.Region != resolvedRegion
+		scoredVariants = append(scoredVariants, sv)
 	}
 
 	sortScored(scoredVariants)
@@ -316,8 +335,10 @@ func rankEntry(entry *classifier.CatalogEntry, in *Input) []Recommendation {
 		// the gallery hides it (buildVariantResponses) unless it is the installed
 		// one, so recommending it would point at a variant absent from the client's
 		// variant list. When the only compatible variant is Legacy, the entry gets
-		// no recommendation, which is correct.
-		if !recommendedChosen && rec.Compatible && !scoredVariants[k].legacy {
+		// no recommendation, which is correct. The same holds for a slice of another
+		// region: when the host's own slice does not fit (or no region resolved) and
+		// the globals are blocked, no recommendation beats species the slice lacks.
+		if !recommendedChosen && rec.Compatible && !scoredVariants[k].legacy && !scoredVariants[k].foreignRegion {
 			rec.Recommended = true
 			recommendedChosen = true
 		}
@@ -334,14 +355,18 @@ type scoredVariant struct {
 	backendRank int
 	sizeBytes   int64
 	legacy      bool
+	// foreignRegion marks a regional slice that does not match the host's
+	// resolved region; it stays listed and ranked but is never Recommended.
+	foreignRegion bool
 }
 
 // evaluateVariant computes the verdict for one variant: its blockers (hard
 // filters), its score terms, and the sort keys used to break ties.
+// resolvedRegion is the entry's resolved region slug (Input.regionFor).
 // hasMatchingRegion reports whether the variant's entry ships a slice matching
 // the host's resolved region, which decides whether a global variant earns the
 // region fallback bonus (see rankEntry).
-func evaluateVariant(entry *classifier.CatalogEntry, v *classifier.CatalogVariant, in *Input, bench benchmarkResult, hasMatchingRegion bool) scoredVariant {
+func evaluateVariant(entry *classifier.CatalogEntry, v *classifier.CatalogVariant, in *Input, bench benchmarkResult, resolvedRegion string, hasMatchingRegion bool) scoredVariant {
 	var reasons, blockers []Reason
 	score := 0
 
@@ -407,10 +432,10 @@ func evaluateVariant(entry *classifier.CatalogEntry, v *classifier.CatalogVarian
 	// slice, which earns nothing here. Scored after the backend term so the
 	// backend reason stays the headline (reasons[0]) the gallery renders.
 	switch {
-	case in.ResolvedRegion != "" && v.Region == in.ResolvedRegion:
+	case resolvedRegion != "" && v.Region == resolvedRegion:
 		score += scoreRegionMatched
 		reasons = append(reasons, Reason{Code: ReasonRegionMatched, Args: map[string]string{"region": v.Region}})
-	case v.Region == "" && (in.ResolvedRegion == "" || !hasMatchingRegion):
+	case v.Region == "" && (resolvedRegion == "" || !hasMatchingRegion):
 		score += scoreRegionGlobalFallback
 		reasons = append(reasons, Reason{Code: ReasonRegionGlobalFallback})
 	}

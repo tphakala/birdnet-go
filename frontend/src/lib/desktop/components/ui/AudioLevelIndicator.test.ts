@@ -163,6 +163,19 @@ describe('AudioLevelIndicator start and stop', () => {
     vi.restoreAllMocks();
   });
 
+  it('shows a focus ring on the header button when focused with the keyboard', async () => {
+    await renderWithSources();
+
+    const trigger = screen.getByRole('button', { name: /media\.audio\.levelFor/ });
+
+    expect(trigger).toHaveClass(
+      'focus-visible:outline-2',
+      'focus-visible:outline-[var(--color-primary)]',
+      'focus-visible:outline-offset-2'
+    );
+    expect(trigger).not.toHaveClass('focus:outline-hidden');
+  });
+
   it('reports a failed HLS.js load and hides the message', async () => {
     mocks.tryLoadHls.mockResolvedValue(null);
     mocks.canPlayHls.mockReturnValue(false);
@@ -449,6 +462,35 @@ describe('AudioLevelIndicator start and stop', () => {
     expect(disconnectCalls()).toBe(0);
 
     await clickSourceButton(SOURCE_A);
+
+    expect(disconnectCalls()).toBe(1);
+  });
+
+  // A cancelled leave prompt must not end the stream of a page that keeps playing.
+  async function playUntilHeartbeat() {
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+    startCalls[0].response.resolve(startResponse());
+    await waitForNextTick();
+    // The page treats the stream as playing once the audio element says so.
+    document.getElementById('hls-audio-player')?.dispatchEvent(new Event('playing'));
+    await waitForNextTick();
+    expect(disconnectCalls()).toBe(0);
+  }
+
+  it('keeps the heartbeat when the page only asks to unload', async () => {
+    await playUntilHeartbeat();
+
+    window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
+
+    expect(disconnectCalls()).toBe(0);
+  });
+
+  it('sends the disconnect heartbeat when the page goes away', async () => {
+    await playUntilHeartbeat();
+
+    window.dispatchEvent(new Event('pagehide'));
 
     expect(disconnectCalls()).toBe(1);
   });

@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,16 +10,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
-// fakeOVHost builds injected host facts and a counter of GPU probe calls.
+// fakeOVHost builds injected host facts and a counter of GPU probe calls. A
+// present GPU is the lone bare "GPU" a single-GPU host enumerates.
 func fakeOVHost(goarch string, nativeF16, ortAvailable, gpuPresent bool) (host *ovHostFacts, gpuProbes *int) {
+	var gpus []inference.OpenVINODevice
+	if gpuPresent {
+		gpus = []inference.OpenVINODevice{{Name: inference.OVDeviceGPU}}
+	}
+	return fakeOVHostWithGPUs(goarch, nativeF16, ortAvailable, gpus)
+}
+
+// fakeOVHostWithGPUs is fakeOVHost with an explicit GPU list.
+func fakeOVHostWithGPUs(goarch string, nativeF16, ortAvailable bool, gpus []inference.OpenVINODevice) (host *ovHostFacts, gpuProbes *int) {
 	probes := 0
 	return &ovHostFacts{
 		goarch:       goarch,
 		nativeF16:    nativeF16,
 		ortAvailable: ortAvailable,
-		gpuAvailable: func() bool {
+		gpus: func() []inference.OpenVINODevice {
 			probes++
-			return gpuPresent
+			return gpus
 		},
 	}, &probes
 }
@@ -58,7 +69,7 @@ func TestPlanOpenVINODevice(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			host, probes := fakeOVHost(tt.goarch, tt.nativeF16, tt.ortAvailable, tt.gpuPresent)
-			device, ok, reason := planOpenVINODevice(tt.backendPref, tt.devicePref, host)
+			device, _, ok, reason := planOpenVINODevice(tt.backendPref, tt.devicePref, host)
 			assert.Equal(t, tt.wantDevice, device)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantReason, reason)
@@ -69,12 +80,129 @@ func TestPlanOpenVINODevice(t *testing.T) {
 	t.Run("settings transitions are re-read on every plan", func(t *testing.T) {
 		t.Parallel()
 		host, _ := fakeOVHost(goarchARM64, true, true, false)
-		_, ok, _ := planOpenVINODevice(conf.BackendPrefAuto, conf.OVDeviceAuto, host)
+		_, _, ok, _ := planOpenVINODevice(conf.BackendPrefAuto, conf.OVDeviceAuto, host)
 		assert.False(t, ok, "auto declines")
-		device, ok, _ := planOpenVINODevice(conf.BackendPrefOpenVINO, conf.OVDeviceAuto, host)
+		device, _, ok, _ := planOpenVINODevice(conf.BackendPrefOpenVINO, conf.OVDeviceAuto, host)
 		assert.True(t, ok, "openvino opts in")
 		assert.Equal(t, inference.OVDeviceCPU, device)
-		_, ok, _ = planOpenVINODevice(conf.BackendPrefAuto, conf.OVDeviceAuto, host)
+		_, _, ok, _ = planOpenVINODevice(conf.BackendPrefAuto, conf.OVDeviceAuto, host)
 		assert.False(t, ok, "auto declines again")
 	})
+}
+
+// TestPlanOpenVINODeviceGPUList covers the GPU choice on hosts that enumerate
+// several GPUs: "gpu" and "auto" keep meaning OpenVINO's GPU alias, a concrete
+// "GPU.<n>" runs only on a device enumerated under exactly that name, and a
+// missing index declines instead of substituting another adapter.
+func TestPlanOpenVINODeviceGPUList(t *testing.T) {
+	t.Parallel()
+
+	igpu := inference.OpenVINODevice{Name: "GPU.0", Type: "integrated", FullName: "Test iGPU"}
+	arc := inference.OpenVINODevice{Name: "GPU.1", Type: "discrete", FullName: "Test Arc"}
+	lone := inference.OpenVINODevice{Name: "GPU", Type: "integrated", FullName: "Lone GPU"}
+	both := []inference.OpenVINODevice{igpu, arc}
+
+	tests := []struct {
+		name        string
+		gpus        []inference.OpenVINODevice
+		backendPref string
+		devicePref  string
+		wantDevice  string
+		wantName    string
+		wantOK      bool
+		wantReason  string
+		wantProbed  bool
+	}{
+		{"gpu on two GPUs uses the alias and names GPU.0", both, conf.BackendPrefAuto, conf.OVDeviceGPU, inference.OVDeviceGPU, "Test iGPU", true, "", true},
+		{"auto on two GPUs uses the alias and names GPU.0", both, conf.BackendPrefAuto, conf.OVDeviceAuto, inference.OVDeviceGPU, "Test iGPU", true, "", true},
+		{"gpu on a lone GPU names it", []inference.OpenVINODevice{lone}, conf.BackendPrefAuto, conf.OVDeviceGPU, inference.OVDeviceGPU, "Lone GPU", true, "", true},
+		{"GPU.1 on two GPUs selects the second", both, conf.BackendPrefAuto, "GPU.1", "GPU.1", "Test Arc", true, "", true},
+		{"GPU.0 on two GPUs selects the first", both, conf.BackendPrefAuto, "GPU.0", "GPU.0", "Test iGPU", true, "", true},
+		{"GPU.1 with openvino backend selects the second", both, conf.BackendPrefOpenVINO, "GPU.1", "GPU.1", "Test Arc", true, "", true},
+		{"GPU.1 on a lone GPU declines", []inference.OpenVINODevice{lone}, conf.BackendPrefAuto, "GPU.1", "", "", false, ovReasonGPUDeviceMissing, true},
+		{"GPU.0 on a lone GPU declines, no alias matching", []inference.OpenVINODevice{lone}, conf.BackendPrefAuto, "GPU.0", "", "", false, ovReasonGPUDeviceMissing, true},
+		{"GPU.5 on two GPUs declines", both, conf.BackendPrefAuto, "GPU.5", "", "", false, ovReasonGPUDeviceMissing, true},
+		{"GPU.1 without any GPU declines", nil, conf.BackendPrefAuto, "GPU.1", "", "", false, ovReasonGPUDeviceMissing, true},
+		{"GPU.1 with backend onnx declines without probing", both, conf.BackendPrefONNX, "GPU.1", "", "", false, ovReasonBackendONNX, false},
+		{"a GPU name without a name from the child still plans", []inference.OpenVINODevice{{Name: "GPU.0"}, {Name: "GPU.1"}}, conf.BackendPrefAuto, "GPU.1", "GPU.1", "", true, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			host, probes := fakeOVHostWithGPUs(goarchAMD64, false, true, tt.gpus)
+			device, name, ok, reason := planOpenVINODevice(tt.backendPref, tt.devicePref, host)
+			assert.Equal(t, tt.wantDevice, device)
+			assert.Equal(t, tt.wantName, name)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantReason, reason)
+			assert.Equal(t, tt.wantProbed, *probes > 0, "GPU probe calls: %d", *probes)
+		})
+	}
+
+	t.Run("a fixed GPU.1 preference follows the hardware across hot reloads", func(t *testing.T) {
+		t.Parallel()
+		gpus := both
+		host := &ovHostFacts{
+			goarch: goarchAMD64, ortAvailable: true,
+			gpus: func() []inference.OpenVINODevice { return gpus },
+		}
+		plan := func() (string, bool) {
+			device, _, ok, _ := planOpenVINODevice(conf.BackendPrefAuto, "GPU.1", host)
+			return device, ok
+		}
+
+		device, ok := plan()
+		assert.True(t, ok)
+		assert.Equal(t, "GPU.1", device)
+
+		gpus = []inference.OpenVINODevice{lone} // the iGPU was disabled, the Arc is now plain GPU
+		_, ok = plan()
+		assert.False(t, ok, "the stored index is gone, so OpenVINO is declined")
+
+		gpus = both
+		device, ok = plan()
+		assert.True(t, ok)
+		assert.Equal(t, "GPU.1", device)
+	})
+}
+
+// TestPlanConcreteGPUWarnsOncePerHardware pins the once-per-(preference, GPUs
+// found) rule of the missing-GPU warning: a repeat on unchanged hardware stays
+// silent, a different set of GPUs or a different preference warns again, and the
+// line names both the configured device and the GPUs found. It swaps the global
+// logger, so it must not run in parallel.
+func TestPlanConcreteGPUWarnsOncePerHardware(t *testing.T) {
+	ovGPUMissingWarned.Clear()
+	t.Cleanup(ovGPUMissingWarned.Clear)
+	buf := newCaptureLogger(t)
+	const warnLine = "configured OpenVINO GPU is not present"
+	lone := []inference.OpenVINODevice{{Name: "GPU"}}
+	both := []inference.OpenVINODevice{{Name: "GPU.0"}, {Name: "GPU.1"}}
+
+	_, _, ok, reason := planConcreteGPU("GPU.1", lone)
+	assert.False(t, ok)
+	assert.Equal(t, ovReasonGPUDeviceMissing, reason)
+	assert.Equal(t, 1, strings.Count(buf.String(), warnLine))
+	assert.Contains(t, buf.String(), "GPU.1", "the warning names the configured device")
+	assert.Contains(t, buf.String(), "gpus_found=GPU", "the warning names the GPUs found")
+
+	planConcreteGPU("GPU.1", lone)
+	assert.Equal(t, 1, strings.Count(buf.String(), warnLine), "same preference on the same hardware warns once")
+
+	planConcreteGPU("GPU.5", both)
+	assert.Equal(t, 2, strings.Count(buf.String(), warnLine), "another preference or other hardware warns again")
+
+	planConcreteGPU("GPU.5", lone)
+	assert.Equal(t, 3, strings.Count(buf.String(), warnLine), "changed hardware warns again")
+}
+
+// TestOVGPUDeviceNamesAgree is the drift guard between the config package's
+// pattern for a concrete GPU name and the inference package's device-class
+// check, which conf cannot import.
+func TestOVGPUDeviceNamesAgree(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"GPU", "GPU.0", "GPU.1", "GPU.12", "GPU.", "GPU.x", "GPU.1x", "GPU.-1", "gpu.1", "GPUX", "CPU", "NPU", ""} {
+		wantIndexed := inference.OpenVINOIsGPUDevice(name) && name != inference.OVDeviceGPU
+		assert.Equalf(t, wantIndexed, conf.IsOVGPUDeviceName(name), "name %q", name)
+	}
 }

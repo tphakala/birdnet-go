@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
+	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/support"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gopkg.in/yaml.v3"
@@ -203,6 +204,10 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 // side-effect or disk-write failure is a compare-and-swap back to the previous
 // snapshot (rollbackSettings).
 //
+// The save is rejected with 400 while any security.oauthProviders entry has a
+// blank or unknown provider ID, or while security.baseUrl is set but not an
+// absolute http(s) URL with a host and no credentials, including a value that was already stored.
+//
 // A request that sends If-Match is applied only if it matches the current
 // settings ETag (settingsETag); otherwise it answers 412 with the current ETag
 // and changes nothing. A request without If-Match is applied as before. The
@@ -248,6 +253,9 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			return newRejection(err, "Failed to apply settings update", http.StatusBadRequest)
 		}
 
+		// Canonicalize provider IDs before the secret restore matches them by ID.
+		updated.NormalizeOAuthProviderIDs()
+
 		// Restore redacted secret placeholders to their live values so the merge does
 		// not persist the placeholder over a real secret. current is the source of
 		// truth for pre-update secrets (same argument order and ordering as PATCH).
@@ -285,9 +293,11 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// an already-canonical list, so this does not spuriously trigger a rebuild.
 		updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
 
-		// The model consensus species list is matched like the exclude list, so store
-		// it in the same canonical form.
-		updated.Realtime.ModelConsensus.Species = c.canonicalizeExcludeList(updated.Realtime.ModelConsensus.Species)
+		// Each model consensus rule's species list is matched like the exclude list, so
+		// store it in the same canonical form.
+		if err := c.canonicalizeConsensusRules(updated.Realtime.ModelConsensus.Rules); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
 
 		// Ensure LocationConfigured is set when birdnet coordinates are present.
 		// Backward compatibility with older frontends that don't send the flag.
@@ -300,6 +310,16 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 
 		// Validate the clone before publishing. No rollback needed on validation
 		// failure: commitSettings publishes nothing when this returns an error.
+		if err := conf.ValidateOAuthProviderIDs(&updated.Security); err != nil {
+			// The text names the field, so the settings page can show what to fix.
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
+		if err := conf.ValidateModelConsensusRuleModels(&current.Realtime.ModelConsensus, &updated.Realtime.ModelConsensus); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
+		if err := conf.ValidateSecurityBaseURL(&updated.Security); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
 		if err := conf.ValidateSettings(updated); err != nil {
 			return newRejection(err, "Invalid settings", http.StatusBadRequest)
 		}
@@ -413,8 +433,17 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 // previous snapshot. Keeps PATCH race-free against basepath middleware reads
 // and any other reader that goes through conf.GetSettings().
 //
+// Like UpdateSettings, it rejects the save with 400 while the merged settings
+// hold a security.oauthProviders entry with a blank or unknown provider ID, or a
+// security.baseUrl that is set but not an absolute http(s) URL with a host and no credentials, whichever section
+// was patched.
+//
 // If-Match and the ETag response header work as on UpdateSettings: the ETag is
 // the one for the whole settings, not for the section.
+//
+// The response carries the section as it is now stored under "settings",
+// sanitized like the GET responses (secrets redacted). Some patchable sections
+// have no GET /settings/:section endpoint.
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
@@ -442,6 +471,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		if err := updateSettingsSection(updated, section, requestBody); err != nil {
 			return newRejection(err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 		}
+
+		// Canonicalize provider IDs before the secret restore matches them by ID.
+		updated.NormalizeOAuthProviderIDs()
 
 		// Restore redacted secret fields to their current values so the merge
 		// does not overwrite real secrets with the placeholder. current is the
@@ -494,13 +526,24 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
 		}
 
-		// The model consensus species list lives in the realtime section only.
+		// The model consensus rules live in the realtime section only.
 		if strings.EqualFold(section, SettingsSectionRealtime) {
-			updated.Realtime.ModelConsensus.Species = c.canonicalizeExcludeList(updated.Realtime.ModelConsensus.Species)
+			if err := c.canonicalizeConsensusRules(updated.Realtime.ModelConsensus.Rules); err != nil {
+				return newRejection(err, err.Error(), http.StatusBadRequest)
+			}
 		}
 
 		// Validate the clone before publishing. No rollback needed on validation
 		// failure: commitSettings publishes nothing when this returns an error.
+		if err := conf.ValidateOAuthProviderIDs(&updated.Security); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
+		if err := conf.ValidateModelConsensusRuleModels(&current.Realtime.ModelConsensus, &updated.Realtime.ModelConsensus); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
+		if err := conf.ValidateSecurityBaseURL(&updated.Security); err != nil {
+			return newRejection(err, err.Error(), http.StatusBadRequest)
+		}
 		if err := conf.ValidateSettings(updated); err != nil {
 			return newRejection(err, fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 		}
@@ -535,9 +578,15 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
 	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(updated))
+	// Return the stored section, redacted like GET /settings/:section, so a client
+	// can record what the server holds instead of its own request. The section
+	// resolver is the one the write used, so every writable section resolves.
+	storedSection, _ := getSettingsSectionValue(sanitizeSettingsForAPI(updated), section)
+
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":          fmt.Sprintf("%s settings updated successfully", section),
 		"skippedFields":    skippedFields,
+		"settings":         storedSection,
 		"restart_required": restart.IsRestartRequired(),
 		"restart_reasons":  restart.GetRestartReasons(),
 	})
@@ -1014,6 +1063,8 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Perch, nil
 	case "birdnetv3":
 		return &settings.BirdNETV3, nil
+	case "birdnetplus":
+		return &settings.BirdNETPlus, nil
 	case "bat":
 		return &settings.Bat, nil
 	case "bsgbat":
@@ -1259,22 +1310,6 @@ func validateSubnetBypassField(updateMap map[string]any) error {
 	return nil
 }
 
-// validOAuthProviders defines the valid OAuth provider names
-var validOAuthProviders = map[string]bool{
-	"google":    true,
-	"github":    true,
-	"microsoft": true,
-	"line":      true,
-	"kakao":     true,
-}
-
-// getValidOAuthProviderNames returns sorted list of valid provider names for error messages
-func getValidOAuthProviderNames() string {
-	names := slices.Collect(maps.Keys(validOAuthProviders))
-	slices.Sort(names)
-	return strings.Join(names, ", ")
-}
-
 // validateOAuthProvidersArray validates the new array-based OAuth providers configuration
 func validateOAuthProvidersArray(updateMap map[string]any) error {
 	providers, exists := updateMap["oauthProviders"]
@@ -1287,56 +1322,39 @@ func validateOAuthProvidersArray(updateMap map[string]any) error {
 		return fmt.Errorf("oauthProviders must be an array")
 	}
 
-	// Track configured providers to detect duplicates
-	configuredProviders := make(map[string]bool)
-
+	// Two entries with the same provider ID are rejected by conf.ValidateSettings,
+	// which runs on the merged settings after this check.
 	for i, item := range providersArray {
-		providerName, err := validateOAuthProviderEntry(item, i, configuredProviders)
-		if err != nil {
+		providerMap, ok := item.(map[string]any)
+		if !ok {
+			return fmt.Errorf("oauthProviders[%d] must be an object", i)
+		}
+		if err := validateOAuthProviderName(providerMap, i); err != nil {
 			return err
 		}
-		configuredProviders[providerName] = true
+		if err := validateOAuthProviderEnabled(providerMap, i); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// validateOAuthProviderEntry validates a single OAuth provider entry in the array.
-// Returns the provider name if valid, or an error if validation fails.
-func validateOAuthProviderEntry(item any, index int, configuredProviders map[string]bool) (string, error) {
-	providerMap, ok := item.(map[string]any)
-	if !ok {
-		return "", fmt.Errorf("oauthProviders[%d] must be an object", index)
-	}
-
-	providerName, err := validateOAuthProviderName(providerMap, index, configuredProviders)
-	if err != nil {
-		return "", err
-	}
-
-	if err := validateOAuthProviderEnabled(providerMap, index); err != nil {
-		return "", err
-	}
-
-	return providerName, nil
-}
-
-// validateOAuthProviderName validates the provider name field and checks for duplicates.
-func validateOAuthProviderName(providerMap map[string]any, index int, configuredProviders map[string]bool) (string, error) {
+// validateOAuthProviderName validates the provider name field against
+// conf.KnownOAuthProviderIDs. The ID is trimmed and lower-cased first, the same
+// way it is stored.
+func validateOAuthProviderName(providerMap map[string]any, index int) error {
 	providerName, ok := providerMap["provider"].(string)
-	if !ok || providerName == "" {
-		return "", fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
+	canonical := conf.NormalizeOAuthProviderID(providerName)
+	if !ok || canonical == "" {
+		return fmt.Errorf("oauthProviders[%d].provider must be a non-empty string", index)
 	}
 
-	if !validOAuthProviders[providerName] {
-		return "", fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, getValidOAuthProviderNames())
+	if !conf.IsKnownOAuthProviderID(canonical) {
+		return fmt.Errorf("oauthProviders[%d].provider '%s' is not a valid provider (valid: %s)", index, providerName, strings.Join(conf.KnownOAuthProviderIDs(), ", "))
 	}
 
-	if configuredProviders[providerName] {
-		return "", fmt.Errorf("oauthProviders contains duplicate provider '%s'", providerName)
-	}
-
-	return providerName, nil
+	return nil
 }
 
 // validateOAuthProviderEnabled validates the enabled field and required credentials.
@@ -1825,16 +1843,16 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Diagnostics
 	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
 
-	// Array-based OAuth providers: match by Provider name to handle reordering
+	// Array-based OAuth providers: match by provider ID, which is unique, to handle
+	// reordering. An incoming ID with no stored entry keeps its sentinel and the
+	// save is rejected below.
 	for i := range incoming.Security.OAuthProviders {
-		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
+		in := &incoming.Security.OAuthProviders[i]
+		if in.ClientSecret != redactedValue {
 			continue
 		}
-		for j := range current.Security.OAuthProviders {
-			if current.Security.OAuthProviders[j].Provider == incoming.Security.OAuthProviders[i].Provider {
-				incoming.Security.OAuthProviders[i].ClientSecret = current.Security.OAuthProviders[j].ClientSecret
-				break
-			}
+		if stored := current.GetOAuthProvider(in.Provider); stored != nil {
+			in.ClientSecret = stored.ClientSecret
 		}
 	}
 
@@ -2366,7 +2384,6 @@ const (
 	reasonWebserverRestart = "restart.reasons.webserver"
 	reasonDatabaseRestart  = "restart.reasons.database"
 	reasonLoggingRestart   = "restart.reasons.logging"
-	reasonOAuthRestart     = "restart.reasons.oauth"
 )
 
 // settingsChangeChecks defines the settings change detectors that dispatch an
@@ -2437,7 +2454,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, ToastTypeWarning, toastDurationExtended},
-	{"OAuth providers", "", oauthProvidersChanged, "Authentication provider settings changed. Restart required to apply.", notification.MsgSettingsOauthRestart, ToastTypeWarning, toastDurationExtended},
+	{"OAuth providers", "", oauthProvidersChanged, "Updating authentication providers...", notification.MsgSettingsReconfiguringOauthProviders, ToastTypeInfo, toastDurationMedium},
 	{"Database", "", outputSettingsChanged, "Database settings changed. Restart required to apply.", notification.MsgSettingsDatabaseRestart, ToastTypeWarning, toastDurationExtended},
 	{"Logging", "", loggingSettingsChanged, "Logging settings changed. Restart required to apply.", notification.MsgSettingsLoggingRestart, ToastTypeWarning, toastDurationExtended},
 	{"Log deduplication", "reconfigure_log_deduplication", logDeduplicationSettingsChanged, "Reconfiguring log deduplication...", "", ToastTypeInfo, toastDurationShort},
@@ -2453,16 +2470,30 @@ var settingsChangeChecks = []settingsChangeCheck{
 // above; settings_restart_test.go cross-validates these keys against the table
 // names and against the hot-reload registry's `restart` category.
 var restartRequiringChecks = map[string]string{
-	"Web server":      reasonWebserverRestart,
-	"OAuth providers": reasonOAuthRestart,
-	"Database":        reasonDatabaseRestart,
-	"Logging":         reasonLoggingRestart,
+	"Web server": reasonWebserverRestart,
+	"Database":   reasonDatabaseRestart,
+	"Logging":    reasonLoggingRestart,
 }
 
 // handleSettingsChanges checks if important settings have changed and triggers appropriate actions
 func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Settings) error {
 	var reconfigActions []string
 	var restartReasons []string
+
+	// Re-register the OAuth providers first, before the table below and the
+	// fallible audio step, so the registration built from the old settings stops
+	// serving logins as early as possible after the new snapshot is published.
+	// It can run this early because security.ReloadOAuthProviders cannot fail and
+	// does no network I/O: it builds the providers in memory and starts OIDC
+	// discovery in the background. A control channel action would leave the old
+	// registration serving until ControlMonitor reached it, which can take as long
+	// as an MQTT reconfigure. When a later step fails, finishSettingsWrite undoes
+	// the pass (restoreOAuthProviders) together with the settings rollback.
+	// Limited to the controller that owns the global snapshot: goth's registry is
+	// process-global, so a standalone test controller must not rewrite it.
+	if c.isGlobalOwner && oauthProvidersChanged(oldSettings, currentSettings) {
+		security.ReloadOAuthProviders(currentSettings)
+	}
 
 	// Process all settings change checks using table-driven approach
 	for _, check := range settingsChangeChecks {
@@ -3138,8 +3169,9 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	// Check security/TLS settings that affect the server. BaseURL is included
 	// because it feeds the HTTP->HTTPS redirect authority (api.Config.RedirectAuthority)
 	// and the session-cookie Secure decision (SessionCookiesSecure), both captured
-	// once at server start; it also seeds OAuth callback URLs at startup. Its only
-	// live consumer is notification link generation, so prompting restart matches the
+	// once at server start; it also feeds the default OAuth callback URLs, which
+	// oauthProvidersChanged re-registers without a restart. Its only other live
+	// consumer is notification link generation, so prompting restart matches the
 	// existing Host handling (Host is also read live by notifications yet restart-gated).
 	oldSec := oldSettings.Security
 	newSec := currentSettings.Security
@@ -3155,31 +3187,30 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	return false
 }
 
-// oauthProvidersChanged reports whether OAuth provider REGISTRATION config changed.
-// Provider registration (the goth providers built from client id/secret and the
-// callback URL derived from the base URL) binds once at startup via
-// security.InitializeGoth and does not hot-reload, so a change needs a restart to
-// take effect. Comparison is keyed by provider ID so reordering the list alone is
-// not treated as a change. UserID is intentionally excluded: the per-provider
-// allowlist is read live by the auth check (via currentSettings), so allowlist
-// edits already hot-reload without a restart.
+// oauthProvidersChanged reports whether OAuth provider REGISTRATION config changed,
+// which makes handleSettingsChanges re-register the providers
+// (security.ReloadOAuthProviders). Registration depends on each provider's client
+// id/secret, redirect URI, issuer and scopes, and on the callback URL derived from
+// Host or BaseURL, so a change of either of those counts when at least one provider
+// is enabled. Entries are matched by provider ID, which is unique, so reordering
+// the list alone is not treated as a change. UserID is intentionally excluded: the
+// per-provider allowlist is read live by the auth check (via currentSettings), so
+// allowlist edits need no re-registration.
 func oauthProvidersChanged(oldSettings, currentSettings *conf.Settings) bool {
+	if (oldSettings.Security.Host != currentSettings.Security.Host ||
+		oldSettings.Security.BaseURL != currentSettings.Security.BaseURL) &&
+		slices.ContainsFunc(currentSettings.Security.OAuthProviders, func(p conf.OAuthProviderConfig) bool { return p.Enabled }) {
+		return true
+	}
 	oldProviders := oldSettings.Security.OAuthProviders
 	newProviders := currentSettings.Security.OAuthProviders
 	if len(oldProviders) != len(newProviders) {
 		return true
 	}
-	// Keyed by provider ID; duplicate IDs (a malformed config) collapse last-wins,
-	// which is acceptable and fail-safe: a missed change only delays a not-yet-active
-	// provider from registering until the next restart, never grants access.
-	newByID := make(map[string]*conf.OAuthProviderConfig, len(newProviders))
-	for i := range newProviders {
-		newByID[newProviders[i].Provider] = &newProviders[i]
-	}
 	for i := range oldProviders {
 		oldProvider := &oldProviders[i]
-		newProvider, ok := newByID[oldProvider.Provider]
-		if !ok {
+		newProvider := currentSettings.GetOAuthProvider(oldProvider.Provider)
+		if newProvider == nil {
 			return true
 		}
 		if oldProvider.Enabled != newProvider.Enabled ||

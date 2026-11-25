@@ -43,6 +43,18 @@ describe('SelectDropdown', () => {
     { value: 'cherry', label: 'Cherry', description: 'Small stone fruit', icon: '🍒' },
   ];
 
+  describe('Disabled trigger', () => {
+    it('uses the disabled field fill and not the active one', () => {
+      selectTest.render({
+        props: { options: basicOptions, disabled: true, 'aria-label': 'Fruit' },
+      });
+
+      const trigger = screen.getByRole('combobox', { name: 'Fruit' });
+      expect(trigger.className).toContain('bg-[var(--field-bg-disabled)]');
+      expect(trigger.className).not.toContain('bg-[var(--field-bg)]');
+    });
+  });
+
   describe('Basic Functionality', () => {
     it('renders with placeholder', () => {
       selectTest.render({
@@ -999,6 +1011,20 @@ describe('SelectDropdown Accessibility', () => {
     await user.click(screen.getByRole('combobox'));
     const unnamed = await screen.findByRole('listbox');
     expect(unnamed).not.toHaveAttribute('aria-label');
+  });
+
+  it('marks the trigger invalid only while aria-invalid is set', async () => {
+    const view = selectTest.render({
+      props: { options: fruit, value: 'banana', 'aria-label': 'Fruit picker' },
+    });
+    const trigger = screen.getByRole('combobox', { name: 'Fruit picker' });
+    expect(trigger).not.toHaveAttribute('aria-invalid');
+
+    await view.rerender({ 'aria-invalid': true });
+    expect(trigger).toHaveAttribute('aria-invalid', 'true');
+
+    await view.rerender({ 'aria-invalid': false });
+    expect(trigger).not.toHaveAttribute('aria-invalid');
   });
 
   it('names the trigger and the open listbox from the aria-label prop, not the selected value', async () => {

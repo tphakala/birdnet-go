@@ -196,7 +196,7 @@ type Config struct {
 	Labels []string
 
 	// SpeciesCodeMap maps scientific names to eBird species codes.
-	// Built from taxonomy data (e.g., birdnet.CreateScientificNameIndex).
+	// Built from taxonomy data (e.g., classifier.CreateScientificNameIndex).
 	SpeciesCodeMap map[string]string
 }
 
@@ -1221,6 +1221,10 @@ type detectionFields struct {
 	commonName string
 	// speciesCode is the eBird species code for scientificName, or empty.
 	speciesCode string
+	// originalSpecies is the model's own pick of a detection whose species was changed.
+	// It is zero when the species was never changed, when the original label is not
+	// preloaded and when its scientific name is empty.
+	originalSpecies detection.Species
 	// clipName and spectrogramClipName are empty when the column is NULL.
 	clipName            string
 	spectrogramClipName string
@@ -1243,10 +1247,21 @@ type detectionFields struct {
 	model detection.ModelInfo
 }
 
+// speciesForName returns the species for a non-empty scientific name, with its common
+// name and species code resolved from the name maps built at startup.
+func (ds *Datastore) speciesForName(scientificName string) detection.Species {
+	return detection.Species{
+		ScientificName: scientificName,
+		CommonName:     ds.resolveCommonName(scientificName),
+		Code:           ds.speciesCodeMap[scientificName],
+	}
+}
+
 // decodeDetection derives the detectionFields of det. The instant comes from the stored
 // detected_at column and never from formatted text. det must not be nil.
 // Common name is looked up from the name maps which are built at startup. When the label is not
-// preloaded it is fetched from the label repository with ctx.
+// preloaded it is fetched from the label repository with ctx. The original species is read from
+// the preloaded original label only.
 func (ds *Datastore) decodeDetection(ctx context.Context, det *entities.Detection) detectionFields {
 	f := detectionFields{}
 
@@ -1263,8 +1278,16 @@ func (ds *Datastore) decodeDetection(ctx context.Context, det *entities.Detectio
 	}
 
 	// Look up common name from pre-built map, fallback to scientific name
-	f.commonName = ds.resolveCommonName(f.scientificName)
-	f.speciesCode = ds.speciesCodeMap[f.scientificName]
+	primary := ds.speciesForName(f.scientificName)
+	f.commonName, f.speciesCode = primary.CommonName, primary.Code
+
+	// The original pick comes from the preloaded label only; there is no fallback
+	// lookup, so a list read never costs a query per row.
+	if det.OriginalLabel != nil {
+		if name := detection.ExtractScientificName(det.OriginalLabel.ScientificName); name != "" {
+			f.originalSpecies = ds.speciesForName(name)
+		}
+	}
 
 	if det.ClipName != nil {
 		f.clipName = *det.ClipName
@@ -2648,7 +2671,7 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 	return records, int(total), nil
 }
 
-// loadDetectionRelations loads Label, Source, Model, Review, Lock, and Comments for detections.
+// loadDetectionRelations loads Label, original Label, Source, Model, Review, Lock, and Comments for detections.
 // Uses batch queries to minimize database round-trips.
 func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entities.Detection) error {
 	if len(dets) == 0 {
@@ -2664,6 +2687,9 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	for i, det := range dets {
 		detectionIDs[i] = det.ID
 		labelIDSet[det.LabelID] = struct{}{}
+		if det.OriginalLabelID != nil {
+			labelIDSet[*det.OriginalLabelID] = struct{}{}
+		}
 		modelIDSet[det.ModelID] = struct{}{}
 		if det.SourceID != nil {
 			sourceIDSet[*det.SourceID] = struct{}{}
@@ -2722,6 +2748,9 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	for _, det := range dets {
 		if label, ok := labelMap[det.LabelID]; ok {
 			det.Label = label
+		}
+		if det.OriginalLabelID != nil {
+			det.OriginalLabel = labelMap[*det.OriginalLabelID]
 		}
 		if det.SourceID != nil {
 			if source, ok := sourceMap[*det.SourceID]; ok {
@@ -3409,47 +3438,12 @@ func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, start
 	return results, nil
 }
 
-// scientificNameLikeEscaper escapes the LIKE metacharacters %, _, and the escape
-// character itself in a user-supplied scientific name, using '!' as the escape
-// character. '!' is not special in any SQL dialect's string literals, so the
-// generated SQL is identical and valid on MySQL, SQLite, and Postgres. A backslash
-// escape ('\') must NOT be used: MySQL's default sql_mode treats a lone backslash
-// in a string literal as an escape character, so "ESCAPE '\'" swallows the closing
-// quote and raises a syntax error (Error 1064). SQLite does not treat backslash as
-// special, which is why that only broke MySQL.
-//
-// It is a package-level value because strings.Replacer precomputes its matcher and
-// is safe for concurrent use, so there is no need to rebuild it on every call.
-var scientificNameLikeEscaper = strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`)
-
 // labelIDsForScientificName returns the "d.label_id IN (...)" clause and its
 // arguments for a scientific-name history lookup. Labels are matched as described
-// on labelMatchForScientificName.
+// on repository.LabelMatchForScientificName.
 func labelIDsForScientificName(tablePrefix, scientificName string) (clause string, args []any) {
-	match, args := labelMatchForScientificName(scientificName)
+	match, args := repository.LabelMatchForScientificName(scientificName)
 	return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE %s)", tablePrefix, match), args
-}
-
-// labelMatchForScientificName returns a predicate on an unqualified labels
-// scientific_name column, and its arguments, selecting the labels that belong to
-// scientificName in a history lookup.
-//
-// A bare scientific name matches exactly, or a legacy concatenated label stored
-// as "ScientificName_CommonName". The "!_%" suffix is "literal underscore
-// separator, then anything" ('!_' is an escaped underscore, '%' is the
-// wildcard), mirroring how such labels are split on the first underscore (see
-// detection.ExtractScientificName). A class name that is also the first token of
-// a longer class matches exactly, because otherwise "Car" would also match the
-// distinct class "Car_passing_by"; the legacy concatenated form of such a name
-// is no longer matched. Every other name, including a single-token class like
-// "Dog" that BirdNET also emits as "Dog_Dog", keeps the prefix match.
-func labelMatchForScientificName(scientificName string) (predicate string, args []any) {
-	if soundevent.IsMultiWordClassPrefix(scientificName) {
-		return "scientific_name = ?", []any{scientificName}
-	}
-	// Escape LIKE metacharacters with '!' (see scientificNameLikeEscaper).
-	escaped := scientificNameLikeEscaper.Replace(scientificName)
-	return "scientific_name = ? OR scientific_name LIKE ? ESCAPE '!'", []any{scientificName, escaped + `!_%`}
 }
 
 // GetSpeciesLastDetectionDateBefore returns the last detection date before the given date.
@@ -3475,12 +3469,12 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 			" WHERE d.label_id = l.id AND d.detected_at < ? AND (dr.verified IS NULL OR dr.verified != ?)"+
 			" ORDER BY d.detected_at DESC LIMIT 1",
 		prefix, prefix)
-	labelMatch, labelMatchArgs := labelMatchForScientificName(scientificName)
+	labelMatch, labelMatchArgs := repository.LabelMatchForScientificName(scientificName)
 	query := ds.manager.DB().WithContext(ctx).
 		Table(prefix+"labels l").
 		Select(fmt.Sprintf("MAX((%s)) AS last_detected_at", latestForLabel),
 			before.Unix(), string(entities.VerificationFalsePositive)).
-		// See labelMatchForScientificName for the matching rule.
+		// See repository.LabelMatchForScientificName for the matching rule.
 		Where(labelMatch, labelMatchArgs...)
 
 	if err := query.Scan(&result).Error; err != nil {
@@ -3504,7 +3498,7 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 // GetSpeciesFirstAndLastDetectionTimeBefore returns the earliest and most-recent
 // detection times for a species that occurred strictly before `before`.
 // Either/both may be nil when there is no prior detection. The name is matched
-// as described on labelMatchForScientificName.
+// as described on repository.LabelMatchForScientificName.
 func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error) {
 	var result struct {
 		FirstDetectedAt *int64 `gorm:"column:first_detected_at"`
@@ -3519,7 +3513,7 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 			Select(aggregate).
 			Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
 			Where("d.detected_at < ?", before.Unix()).
-			// See labelMatchForScientificName for the matching rule.
+			// See repository.LabelMatchForScientificName for the matching rule.
 			Where(labelIDsClause, labelIDsArgs...).
 			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
 	}

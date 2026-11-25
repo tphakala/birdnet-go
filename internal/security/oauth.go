@@ -2,9 +2,7 @@ package security
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -16,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/sessions"
@@ -37,167 +36,135 @@ import (
 )
 
 var (
-	oidcRetryCancelMu sync.Mutex
+	// oidcMu guards the variables below and every write this package makes to
+	// goth's provider registry and to lastOIDCDiscoveryErr, so a registration
+	// generation check and the write it protects are one step.
+	oidcMu sync.Mutex
 
-	// oidcRetriesDisabled blocks new OIDC discovery retries once application
-	// shutdown has begun, so a late provider (re)initialization cannot spawn a
-	// retry goroutine that outlives the server. Reset for each new server
-	// instance via enableOIDCRetries. Guarded by oidcRetryCancelMu.
+	// oidcRetriesDisabled blocks new OIDC discovery once application shutdown has
+	// begun, so a late provider (re)registration cannot spawn a discovery
+	// goroutine that outlives the server. Reset for each new server instance via
+	// enableOIDCRetries. A provider reload does not set it.
 	oidcRetriesDisabled bool
 
-	// oidcRetryCancels tracks in-flight OIDC discovery retry goroutines, keyed by
-	// issuer URL. Keying per issuer (rather than a single package-global) lets
-	// multiple OIDC providers retry independently: configuring a second provider
-	// no longer cancels or orphans the first provider's retry. Guarded by
-	// oidcRetryCancelMu.
-	//
-	// A retry goroutine that finishes on its own (provider registered, or the
-	// retry deadline elapsed) leaves its now-inert cancel func in the map; these
-	// spent entries are reaped on server shutdown (shutdownOIDCRetries, via
-	// cancelAllOIDCRetriesLocked). The map is therefore bounded by the number of
-	// distinct configured issuer URLs, not by retry attempts.
-	oidcRetryCancels = make(map[string]context.CancelFunc)
+	// oidcEnableEpoch counts enableOIDCRetries calls, one per server instance. A
+	// shutdown that belongs to an older epoch is ignored.
+	oidcEnableEpoch uint64
+
+	// oidcGeneration identifies the current provider registration. It is bumped by
+	// every registration pass and by shutdown; a discovery attempt of an older
+	// generation commits nothing.
+	oidcGeneration uint64
+
+	// oidcDiscoveryCancel cancels the discovery goroutine of the current
+	// generation, nil when there is none.
+	oidcDiscoveryCancel context.CancelFunc
+
+	// oidcActive is the OIDC registration of the current generation, nil when
+	// OIDC is not enabled. A pass whose OIDC registration equals it keeps the
+	// generation instead of starting a new discovery.
+	oidcActive *oidcRegistration
+
+	// oidcProvider is the provider that discovery registered for oidcActive, nil
+	// until discovery has succeeded.
+	oidcProvider goth.Provider
+
+	// oidcDiscoveryRunning reports whether the discovery goroutine of the current
+	// generation is still running.
+	oidcDiscoveryRunning bool
+
+	// oidcDiscoveryGoroutines counts running OIDC discovery goroutines. It exists
+	// so tests can wait for them to exit; shutdown does not wait on it, because a
+	// discovery request in flight cannot be cancelled.
+	oidcDiscoveryGoroutines sync.WaitGroup
 )
 
-// cancelAllOIDCRetriesLocked cancels and forgets every in-flight OIDC discovery
-// retry. The caller must hold oidcRetryCancelMu.
-func cancelAllOIDCRetriesLocked() {
-	for issuerURL, cancel := range oidcRetryCancels {
-		cancel()
-		delete(oidcRetryCancels, issuerURL)
+// oidcRetryPolicy is the timing of background OIDC discovery.
+type oidcRetryPolicy struct {
+	initialBackoff time.Duration
+	maxBackoff     time.Duration
+	maxDuration    time.Duration
+}
+
+// defaultOIDCRetryPolicy returns the production discovery timing.
+func defaultOIDCRetryPolicy() oidcRetryPolicy {
+	return oidcRetryPolicy{
+		initialBackoff: OIDCRetryInitialBackoff,
+		maxBackoff:     OIDCRetryMaxBackoff,
+		maxDuration:    OIDCRetryMaxDuration,
 	}
 }
 
-// shutdownOIDCRetries cancels every in-flight retry and blocks new ones for the
-// remaining lifetime of the current server instance. Called when the server's
-// context is cancelled (application shutdown), so a retry cannot be started
-// after shutdown has begun (e.g. by a late InitializeGoth).
-func shutdownOIDCRetries() {
-	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
+// cancelOIDCDiscoveryLocked cancels and forgets the discovery goroutine of the
+// current generation. The caller must hold oidcMu.
+func cancelOIDCDiscoveryLocked() {
+	if oidcDiscoveryCancel != nil {
+		oidcDiscoveryCancel()
+		oidcDiscoveryCancel = nil
+	}
+}
+
+// shutdownOIDCRetriesFor shuts down OIDC discovery for the server instance that
+// enableOIDCRetries returned epoch for: it supersedes the current registration
+// generation, cancels its discovery and blocks new discovery for the remaining
+// lifetime of the instance. It does nothing when a newer instance has enabled
+// discovery since, so a late shutdown of an earlier server cannot tear down the
+// registration or the discovery of the current one. Called when the server's
+// context is cancelled (application shutdown), so discovery cannot be started
+// after shutdown has begun (e.g. by a late provider reload).
+func shutdownOIDCRetriesFor(epoch uint64) {
+	oidcMu.Lock()
+	defer oidcMu.Unlock()
+	if epoch != oidcEnableEpoch {
+		return
+	}
 	oidcRetriesDisabled = true
-	cancelAllOIDCRetriesLocked()
+	oidcGeneration++
+	cancelOIDCDiscoveryLocked()
+	oidcActive, oidcProvider, oidcDiscoveryRunning = nil, nil, false
 }
 
-// enableOIDCRetries re-enables OIDC discovery retries for a fresh server
-// instance, clearing any disabled state left by a previous instance's shutdown
-// (relevant in tests that build servers sequentially).
-func enableOIDCRetries() {
-	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
+// enableOIDCRetries re-enables OIDC discovery for a fresh server instance,
+// clearing any disabled state left by a previous instance's shutdown (relevant
+// in tests that build servers sequentially). It returns the epoch of this
+// instance, which shutdownOIDCRetriesFor compares.
+func enableOIDCRetries() uint64 {
+	oidcMu.Lock()
+	defer oidcMu.Unlock()
 	oidcRetriesDisabled = false
+	oidcEnableEpoch++
+	return oidcEnableEpoch
 }
 
-// setOIDCRetryCancel stores the cancel function for the retry goroutine of the
-// given issuer URL, cancelling and replacing any existing retry for that same
-// issuer first. Per-issuer keying prevents a second provider's init from
-// orphaning another provider's retry. It returns false (after cancelling the
-// passed func) when retries are disabled because shutdown has begun, signalling
-// the caller not to start the goroutine.
-func setOIDCRetryCancel(issuerURL string, cancel context.CancelFunc) bool {
-	oidcRetryCancelMu.Lock()
-	defer oidcRetryCancelMu.Unlock()
-	if oidcRetriesDisabled {
-		cancel()
-		return false
-	}
-	if existing, ok := oidcRetryCancels[issuerURL]; ok {
-		existing()
-	}
-	oidcRetryCancels[issuerURL] = cancel
-	return true
-}
-
-// startOIDCRetry starts a background goroutine that retries OIDC discovery with exponential backoff.
-// The goroutine is canceled when the context is canceled (e.g., on config reload or shutdown).
-// Returns a channel that is closed when the goroutine exits (for testing synchronization).
-func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string) <-chan struct{} { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
-	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
-	secLog.Info("Starting background OIDC discovery retry",
-		logger.String("issuer_url", providerConfig.IssuerURL),
-		logger.Duration("max_duration", OIDCRetryMaxDuration))
-
-	backoff := OIDCRetryInitialBackoff
-	deadline := time.Now().Add(OIDCRetryMaxDuration)
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		// A single reusable timer (Reset per iteration) instead of time.After
-		// inside the loop, so an early ctx cancellation does not leave an
-		// unexpired timer per backoff round waiting to be garbage collected.
-		timer := time.NewTimer(backoff)
-		defer timer.Stop()
-		for {
-			// Prioritize cancellation: a single select with both ctx.Done() and
-			// timer.C ready picks pseudo-randomly, so on shutdown the timer case
-			// could win and start one more (uncancellable) discovery request,
-			// delaying graceful shutdown. Check ctx first, then block on the timer.
-			select {
-			case <-ctx.Done():
-				secLog.Info("OIDC discovery retry canceled")
-				return
-			default:
-			}
-
-			select {
-			case <-ctx.Done():
-				secLog.Info("OIDC discovery retry canceled")
-				return
-			case <-timer.C:
-				if time.Now().After(deadline) {
-					secLog.Error("OIDC discovery retry exhausted; provider not available. Save settings to retry.",
-						logger.String("issuer_url", providerConfig.IssuerURL))
-					return
-				}
-
-				secLog.Info("Retrying OIDC discovery",
-					logger.String("issuer_url", providerConfig.IssuerURL),
-					logger.Duration("backoff", backoff))
-
-				discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
-				oidcProvider, err := openidConnect.New(
-					providerConfig.ClientID,
-					providerConfig.ClientSecret,
-					redirectURI,
-					discoveryURL,
-					scopes...,
-				)
-				if err != nil {
-					backoff = min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)
-					secLog.Warn("OIDC discovery retry failed",
-						logger.Error(err),
-						logger.Duration("next_backoff", backoff))
-					timer.Reset(backoff)
-					continue
-				}
-
-				goth.UseProviders(newPKCEOIDCProvider(oidcProvider))
-				secLog.Info("OIDC provider registered after background retry")
-				return
-			}
-		}
-	}()
-
-	return done
-}
-
+// AuthCode is a one-time authorization code a password sign-in exchanges for a
+// session.
 type AuthCode struct {
 	Code      string
 	ExpiresAt time.Time
+	// Remember is the "Remember this browser" choice made at sign-in; the
+	// session issued for the code inherits it.
+	Remember bool
 }
 
+// AccessToken is a browser session record. It is stored under the SHA-256 of
+// the session token (never the token itself) and carries the "Remember this
+// browser" choice, which is fixed at sign-in, and the sliding expiry. The name
+// is kept from the access token the record replaces.
 type AccessToken struct {
-	Token     string
 	ExpiresAt time.Time
-}
-
-// providerAuthConfig holds the configuration for validating a provider's auth session.
-// This allows checkProviderAuth to work generically with any OAuth provider.
-type providerAuthConfig struct {
-	providerName   string // Session key (e.g., ProviderGoogle, ProviderGitHub)
-	enabled        bool   // Whether this provider is enabled
-	allowedUserIds string // Comma-separated list of allowed user IDs
+	// Remember is the choice made at sign-in; only the expiry slides.
+	Remember bool
+	// Provider is the goth provider name of a social sign-in, empty for a
+	// password sign-in.
+	Provider string
+	// UserID is the identity matched against the provider's allowed list and
+	// shown as the user name (the email when the provider gave one).
+	UserID string
+	// ProviderUserID is the provider's own user ID, also matched against the
+	// allowed list.
+	ProviderUserID string
+	// IDToken is the OIDC ID token kept for RP-Initiated Logout. Never logged.
+	IDToken string
 }
 
 type OAuth2Server struct {
@@ -207,8 +174,21 @@ type OAuth2Server struct {
 	// the live atomic snapshot (GitHub #3370).
 	settings     *conf.Settings
 	authCodes    map[string]AuthCode
-	accessTokens map[string]AccessToken
+	accessTokens map[string]AccessToken // session records, keyed by sessionTokenKey
 	mutex        sync.RWMutex
+
+	// credentialsID identifies the basic-auth credentials the records were
+	// issued under (see syncCredentials). Guarded by mutex.
+	credentialsID string
+	// credentialsMemo caches the ID computed for the latest settings snapshot
+	// (see liveCredentialsID).
+	credentialsMemo atomic.Pointer[credentialsMemo]
+	// saveMu serialises saveTokens so an older snapshot cannot overwrite a
+	// newer file.
+	saveMu sync.Mutex
+	// afterSnapshot is a test seam: when set, saveTokens calls it right after it
+	// takes its snapshot and before it writes it. Production never sets it.
+	afterSnapshot func()
 
 	GithubConfig *oauth2.Config
 	GoogleConfig *oauth2.Config
@@ -337,6 +317,10 @@ var testConfigPath string
 var (
 	ErrTokenNotFound = errors.NewStd("token not found")
 	ErrTokenExpired  = errors.NewStd("token expired")
+
+	// ErrCredentialsChanged is returned by GenerateAuthCode when the credentials
+	// a password was verified against are not the live ones any more.
+	ErrCredentialsChanged = errors.NewStd("basic-auth credentials changed")
 )
 
 // NewOAuth2Server creates and initializes an OAuth2Server. The supplied context
@@ -353,7 +337,7 @@ var (
 func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 	// Re-enable OIDC discovery retries for this instance, clearing any disabled
 	// state a previous instance's shutdown left behind (sequential tests).
-	enableOIDCRetries()
+	epoch := enableOIDCRetries()
 	// Use the security logger from the start
 	GetLogger().Info("Initializing OAuth2 server")
 	settings := conf.GetSettings()
@@ -370,25 +354,51 @@ func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
 	// Initialize Gothic with the provided configuration
 	InitializeGoth(settings, secureCookies)
 
+	warnSupersededSessionSettings(settings)
+
 	// Set up token persistence
 	server.setupTokenPersistence()
+	server.syncCredentials()
 
 	// Clean up expired tokens every hour. The caller's context terminates the
 	// goroutine on application shutdown.
 	server.StartAuthCleanup(ctx, time.Hour)
 
-	// Stop in-flight OIDC discovery retries when the application shuts down and
-	// block any new ones. The retries are package-global (goth's provider
-	// registry is global), so a lightweight watcher on the lifecycle context
-	// drives shutdownOIDCRetries, rather than threading a context field through
-	// the global provider-init path (which the fatcontext linter forbids).
+	// Stop in-flight OIDC discovery when the application shuts down and block
+	// any new one. Discovery is package-global (goth's provider registry is
+	// global), so a lightweight watcher on the lifecycle context drives
+	// shutdownOIDCRetriesFor, rather than threading a context field through the
+	// global provider-init path (which the fatcontext linter forbids). The epoch
+	// ties the watcher to this instance: if a newer instance has started by the
+	// time ctx ends, the shutdown is ignored.
 	go func() {
 		<-ctx.Done()
-		shutdownOIDCRetries()
+		shutdownOIDCRetriesFor(epoch)
 	}()
 
 	GetLogger().Info("OAuth2 server initialization complete")
 	return server
+}
+
+// warnSupersededSessionSettings warns once at startup when a configured
+// security.sessionduration or security.basicauth.accesstokenexp differs from its
+// old default: neither governs how long a browser stays signed in any more.
+func warnSupersededSessionSettings(settings *conf.Settings) {
+	superseded := []struct {
+		key        string
+		configured time.Duration
+		legacy     time.Duration
+	}{
+		{"security.sessionduration", settings.Security.SessionDuration, legacySessionDuration},
+		{"security.basicauth.accesstokenexp", settings.Security.BasicAuth.AccessTokenExp, legacyAccessTokenExp},
+	}
+	for _, setting := range superseded {
+		if setting.configured > 0 && setting.configured != setting.legacy {
+			GetLogger().Warn(setting.key+" no longer controls how long a browser stays signed in; "+
+				"sign-in length follows the \"Remember this browser\" choice",
+				logger.Duration("configured", setting.configured))
+		}
+	}
 }
 
 // validateSessionSecret checks the session secret strength and generates a temporary one if needed
@@ -591,41 +601,27 @@ func getSessionPath() (string, bool) {
 	return sessionPath, true
 }
 
-// computeBaseURL returns the base URL for constructing OAuth redirect URIs.
-// It prioritizes BaseURL, then falls back to Host (which may include scheme).
-// Returns empty string if neither is configured.
-func computeBaseURL(settings *conf.Settings) string {
-	// BaseURL takes precedence if configured
-	if settings.Security.BaseURL != "" {
-		// Ensure no trailing slash
-		return strings.TrimSuffix(settings.Security.BaseURL, "/")
-	}
-
-	// Fall back to Host (may already include scheme like "https://example.com")
-	if settings.Security.Host != "" {
-		host := strings.TrimSuffix(settings.Security.Host, "/")
-		// If host already has a scheme, use it as-is
-		if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
-			return host
-		}
-		// Otherwise, assume HTTPS for security
-		return "https://" + host
-	}
-
-	return ""
+// oidcRegistration holds the inputs of one OIDC provider registration, copied out
+// of the settings snapshot so the discovery goroutine never reads shared settings.
+type oidcRegistration struct {
+	issuerURL    string
+	discoveryURL string
+	clientID     string
+	clientSecret string
+	redirectURI  string
+	scopes       []string
 }
 
-// initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft, LINE, Kakao, OIDC).
-// It uses the new OAuthProviders array which is populated either from new config
-// or from migration of legacy provider fields.
-func initializeProviders(settings *conf.Settings) {
+// buildGothProviders builds every enabled provider that needs no network call
+// from the settings. The first enabled and configured OIDC entry is returned as
+// a registration for background discovery instead, because goth's OpenID
+// Connect constructor fetches the discovery document.
+func buildGothProviders(settings *conf.Settings) (providers []goth.Provider, oidc *oidcRegistration) {
 	secLog := GetLogger()
-	secLog.Info("Configuring Goth providers")
-
-	providers := make([]goth.Provider, 0, InitialProviderCapacity)
+	providers = make([]goth.Provider, 0, InitialProviderCapacity)
 
 	// Compute base URL for redirect URIs if not explicitly configured
-	baseURL := computeBaseURL(settings)
+	baseURL := settings.Security.OAuthOrigin()
 
 	// Iterate over the OAuthProviders array
 	for i := range settings.Security.OAuthProviders {
@@ -701,8 +697,26 @@ func initializeProviders(settings *conf.Settings) {
 			))
 
 		case ConfigOIDC:
-			if p := initializeOIDCProvider(providerConfig, redirectURI, providerLog); p != nil {
-				providers = append(providers, p)
+			if oidc != nil {
+				providerLog.Warn("Only one OIDC provider can be registered, skipping additional OIDC entry")
+				continue
+			}
+			providerLog.Info("Enabling OIDC provider")
+			scopes := slices.Clone(providerConfig.Scopes)
+			if len(scopes) == 0 {
+				scopes = []string{"openid", "profile", "email"}
+			}
+			// Ensure "openid" scope is always present (OIDC spec requirement)
+			if !slices.Contains(scopes, "openid") {
+				scopes = append([]string{"openid"}, scopes...)
+			}
+			oidc = &oidcRegistration{
+				issuerURL:    providerConfig.IssuerURL,
+				discoveryURL: oidcDiscoveryURL(providerConfig.IssuerURL),
+				clientID:     providerConfig.ClientID,
+				clientSecret: providerConfig.ClientSecret,
+				redirectURI:  redirectURI,
+				scopes:       scopes,
 			}
 
 		default:
@@ -710,54 +724,305 @@ func initializeProviders(settings *conf.Settings) {
 		}
 	}
 
-	if len(providers) > 0 {
-		goth.UseProviders(providers...)
-		secLog.Info("Goth providers initialized", logger.Int("count", len(providers)))
-	} else {
-		secLog.Warn("No Goth providers enabled or configured")
+	return providers, oidc
+}
+
+// sameOIDCRegistration reports whether two OIDC registrations build the same
+// provider: every input of discovery and of the provider is equal.
+func sameOIDCRegistration(a, b *oidcRegistration) bool {
+	return a != nil && b != nil &&
+		a.issuerURL == b.issuerURL &&
+		a.clientID == b.clientID &&
+		a.clientSecret == b.clientSecret &&
+		a.redirectURI == b.redirectURI &&
+		slices.Equal(a.scopes, b.scopes)
+}
+
+// beginProviderRegistration runs one registration pass. Under oidcMu it replaces
+// goth's whole registry with providers, so no provider built from older settings
+// stays registered, and decides what happens to OIDC:
+//   - oidc equals the registration of the current generation: the generation
+//     stays. A provider that discovery already registered is carried into the new
+//     registry, and a discovery still running is left running, so an edit of
+//     another provider neither interrupts OIDC login nor repeats discovery.
+//   - otherwise the previous generation is superseded (its discovery cancelled),
+//     the recorded discovery failure is forgotten, and when oidc is set and
+//     retries are not disabled the context and generation for a new discovery
+//     goroutine are returned, with start true.
+func beginProviderRegistration(providers []goth.Provider, oidc *oidcRegistration) (ctx context.Context, gen uint64, start bool) {
+	oidcMu.Lock()
+	defer oidcMu.Unlock()
+
+	if sameOIDCRegistration(oidcActive, oidc) && (oidcProvider != nil || oidcDiscoveryRunning) {
+		if oidcProvider != nil {
+			providers = append(providers, oidcProvider)
+		}
+		goth.ReplaceProviders(providers...)
+		return nil, oidcGeneration, false
+	}
+
+	oidcGeneration++
+	gen = oidcGeneration
+	cancelOIDCDiscoveryLocked()
+	clearOIDCDiscoveryFailure()
+	goth.ReplaceProviders(providers...)
+	oidcActive, oidcProvider, oidcDiscoveryRunning = nil, nil, false
+
+	if oidc == nil || oidcRetriesDisabled {
+		return nil, gen, false
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	oidcDiscoveryCancel = cancel
+	oidcActive = oidc
+	oidcDiscoveryRunning = true
+	return ctx, gen, true
+}
+
+// markOIDCDiscoveryStopped records that the discovery goroutine of generation
+// gen has exited, so a later pass with the same OIDC registration starts
+// discovery again instead of waiting for it.
+func markOIDCDiscoveryStopped(gen uint64) {
+	oidcMu.Lock()
+	defer oidcMu.Unlock()
+	if gen == oidcGeneration {
+		oidcDiscoveryRunning = false
 	}
 }
 
-// initializeOIDCProvider creates and returns an OIDC provider using goth's openidConnect.
-// Returns nil if initialization fails (discovery unreachable), in which case a background
-// retry goroutine is started automatically.
-func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectURI string, providerLog SecurityLogger) goth.Provider {
-	providerLog.Info("Enabling OIDC provider")
-	scopes := providerConfig.Scopes
-	if len(scopes) == 0 {
-		scopes = []string{"openid", "profile", "email"}
+// finishOIDCDiscovery commits the result of one discovery attempt of generation
+// gen. It reports false, and writes nothing, when a newer registration pass or
+// shutdown has superseded the generation. Otherwise it records the failure, or
+// registers the provider and clears the recorded failure, and reports true.
+func finishOIDCDiscovery(gen uint64, reg *oidcRegistration, provider *openidConnect.Provider, err error) bool {
+	oidcMu.Lock()
+	defer oidcMu.Unlock()
+
+	if gen != oidcGeneration {
+		return false
 	}
-	// Ensure "openid" scope is always present (OIDC spec requirement)
-	if !slices.Contains(scopes, "openid") {
-		scopes = append([]string{"openid"}, scopes...)
-	}
-	// Build the OIDC discovery document URL per RFC 8414:
-	// the discovery document is at {issuer}/.well-known/openid-configuration
-	discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
-	oidcProvider, err := openidConnect.New(
-		providerConfig.ClientID,
-		providerConfig.ClientSecret,
-		redirectURI,
-		discoveryURL,
-		scopes...,
-	)
 	if err != nil {
-		providerLog.Error("Failed to initialize OIDC provider (is the issuer URL reachable?)",
-			logger.Error(err),
-			logger.String("issuer_url", providerConfig.IssuerURL))
-		// Cancel any previous retry for this issuer and start a new one.
-		// Keying by issuer URL keeps multiple OIDC providers' retries independent;
-		// setOIDCRetryCancel cancels and replaces only this issuer's prior retry.
-		// If it reports that retries are disabled (shutdown has begun), it has
-		// already cancelled the context and we must not start the goroutine.
-		ctx, cancel := context.WithCancel(context.Background())
-		if !setOIDCRetryCancel(providerConfig.IssuerURL, cancel) {
-			return nil
+		recordOIDCDiscoveryFailure(reg.discoveryURL, err)
+		return true
+	}
+	registered := newPKCEOIDCProvider(provider)
+	goth.UseProviders(registered)
+	oidcProvider = registered
+	// Register first, clear second: a reader that sees the provider
+	// missing may still read the old failure, never the reverse.
+	clearOIDCDiscoveryFailure()
+	return true
+}
+
+// endOIDCDiscoveryWindow ends the discovery of generation gen at the end of its
+// retry window, under oidcMu. The generation's discovery is marked stopped in
+// the same step, so a pass that arrives afterwards starts discovery again
+// instead of finding it "running". It reports whether gen is still the current
+// generation.
+func endOIDCDiscoveryWindow(gen uint64) (current bool) {
+	oidcMu.Lock()
+	defer oidcMu.Unlock()
+	current = gen == oidcGeneration
+	if current {
+		oidcDiscoveryRunning = false
+	}
+	return current
+}
+
+// oidcHTTPClient is the one client for every request to the identity provider:
+// discovery, token exchange, userinfo and token refresh. Its Timeout bounds
+// each request. The nil Transport is http.DefaultTransport, which keeps the
+// proxy environment variables and the system root store, including the
+// SSL_CERT_FILE and SSL_CERT_DIR overrides, so trust is not changed.
+var oidcHTTPClient = &http.Client{Timeout: OIDCHTTPTimeout}
+
+// discoverOIDC fetches the discovery document and builds the goth OIDC provider
+// with oidcHTTPClient. ctx bounds the discovery request together with the
+// client timeout. It is the only place that calls goth's OpenID Connect
+// constructor.
+func discoverOIDC(ctx context.Context, reg *oidcRegistration) (*openidConnect.Provider, error) {
+	return openidConnect.NewCustomisedHttpClientContext(
+		ctx,
+		oidcHTTPClient,
+		"", // empty name keeps goth's default, ProviderOIDC
+		reg.clientID,
+		reg.clientSecret,
+		reg.redirectURI,
+		reg.discoveryURL,
+		reg.scopes...,
+	)
+}
+
+// startOIDCDiscovery starts the background OIDC discovery of registration
+// generation gen. The first attempt runs at once; failed attempts are retried
+// with exponential backoff until policy.maxDuration has passed. Cancelling ctx
+// and the end of the retry window both stop the goroutine, also in the middle
+// of a request to the identity provider. Results are committed through
+// finishOIDCDiscovery, so an attempt that a newer generation has superseded
+// writes nothing, and a cancelled attempt is not recorded as a failure.
+// Returns a channel that is closed when the goroutine exits.
+func startOIDCDiscovery(ctx context.Context, gen uint64, reg *oidcRegistration, policy oidcRetryPolicy) <-chan struct{} {
+	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
+	done := make(chan struct{})
+	// windowCtx ends with ctx or when the retry window is over, whichever comes
+	// first, so the window also cuts a request in flight.
+	windowCtx, cancelWindow := context.WithTimeout(ctx, policy.maxDuration)
+
+	oidcDiscoveryGoroutines.Go(func() {
+		defer close(done)
+		defer cancelWindow()
+		defer markOIDCDiscoveryStopped(gen)
+		backoff := policy.initialBackoff
+		var lastErr error
+		// A single reusable timer (Reset per iteration) instead of time.After
+		// inside the loop, so an early ctx cancellation does not leave an
+		// unexpired timer per backoff round waiting to be garbage collected.
+		// It starts at zero so the first attempt runs at once.
+		timer := time.NewTimer(0)
+		defer timer.Stop()
+		for attempt := 1; ; attempt++ {
+			// Prioritize cancellation: a single select with both ctx.Done() and
+			// timer.C ready picks pseudo-randomly, so on supersession or shutdown
+			// the timer case could win and start one more (uncancellable)
+			// discovery request. Check ctx first, then block on the timer.
+			select {
+			case <-ctx.Done():
+				secLog.Info("OIDC discovery canceled")
+				return
+			default:
+			}
+
+			// The first attempt always runs: with a window that is already over
+			// the select would otherwise pick at random between the window and
+			// the zero timer, and could skip discovery without a recorded cause.
+			windowOver := windowCtx.Done()
+			if attempt == 1 {
+				windowOver = nil
+			}
+			select {
+			case <-windowOver:
+				if ctx.Err() == nil {
+					endOIDCRetryWindow(gen, reg, lastErr, policy)
+					return
+				}
+				secLog.Info("OIDC discovery canceled")
+				return
+			case <-timer.C:
+			}
+
+			if attempt > 1 {
+				secLog.Info("Retrying OIDC discovery",
+					logger.CredentialURL("issuer_url", reg.issuerURL),
+					logger.Duration("backoff", backoff))
+			}
+
+			oidcProvider, err := discoverOIDC(windowCtx, reg)
+			// A cancelled attempt is not a failure: skip recording and logging.
+			if ctx.Err() != nil {
+				secLog.Info("OIDC discovery canceled")
+				return
+			}
+			// The retry window ended during the attempt: the request was cut, so
+			// its error is not a discovery failure. It is recorded only when no
+			// real cause exists yet, and the window is reported as exhausted.
+			if err != nil && windowCtx.Err() != nil {
+				if lastErr == nil {
+					lastErr = redactDiscoveryErr(err)
+					finishOIDCDiscovery(gen, reg, nil, err)
+				}
+				endOIDCRetryWindow(gen, reg, lastErr, policy)
+				return
+			}
+			if !finishOIDCDiscovery(gen, reg, oidcProvider, err) {
+				secLog.Info("OIDC discovery result discarded, a newer provider registration or shutdown superseded it",
+					logger.CredentialURL("issuer_url", reg.issuerURL))
+				return
+			}
+
+			if err == nil {
+				warnOnOIDCIssuerMismatch(reg.issuerURL, oidcProvider.OpenIDConfig.Issuer, reg.discoveryURL)
+				if attempt == 1 {
+					secLog.Info("OIDC provider registered",
+						logger.CredentialURL("issuer_url", reg.issuerURL))
+				} else {
+					logOIDCEvent(logger.LogLevelInfo, "OIDC provider registered after background retry",
+						logger.CredentialURL("issuer_url", reg.issuerURL),
+						logger.CredentialURL("discovery_url", reg.discoveryURL))
+				}
+				return
+			}
+
+			lastErr = redactDiscoveryErr(err)
+			if attempt == 1 {
+				logOIDCEvent(logger.LogLevelError, "OIDC discovery failed, OIDC login is unavailable until a retry succeeds",
+					logger.CredentialURL("issuer_url", reg.issuerURL),
+					logger.CredentialURL("discovery_url", reg.discoveryURL),
+					logger.Error(lastErr),
+					logger.Duration("retry_for", policy.maxDuration))
+			} else {
+				secLog.Warn("OIDC discovery retry failed",
+					logger.Error(lastErr),
+					logger.Duration("next_backoff", backoff))
+			}
+			timer.Reset(backoff)
+			backoff = min(backoff*OIDCRetryBackoffFactor, policy.maxBackoff)
 		}
-		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
+	})
+
+	return done
+}
+
+// endOIDCRetryWindow ends the discovery of generation gen at the end of its
+// retry window and, when gen is still current, logs the exhaustion with the last
+// real cause.
+func endOIDCRetryWindow(gen uint64, reg *oidcRegistration, lastErr error, policy oidcRetryPolicy) {
+	if endOIDCDiscoveryWindow(gen) {
+		logOIDCRetryExhausted(reg.issuerURL, reg.discoveryURL, lastErr, policy.maxDuration)
+	}
+}
+
+// initializeProviders registers the OAuth providers (Google, GitHub, Microsoft,
+// LINE, Kakao, OIDC) from the OAuthProviders array, which is populated either
+// from new config or from migration of legacy provider fields. Every call
+// replaces goth's whole registry, so providers that were disabled, removed or
+// built from older settings are no longer served. OIDC discovery runs in a
+// background goroutine of the new registration generation. It returns the done
+// channel of a goroutine this call started. It returns nil when no goroutine was
+// started: OIDC is not enabled, retries are disabled by shutdown, or the OIDC
+// settings are unchanged and the provider is registered or its discovery is
+// still running.
+func initializeProviders(settings *conf.Settings) <-chan struct{} {
+	secLog := GetLogger()
+	secLog.Info("Configuring Goth providers")
+
+	providers, oidc := buildGothProviders(settings)
+	ctx, gen, start := beginProviderRegistration(providers, oidc)
+
+	if len(providers) > 0 {
+		secLog.Info("Goth providers initialized", logger.Int("count", len(providers)))
+	} else if oidc == nil {
+		secLog.Warn("No Goth providers enabled or configured")
+	}
+
+	if !start {
 		return nil
 	}
-	return newPKCEOIDCProvider(oidcProvider)
+	return startOIDCDiscovery(ctx, gen, oidc, defaultOIDCRetryPolicy())
+}
+
+// ReloadOAuthProviders re-registers the OAuth providers from settings after a
+// provider setting changed, so the change takes effect without a restart. It
+// replaces goth's whole registry and, unless the OIDC settings are unchanged,
+// restarts OIDC discovery in the background, so it performs no network I/O and
+// does not wait for the identity provider.
+// The session store is left untouched, so signed-in sessions survive. It does
+// nothing but log when settings is nil.
+func ReloadOAuthProviders(settings *conf.Settings) {
+	if settings == nil {
+		GetLogger().Warn("OAuth provider reload skipped: settings not available")
+		return
+	}
+	GetLogger().Info("Reloading OAuth providers")
+	initializeProviders(settings)
 }
 
 // createSessionKey creates a key of the proper length for AES encryption from a seed string
@@ -787,124 +1052,11 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 		return true
 	}
 
-	if s.checkBasicAuthToken(c.Request(), secLog) {
-		return true
-	}
-
-	if s.checkSocialAuthSessions(c.Request(), secLog) {
+	if s.checkSession(c, secLog) {
 		return true
 	}
 
 	secLog.Info("User not authenticated")
-	return false
-}
-
-// checkBasicAuthToken validates the basic auth access token from the session
-func (s *OAuth2Server) checkBasicAuthToken(r *http.Request, log SecurityLogger) bool {
-	token, err := gothic.GetFromSession("access_token", r)
-	if err != nil || token == "" {
-		return false
-	}
-
-	log.Debug("Found access_token in session, validating...")
-	if s.ValidateAccessToken(token) == nil {
-		log.Info("User authenticated: valid access_token found in session")
-		return true
-	}
-	log.Warn("Invalid or expired access_token found in session")
-	return false
-}
-
-// checkSocialAuthSessions checks for valid OAuth authentication sessions.
-// It first tries a direct lookup using the stored auth_provider session key,
-// then falls back to iterating all configured providers for backward compatibility.
-func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogger) bool {
-	userId, err := gothic.GetFromSession("userId", r)
-	if err != nil {
-		log.Debug("No userId found in session")
-	} else {
-		log.Debug("Found userId in session, checking provider sessions")
-	}
-
-	// Try direct lookup via stored auth_provider session key first
-	if s.checkSocialAuthDirect(r, userId, log) {
-		return true
-	}
-
-	// Fall back to iterating all providers for backward compatibility
-	// (existing sessions may not have the auth_provider key)
-	return s.checkSocialAuthFallback(r, userId, log)
-}
-
-// checkSocialAuthDirect checks for a valid session using the stored auth_provider key.
-// Returns false if the key is missing or the provider session is invalid.
-func (s *OAuth2Server) checkSocialAuthDirect(r *http.Request, userId string, log SecurityLogger) bool {
-	activeProvider, err := gothic.GetFromSession(SessionKeyAuthProvider, r)
-	if err != nil || activeProvider == "" {
-		log.Debug("No auth_provider key in session, will try fallback iteration")
-		return false
-	}
-
-	log.Debug("Found active auth provider in session", logger.String("provider", activeProvider))
-
-	// Look up the config provider for this goth provider name
-	configProvider := gothToConfigProvider(activeProvider)
-	provider := s.currentSettings().GetOAuthProvider(configProvider)
-	if provider == nil || !provider.Enabled {
-		log.Debug("Active auth provider not enabled or not found in config", logger.String("provider", activeProvider))
-		return false
-	}
-
-	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
-		providerName:   activeProvider,
-		enabled:        provider.Enabled,
-		allowedUserIds: provider.UserID,
-	})
-}
-
-// checkSocialAuthFallback iterates over all configured providers to find a valid session.
-// This handles sessions created before the auth_provider key was introduced.
-func (s *OAuth2Server) checkSocialAuthFallback(r *http.Request, userId string, log SecurityLogger) bool {
-	settings := s.currentSettings()
-	for configProvider, gothProvider := range ConfigToGothProvider {
-		provider := settings.GetOAuthProvider(configProvider)
-		if provider == nil || !provider.Enabled {
-			continue
-		}
-
-		if s.checkProviderAuth(r, userId, log, providerAuthConfig{
-			providerName:   gothProvider,
-			enabled:        provider.Enabled,
-			allowedUserIds: provider.UserID,
-		}) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// checkProviderAuth validates an OAuth provider session generically.
-// This is the shared implementation used by all OAuth provider auth checks.
-func (s *OAuth2Server) checkProviderAuth(r *http.Request, userId string, log SecurityLogger, cfg providerAuthConfig) bool {
-	if !cfg.enabled {
-		return false
-	}
-
-	sessionUser, err := gothic.GetFromSession(cfg.providerName, r)
-	if err != nil || sessionUser == "" {
-		return false
-	}
-
-	log.Debug("Found provider session key", logger.String("provider", cfg.providerName))
-	// Check both the session userId (typically email) and the provider-specific session user
-	// (typically the provider's UserID/sub claim). This handles cases where the admin configured
-	// the allowed user list using either format.
-	if isValidUserId(cfg.allowedUserIds, userId) || isValidUserId(cfg.allowedUserIds, sessionUser) {
-		log.Info("User authenticated: valid session found for allowed user ID", logger.String("provider", cfg.providerName))
-		return true
-	}
-	log.Warn("Provider session found, but userId does not match allowed IDs", logger.String("provider", cfg.providerName), logger.String("allowed_ids", cfg.allowedUserIds))
 	return false
 }
 
@@ -939,27 +1091,41 @@ func isValidUserId(configuredIds, providedId string) bool {
 	return false
 }
 
-// GenerateAuthCode generates a new authorization code
-func (s *OAuth2Server) GenerateAuthCode() string {
+// GenerateAuthCode generates a new authorization code for a login verified
+// against the verified settings snapshot. It refuses with ErrCredentialsChanged
+// (and stores nothing) when those credentials are not the live ones any more,
+// so a code is never issued under credentials the password was not checked
+// against. remember is the "Remember this browser" choice the session issued
+// for the code inherits.
+func (s *OAuth2Server) GenerateAuthCode(verified *conf.Settings, remember bool) (string, error) {
 	secLog := GetLogger()
 	secLog.Debug("Generating new authorization code")
+	if verified == nil {
+		return "", ErrCredentialsChanged
+	}
+	s.syncCredentials()
 
-	code := make([]byte, AuthCodeByteLength)
-	rand.Read(code)
-	authCode := base64.URLEncoding.EncodeToString(code)
+	authCode := newOpaqueToken(AuthCodeByteLength)
+	verifiedID := basicCredentialsID(verified)
 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AuthCodeExp)
+	if verifiedID != s.credentialsID {
+		secLog.Warn("Authorization code refused: basic-auth credentials changed during sign-in")
+		return "", ErrCredentialsChanged
+	}
+
+	expiresAt := time.Now().Add(verified.Security.BasicAuth.AuthCodeExp)
 	s.authCodes[authCode] = AuthCode{
 		Code:      authCode,
 		ExpiresAt: expiresAt,
+		Remember:  remember,
 	}
 	// Do not log the authCode itself
 	secLog.Info("Generated and stored new authorization code", logger.Time("expires_at", expiresAt))
 	go s.persistTokensIfEnabled() // Persist changes
-	return authCode
+	return authCode, nil
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token
@@ -975,6 +1141,8 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 	}
 
 	secLog.Debug("Attempting to exchange authorization code")
+	// A code issued before a credentials change must not be exchanged after it.
+	s.syncCredentials()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -997,49 +1165,49 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 		return "", errors.NewStd("authorization code expired")
 	}
 
-	// Generate access token
-	tokenBytes := make([]byte, AccessTokenByteLength)
-	rand.Read(tokenBytes)
-	accessToken := base64.URLEncoding.EncodeToString(tokenBytes)
-	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AccessTokenExp)
+	// Generate the session token; only its hash is stored.
+	accessToken := newOpaqueToken(AccessTokenByteLength)
+	expiresAt := time.Now().Add(sessionLifetime(authCode.Remember))
 
-	s.accessTokens[accessToken] = AccessToken{
-		Token:     accessToken,
+	s.accessTokens[sessionTokenKey(accessToken)] = AccessToken{
 		ExpiresAt: expiresAt,
+		Remember:  authCode.Remember,
 	}
 
 	// Invalidate the auth code after use
 	delete(s.authCodes, code)
 
 	// Do not log the accessToken
-	secLog.Info("Exchanged authorization code for new access token", logger.Time("expires_at", expiresAt))
+	secLog.Info("Exchanged authorization code for new session", logger.Time("expires_at", expiresAt), logger.Bool("remember", authCode.Remember))
 	go s.persistTokensIfEnabled() // Persist changes
 	return accessToken, nil
 }
 
-// ValidateAccessToken checks if an access token is valid and returns an error if not.
+// ValidateAccessToken checks if an access token is valid and returns an error
+// if not. Only a live password session counts (a social session is not a bearer
+// token), and only while basic authentication is enabled.
 func (s *OAuth2Server) ValidateAccessToken(token string) error {
 	// Do not log the token
 	secLog := GetLogger()
 	secLog.Debug("Validating access token")
 
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	accessToken, ok := s.accessTokens[token]
-	if !ok {
-		secLog.Debug("Access token not found")
-		return ErrTokenNotFound // Return specific error
+	settings := s.syncCredentials()
+	if settings == nil {
+		secLog.Debug("Settings unavailable")
+		return ErrTokenNotFound
 	}
-
-	if time.Now().After(accessToken.ExpiresAt) {
-		secLog.Debug("Access token expired", logger.Time("expired_at", accessToken.ExpiresAt))
-		// No need to delete here, cleanup routine handles it
-		return ErrTokenExpired // Return specific error
+	rec, err := s.lookupRecord(token)
+	if err != nil {
+		secLog.Debug("Access token is not live", logger.Bool("expired", errors.Is(err, ErrTokenExpired)))
+		return err
+	}
+	if rec.Provider != "" || !recordAllowed(settings, &rec, secLog) {
+		secLog.Debug("Access token not found")
+		return ErrTokenNotFound
 	}
 
 	secLog.Debug("Access token is valid")
-	return nil // Return nil on success
+	return nil
 }
 
 // IsAuthenticationEnabled reports whether r must authenticate: an
@@ -1168,16 +1336,30 @@ func (s *OAuth2Server) isAllowedSubnetIP(settings *conf.Settings, ipStr string) 
 	return false
 }
 
-// persistTokensIfEnabled saves tokens if persistence is enabled
+// tokenFile is the format of tokens.json. An older binary reads auth_codes and
+// ignores sessions; this one ignores the older access_tokens key.
+type tokenFile struct {
+	AuthCodes     map[string]AuthCode    `json:"auth_codes"`
+	Sessions      map[string]AccessToken `json:"sessions"`
+	CredentialsID string                 `json:"credentials_id"`
+}
+
+// trySaveTokens saves tokens if persistence is enabled and returns the error of
+// a failed save. The save timeout starts inside saveTokens once the save lock is
+// held, so a save queued behind a slow one is not dropped while it waits.
+func (s *OAuth2Server) trySaveTokens() error {
+	if !s.persistTokens {
+		return nil
+	}
+	return s.saveTokens(context.Background())
+}
+
+// persistTokensIfEnabled saves tokens if persistence is enabled and logs a
+// failure, throttled.
 func (s *OAuth2Server) persistTokensIfEnabled() {
-	if s.persistTokens {
-		// Use a short background context for saving, as it runs in a goroutine
-		ctx, cancel := context.WithTimeout(context.Background(), TokenSaveTimeout)
-		defer cancel()
-		if err := s.saveTokens(ctx); err != nil {
-			// Throttle logging for repeated save errors
-			s.logThrottledError("save_tokens_error", "Failed to save tokens", err, ThrottleLogInterval)
-		}
+	if err := s.trySaveTokens(); err != nil {
+		// Throttle logging for repeated save errors
+		s.logThrottledError("save_tokens_error", "Failed to save tokens", err, ThrottleLogInterval)
 	}
 }
 
@@ -1217,10 +1399,7 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	}
 
 	// Unmarshal data outside the lock
-	var storedData struct {
-		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
-		AccessTokens map[string]AccessToken `json:"access_tokens"`
-	}
+	var storedData tokenFile
 
 	if err := json.Unmarshal(data, &storedData); err != nil {
 		secLog.Error("Failed to unmarshal token data from file", logger.Error(err))
@@ -1231,7 +1410,13 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	// Restore non-expired tokens
+	// Restore non-expired tokens. A file without a credentials ID cannot tie
+	// its codes or sessions to the credentials that issued them, so none of
+	// them is restored; startup then adopts the live credentials.
+	if storedData.CredentialsID == "" {
+		storedData.AuthCodes = nil
+		storedData.Sessions = nil
+	}
 	loadedAuthCodes := 0
 	now := time.Now()
 	for code, authCode := range storedData.AuthCodes {
@@ -1243,19 +1428,20 @@ func (s *OAuth2Server) loadTokens(ctx context.Context) error {
 		}
 	}
 
-	loadedAccessTokens := 0
-	for token, accessToken := range storedData.AccessTokens {
-		if now.Before(accessToken.ExpiresAt) {
-			s.accessTokens[token] = accessToken
-			loadedAccessTokens++
+	loadedSessions := 0
+	for key, session := range storedData.Sessions {
+		if now.Before(session.ExpiresAt) {
+			s.accessTokens[key] = session
+			loadedSessions++
 		} else {
-			secLog.Debug("Ignoring expired access token during load", logger.Time("expired_at", accessToken.ExpiresAt))
+			secLog.Debug("Ignoring expired session during load", logger.Time("expired_at", session.ExpiresAt))
 		}
 	}
+	s.credentialsID = storedData.CredentialsID
 
 	secLog.Info("Successfully loaded tokens from file",
 		logger.Int("auth_codes_loaded", loadedAuthCodes),
-		logger.Int("access_tokens_loaded", loadedAccessTokens),
+		logger.Int("sessions_loaded", loadedSessions),
 	)
 	return nil
 }
@@ -1270,14 +1456,27 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	}
 
 	secLog.Debug("Attempting to save tokens to file")
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
+	// Take the snapshot inside the save lock so an older snapshot cannot be
+	// written after a newer one.
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 
-	// Create copies to avoid holding lock during marshaling/writing
-	authCodesCopy := make(map[string]AuthCode, len(s.authCodes))
-	maps.Copy(authCodesCopy, s.authCodes)
-	accessTokensCopy := make(map[string]AccessToken, len(s.accessTokens))
-	maps.Copy(accessTokensCopy, s.accessTokens)
+	// Start the timeout once the lock is held: a save that queued behind a slow
+	// one must not lose its time to the wait.
+	ctx, cancel := context.WithTimeout(ctx, TokenSaveTimeout)
+	defer cancel()
+
+	// Copy under the read lock and release it before marshaling and writing;
+	// saveMu alone orders the saves.
+	s.mutex.RLock()
+	authCodesCopy := maps.Clone(s.authCodes)
+	accessTokensCopy := maps.Clone(s.accessTokens)
+	credentialsID := s.credentialsID
+	s.mutex.RUnlock()
+
+	if s.afterSnapshot != nil {
+		s.afterSnapshot()
+	}
 
 	// Check context before marshaling/writing
 	select {
@@ -1287,12 +1486,10 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 	default:
 	}
 
-	storedData := struct {
-		AuthCodes    map[string]AuthCode    `json:"auth_codes"`
-		AccessTokens map[string]AccessToken `json:"access_tokens"`
-	}{
-		AuthCodes:    authCodesCopy,
-		AccessTokens: accessTokensCopy,
+	storedData := tokenFile{
+		AuthCodes:     authCodesCopy,
+		Sessions:      accessTokensCopy,
+		CredentialsID: credentialsID,
 	}
 
 	data, err := json.MarshalIndent(storedData, "", "  ")
@@ -1317,7 +1514,7 @@ func (s *OAuth2Server) saveTokens(ctx context.Context) error {
 
 	secLog.Debug("Successfully saved tokens to file",
 		logger.Int("auth_codes_saved", len(authCodesCopy)),
-		logger.Int("access_tokens_saved", len(accessTokensCopy)),
+		logger.Int("sessions_saved", len(accessTokensCopy)),
 	)
 	return nil
 }

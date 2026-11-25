@@ -191,9 +191,9 @@
       class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)]"
       role="status"
     >
-      <CheckCircle class="w-5 h-5 text-[var(--color-success)] flex-shrink-0 mt-0.5" />
+      <CheckCircle class="w-5 h-5 text-[var(--text-success)] flex-shrink-0 mt-0.5" />
       <div>
-        <p class="text-sm font-semibold text-[var(--color-success)]">
+        <p class="text-sm font-semibold text-[var(--text-success)]">
           {t('system.database.migration.progress.completedTitle')}
         </p>
         <p class="text-xs mt-1 text-muted">
@@ -209,9 +209,9 @@
       <div
         class="flex items-start gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]"
       >
-        <Info class="w-4 h-4 text-[var(--color-info)] flex-shrink-0 mt-0.5" />
+        <Info class="w-4 h-4 text-[var(--text-info)] flex-shrink-0 mt-0.5" />
         <div class="flex-1">
-          <p class="text-sm font-medium text-[var(--color-info)]">
+          <p class="text-sm font-medium text-[var(--text-info)]">
             {t('system.database.migration.progress.restartTitle')}
           </p>
           <p class="text-xs mt-0.5 text-muted">
@@ -248,7 +248,7 @@
       {#if status?.can_cancel}
         <button
           onclick={onCancel}
-          class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-[var(--color-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] transition-colors"
+          class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-[var(--text-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] transition-colors"
         >
           <Square class="w-3.5 h-3.5" />
           {t('system.database.migration.actions.cancel')}
@@ -273,44 +273,45 @@
     <div class="grid grid-cols-2 gap-4 mb-4">
       <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
         <div class="flex items-center gap-2 mb-2">
-          <Database class="w-3.5 h-3.5 text-[var(--color-warning)]" />
-          <span class="text-xs font-medium"
-            >{t('system.database.migration.progress.sourceLegacy')}</span
-          >
+          <Database class="w-3.5 h-3.5 text-[var(--text-warning)]" />
+          <span class="text-xs font-medium">
+            {t('system.database.migration.progress.sourceLegacy')}
+          </span>
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.recordsLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatNumber(legacyStats?.total_detections ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatNumber(legacyStats?.total_detections ?? 0)}
+            </span>
           </div>
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatBytesCompact(legacyStats?.size_bytes ?? 0)}
+            </span>
           </div>
         </div>
       </div>
       <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
         <div class="flex items-center gap-2 mb-2">
-          <Database class="w-3.5 h-3.5 text-[var(--color-success)]" />
-          <span class="text-xs font-medium">{t('system.database.migration.progress.targetV2')}</span
-          >
+          <Database class="w-3.5 h-3.5 text-[var(--text-success)]" />
+          <span class="text-xs font-medium">
+            {t('system.database.migration.progress.targetV2')}
+          </span>
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.recordsLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatNumber(v2Stats?.total_detections ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatNumber(v2Stats?.total_detections ?? 0)}
+            </span>
           </div>
           <div class="flex justify-between text-xs">
             <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-            <span class="tabular-nums font-medium"
-              >{formatBytesCompact(v2Stats?.size_bytes ?? 0)}</span
-            >
+            <span class="tabular-nums font-medium">
+              {formatBytesCompact(v2Stats?.size_bytes ?? 0)}
+            </span>
           </div>
         </div>
       </div>
@@ -372,7 +373,7 @@
       </div>
 
       {#if status && status.dirty_id_count > 0}
-        <p class="text-xs mt-2 text-[var(--color-warning)]">
+        <p class="text-xs mt-2 text-[var(--text-warning)]">
           {t('system.database.migration.progress.dirtyRecordsCatchup', {
             count: status.dirty_id_count,
           })}
@@ -384,7 +385,7 @@
       <div class="flex justify-center mt-4">
         <button
           onclick={onCancel}
-          class="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-[var(--color-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] transition-colors"
+          class="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-[var(--text-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] transition-colors"
         >
           <Square class="w-3.5 h-3.5" />
           {t('system.database.migration.actions.cancel')}
@@ -395,14 +396,14 @@
     <!-- STATE: Cutover -->
   {:else if isCutover}
     <div
-      class="flex items-start gap-2 p-2.5 rounded-lg mb-4 text-xs bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] text-[var(--color-warning)]"
+      class="flex items-start gap-2 p-2.5 rounded-lg mb-4 text-xs bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] text-[var(--text-warning)]"
     >
       <Loader2 class="w-3.5 h-3.5 flex-shrink-0 mt-0.5 animate-spin" />
       <span>{bannerMessage(migState)}</span>
     </div>
 
     <div class="p-4 rounded-lg text-center bg-black/[0.03] dark:bg-white/[0.03]">
-      <Loader2 class="w-6 h-6 mx-auto mb-2 text-[var(--color-warning)] animate-spin" />
+      <Loader2 class="w-6 h-6 mx-auto mb-2 text-[var(--text-warning)] animate-spin" />
       <p class="text-sm font-medium">{t('system.database.migration.progress.cutoverTitle')}</p>
       <p class="text-xs mt-1 text-muted">
         {t('system.database.migration.progress.cutoverBody')}
@@ -415,8 +416,8 @@
     {#if banner}
       <div
         class="flex items-start gap-2 p-2.5 rounded-lg mb-4 text-xs {isPaused
-          ? 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] text-[var(--color-warning)]'
-          : 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--color-info)]'}"
+          ? 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] text-[var(--text-warning)]'
+          : 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--text-info)]'}"
       >
         {#if isPaused}
           <Pause class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -433,9 +434,9 @@
       {#if status?.current_phase}
         <div class="flex items-center gap-2">
           {#if !isPaused}
-            <Loader2 class="w-3.5 h-3.5 text-[var(--color-info)] animate-spin" />
+            <Loader2 class="w-3.5 h-3.5 text-[var(--text-info)] animate-spin" />
           {:else}
-            <Pause class="w-3.5 h-3.5 text-[var(--color-warning)]" />
+            <Pause class="w-3.5 h-3.5 text-[var(--text-warning)]" />
           {/if}
           <span class="text-sm font-medium">
             {t('system.database.migration.progress.migratingPhase', { phase: phaseName })}
@@ -452,16 +453,16 @@
       <!-- Progress bar -->
       <div>
         <div class="flex items-center justify-between mb-1.5">
-          <span class="text-sm font-medium"
-            >{t('system.database.migration.progress.progressLabel')}</span
-          >
+          <span class="text-sm font-medium">
+            {t('system.database.migration.progress.progressLabel')}
+          </span>
           <div class="text-sm tabular-nums">
             <span class="font-semibold">{formatNumber(status?.migrated_records ?? 0)}</span>
             <span class="text-muted">
               {t('system.database.migration.progress.ofRecords', {
                 count: formatNumber(status?.total_records ?? 0),
-              })}</span
-            >
+              })}
+            </span>
           </div>
         </div>
         <div
@@ -480,11 +481,11 @@
           ></div>
         </div>
         <div class="grid grid-cols-3 mt-1.5 text-[10px] tabular-nums text-muted">
-          <span
-            >{t('system.database.migration.progress.percentComplete', {
+          <span>
+            {t('system.database.migration.progress.percentComplete', {
               percent: (status?.progress_percent ?? 0).toFixed(1),
-            })}</span
-          >
+            })}
+          </span>
           <span class="text-center">
             {isPaused
               ? '\u2014'
@@ -511,8 +512,8 @@
         <div
           class="flex items-center gap-2 px-3 py-2 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] text-xs"
         >
-          <AlertTriangle class="w-3.5 h-3.5 text-[var(--color-warning)] flex-shrink-0" />
-          <span class="text-[var(--color-warning)]">
+          <AlertTriangle class="w-3.5 h-3.5 text-[var(--text-warning)] flex-shrink-0" />
+          <span class="text-[var(--text-warning)]">
             {t('system.database.migration.progress.dirtyWriteFailed', {
               count: status.dirty_id_count,
             })}
@@ -525,55 +526,53 @@
         <div class="grid grid-cols-2 gap-4">
           <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
             <div class="flex items-center gap-2 mb-2">
-              <Database class="w-3.5 h-3.5 text-[var(--color-warning)]" />
-              <span class="text-xs font-medium"
-                >{t('system.database.migration.progress.sourceLegacy')}</span
-              >
+              <Database class="w-3.5 h-3.5 text-[var(--text-warning)]" />
+              <span class="text-xs font-medium">
+                {t('system.database.migration.progress.sourceLegacy')}
+              </span>
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-muted"
-                  >{t('system.database.migration.progress.recordsLabel')}</span
-                >
-                <span class="tabular-nums font-medium"
-                  >{formatNumber(legacyStats?.total_detections ?? 0)}</span
-                >
+                <span class="text-muted">
+                  {t('system.database.migration.progress.recordsLabel')}
+                </span>
+                <span class="tabular-nums font-medium">
+                  {formatNumber(legacyStats?.total_detections ?? 0)}
+                </span>
               </div>
               <div class="flex justify-between text-xs">
                 <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-                <span class="tabular-nums font-medium"
-                  >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
-                >
+                <span class="tabular-nums font-medium">
+                  {formatBytesCompact(legacyStats?.size_bytes ?? 0)}
+                </span>
               </div>
             </div>
           </div>
 
           <div class="p-3 rounded-lg bg-black/[0.03] dark:bg-white/[0.03]">
             <div class="flex items-center gap-2 mb-2">
-              <Database class="w-3.5 h-3.5 text-[var(--color-success)]" />
-              <span class="text-xs font-medium"
-                >{t('system.database.migration.progress.targetV2')}</span
-              >
+              <Database class="w-3.5 h-3.5 text-[var(--text-success)]" />
+              <span class="text-xs font-medium">
+                {t('system.database.migration.progress.targetV2')}
+              </span>
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-muted"
-                  >{t('system.database.migration.progress.recordsLabel')}</span
-                >
-                <span class="tabular-nums font-medium"
-                  >{formatNumber(
-                    (v2Stats?.total_detections ?? 0) + (status?.migrated_records ?? 0)
-                  )}</span
-                >
+                <span class="text-muted">
+                  {t('system.database.migration.progress.recordsLabel')}
+                </span>
+                <span class="tabular-nums font-medium">
+                  {formatNumber((v2Stats?.total_detections ?? 0) + (status?.migrated_records ?? 0))}
+                </span>
               </div>
               <div class="flex justify-between text-xs">
                 <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
-                <span class="tabular-nums font-medium"
-                  >{formatBytesCompact(
+                <span class="tabular-nums font-medium">
+                  {formatBytesCompact(
                     (v2Stats?.size_bytes ?? 0) +
                       (status?.migrated_records ?? 0) * ESTIMATED_V2_RECORD_SIZE_BYTES
-                  )}</span
-                >
+                  )}
+                </span>
               </div>
             </div>
           </div>
@@ -604,7 +603,7 @@
         {#if status?.can_cancel}
           <button
             onclick={onCancel}
-            class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-[var(--color-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)]"
+            class="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-[var(--text-error)] hover:bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)]"
           >
             <Square class="w-3.5 h-3.5" />
             {t('system.database.migration.actions.cancel')}

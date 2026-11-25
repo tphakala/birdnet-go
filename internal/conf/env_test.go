@@ -70,6 +70,12 @@ func TestValidateEnvBool(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("error omits the input", func(t *testing.T) {
+		err := validateEnvBool("user:hunter2@not a bool")
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "hunter2")
+	})
 }
 
 func TestValidateEnvLocale(t *testing.T) {
@@ -102,6 +108,14 @@ func TestValidateEnvLocale(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("errors omit the input", func(t *testing.T) {
+		for _, value := range []string{"user:hunter2@not a locale", "hun@ter2"} {
+			err := validateEnvLocale(value)
+			require.Error(t, err, value)
+			assert.NotContains(t, err.Error(), "hunter2", value)
+		}
+	})
 }
 
 func TestValidateEnvPath(t *testing.T) {
@@ -145,6 +159,12 @@ func TestValidateEnvPath(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("error omits the input", func(t *testing.T) {
+		err := validateEnvPath("user:hunter2@not-a-path")
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), "hunter2")
+	})
 }
 
 func TestConfigureEnvironmentVariables(t *testing.T) {
@@ -752,7 +772,7 @@ const (
 	invalidURLEmpty     = ""
 )
 
-func TestValidateEnvBaseURL(t *testing.T) {
+func TestValidateBaseURL(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -803,15 +823,17 @@ func TestValidateEnvBaseURL(t *testing.T) {
 		// Edge cases
 		{"URL with query string", "https://birdnet.example.com?foo=bar", false, ""},
 		{"URL with fragment", "https://birdnet.example.com#section", false, ""},
-		{"URL with userinfo", "https://user:pass@birdnet.example.com", false, ""},
-		{"URL with all components", "https://user:pass@birdnet.example.com:8080/path?q=1#frag", false, ""},
+		{"URL with userinfo", "https://user:pass@birdnet.example.com", true, "must not include credentials"},
+		{"URL with a user only", "https://user@birdnet.example.com", true, "must not include credentials"},
+		{"URL with an uppercase scheme and userinfo", "HTTPS://user:pass@birdnet.example.com", true, "must not include credentials"},
+		{"URL with all components but userinfo", "https://birdnet.example.com:8080/path?q=1#frag", false, ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateEnvBaseURL(tt.value)
+			err := ValidateBaseURL(tt.value)
 			if tt.wantErr {
 				require.Error(t, err, "Expected error for value: %q", tt.value)
 				if tt.errMsg != "" {
@@ -867,6 +889,38 @@ func TestValidateEnvBaseURL_Integration(t *testing.T) {
 		err := configureEnvironmentVariables()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be http or https")
+	})
+
+	t.Run("credentials in a URL set in any validated variable stay out of the error", func(t *testing.T) {
+		// The second value fails to parse, and the parser's reason names the password.
+		for _, value := range []string{
+			"ftp://user:hunter2@birdnet.example.com",
+			"https://user:hunter2/path@birds.example.com",
+		} {
+			for _, binding := range getEnvBindings() {
+				if binding.Validate == nil {
+					continue
+				}
+				t.Run(binding.EnvVar+" "+value, func(t *testing.T) {
+					viper.Reset()
+					t.Setenv(binding.EnvVar, value)
+
+					err := configureEnvironmentVariables()
+					require.Error(t, err)
+					assert.Contains(t, err.Error(), binding.EnvVar)
+					assert.NotContains(t, err.Error(), "hunter2")
+				})
+			}
+		}
+	})
+
+	t.Run("an invalid non-URL value is still shown as given", func(t *testing.T) {
+		viper.Reset()
+		t.Setenv(EnvVarWebServerPort, "notaport")
+
+		err := configureEnvironmentVariables()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `BIRDNET_WEBSERVER_PORT="notaport"`)
 	})
 }
 

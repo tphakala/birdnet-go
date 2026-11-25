@@ -14,11 +14,21 @@ updates:
       # onnxruntime_go v1.38.x is built for ONNX Runtime C API 31 and needs
       # native ONNX Runtime 1.31 or newer. A binding release that raises the API
       # level needs the native pin (Dockerfile, Taskfile.yml, setup-onnxruntime
-      # action) and minORTMinor in internal/inference/ort_status.go moved with
+      # action), the SHA-256 pins in scripts/onnxruntime-pins.sha256 and
+      # minORTMinor in internal/inference/ort_status.go moved with
       # it; TestORTMinimumMatchesBindingAPIVersion fails until minORTMinor matches
       # the binding. Newer bindings are held for a manual lockstep upgrade.
       - dependency-name: "github.com/yalue/onnxruntime_go"
         versions: [">=1.39.0"]
+      # shoutrrr v0.25.0 rejects Gotify client tokens and fails sends that end
+      # in a redirect or a non-2xx reply. Held until notification setups that
+      # rely on the old behavior are handled.
+      - dependency-name: "github.com/nicholas-fedor/shoutrrr"
+        versions: [">=0.25.0"]
+      # tzf v1.2.5 requires tzf-dist v0.0.2026-c-fix1, and tzf-dist
+      # v0.0.2026-f drops symbols tzf v1.2.5 still uses, so the build breaks.
+      # tzf pulls the data version it needs; upgrade tzf instead of tzf-dist.
+      - dependency-name: "github.com/ringsaturn/tzf-dist"
     groups:
       go-minor-patch:
         patterns:

@@ -34,6 +34,7 @@ import { writable } from 'svelte/store';
 import { loggers } from '$lib/utils/logger';
 import { getCsrfToken } from '$lib/utils/api';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
 
 const logger = loggers.auth;
 
@@ -138,14 +139,21 @@ function createAuthStore() {
                 typeof (data as Record<string, unknown>).providerLogoutUrl === 'string'
               ) {
                 const candidate = (data as Record<string, unknown>).providerLogoutUrl as string;
-                // Validate URL is HTTPS before redirecting
+                // Only web URLs are followed. The server decides whether plain
+                // HTTP is acceptable (an HTTP issuer); this blocks other schemes.
                 try {
                   const parsed = new URL(candidate);
-                  if (parsed.protocol === 'https:' && parsed.host.length > 0) {
+                  if (
+                    (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+                    parsed.host.length > 0
+                  ) {
                     providerLogoutUrl = candidate;
+                  } else {
+                    logger.warn('Ignoring provider logout URL: not a web URL or has no host');
                   }
                 } catch {
                   // Invalid URL, fall through to default redirect
+                  logger.warn('Ignoring provider logout URL: not a valid URL');
                 }
               }
             } catch {
@@ -153,6 +161,8 @@ function createAuthStore() {
             }
           }
 
+          // The logout POST succeeded, so the page must leave; the sidebar asked about drafts first.
+          unsavedChanges.allowUnload();
           if (providerLogoutUrl) {
             window.location.href = providerLogoutUrl;
           } else {

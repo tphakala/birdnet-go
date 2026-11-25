@@ -234,6 +234,34 @@ func TestSpeciesAPIValidation(t *testing.T) {
 			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
 			http.StatusBadRequest, "Invalid scientific name format"},
 
+		// Invalid format tests - GetSpeciesTree
+		{"GetSpeciesTree single word", "/api/v2/taxonomy/tree/Turdus", []string{"scientific_name"}, []string{"Turdus"},
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTree },
+			http.StatusBadRequest, "Invalid scientific name format"},
+
+		// A raw Name_Common label is not a class name and keeps 400 on every route.
+		{"GetSpeciesInfo raw class label", "/api/v2/species?scientific_name=Dog_Dog", nil, nil,
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesInfo },
+			http.StatusBadRequest, "Invalid scientific name format"},
+		{"GetSpeciesTaxonomy raw class label", "/api/v2/species/taxonomy?scientific_name=Dog_Dog", nil, nil,
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
+			http.StatusBadRequest, "Invalid scientific name format"},
+		{"GetSpeciesTree raw class label", "/api/v2/taxonomy/tree/Dog_Dog", []string{"scientific_name"}, []string{"Dog_Dog"},
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTree },
+			http.StatusBadRequest, "Invalid scientific name format"},
+
+		// With no taxonomy database the tree route still answers a class 404 (it needs
+		// no database) and a binomial 503.
+		{"GetSpeciesTree class without database", "/api/v2/taxonomy/tree/Siren", []string{"scientific_name"}, []string{"Siren"},
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTree },
+			http.StatusNotFound, "Species not found"},
+		{"GetSpeciesTaxonomy class without database", "/api/v2/species/taxonomy?scientific_name=Siren", nil, nil,
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTaxonomy },
+			http.StatusOK, taxonomySourceUnresolved},
+		{"GetSpeciesTree binomial without database", "/api/v2/taxonomy/tree/Turdus%20migratorius", []string{"scientific_name"}, []string{"Turdus%20migratorius"},
+			func(c *Handler) func(echo.Context) error { return c.GetSpeciesTree },
+			http.StatusServiceUnavailable, "Taxonomy database not available"},
+
 		// Error handling - nil processor
 		{"GetSpeciesThumbnail nil processor", "/api/v2/species/amro/thumbnail", []string{"code"}, []string{"amro"},
 			func(c *Handler) func(echo.Context) error { return c.GetSpeciesThumbnail },

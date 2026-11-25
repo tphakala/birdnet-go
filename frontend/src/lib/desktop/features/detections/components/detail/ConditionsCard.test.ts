@@ -1,0 +1,288 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { t } from '$lib/i18n';
+import { cleanup, render, screen } from '@testing-library/svelte';
+import { get } from 'svelte/store';
+import { settingsStore } from '$lib/stores/settings';
+import ConditionsCard from './ConditionsCard.svelte';
+import type { DetectionDetailData, DetectionWeather } from './detailTypes';
+
+const detection: DetectionDetailData = {
+  id: 7,
+  date: '2026-11-14',
+  time: '02:57:03',
+  timestamp: '2026-11-14T02:57:03+02:00',
+  beginTime: '2026-11-14T02:57:00+02:00',
+  endTime: '2026-11-14T02:57:03+02:00',
+  speciesCode: 'eurwoo',
+  scientificName: 'Scolopax rusticola',
+  commonName: 'Eurasian Woodcock',
+  confidence: 0.87,
+  verified: 'unverified',
+  locked: false,
+};
+
+function renderCard(weather: DetectionWeather) {
+  return render(ConditionsCard, { props: { detection, weather, speciesName: 'Woodcock' } });
+}
+
+/** The value text of the tile whose term contains the label key. */
+function tileValue(label: string): string {
+  const term = screen.getByText(label, { exact: false });
+  return term.closest('.dd-tile')?.querySelector('.dd-tile-value')?.textContent.trim() ?? '';
+}
+
+describe('ConditionsCard weather tiles', () => {
+  afterEach(() => cleanup());
+
+  // Regression: the weather API leaves out zero values, so a dry or calm hour showed
+  // dashes as if nothing had been recorded.
+  it('shows zero for precipitation and wind the API left out', () => {
+    renderCard({ hourly: { time: '03:00', temperature: 2, humidity: 80 } });
+
+    expect(tileValue('detections.detail.conditions.precipitation')).toBe('0.0 mm');
+    expect(tileValue('detections.detail.conditions.windFrom')).toBe('0.0 m/s');
+  });
+
+  // Regression: the type came straight from the API and read "snow" in every language.
+  it('names the precipitation type in the UI language', () => {
+    renderCard({
+      hourly: { time: '03:00', temperature: -2, precipitation: 0.3, precipitation_type: 'snow' },
+    });
+
+    expect(document.querySelector('.dd-tile-suffix')?.textContent).toBe(
+      'detections.detail.conditions.precipitationTypes.snow'
+    );
+  });
+
+  it('leaves out a precipitation type it has no name for', () => {
+    renderCard({
+      hourly: { time: '03:00', temperature: 2, precipitation: 0.3, precipitation_type: 'hail' },
+    });
+
+    expect(tileValue('detections.detail.conditions.precipitation')).toBe('0.3 mm');
+  });
+
+  // The detection leaves out its weather block when the hour has no icon, while the weather
+  // answer still has values: those follow the station's unit setting, not metric.
+  it('uses the station\u2019s temperature unit when the detection carries no weather block', () => {
+    const saved = get(settingsStore);
+    const dashboard = saved.formData.realtime?.dashboard;
+    expect(dashboard).toBeDefined();
+    if (!dashboard) return;
+    settingsStore.set({
+      ...saved,
+      formData: {
+        ...saved.formData,
+        realtime: {
+          ...saved.formData.realtime,
+          dashboard: { ...dashboard, temperatureUnit: 'fahrenheit' },
+        },
+      },
+    });
+    try {
+      renderCard({ hourly: { time: '03:00', temperature: 10 } });
+
+      expect(document.querySelector('.dd-weather-temp')?.textContent).toContain('50');
+      expect(document.querySelector('.dd-weather-temp')?.textContent).toContain('F');
+    } finally {
+      settingsStore.set(saved);
+    }
+  });
+
+  it('shows the cloud cover the API sent', () => {
+    renderCard({ hourly: { time: '03:00', temperature: 2, clouds: 40 } });
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('40%');
+  });
+
+  // The API leaves out clouds of 0, and the Wunderground provider never sets clouds
+  // (internal/weather/provider_wunderground.go), so a recorded hour shows 0 % for it.
+  it('shows 0 % cloud cover for a recorded hour that left it out', () => {
+    renderCard({ hourly: { time: '03:00', temperature: 2 } });
+
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('0%');
+  });
+
+  it('shows dashes for the empty hourly object the API sends when it has no data', () => {
+    renderCard({ hourly: { time: '', temperature: 0, feels_like: 0 } });
+
+    expect(tileValue('detections.detail.conditions.precipitation')).toBe('-');
+    expect(tileValue('detections.weather.labels.wind')).toBe('-');
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('-');
+    expect(tileValue('detections.detail.conditions.feelsLike')).toBe('-');
+    // The weather line must not read 0 degrees.
+    expect(document.querySelector('.dd-weather-temp')?.textContent.trim()).toBe('-');
+    expect(screen.getByRole('img', { name: 'not-available', hidden: true })).toBeInTheDocument();
+  });
+
+  it('gives no wind direction when only the detection carries a wind speed', () => {
+    const withWind: DetectionDetailData = {
+      ...detection,
+      weather: { weatherIcon: '', windSpeed: 3, units: 'metric' },
+    };
+    render(ConditionsCard, {
+      props: { detection: withWind, weather: null, speciesName: 'Woodcock' },
+    });
+
+    expect(tileValue('detections.weather.labels.wind')).toBe('3.0 m/s');
+    expect(document.querySelector('.dd-tile-icon[style]')).toBeNull();
+  });
+
+  it('shows the wind from north for a recorded hour', () => {
+    vi.mocked(t).mockClear();
+    renderCard({ hourly: { time: '03:00', wind_speed: 3 } });
+
+    expect(t).toHaveBeenCalledWith('detections.detail.compass.n');
+  });
+
+  it('names the compass point of the wind direction through t()', () => {
+    vi.mocked(t).mockClear();
+    renderCard({ hourly: { time: '03:00', wind_speed: 3, wind_deg: 292 } });
+
+    expect(t).toHaveBeenCalledWith('detections.detail.compass.wnw');
+    expect(t).not.toHaveBeenCalledWith('detections.detail.compass.n');
+  });
+
+  it('shows dashes when there is no observation for the hour', () => {
+    renderCard({});
+
+    expect(tileValue('detections.detail.conditions.precipitation')).toBe('-');
+    expect(tileValue('detections.detail.conditions.cloudCover')).toBe('-');
+  });
+
+  // The arrow icon rests pointing up, so a wind from 0 degrees (north) blows south: down.
+  it('points the wind arrow the way a north wind blows (south)', () => {
+    const { container } = renderCard({ hourly: { time: '03:00', wind_speed: 3 } });
+
+    const icon = container.querySelector<HTMLElement>('.dd-tile-icon[style]');
+    expect(icon?.style.transform).toBe('rotate(180deg)');
+  });
+
+  it('points the wind arrow east for a west wind', () => {
+    const { container } = renderCard({ hourly: { time: '03:00', wind_speed: 3, wind_deg: 270 } });
+
+    const icon = container.querySelector<HTMLElement>('.dd-tile-icon[style]');
+    expect(icon?.style.transform).toBe('rotate(450deg)');
+  });
+
+  // The stored weather icon has no d or n suffix, so without sun times the day or night
+  // signal is the time of day the API or the detection carries.
+  it('shows the night icon for a stored code without suffix and a night time of day', () => {
+    renderCard({
+      hourly: { time: '03:00', temperature: 2, weather_icon: '01' },
+      time_of_day: 'night',
+    });
+
+    expect(screen.getByRole('img', { name: 'clear-night', hidden: true })).toBeInTheDocument();
+  });
+
+  it('shows the day icon for a stored code without suffix and a day time of day', () => {
+    renderCard({
+      hourly: { time: '03:00', temperature: 2, weather_icon: '01' },
+      time_of_day: 'day',
+    });
+
+    expect(screen.getByRole('img', { name: 'clear-day', hidden: true })).toBeInTheDocument();
+  });
+
+  it('falls back to the detection time of day when the weather has none', () => {
+    render(ConditionsCard, {
+      props: {
+        detection: { ...detection, timeOfDay: 'night' },
+        weather: { hourly: { time: '03:00', temperature: 2, weather_icon: '01' } },
+        speciesName: 'Woodcock',
+      },
+    });
+
+    expect(screen.getByRole('img', { name: 'clear-night', hidden: true })).toBeInTheDocument();
+  });
+});
+
+describe('ConditionsCard loading', () => {
+  afterEach(() => cleanup());
+
+  // Regression: the card showed placeholder bars with no visible loading label.
+  it('labels its placeholders while the weather loads', () => {
+    render(ConditionsCard, {
+      props: { detection, weather: null, weatherLoading: true, speciesName: 'Woodcock' },
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('common.loading');
+  });
+
+  it('shows one loading label and a sun placeholder while only the sun is loading', () => {
+    render(ConditionsCard, {
+      props: {
+        detection,
+        weather: { hourly: { time: '03:00', temperature: 2 } },
+        sun: null,
+        weatherLoading: true,
+        speciesName: 'Woodcock',
+      },
+    });
+
+    expect(screen.getAllByText('common.loading')).toHaveLength(1);
+    const legend = document.querySelector('.dd-sky-legend');
+    expect(legend?.querySelectorAll('[data-skeleton]')).toHaveLength(2);
+    expect(legend?.textContent).not.toContain('-');
+  });
+
+  it('shows no loading label once the weather answered', () => {
+    renderCard({ hourly: { time: '03:00' } });
+
+    expect(screen.queryByText('common.loading')).toBeNull();
+  });
+});
+
+describe('ConditionsCard condition icon', () => {
+  afterEach(() => cleanup());
+
+  // The condition line beside the icon says the same in the UI language; the icon's own
+  // name would be the provider's English text or an icon id.
+  it('hides the condition icon from assistive technology', () => {
+    renderCard({ hourly: { time: '03:00', temperature: 2, weather_desc: 'overcast clouds' } });
+
+    expect(screen.queryByRole('img', { name: /overcast clouds/ })).toBeNull();
+    const icon = document.querySelector('.dd-weather-now [role="img"]');
+    expect(icon?.closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+});
+
+describe('ConditionsCard sky without sun times', () => {
+  afterEach(() => cleanup());
+
+  // Regression: without sunrise and sunset the strip was painted as night all day and the
+  // marker of a daytime detection was drawn as a night marker.
+  it('claims neither day nor night when no sun times are known', () => {
+    render(ConditionsCard, {
+      props: { detection, weather: null, sun: null, speciesName: 'Woodcock' },
+    });
+
+    const sky = document.querySelector<HTMLElement>('.dd-sky');
+    expect(sky?.style.background).not.toContain('--sky-night');
+    expect(sky?.style.background).not.toContain('--sky-day');
+    const dot = document.querySelector('.dd-sky-now-dot');
+    expect(dot).toHaveClass('dd-sky-now-dot-unknown');
+    expect(dot).not.toHaveClass('dd-sky-now-dot-day');
+    expect(document.querySelector('.dd-sky-arc')).toBeNull();
+  });
+
+  it('paints day and night once the sun times are known', () => {
+    render(ConditionsCard, {
+      props: {
+        detection,
+        weather: null,
+        sun: {
+          date: '2026-11-14',
+          sunrise: '2026-11-14T08:26:00+02:00',
+          sunset: '2026-11-14T15:35:00+02:00',
+        },
+        speciesName: 'Woodcock',
+      },
+    });
+
+    expect(document.querySelector<HTMLElement>('.dd-sky')?.style.background).toContain(
+      '--sky-night'
+    );
+    expect(document.querySelector('.dd-sky-now-dot')).not.toHaveClass('dd-sky-now-dot-unknown');
+  });
+});

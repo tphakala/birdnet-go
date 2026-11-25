@@ -23,6 +23,7 @@ func TestDownloadStateIsActive(t *testing.T) {
 		{StatusVerifying, true},
 		{StatusLoading, true},
 		{StatusFailed, false},
+		{StatusCancelled, false},
 		{StatusComplete, false},
 		{StatusRemoved, false},
 		{"", false},

@@ -19,6 +19,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
+// containerModelsPath is where the faked container sees its models directory.
+const containerModelsPath = "/models"
+
 // fakeRuntimeSource is a runtimeSource with fixed answers.
 type fakeRuntimeSource struct {
 	models  []classifier.ModelRuntimeSnapshot
@@ -133,14 +136,21 @@ func TestRuntimeInfoProvider_OrchestratorAndContainer(t *testing.T) {
 	p.mountTable = func() ([]diagnostics.MountTableEntry, error) {
 		return []diagnostics.MountTableEntry{{Destination: "/", FSType: "overlay"}}, nil
 	}
+	// The mount table is a Linux container's, so the resolved path must be a
+	// POSIX path too; a real resolve of the TempDir gives a drive path on Windows.
+	p.resolve = func(path string) (string, error) {
+		assert.Equal(t, dir, path, "the orchestrator's directory is the one judged")
+		return containerModelsPath, nil
+	}
 
 	p.ovSnap = func() inference.OpenVINORuntime {
-		return inference.OpenVINORuntime{LibraryLoaded: true, ProbeStatus: inference.OVProbeStatusCached}
+		return inference.OpenVINORuntime{LibraryLoaded: true, LibraryConfigured: true, ProbeStatus: inference.OVProbeStatusCached}
 	}
 
 	info := p.CollectRuntimeInfo(t.Context())
 
 	assert.Equal(t, ov.DefaultLibraryName, info.OpenVINO.LibraryPath, "a default-soname load has an empty path and must be named")
+	assert.True(t, info.OpenVINO.LibraryConfigured, "the configured flag must reach the collector")
 	assert.True(t, info.OrchestratorAvailable)
 	require.Len(t, info.Models, 1)
 	assert.Equal(t, supportpkg.ModelRuntimeInfo{

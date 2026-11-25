@@ -16,6 +16,9 @@
   - label: string - The label text for the slider
   - value: number - The current value (bindable)
   - onUpdate: (value: number) => void - Callback when value changes
+  - updateOn?: 'input' | 'change' - When onUpdate runs (default: 'input', every move).
+    'change' runs it once per committed value (pointer release, each key step) while
+    the label still follows the drag; use it where an update saves the setting.
   - min: number - Minimum value
   - max: number - Maximum value
   - step?: number - Step increment (default: 1)
@@ -37,6 +40,7 @@
     label: string;
     value: number;
     onUpdate: (value: number) => void; // eslint-disable-line no-unused-vars
+    updateOn?: 'input' | 'change';
     min: number;
     max: number;
     step?: number;
@@ -53,6 +57,7 @@
     label,
     value = $bindable(),
     onUpdate,
+    updateOn = 'input',
     min,
     max,
     step = 1,
@@ -108,13 +113,15 @@
     return Math.min(Math.max(val, min), max);
   }
 
-  // Single handler for both input and change events since they have identical logic
+  // Both events move the shown value; onUpdate runs on the event updateOn names.
   function handleInputChange(event: Event) {
     const target = event.currentTarget as HTMLInputElement;
     const rawValue = Number(target.value);
     const newValue = clampValue(rawValue);
     value = newValue;
-    onUpdate(newValue);
+    if (updateOn === 'input' || event.type === 'change') {
+      onUpdate(newValue);
+    }
   }
 </script>
 

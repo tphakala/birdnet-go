@@ -27,7 +27,7 @@ import (
 //   - OV_V3_LABELS:  matching labels file, one "Scientific_Common" per line.
 //   - OV_V3_AUDIO:   optional raw little-endian float32 PCM (32 kHz mono, 5 s =
 //     160000 samples). Zeros if unset, but a real clip exercises realistic activations.
-//   - OV_V3_DEVICE:  "", "cpu", or "gpu" (BirdNET.OpenVINODevice; "" = auto).
+//   - OV_V3_DEVICE:  "", "cpu", "gpu", or a concrete "GPU.<n>" (BirdNET.OpenVINODevice; "" = auto).
 //   - OV_V3_LIB / OV_V3_ORT_LIB: optional libopenvino_c / libonnxruntime paths.
 func TestBirdNETV3OpenVINO_ForcesF32AndStaysFinite(t *testing.T) {
 	modelPath := os.Getenv("OV_V3_MODEL")

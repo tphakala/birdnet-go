@@ -22,13 +22,12 @@
 <script lang="ts">
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import LocationMap from '$lib/desktop/components/forms/LocationMap.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import WeatherIcon, { type WeatherProvider } from '$lib/desktop/components/ui/WeatherIcon.svelte';
   import DatabaseIcon, { type DatabaseType } from '$lib/desktop/components/ui/DatabaseIcon.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { cn } from '$lib/utils/cn.js';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
@@ -48,14 +47,21 @@
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import { api, ApiError, getCsrfToken } from '$lib/utils/api';
+  import { getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
-  import { formatNumber } from '$lib/utils/formatters';
-  import { Settings, MapPin, Database, XCircle, RefreshCw } from '@lucide/svelte';
+  import { SYSTEM_ROUTES } from '$lib/utils/settingsRoutes';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import {
+    Settings,
+    MapPin,
+    Database,
+    SlidersHorizontal,
+    Activity,
+    CloudSun,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
-  import { formatBytes } from '$lib/utils/formatters';
   import {
     wundergroundDefaults,
     pirateWeatherDefaults,
@@ -173,59 +179,6 @@
     stages: [],
     isRunning: false,
     showSuccessNote: false,
-  });
-
-  // Database stats interface and state
-  interface DatabaseStats {
-    type: DatabaseType;
-    size_bytes: number;
-    total_detections: number;
-    connected: boolean;
-    location: string;
-  }
-
-  let databaseStats = $state<{
-    loading: boolean;
-    error: string | null;
-    data: DatabaseStats | null;
-  }>({
-    loading: false,
-    error: null,
-    data: null,
-  });
-
-  // Load database statistics from the API
-  async function loadDatabaseStats() {
-    databaseStats.loading = true;
-    databaseStats.error = null;
-
-    try {
-      const stats = await api.get<DatabaseStats>('/api/v2/system/database/stats');
-      databaseStats.data = stats;
-    } catch (error) {
-      if (error instanceof ApiError) {
-        databaseStats.error = error.message;
-      } else if (error instanceof Error) {
-        databaseStats.error = error.message;
-      } else {
-        databaseStats.error = t('settings.errors.databaseStatsFailed');
-      }
-      logger.error('Failed to load database stats:', error);
-    } finally {
-      databaseStats.loading = false;
-    }
-  }
-
-  // Load database stats when database tab becomes active (only on first load, not after errors)
-  $effect(() => {
-    if (
-      activeTab === 'database' &&
-      !databaseStats.data &&
-      !databaseStats.loading &&
-      !databaseStats.error
-    ) {
-      loadDatabaseStats();
-    }
   });
 
   // Every user-initiated coordinate update advances this version, including a
@@ -527,6 +480,7 @@
     <!-- Node Identity Card -->
     <SettingsSection
       title={t('settings.main.sections.main.title')}
+      icon={SlidersHorizontal}
       description={t('settings.main.sections.main.description')}
       originalData={store.originalData.main}
       currentData={store.formData.main}
@@ -545,6 +499,7 @@
     <!-- Privacy & Telemetry Card -->
     <SettingsSection
       title={t('settings.support.sections.telemetry.title')}
+      icon={Activity}
       description={t('settings.support.sections.telemetry.description')}
       originalData={store.originalData.sentry}
       currentData={store.formData.sentry}
@@ -565,11 +520,11 @@
         </div>
 
         <!-- Enable Error Tracking -->
-        <Checkbox
-          checked={settings.sentry.enabled}
+        <ToggleField
+          value={settings.sentry.enabled}
           label={t('settings.support.telemetry.enableTracking')}
           disabled={store.isLoading || store.isSaving}
-          onchange={enabled => updateTelemetryEnabled(enabled)}
+          onUpdate={enabled => updateTelemetryEnabled(enabled)}
         />
       </div>
     </SettingsSection>
@@ -581,6 +536,7 @@
     <!-- Station Location Card -->
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.stationLocation.label')}
+      icon={MapPin}
       description={t('settings.main.sections.rangeFilter.stationLocation.helpText')}
       originalData={{
         latitude: store.originalData.birdnet?.latitude,
@@ -648,6 +604,7 @@
     <!-- Weather Provider Card -->
     <SettingsSection
       title={t('settings.integration.weather.title')}
+      icon={CloudSun}
       description={t('settings.integration.weather.description')}
       originalData={store.originalData.realtime?.weather}
       currentData={store.formData.realtime?.weather}
@@ -850,6 +807,7 @@
     <!-- Database Settings Card -->
     <SettingsSection
       title={t('settings.main.sections.database.title')}
+      icon={Database}
       description={t('settings.main.sections.database.description')}
       originalData={store.originalData.output}
       currentData={store.formData.output}
@@ -960,120 +918,17 @@
             />
           </div>
         {/if}
-      </div>
-    </SettingsSection>
-
-    <!-- Database Statistics Section -->
-    <SettingsSection
-      title={t('settings.main.sections.database.stats.title')}
-      description={t('settings.main.sections.database.stats.description')}
-    >
-      <div class="space-y-4">
-        {#if databaseStats.loading}
-          <div
-            class="flex items-center gap-2 text-[var(--color-base-content)]/60"
-            role="status"
-            aria-live="polite"
+        <!-- Database statistics live on the System page -->
+        <SettingsNote>
+          <span>{t('settings.main.sections.database.statsMoved.text')}</span>
+          <a
+            href={buildAppUrl(SYSTEM_ROUTES.database)}
+            class="underline font-medium ml-1 hover:decoration-2"
+            onclick={handleAppLinkClick}
           >
-            <span
-              class="inline-block w-4 h-4 border-2 border-[var(--color-base-300)] border-t-current rounded-full animate-spin"
-            ></span>
-            <span>{t('settings.main.sections.database.stats.loading')}</span>
-          </div>
-        {:else if databaseStats.error}
-          <div
-            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
-            role="alert"
-          >
-            <XCircle class="size-5" />
-            <span>{databaseStats.error}</span>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
-              onclick={() => loadDatabaseStats()}
-            >
-              {t('settings.main.sections.database.stats.retry')}
-            </button>
-          </div>
-        {:else if databaseStats.data}
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <!-- Database Type -->
-            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
-              <div class="text-xs text-[var(--color-base-content)]/60">
-                {t('settings.main.sections.database.stats.type')}
-              </div>
-              <div class="text-lg font-semibold flex items-center gap-2 mt-1">
-                <DatabaseIcon database={databaseStats.data.type} className="size-5" />
-                <span class="capitalize">{databaseStats.data.type}</span>
-              </div>
-            </div>
-
-            <!-- Connection Status -->
-            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
-              <div class="text-xs text-[var(--color-base-content)]/60">
-                {t('settings.main.sections.database.stats.status')}
-              </div>
-              <div class="text-lg font-semibold mt-1">
-                {#if databaseStats.data.connected}
-                  <span class="text-[var(--color-success)] flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-[var(--color-success)]"></span>
-                    {t('settings.main.sections.database.stats.connected')}
-                  </span>
-                {:else}
-                  <span class="text-[var(--color-error)] flex items-center gap-2">
-                    <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
-                    {t('settings.main.sections.database.stats.disconnected')}
-                  </span>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Database Size -->
-            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
-              <div class="text-xs text-[var(--color-base-content)]/60">
-                {t('settings.main.sections.database.stats.size')}
-              </div>
-              <div class="text-lg font-semibold mt-1">
-                {formatBytes(databaseStats.data.size_bytes)}
-              </div>
-            </div>
-
-            <!-- Total Detections -->
-            <div class="bg-[var(--color-base-200)] rounded-xl p-4">
-              <div class="text-xs text-[var(--color-base-content)]/60">
-                {t('settings.main.sections.database.stats.totalDetections')}
-              </div>
-              <div class="text-lg font-semibold mt-1">
-                {formatNumber(databaseStats.data.total_detections)}
-              </div>
-            </div>
-          </div>
-
-          <!-- Location/Path -->
-          <div class="bg-[var(--color-base-200)] rounded-xl p-4">
-            <div class="text-xs text-[var(--color-base-content)]/60 mb-1">
-              {t('settings.main.sections.database.stats.location')}
-            </div>
-            <div class="font-mono text-sm break-all">{databaseStats.data.location}</div>
-          </div>
-
-          <!-- Refresh Button -->
-          <div class="flex justify-end">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={() => loadDatabaseStats()}
-              disabled={databaseStats.loading}
-            >
-              <RefreshCw class={cn('size-4', databaseStats.loading && 'animate-spin')} />
-              {t('settings.main.sections.database.stats.refresh')}
-            </button>
-          </div>
-        {:else}
-          <div class="text-[var(--color-base-content)]/60">
-            {t('settings.main.sections.database.stats.noData')}
-          </div>
-        {/if}
+            {t('settings.main.sections.database.statsMoved.link')}
+          </a>
+        </SettingsNote>
       </div>
     </SettingsSection>
   </div>

@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"maps"
@@ -356,7 +357,7 @@ func TestCatalogByCategory(t *testing.T) {
 	}
 
 	// Verify expected counts
-	assert.Len(t, grouped[CategoryWildlife], 2, "expected 2 visible wildlife catalog entries (perch-v2, birdnet-v3.0)")
+	assert.Len(t, grouped[CategoryWildlife], 3, "expected 3 visible wildlife catalog entries (birdnet-plus-v3.0, perch-v2, birdnet-v3.0)")
 	assert.Len(t, grouped[CategoryBird], 1, "expected 1 visible bird catalog entry (birdnet-v2.4)")
 	assert.Len(t, grouped[CategoryGeomodel], 1, "expected 1 visible geomodel catalog entry")
 	assert.Len(t, grouped[CategoryBat], 12, "expected 12 bat catalog entries (11 BattyBirdNET regions and BSG-BAT)")
@@ -403,10 +404,26 @@ func TestEmbeddedCatalog_BatEntriesHaveEmbeddingsFile(t *testing.T) {
 func TestEmbeddedCatalog_EntryCount(t *testing.T) {
 	t.Parallel()
 
-	// 2 wildlife + 2 bird + 1 geomodel + 12 bat = 17 total
+	// 3 wildlife + 2 bird + 1 geomodel + 12 bat = 18 total
 	// (bird: bsg-finland + the collapsed hidden BirdNET v2.4 foundation entry;
 	// bat: 11 BattyBirdNET regions + BSG-BAT)
-	assert.Len(t, EmbeddedCatalog, 17, "expected 17 total catalog entries")
+	assert.Len(t, EmbeddedCatalog, 18, "expected 18 total catalog entries")
+}
+
+// TestEmbeddedCatalog_PreviewSupersededByBirdNETPlus pins the supersession
+// pointer that drives the gallery note and the bell notice for the BirdNET v3.0
+// preview, and checks the successor is offered.
+func TestEmbeddedCatalog_PreviewSupersededByBirdNETPlus(t *testing.T) {
+	t.Parallel()
+
+	preview, ok := GetCatalogEntry("birdnet-v3.0")
+	require.True(t, ok)
+	assert.Equal(t, "birdnet-plus-v3.0", preview.SupersededBy)
+
+	successor, ok := GetCatalogEntry(preview.SupersededBy)
+	require.True(t, ok)
+	assert.False(t, successor.Hidden, "the successor must be visible in the gallery")
+	assert.Empty(t, successor.SupersededBy, "the successor is current")
 }
 
 func TestVisibleCatalog_ExcludesHiddenEntries(t *testing.T) {
@@ -503,6 +520,16 @@ func TestGetCatalogEntry_BirdNETv30(t *testing.T) {
 	assert.True(t, entry.CommercialUse, "birdnet-v3.0 is CC-BY-SA-4.0, which permits commercial use")
 }
 
+func TestGetCatalogEntry_BirdNETPlusV30(t *testing.T) {
+	t.Parallel()
+
+	entry, ok := GetCatalogEntry("birdnet-plus-v3.0")
+	require.True(t, ok, "expected to find catalog entry birdnet-plus-v3.0")
+	assert.Equal(t, "BirdNET+ v3.0", entry.Name)
+	assert.Contains(t, entry.Description, "BirdNET+ v3.0 ", "the description names the model with the lowercase v")
+	assert.Equal(t, RegistryIDBirdNETPlusV3, entry.RegistryID)
+}
+
 // TestEmbeddedCatalog_VariantRequirementsPopulated pins the per-variant MinRAMMB
 // floors, the fp16 exclude token, and the BirdNET v3.0 benchmark data. These
 // values are mirrored from the acoustic-models manifests and drive the hardware
@@ -533,7 +560,9 @@ func TestEmbeddedCatalog_VariantRequirementsPopulated(t *testing.T) {
 	fp16 := variantByID(t, &v30, "fp16")
 	assert.Contains(t, fp16.Requirements.Excludes, "openvino-gpu-intel-gen12", "fp16 must exclude the gen12 iGPU path")
 
-	// BirdNET v3.0 is the only family with measured benchmarks. Pin every row
+	// BirdNET v3.0 benchmarks are pinned one by one here (families with a
+	// vendored manifest are also checked against it by
+	// TestGlobalVariants_MatchManifest). Pin every row
 	// exactly (device, backend, latency, RSS): the latencies drive the
 	// recommender's ranking, so a wrong value is a silent behavior change, not a
 	// count mismatch. Both global variants carry an rpi5-a76 onnxruntime-cpu
@@ -723,11 +752,85 @@ func TestIsPermanentEntry(t *testing.T) {
 	assert.False(t, IsPermanentEntry(nil), "nil is not permanent")
 }
 
+// TestVariantUpdate pins when a Legacy variant counts as an update to a newer
+// release: only a Legacy variant whose live successor is of a different release.
+// A withdrawn build of the same release (Perch int8-arm) is not an update.
+func TestVariantUpdate(t *testing.T) {
+	t.Parallel()
+
+	entry := &CatalogEntry{
+		ID:      "m",
+		Version: "2.0",
+		Variants: []CatalogVariant{
+			{ID: "live", Default: true},
+			{ID: "old", Legacy: true, SupersededBy: "live", Version: "1.0"},
+			{ID: "withdrawn", Legacy: true, SupersededBy: "live"},
+			{ID: "dangling", Legacy: true, SupersededBy: "missing", Version: "1.0"},
+			{ID: "chained", Legacy: true, SupersededBy: "old", Version: "0.9"},
+			{ID: "unlinked", Legacy: true, Version: "1.0"},
+			{ID: "newer-build-live", Build: 3},
+			{ID: "same-release-lower-build", Legacy: true, SupersededBy: "newer-build-live", Build: 2},
+			{ID: "same-release-build-one", Legacy: true, SupersededBy: "newer-build-live"},
+			{ID: "higher-build-legacy", Legacy: true, SupersededBy: "lower-build-live", Build: 4},
+			{ID: "lower-build-live", Build: 2},
+			{ID: "same-build-withdrawn", Legacy: true, SupersededBy: "same-build-live", Build: 2},
+			{ID: "same-build-live", Build: 2},
+		},
+	}
+	tests := []struct {
+		name      string
+		variantID string
+		wantOK    bool
+		wantNext  string // successor id, "live" when empty
+	}{
+		{name: "older release with a live successor", variantID: "old", wantOK: true},
+		{name: "live variant", variantID: "live"},
+		{name: "withdrawn build of the same release", variantID: "withdrawn"},
+		{name: "newer build of the same release", variantID: "same-release-lower-build", wantOK: true, wantNext: "newer-build-live"},
+		{name: "build 1 replaced by a newer build of the same release", variantID: "same-release-build-one", wantOK: true, wantNext: "newer-build-live"},
+		{name: "successor of a lower build", variantID: "higher-build-legacy"},
+		{name: "withdrawn build replaced by the same build number", variantID: "same-build-withdrawn"},
+		{name: "successor missing from the entry", variantID: "dangling"},
+		{name: "successor is itself Legacy", variantID: "chained"},
+		{name: "Legacy variant naming no successor", variantID: "unlinked"},
+		{name: "unknown variant", variantID: "nope"},
+		{name: "empty variant id", variantID: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			successor, ok := VariantUpdate(entry, tt.variantID)
+			assert.Equal(t, tt.wantOK, ok)
+			if tt.wantOK {
+				require.NotNil(t, successor)
+				assert.Equal(t, cmp.Or(tt.wantNext, "live"), successor.ID)
+			} else {
+				assert.Nil(t, successor)
+			}
+		})
+	}
+
+	_, ok := VariantUpdate(nil, "old")
+	assert.False(t, ok, "a nil entry has no update")
+
+	assert.Equal(t, "1.0", VariantVersion(entry, "old"), "a variant's own release wins")
+	assert.Equal(t, "2.0", VariantVersion(entry, "withdrawn"), "a variant without a release takes the entry's")
+	assert.Equal(t, "2.0", VariantVersion(entry, "nope"), "an unknown variant takes the entry's")
+
+	assert.Equal(t, 3, VariantBuild(entry, "newer-build-live"), "a variant's own build")
+	assert.Equal(t, 1, VariantBuild(entry, "live"), "a variant without a build is build 1")
+	assert.Equal(t, 1, VariantBuild(entry, "nope"), "an unknown variant is build 1")
+}
+
 // TestEmbeddedCatalog_GlobalVariantResolution verifies the multi-variant global
-// entries (Perch v2, BirdNET v3.0) resolve their default variant into entry.Files
+// entries (Perch v2, BirdNET v3.0, BirdNET+ v3.0) resolve their default variant into entry.Files
 // with the model and labels LocalName + checksum unchanged from the pre-variant flat
-// entries (so existing installs are undisturbed), carry the shared geomodel + taxonomy
-// companions, and declare exactly one Default variant with no Legacy variant.
+// entries (so existing installs are undisturbed), carry the taxonomy companion (the
+// geomodel comes from the entry's DependsOn), and declare exactly one Default variant, which is never Legacy (an
+// empty install request resolves to it). The Legacy global variants are Perch's
+// withdrawn int8-arm build, which names no-dft-fp32 as its successor, and the
+// BirdNET+ 3.0 build, which names its 3.0.1 successor and keeps its pre-3.0.1
+// file names and id.
 func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 	t.Parallel()
 
@@ -738,6 +841,11 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 		modelSHA    string
 		labelsLocal string
 		labelsSHA   string
+		// legacy maps each Legacy global variant id to its successor's id.
+		legacy map[string]string
+		// withdrawn marks a Legacy variant that recommends no backend (a withdrawn
+		// build, as opposed to an older release that keeps its backend claims).
+		withdrawn map[string]bool
 	}{
 		{
 			id:          "perch-v2",
@@ -746,6 +854,8 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 			modelSHA:    "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f",
 			labelsLocal: "perch_v2_labels.txt",
 			labelsSHA:   "e4d5c0397d8fb08bf90c6b13a34810af53504faad927e472fcc567793c9de057",
+			legacy:      map[string]string{"int8-arm": "no-dft-fp32"},
+			withdrawn:   map[string]bool{"int8-arm": true},
 		},
 		{
 			id:          "birdnet-v3.0",
@@ -754,6 +864,15 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 			modelSHA:    "05535c3ef6ce3f9e523706dd3e144cb6db96bc202e9047f4973961256acbf997",
 			labelsLocal: "birdnet_v3.0_labels.txt",
 			labelsSHA:   "4f4ef82f1704c66cf4da9f59757c12baa34ff98863fa2627e33c302fc92997aa",
+		},
+		{
+			id:          "birdnet-plus-v3.0",
+			variantIDs:  []string{"fp32-3.0.1", "fp32"},
+			modelLocal:  "birdnet_plus_v3.0.1_fp32.onnx",
+			modelSHA:    "835efeb33c84c5ac8c1591d33dd99c61cdb306d5bc273e811290de625a19b88e",
+			labelsLocal: "birdnet_plus_v3.0.1_labels.txt",
+			labelsSHA:   "ab212fdd39cc0f8be920308fbe7e793abad17d3dca07310b1590d032c36e4dc3",
+			legacy:      map[string]string{"fp32": "fp32-3.0.1"},
 		},
 	}
 
@@ -770,26 +889,45 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 				if entry.Variants[i].Default {
 					defaults++
 				}
-				assert.Falsef(t, entry.Variants[i].Legacy, "%s variant %q must not be Legacy", tc.id, entry.Variants[i].ID)
+				v := &entry.Variants[i]
+				if v.Region != "" {
+					continue // regional Legacy marking is covered by TestEmbeddedCatalog_RegionalVariants
+				}
+				wantSuccessor, wantLegacy := tc.legacy[v.ID]
+				assert.Equalf(t, wantLegacy, v.Legacy, "%s global variant %q Legacy flag", tc.id, v.ID)
+				if wantLegacy {
+					assert.Equalf(t, wantSuccessor, v.SupersededBy, "%s Legacy variant %q successor", tc.id, v.ID)
+					successor := slices.IndexFunc(entry.Variants, func(c CatalogVariant) bool { return c.ID == v.SupersededBy && !c.Legacy })
+					assert.GreaterOrEqualf(t, successor, 0, "%s Legacy variant %q must be superseded by a live variant of the entry", tc.id, v.ID)
+					if tc.withdrawn[v.ID] {
+						assert.Falsef(t, backendRecommended(v), "%s withdrawn variant %q must recommend no backend", tc.id, v.ID)
+					}
+				}
+				assert.Falsef(t, v.Default && v.Legacy, "%s default variant %q must not be Legacy", tc.id, v.ID)
 			}
 			// Global variants come first (slices.Concat(globals, regional...)),
 			// followed by the generated regional tiles.
 			require.GreaterOrEqualf(t, len(gotIDs), len(tc.variantIDs), "%s exposes at least its global variants", tc.id)
 			assert.Equalf(t, tc.variantIDs, gotIDs[:len(tc.variantIDs)], "%s global variant ids come first, in order", tc.id)
-			assert.Lenf(t, gotIDs, len(tc.variantIDs)+regionalTilesPerFamily, "%s exposes its global variants plus %d regional tiles", tc.id, regionalTilesPerFamily)
+			regionalVariants := 0
+			for i := range entry.Variants {
+				if entry.Variants[i].Region != "" {
+					regionalVariants++
+				}
+			}
+			assert.Positivef(t, regionalVariants, "%s exposes regional tiles after its global variants", tc.id)
+			assert.Lenf(t, gotIDs, len(tc.variantIDs)+regionalVariants, "%s exposes its global variants plus its regional tiles", tc.id)
 			assert.Equalf(t, 1, defaults, "%s must have exactly one Default variant (regional tiles are never Default)", tc.id)
 
 			// Resolved Files: default model + labels LocalName/sha unchanged, companions present.
 			var model, labels *CatalogFile
-			hasGeomodel, hasTaxonomy := false, false
+			hasTaxonomy := false
 			for i := range entry.Files {
 				switch entry.Files[i].Role {
 				case RoleModel:
 					model = &entry.Files[i]
 				case RoleLabels:
 					labels = &entry.Files[i]
-				case RoleGeomodelModel, RoleGeomodelLabels:
-					hasGeomodel = true
 				case RoleTaxonomy:
 					hasTaxonomy = true
 				}
@@ -800,7 +938,6 @@ func TestEmbeddedCatalog_GlobalVariantResolution(t *testing.T) {
 			assert.Equalf(t, tc.modelSHA, model.SHA256, "%s default model checksum", tc.id)
 			assert.Equalf(t, tc.labelsLocal, labels.LocalName, "%s labels LocalName", tc.id)
 			assert.Equalf(t, tc.labelsSHA, labels.SHA256, "%s labels checksum", tc.id)
-			assert.Truef(t, hasGeomodel, "%s resolved Files must carry the geomodel companion", tc.id)
 			assert.Truef(t, hasTaxonomy, "%s resolved Files must carry the taxonomy companion", tc.id)
 		})
 	}
@@ -818,14 +955,14 @@ func fileRoles(files []CatalogFile) map[string]bool {
 // TestEmbeddedCatalog_VariantFilesSelfContained verifies that EVERY variant (not
 // just the resolved default) carries the companions it needs. resolveVariantDefaults
 // sets entry.Files = variant.Files without merging, so a variant that omits the
-// geomodel/taxonomy companion would silently break the range-filter wiring once a
-// variant selector installs it. Perch v2 and BirdNET v3.0 variants must each carry
-// model + labels + geomodel + taxonomy; BirdNET v2.4 variants deliberately carry only
-// the model (embedded labels, no geomodel).
+// taxonomy companion would silently lose it once a variant selector installs it.
+// Perch v2, BirdNET v3.0 and BirdNET+ v3.0 variants must each carry model + labels +
+// taxonomy; the geomodel is not inline, it is the entry's dependency. BirdNET v2.4
+// variants deliberately carry only the model (embedded labels, no geomodel).
 func TestEmbeddedCatalog_VariantFilesSelfContained(t *testing.T) {
 	t.Parallel()
 
-	withCompanions := map[string]bool{"perch-v2": true, "birdnet-v3.0": true}
+	withCompanions := map[string]bool{"perch-v2": true, "birdnet-v3.0": true, "birdnet-plus-v3.0": true}
 	modelOnly := map[string]bool{"birdnet-v2.4": true}
 
 	for i := range EmbeddedCatalog {
@@ -848,8 +985,8 @@ func TestEmbeddedCatalog_VariantFilesSelfContained(t *testing.T) {
 			assert.Truef(t, roles[RoleModel], "%s/%s must carry a model file", entry.ID, v.ID)
 			if wantCompanions {
 				assert.Truef(t, roles[RoleLabels], "%s/%s must carry a labels file", entry.ID, v.ID)
-				assert.Truef(t, roles[RoleGeomodelModel], "%s/%s must carry the geomodel model companion", entry.ID, v.ID)
-				assert.Truef(t, roles[RoleGeomodelLabels], "%s/%s must carry the geomodel labels companion", entry.ID, v.ID)
+				assert.Falsef(t, roles[RoleGeomodelModel], "%s/%s must not carry the geomodel model (it is the entry's dependency)", entry.ID, v.ID)
+				assert.Falsef(t, roles[RoleGeomodelLabels], "%s/%s must not carry the geomodel labels (it is the entry's dependency)", entry.ID, v.ID)
 				assert.Truef(t, roles[RoleTaxonomy], "%s/%s must carry the taxonomy companion", entry.ID, v.ID)
 			}
 			if wantModelOnly {
@@ -893,6 +1030,11 @@ func TestEmbeddedCatalog_BSGBat(t *testing.T) {
 	assert.Equal(t, CategoryBat, entry.Category)
 	assert.Equal(t, "CC-BY-4.0", entry.License)
 	assert.Equal(t, ModelRegistry[RegistryIDBSGBat].NumSpecies, entry.SpeciesCount)
+
+	// The model covers European bats only, and its performance in BirdNET-Go is not
+	// proven yet, so the gallery must not present it as global or as a stable release.
+	assert.Equal(t, "Europe", entry.Region)
+	assert.Equal(t, ChannelExperimental, entry.Channel)
 
 	files := map[string]CatalogFile{}
 	for _, f := range entry.Files {

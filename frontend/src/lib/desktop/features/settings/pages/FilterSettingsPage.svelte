@@ -22,7 +22,7 @@
   @component
 -->
 <script lang="ts">
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import SpeciesListEditor from '$lib/desktop/components/forms/SpeciesListEditor.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -43,7 +43,7 @@
   interface SpeciesListResponse {
     species?: Array<{ label: string; commonName?: string; scientificName?: string }>;
   }
-  import { Filter, ShieldCheck } from '@lucide/svelte';
+  import { Filter, ShieldCheck, EyeOff, Sun } from '@lucide/svelte';
   import { loggers } from '$lib/utils/logger';
   import { normalizeForLookup } from '$lib/utils/speciesNames';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
@@ -293,17 +293,18 @@
     <!-- Privacy Filter Section -->
     <SettingsSection
       title={t('settings.filters.privacyFiltering.title')}
+      icon={EyeOff}
       description={t('settings.filters.privacyFiltering.description')}
       defaultOpen={true}
       hasChanges={privacyFilterHasChanges}
     >
       <div class="space-y-4">
         <!-- Enable Privacy Filtering -->
-        <Checkbox
-          checked={settings.privacy.enabled}
+        <ToggleField
+          value={settings.privacy.enabled}
           label={t('settings.filters.privacyFiltering.enable')}
           disabled={store.isLoading || store.isSaving}
-          onchange={enabled => updatePrivacyEnabled(enabled)}
+          onUpdate={enabled => updatePrivacyEnabled(enabled)}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -320,24 +321,15 @@
           <div class="transition-opacity duration-200" class:opacity-50={!settings.privacy.enabled}>
             <div class="space-y-4">
               <!-- Privacy Guard (Silero VAD) Sub-section -->
-              <div
-                class="space-y-1.5 rounded-lg border border-[var(--border-100)] bg-[var(--surface-50)] p-3"
-              >
-                <Checkbox
-                  checked={settings.privacy.vad.enabled}
+              <div class="rounded-lg border border-[var(--border-100)] bg-[var(--surface-50)] p-3">
+                <ToggleField
+                  icon={ShieldCheck}
+                  value={settings.privacy.vad.enabled}
+                  label={t('settings.filters.privacyFiltering.vadEnable')}
+                  description={t('settings.filters.privacyFiltering.vadHelp')}
                   disabled={!settings.privacy.enabled || store.isLoading || store.isSaving}
-                  onchange={enabled => updateVADEnabled(enabled)}
-                >
-                  <span
-                    class="inline-flex items-center gap-1.5 text-sm text-[var(--color-base-content)]"
-                  >
-                    <ShieldCheck class="w-4 h-4 shrink-0 text-muted" aria-hidden="true" />
-                    <span>{t('settings.filters.privacyFiltering.vadEnable')}</span>
-                  </span>
-                </Checkbox>
-                <p class="text-xs text-muted pl-6 leading-relaxed">
-                  {t('settings.filters.privacyFiltering.vadHelp')}
-                </p>
+                  onUpdate={enabled => updateVADEnabled(enabled)}
+                />
               </div>
 
               <!-- Threshold configuration: dynamic based on Privacy Guard -->
@@ -375,17 +367,18 @@
     <!-- Dog Bark Filter Section -->
     <SettingsSection
       title={t('settings.filters.falsePositivePrevention.title')}
+      icon={ShieldCheck}
       description={t('settings.filters.falsePositivePrevention.description')}
       defaultOpen={true}
       hasChanges={dogBarkFilterHasChanges}
     >
       <div class="space-y-4">
         <!-- Enable Dog Bark Filter -->
-        <Checkbox
-          checked={settings.dogBark.enabled}
+        <ToggleField
+          value={settings.dogBark.enabled}
           label={t('settings.filters.falsePositivePrevention.enableDogBark')}
           disabled={store.isLoading || store.isSaving}
-          onchange={enabled => updateDogBarkEnabled(enabled)}
+          onUpdate={enabled => updateDogBarkEnabled(enabled)}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
@@ -452,17 +445,18 @@
     <!-- Daylight Filter Section -->
     <SettingsSection
       title={t('settings.filters.daylightFilter.title')}
+      icon={Sun}
       description={t('settings.filters.daylightFilter.description')}
       defaultOpen={true}
       hasChanges={daylightFilterHasChanges}
     >
       <div class="space-y-4">
         <!-- Enable Daylight Filter -->
-        <Checkbox
-          checked={settings.daylight.enabled}
+        <ToggleField
+          value={settings.daylight.enabled}
           label={t('settings.filters.daylightFilter.enable')}
           disabled={store.isLoading || store.isSaving}
-          onchange={enabled => updateDaylightEnabled(enabled)}
+          onUpdate={enabled => updateDaylightEnabled(enabled)}
         />
 
         <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->

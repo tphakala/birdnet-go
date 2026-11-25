@@ -4,6 +4,8 @@
 package classifier
 
 import (
+	"cmp"
+	"iter"
 	"math"
 	"slices"
 	"sync"
@@ -44,10 +46,12 @@ const (
 
 // Model release channels. An empty CatalogEntry.Channel means a stable (GA)
 // release; ChannelPreview marks a developer-preview build the gallery labels as
-// not the final GA build.
+// not the final GA build; ChannelExperimental marks a published model whose
+// performance in BirdNET-Go is not proven yet.
 const (
-	ChannelStable  = "stable"
-	ChannelPreview = "preview"
+	ChannelStable       = "stable"
+	ChannelPreview      = "preview"
+	ChannelExperimental = "experimental"
 )
 
 // CatalogEntry describes a downloadable model available in the model gallery.
@@ -70,12 +74,19 @@ type CatalogEntry struct {
 	Version       string `json:"version"`        // model version string
 	// Channel marks a non-stable release. "" (or "stable") is the normal GA build;
 	// "preview" marks a developer-preview build the gallery flags as not the GA
-	// build. omitempty keeps every stable entry's on-disk JSON byte-identical, so
-	// adding this field does not shift catalogChecksum or force a schema-version bump.
+	// build; "experimental" marks a published model whose performance in BirdNET-Go
+	// is not proven yet. omitempty keeps every stable entry's on-disk JSON
+	// byte-identical, so adding this field does not shift catalogChecksum or force
+	// a schema-version bump.
 	Channel string `json:"channel,omitempty"`
 	// BuildLabel is a human-facing build tag shown next to Version for a non-stable
 	// channel (e.g. "preview3.1"). Empty for stable releases. omitempty as above.
-	BuildLabel      string        `json:"build_label,omitempty"`
+	BuildLabel string `json:"build_label,omitempty"`
+	// SupersededBy is the catalog id of the entry that replaces this one. The
+	// gallery shows a note on this entry and the entry stays installable. Empty
+	// when nothing replaces it. Not to be confused with CatalogVariant.SupersededBy,
+	// which names a replacement variant of the same entry. omitempty as above.
+	SupersededBy    string        `json:"superseded_by,omitempty"`
 	GeomodelVersion string        `json:"geomodel_version"`  // geomodel range filter version (e.g., "v3"); empty if no geomodel
 	RegistryID      string        `json:"registry_id"`       // maps to a ModelRegistry key; empty if loader not yet implemented
 	Hidden          bool          `json:"hidden"`            // if true, entry is excluded from the gallery UI
@@ -105,6 +116,30 @@ type CatalogEntry struct {
 	// a classifier. It is removed automatically when an uninstall leaves nothing
 	// installed or actively downloading that depends on it. omitempty as above.
 	Component bool `json:"component,omitempty"`
+	// Builds holds the release notes of the entry's builds that carry any,
+	// ordered by release string (compared as text) and then build (generated from the upstream manifest's build records).
+	// A variant's notes are the record whose Version and Build equal its
+	// VariantVersion and VariantBuild; a build without notes has no record. omitempty keeps
+	// the on-disk JSON of every entry without records byte-identical, so adding
+	// this field does not shift catalogChecksum or force a schema-version bump.
+	Builds []CatalogBuild `json:"builds,omitempty"`
+}
+
+// CatalogBuild is the release notes of one build of one release of a model:
+// why the build was made and what changed for the user. Reason and Notes are
+// English text from the upstream manifest, shown as is (never as markup).
+type CatalogBuild struct {
+	// Version is the release the build belongs to (a variant's release, see
+	// VariantVersion).
+	Version string `json:"version"`
+	// Build is the build number within the release, 1 or more.
+	Build int `json:"build"`
+	// Date is the build's release date, YYYY-MM-DD.
+	Date string `json:"date"`
+	// Reason is a one-sentence summary of why the build exists.
+	Reason string `json:"reason,omitempty"`
+	// Notes lists what changed for the user, one sentence or short paragraph each.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // CatalogVariant describes one hardware or regional variant of a model: a
@@ -122,8 +157,21 @@ type CatalogVariant struct {
 	Backends     map[string]BackendSupport `json:"backends,omitempty"`      // per-backend support, keyed by backend token (e.g. "onnxruntime-cpu")
 	Benchmarks   []Benchmark               `json:"benchmarks,omitempty"`    // measured latency/memory per device
 	Files        []CatalogFile             `json:"files"`                   // files to download for this variant
-	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded build)
+	Legacy       bool                      `json:"legacy"`                  // if true, hidden unless already installed (superseded or withdrawn build)
 	SupersededBy string                    `json:"superseded_by,omitempty"` // id of the variant that replaces this one, if any
+	// Version is the release of this variant's files when it differs from the
+	// entry's Version (an older release kept as a Legacy variant), empty when the
+	// variant is of the entry's own release. omitempty keeps the on-disk JSON of
+	// every other variant byte-identical, so adding this field does not shift
+	// catalogChecksum for entries that do not use it (the same reasoning as BuiltIn).
+	Version string `json:"version,omitempty"`
+	// Build is the build of this variant's files within its release, 0 meaning
+	// build 1 (a hand-written variant, and a catalog written before builds were
+	// tracked). A later build of the same release replaces an earlier one (see
+	// VariantUpdate). omitempty keeps the on-disk JSON of every build 1 variant
+	// byte-identical, so adding this field does not shift catalogChecksum for
+	// entries that do not use it (the same reasoning as Version).
+	Build int `json:"build,omitempty"`
 	// BuiltIn marks the embedded baseline variant of a permanent model (the
 	// BirdNET v2.4 classifier shipped inside the binary). A BuiltIn variant carries
 	// no files (nothing to download), is always reported installed by ScanInstalled,
@@ -214,6 +262,89 @@ type CatalogFile struct {
 // information to drive the download process.
 var EmbeddedCatalog = []CatalogEntry{
 	// Wildlife models (multi-taxa classifiers)
+	// BirdNET+ v3.0 acoustic classifier (GA, stable channel). Global GPU-native
+	// model (11,725 classes: 11,709 species plus 16 non-animal sound classes,
+	// 32kHz/5s) in its own HuggingFace repo, paired with the v3.0 geomodel range
+	// filter. Only fp32 is published: the graph computes the sigmoid itself and
+	// runs at f32 on OpenVINO (openVINOPrecisionFor). The regional tiles are
+	// appended from the generated birdnetPlusV30RegionalVariants. Backends,
+	// benchmarks, RAM floor and checksums are sourced from the BirdNET-Plus-V3.0
+	// models.json manifest and its frozen 3.0 copy, which TestGlobalVariants_MatchManifest checks.
+	//
+	// Two upstream releases are listed. 3.0.1 (the entry's Version) is the build
+	// offered to new installs: its variants carry "-3.0.1" in their ids and
+	// "v3.0.1" in their file names. 3.0 stays as Legacy variants under its original
+	// ids and file names, each naming its 3.0.1 successor and carrying Version
+	// "3.0", so an installed 3.0 is still recognised, keeps running, can be
+	// repaired, and is never offered to a new install. A file name identifies one
+	// build, so no 3.0.1 file ever sits under a 3.0 name.
+	{
+		ID:              "birdnet-plus-v3.0",
+		Name:            "BirdNET+ v3.0",
+		Description:     "BirdNET+ v3.0 global wildlife classifier (11,725 classes: 11,709 species, birds and other fauna, and 16 non-animal sound classes; scientific and common names).",
+		Author:          "Cornell Lab of Ornithology & Chemnitz University of Technology",
+		License:         "Apache-2.0",
+		CommercialUse:   true,
+		Category:        CategoryWildlife,
+		SpeciesCount:    11725,
+		Version:         "3.0.1",
+		GeomodelVersion: "v3",
+		RegistryID:      RegistryIDBirdNETPlusV3,
+		RequiresONNX:    true,
+		UpstreamURL:     "https://doi.org/10.5281/zenodo.24362980",
+		HuggingFaceRepo: "tphakala/BirdNET-Plus-V3.0",
+		DependsOn:       []string{geomodelV3CatalogID},
+		Variants: slices.Concat([]CatalogVariant{
+			{
+				ID:           "fp32-3.0.1",
+				Precision:    "fp32",
+				SpeciesCount: 11725,
+				Default:      true,
+				Requirements: VariantRequirements{MinRAMMB: 550},
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"openvino-cpu":    {Supported: true},
+					"openvino-gpu":    {Supported: true, Recommended: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true, Recommended: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 260, RSSMB: 457},
+					{Device: "x86-i5-7260U-iris-plus-640", Backend: "onnxruntime-cpu", LatencyMs: 97},
+					{Device: "x86-i5-7260U-iris-plus-640", Backend: "openvino-gpu", LatencyMs: 63},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/birdnet-plus-v3.0.1-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0.1_fp32.onnx", Role: RoleModel, SHA256: "835efeb33c84c5ac8c1591d33dd99c61cdb306d5bc273e811290de625a19b88e", SizeBytes: 344606647},
+				}, birdnetPlusV301LabelsFile(), taxonomyFiles()),
+			},
+			{
+				// Release 3.0, kept so an installed 3.0 is still recognised. Every
+				// value is the one it had when it was the offered build.
+				ID:           "fp32",
+				Precision:    "fp32",
+				SpeciesCount: 11725,
+				Requirements: VariantRequirements{MinRAMMB: 550},
+				Legacy:       true,
+				SupersededBy: "fp32-3.0.1",
+				Version:      "3.0",
+				Backends: map[string]BackendSupport{
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"openvino-cpu":    {Supported: true},
+					"openvino-gpu":    {Supported: true},
+					"cuda":            {Supported: true, Recommended: true},
+					"tensorrt":        {Supported: true, Recommended: true},
+				},
+				Benchmarks: []Benchmark{
+					{Device: "rpi5-a76", Backend: "onnxruntime-cpu", LatencyMs: 284, RSSMB: 470},
+					{Device: "x86-i7-1260P", Backend: "onnxruntime-cpu", LatencyMs: 64},
+				},
+				Files: slices.Concat([]CatalogFile{
+					{RemotePath: "full/birdnet-plus-v3.0-fp32-b1.onnx", LocalName: "birdnet_plus_v3.0_fp32.onnx", Role: RoleModel, SHA256: "cf1a7a3ca29af818ee720131f800c4dd18354fc961317cc5e5e735e0b4a9c8ac", SizeBytes: 360869106},
+				}, birdnetPlusV30LabelsFile(), taxonomyFiles()),
+			},
+		}, birdnetPlusV30RegionalVariants()),
+		Builds: birdnetPlusV30Builds(),
+	},
 	// BirdNET v3.0 acoustic classifier (developer preview). Global GPU-native model
 	// (EfficientNetV2-S backbone, 11,560 species, 32kHz/5s), paired with the v3.0
 	// geomodel range filter. The HuggingFace repo is public and the file
@@ -223,8 +354,9 @@ var EmbeddedCatalog = []CatalogEntry{
 	// MinRAMMB floors below keep the heavy global fp32 (557 MB) and fp16 (279 MB)
 	// builds off hosts that cannot run them. The two global variants plus the
 	// regional tiles appended by birdnetV30RegionalVariants ship today. The entry stays
-	// labelled a developer preview so users know it is not the GA build. The
-	// backend loader is fully functional and v3.0 can also be enabled via config
+	// labelled a developer preview and is superseded by the BirdNET+ v3.0 entry
+	// above (SupersededBy), which the gallery surfaces as a note. The backend
+	// loader is fully functional and v3.0 can also be enabled via config
 	// (models.enabled + birdnetv3 model/label paths).
 	{
 		ID:            "birdnet-v3.0",
@@ -237,23 +369,26 @@ var EmbeddedCatalog = []CatalogEntry{
 		Region:        "",
 		SpeciesCount:  11560,
 		Version:       "3.0",
-		// Developer-preview build: the gallery shows a PREVIEW badge and a not-GA
-		// notice, and surfaces this tag (which otherwise lives only inside the
-		// preview3.1 file paths below) so users know it is not the final release.
+		// Developer-preview build: the gallery card shows a PREVIEW badge and
+		// surfaces this tag (which otherwise lives only inside the preview3.1
+		// file paths below); the install dialog adds a not-GA notice.
 		Channel:         ChannelPreview,
 		BuildLabel:      "preview3.1",
+		SupersededBy:    "birdnet-plus-v3.0",
 		GeomodelVersion: "v3",
 		RegistryID:      RegistryIDBirdNETV3,
 		Hidden:          false,
 		RequiresONNX:    true,
 		UpstreamURL:     "https://github.com/birdnet-team/BirdNET-Analyzer",
 		HuggingFaceRepo: "tphakala/BirdNET-v3.0-Models",
+		DependsOn:       []string{geomodelV3CatalogID},
 		// Global GPU-native model published under full/. fp32 is the default
 		// (byte-identical to the previously flat entry); fp16 is the OpenVINO-GPU /
 		// CUDA / TensorRT build. Regional tiles under regional/ are appended from the
 		// generated birdnetV30RegionalVariants. Each variant's Files is self-contained (model +
-		// labels + geomodel + taxonomy) because resolveVariantDefaults sets
-		// entry.Files = variant.Files without merging anything.
+		// labels + taxonomy) because resolveVariantDefaults sets entry.Files =
+		// variant.Files without merging anything. The geomodel comes from the
+		// entry's DependsOn.
 		Variants: slices.Concat([]CatalogVariant{
 			{
 				ID:           "fp32",
@@ -283,7 +418,7 @@ var EmbeddedCatalog = []CatalogEntry{
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/birdnet-v3.0-preview3.1-fp32-b1.onnx", LocalName: "birdnet_v3.0_fp32.onnx", Role: RoleModel, SHA256: "05535c3ef6ce3f9e523706dd3e144cb6db96bc202e9047f4973961256acbf997", SizeBytes: 557212256},
-				}, birdnetV30LabelsFile(), geomodelFiles(), taxonomyFiles()),
+				}, birdnetV30LabelsFile(), taxonomyFiles()),
 			},
 			{
 				ID:           "fp16",
@@ -312,9 +447,10 @@ var EmbeddedCatalog = []CatalogEntry{
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/birdnet-v3.0-preview3.1-fp16-b1.onnx", LocalName: "birdnet_v3.0_fp16.onnx", Role: RoleModel, SHA256: "18fc932b9ac7478720ac8ca9077694b6ea62fb00675aa488e77b15e722244e67", SizeBytes: 278787557},
-				}, birdnetV30LabelsFile(), geomodelFiles(), taxonomyFiles()),
+				}, birdnetV30LabelsFile(), taxonomyFiles()),
 			},
 		}, birdnetV30RegionalVariants()),
+		Builds: birdnetV30Builds(),
 	},
 	{
 		ID:              "perch-v2",
@@ -332,13 +468,17 @@ var EmbeddedCatalog = []CatalogEntry{
 		RequiresONNX:    true,
 		UpstreamURL:     "https://www.kaggle.com/models/google/bird-vocalization-classifier/tensorFlow2/perch_v2",
 		HuggingFaceRepo: "tphakala/Perch-v2-Models",
+		DependsOn:       []string{geomodelV3CatalogID},
 		// Global builds under full/. fp32 (with in-graph DFT) is the default and is
 		// byte-identical to the previously flat entry, so existing installs stay
 		// detected with no re-download (ScanInstalled keys on LocalName, not repo or
-		// RemotePath). no-dft-fp32 is the OpenVINO/GPU build; int8-arm is the low-RAM
-		// ARM build. Regional tiles under regional/ are appended from the generated
-		// perchV2RegionalVariants. Each variant's Files is self-contained (model + labels + geomodel +
-		// taxonomy) because resolveVariantDefaults does not merge companions.
+		// RemotePath). no-dft-fp32 is the build without the in-graph DFT (ONNX Runtime
+		// CPU recommended, OpenVINO CPU supported but not recommended); int8-arm is
+		// withdrawn (Legacy), kept only so an existing install stays recognised.
+		// Regional tiles under regional/ are appended from the generated
+		// perchV2RegionalVariants. Each variant's Files is self-contained (model + labels +
+		// taxonomy) because resolveVariantDefaults does not merge companions. The
+		// geomodel comes from the entry's DependsOn.
 		Variants: slices.Concat([]CatalogVariant{
 			{
 				ID:           "fp32",
@@ -355,7 +495,7 @@ var EmbeddedCatalog = []CatalogEntry{
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/perch_v2_fp32.onnx", LocalName: "perch_v2.onnx", Role: RoleModel, SHA256: "bf0c8467a924cb074663970ca4a0ab1e143602121930209657d0dff5d5cefa1f", SizeBytes: 409148616},
-				}, perchV2LabelsFile(), geomodelFiles(), taxonomyFiles()),
+				}, perchV2LabelsFile(), taxonomyFiles()),
 			},
 			{
 				ID:           "no-dft-fp32",
@@ -363,29 +503,35 @@ var EmbeddedCatalog = []CatalogEntry{
 				SpeciesCount: 14795,
 				Requirements: VariantRequirements{MinRAMMB: 750},
 				Backends: map[string]BackendSupport{
-					"openvino-cpu":    {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true, Recommended: true},
 					"openvino-gpu":    {Supported: true, Recommended: true},
 					"cuda":            {Supported: true, Recommended: true},
-					"onnxruntime-cpu": {Supported: true},
+					"openvino-cpu":    {Supported: true},
 					"tensorrt":        {Supported: true},
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/perch_v2_no_dft_fp32.onnx", LocalName: "perch_v2_no_dft.onnx", Role: RoleModel, SHA256: "4dcf71c18a147198545944bb5149697e89e3ad2e16637fa8f0edf6d13035a017", SizeBytes: 413350933},
-				}, perchV2LabelsFile(), geomodelFiles(), taxonomyFiles()),
+				}, perchV2LabelsFile(), taxonomyFiles()),
 			},
 			{
 				ID:           "int8-arm",
 				Precision:    "int8",
 				SpeciesCount: 14795,
 				Requirements: VariantRequirements{Arch: []string{"aarch64"}, MinRAMMB: 350},
+				// Withdrawn: MatMul-only INT8 changes the result too often on real
+				// audio. Kept as a Legacy variant so an existing install is still
+				// recognised and keeps working; it is no longer offered to new installs.
+				Legacy:       true,
+				SupersededBy: "no-dft-fp32",
 				Backends: map[string]BackendSupport{
-					"onnxruntime-cpu": {Supported: true, Recommended: true},
+					"onnxruntime-cpu": {Supported: true},
 				},
 				Files: slices.Concat([]CatalogFile{
 					{RemotePath: "full/perch_v2_int8_arm.onnx", LocalName: "perch_v2_int8_arm.onnx", Role: RoleModel, SHA256: "ff32ca8c57954a86e6023a915d018dc7573cfc5567dd7314899d1c947cc6d5c5", SizeBytes: 130856164},
-				}, perchV2LabelsFile(), geomodelFiles(), taxonomyFiles()),
+				}, perchV2LabelsFile(), taxonomyFiles()),
 			},
 		}, perchV2RegionalVariants()),
+		Builds: perchV2Builds(),
 	},
 	{
 		ID:              "bsg-finland",
@@ -506,7 +652,7 @@ var EmbeddedCatalog = []CatalogEntry{
 
 	// Geomodels (spatiotemporal species occurrence prediction)
 	{
-		ID:              "birdnet-geomodel-v3",
+		ID:              geomodelV3CatalogID,
 		Name:            "BirdNET Geomodel v3.0",
 		Description:     "Spatiotemporal species occurrence prediction for post-filtering acoustic detections. Predicts which species are likely at a given location and week of the year.",
 		Author:          "Stefan Kahl, Cornell Lab of Ornithology",
@@ -564,8 +710,11 @@ const (
 	embeddingsSizeBytes int64 = 58763257
 )
 
-// Shared v3.0 geomodel, used as range filter companion by Perch v2 and BirdNET v3.0.
+// Shared v3.0 geomodel, the range filter companion of Perch v2, BirdNET v3.0 and
+// BirdNET+ v3.0. Those entries declare it in DependsOn by geomodelV3CatalogID.
 const (
+	// geomodelV3CatalogID is the catalog ID of the shared v3.0 geomodel entry.
+	geomodelV3CatalogID           = "birdnet-geomodel-v3"
 	geomodelHuggingFaceRepo       = "tphakala/BirdNET-Geomodel"
 	geomodelONNXSHA256            = "2bc5a9b1e7c24115730015a97dbb688e9e8cd49c02c34a011439182c65ef0017"
 	geomodelONNXSizeBytes   int64 = 7483473
@@ -614,8 +763,25 @@ func birdnetV30LabelsFile() []CatalogFile {
 	}
 }
 
-// geomodelFiles returns the shared geomodel CatalogFile entries appended to
-// classifiers that use the v3.0 range filter (Perch v2, BirdNET v3.0).
+// birdnetPlusV30LabelsFile returns the global BirdNET+ release 3.0 labels file,
+// which the Legacy 3.0 global variant carries under its original file name.
+func birdnetPlusV30LabelsFile() []CatalogFile {
+	return []CatalogFile{
+		{RemotePath: "full/birdnet-plus-v3.0-labels-b1.txt", LocalName: "birdnet_plus_v3.0_labels.txt", Role: RoleLabels, SHA256: "ab212fdd39cc0f8be920308fbe7e793abad17d3dca07310b1590d032c36e4dc3", SizeBytes: 470040},
+	}
+}
+
+// birdnetPlusV301LabelsFile returns the global BirdNET+ release 3.0.1 labels file.
+// Its bytes equal the 3.0 file's, but it lives under its own path and local name
+// so a file name never stands for two builds.
+func birdnetPlusV301LabelsFile() []CatalogFile {
+	return []CatalogFile{
+		{RemotePath: "full/birdnet-plus-v3.0.1-labels-b1.txt", LocalName: "birdnet_plus_v3.0.1_labels.txt", Role: RoleLabels, SHA256: "ab212fdd39cc0f8be920308fbe7e793abad17d3dca07310b1590d032c36e4dc3", SizeBytes: 470040},
+	}
+}
+
+// geomodelFiles returns the files of the birdnet-geomodel-v3 entry, which Perch v2,
+// BirdNET v3.0 and BirdNET+ v3.0 depend on.
 func geomodelFiles() []CatalogFile {
 	return []CatalogFile{
 		{
@@ -773,6 +939,7 @@ func bsgBatCatalogEntry() CatalogEntry {
 		CommercialUse:   true,
 		Category:        CategoryBat,
 		Region:          "Europe",
+		Channel:         ChannelExperimental,
 		SpeciesCount:    bsgBatNumSpecies,
 		Version:         DetectionVersionBSGBat,
 		RegistryID:      RegistryIDBSGBat,
@@ -965,6 +1132,88 @@ func resolveVariant(entry *CatalogEntry, variantID string) *CatalogVariant {
 		}
 	}
 	return nil
+}
+
+// variantVersion returns the release of the given variant's files: the variant's
+// own Version when it carries one, else the entry's. An unknown variant id gets
+// the entry's.
+func variantVersion(entry *CatalogEntry, variantID string) string {
+	if v := resolveVariant(entry, variantID); v != nil {
+		return variantRelease(entry, v)
+	}
+	return entry.Version
+}
+
+// variantRelease is variantVersion for a variant the caller already holds.
+func variantRelease(entry *CatalogEntry, v *CatalogVariant) string {
+	return cmp.Or(v.Version, entry.Version)
+}
+
+// VariantVersion returns the release of the given variant's files: the variant's
+// own Version when it carries one, else the entry's. An unknown variant id gets
+// the entry's. entry must not be nil.
+func VariantVersion(entry *CatalogEntry, variantID string) string {
+	return variantVersion(entry, variantID)
+}
+
+// variantBuild is the build of a variant the caller already holds: its Build, or
+// 1 when it carries none.
+func variantBuild(v *CatalogVariant) int {
+	return max(v.Build, 1)
+}
+
+// VariantBuild returns the build of the given variant's files within its
+// release: 1 for a variant without a Build and for an unknown variant id. entry
+// must not be nil.
+func VariantBuild(entry *CatalogEntry, variantID string) int {
+	if v := resolveVariant(entry, variantID); v != nil {
+		return variantBuild(v)
+	}
+	return 1
+}
+
+// VariantUpdate reports whether the given variant is superseded by a newer
+// release or a newer build of the same release, and returns the replacing
+// variant. It is ok when the variant resolves, is Legacy, its SupersededBy names
+// a live (non-Legacy) variant of the same entry, and the successor is of a
+// different release or of a higher build. A withdrawn build replaced by another
+// build of the same number (the global Perch int8-arm and its successor) is not
+// an update: that is a better build, not a newer one. An empty variantId, a
+// dangling SupersededBy and a successor that is itself Legacy are not updates.
+// The returned variant points into entry.
+func VariantUpdate(entry *CatalogEntry, variantID string) (successor *CatalogVariant, ok bool) {
+	if entry == nil || variantID == "" {
+		return nil, false
+	}
+	v := resolveVariant(entry, variantID)
+	if v == nil || !v.Legacy || v.SupersededBy == "" {
+		return nil, false
+	}
+	next := resolveVariant(entry, v.SupersededBy)
+	if next == nil || next.Legacy {
+		return nil, false
+	}
+	if variantRelease(entry, next) == variantRelease(entry, v) && variantBuild(next) <= variantBuild(v) {
+		return nil, false
+	}
+	return next, true
+}
+
+// liveFirstVariants yields the entry's variants with the live ones first and the
+// Legacy ones after, in catalog order within each group. A first-match walk with
+// no configured model path uses it so a leftover Legacy build (an older release,
+// a withdrawn precision) cannot shadow a live build that is also on disk, whatever
+// order they are listed in.
+func liveFirstVariants(variants []CatalogVariant) iter.Seq[*CatalogVariant] {
+	return func(yield func(*CatalogVariant) bool) {
+		for _, legacy := range []bool{false, true} {
+			for i := range variants {
+				if variants[i].Legacy == legacy && !yield(&variants[i]) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // VariantNeedsONNX reports whether running the given variant of entry requires the

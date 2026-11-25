@@ -4,6 +4,9 @@
 
 @import 'tailwindcss';
 
+/* The app theme (html[data-theme]), not the OS, drives dark: utilities */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 /* Custom text utilities */
 @utility text-muted {
   color: var(--text-muted);
@@ -113,8 +116,9 @@
 [data-theme='light'] {
   color-scheme: light;
 
-  /* Color variables are now registered in @theme above.
-     Only non-color tokens remain here. */
+  /* Color fills (--color-*) are registered in @theme above. This block holds the surface,
+     border, hover overlay, text (--text-*, including --text-primary) and visualization
+     tokens, plus the other non-color tokens. */
 
   /* Surface colors */
   --surface-100: #ffffff;
@@ -126,15 +130,58 @@
   --border-300: #94a3b8; /* slate-400 - hover borders, a step darker than --border-200 */
   --hover-overlay: rgba(0, 0, 0, 0.05);
 
+  /* Form fields (.input, .select, .textarea, SelectDropdown). A field is marked by its own
+     tinted fill, a step darker than the page shade (base-200), with a quiet border; it turns
+     white while it is being edited. A disabled field goes flat, a shade lighter than the
+     active fill, so it reads as inactive while its value stays readable. */
+  --field-bg: #eef2f7;
+  --field-bg-focus: #ffffff;
+  --field-bg-disabled: #f8fafc; /* slate-50 */
+  --field-border: #cbd5e1; /* slate-300 */
+  --field-border-hover: #94a3b8; /* slate-400 */
+  --field-border-disabled: #e2e8f0; /* slate-200 */
+  --field-text-disabled: #64748b; /* slate-500, 4.5:1 or more on the disabled fill */
+  --field-shadow: none;
+
+  /* Note panels (SettingsNote) inside cards. */
+  --note-bg: var(--color-base-200);
+
   /* Text colors */
   --text-muted: #475569; /* slate-600 - secondary/muted text */
-  --text-error: #b91c1c; /* red-700 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-error: #991b1b; /* red-800 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
+  --text-success: #166534; /* green-800 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
+  --text-warning: #92400e; /* amber-800 - warning text, same rule */
+  --text-info: #075985; /* sky-800 - info text, same rule */
+  --text-primary: #1e40af; /* blue-800 - primary-hue text and icons, same rule; schemes.css overrides it per scheme */
+
+  /* Data visualization: chart series and meter fills (Meter.svelte, sparklines, legends).
+     Theme tokens, not scheme tokens: schemes.css changes only primary, accent and --text-primary, so these
+     hold under every color scheme, custom included. Every fill reaches 3:1 on --surface-100
+     and on --viz-track (color-contrast.test.ts). Series 2 to 7 also stay apart from each other
+     under protanopia and deuteranopia, so any of them can share a chart; series 1 and 8 are
+     for single-series marks and overflow. */
+  --viz-track: #e2e8f0; /* slate-200 - decorative meter groove, the value is printed beside it */
+  --viz-1: #2563eb; /* blue-600 */
+  --viz-2: #5b21b6; /* violet-800 */
+  --viz-3: #a16207; /* yellow-700 */
+  --viz-4: #059669; /* emerald-600 */
+  --viz-5: #9d174d; /* pink-800 */
+  --viz-6: #075985; /* sky-800 */
+  --viz-7: #a855f7; /* purple-500 */
+  --viz-8: #be123c; /* rose-700 */
+  --viz-success: #15803d; /* green-700 */
+  --viz-warning: #b45309; /* amber-700 */
+  --viz-error: #dc2626; /* red-600 */
 
   /* Component tokens */
   --radius-box: 0.5rem;
   --radius-field: 0.375rem;
   --radius-selector: 0.25rem;
   --radius-full: 9999px;
+
+  /* Media tiles (detection cards) are dark in both themes: everything drawn over them is light */
+  --media-surface-from: #1e293b; /* slate-800 */
+  --media-surface-to: #0f172a; /* slate-900 */
 
   /* Animation */
   --animation-btn: 0.15s;
@@ -203,15 +250,55 @@
   --border-300: #475569; /* slate-600 - hover borders, a step lighter than --border-200 */
   --hover-overlay: rgba(255, 255, 255, 0.05);
 
+  /* Form fields, same rules as the light block. The fill is base-300, a step lighter than the
+     card; a disabled field takes the card colour, so it sits flat. */
+  --field-bg: #1e293b; /* slate-800 */
+  --field-bg-focus: #172033;
+  --field-bg-disabled: #0f172a; /* slate-900, the card */
+  --field-border: #334155; /* slate-700 */
+  --field-border-hover: #475569; /* slate-600 */
+  --field-border-disabled: #1e293b; /* slate-800 */
+  --field-text-disabled: #94a3b8; /* slate-400, 4.5:1 or more on the disabled fill */
+  --field-shadow: none;
+
+  /* Note panels: base-200 is the darkest shade (the page) and reads as a hole in a card, so
+     notes use a shade between the card and base-300. */
+  --note-bg: #172033;
+
   /* Text colors */
   --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
-  --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 */
+  --text-error: #f87171; /* red-400 - error text, 4.5:1 or more on base-100/200/300 and on a 15% error tint */
+  --text-success: #4ade80; /* green-400 - success text, 4.5:1 or more on base-100/200/300 and on a 15% success tint */
+  --text-warning: #fbbf24; /* amber-400 - warning text, same rule */
+  --text-info: #38bdf8; /* sky-400 - info text, same rule */
+  --text-primary: #60a5fa; /* blue-400 - primary-hue text, same rule as the light block */
+
+  /* Data visualization, same rules as the light block */
+  --viz-track: #1e293b; /* slate-800 */
+  --viz-1: #60a5fa; /* blue-400 */
+  --viz-2: #8b5cf6; /* violet-500 */
+  --viz-3: #fde047; /* yellow-300 */
+  --viz-4: #34d399; /* emerald-400 */
+  --viz-5: #ec4899; /* pink-500 */
+  --viz-6: #0ea5e9; /* sky-500 */
+  --viz-7: #d8b4fe; /* purple-300 */
+  --viz-8: #f43f5e; /* rose-500 */
+  --viz-success: #4ade80; /* green-400 */
+  --viz-warning: #fbbf24; /* amber-400 */
+  --viz-error: #f87171; /* red-400 */
 
   /* Shadows (darker for dark mode) */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+}
+
+/* Secondary text at 70% of the body text colour: labels, captions and notes. It follows
+   --color-base-content, so one definition holds in both themes and every scheme; 4.5:1 or
+   more on base-100 and base-200. Not in @theme, where --text-* names font sizes. */
+:root {
+  --text-subtle: color-mix(in srgb, var(--color-base-content) 70%, transparent);
 }
 
 /* ============================================
@@ -293,9 +380,24 @@
     cursor: not-allowed;
   }
 
-  .btn:focus-visible {
+  /* .focus-ring gives a custom control the same keyboard focus ring as a .btn. Never pair
+     it with opacity on the element, which would fade the ring; dim a blocked control by
+     colour instead. */
+  .btn:focus-visible,
+  .focus-ring:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
+  }
+
+  /* .focus-ring-inset is the keyboard focus ring for a segment of a group that clips overflow,
+     where a ring drawn outside the element would be cut off. Two bands: the outer one in the
+     text colour, the inner one in the primary content colour, so one of them stands out against
+     the segment and its neighbour in every state. The outer band is a real outline, so forced
+     colours keeps it. */
+  .focus-ring-inset:focus-visible {
+    outline: 2px solid var(--color-base-content);
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 4px var(--color-primary-content);
   }
 
   /* Button variants */
@@ -357,7 +459,7 @@
   .btn-outline-primary {
     background-color: transparent;
     border-color: var(--color-primary);
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .btn-outline-primary:hover:not(:disabled) {
@@ -381,13 +483,9 @@
   .btn-link {
     background-color: transparent;
     border-color: transparent;
-    color: var(--color-primary);
+    color: var(--text-primary);
     text-decoration: underline;
     padding: 0;
-  }
-
-  .btn-link:hover:not(:disabled) {
-    color: var(--color-primary-hover);
   }
 
   /* Link styles */
@@ -397,11 +495,11 @@
   }
 
   .link:hover {
-    opacity: 0.8;
+    text-decoration-thickness: 2px;
   }
 
   .link-primary {
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .link-secondary {
@@ -459,25 +557,36 @@
 
   /* ----------------------------------------
      STATUS BADGES
+     One recipe for the .badge-status-* classes and StatusPill: each status names its fill once
+     in --status-fill, the tint is drawn from it, and StatusPill draws its border and dot from
+     the same property.
      ---------------------------------------- */
   .badge-status-success {
-    background: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
+    --status-fill: var(--color-success);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
+    color: var(--text-success);
   }
 
   .badge-status-warning {
-    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
-    color: var(--color-warning);
+    --status-fill: var(--color-warning);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
+    color: var(--text-warning);
   }
 
   .badge-status-error {
-    background: color-mix(in srgb, var(--color-error) 15%, transparent);
+    --status-fill: var(--color-error);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
     color: var(--text-error);
   }
 
   .badge-status-info {
-    background: color-mix(in srgb, var(--color-info) 15%, transparent);
-    color: var(--color-info);
+    --status-fill: var(--color-info);
+
+    background: color-mix(in srgb, var(--status-fill) 15%, transparent);
+    color: var(--text-info);
   }
 
   .badge-status-neutral {
@@ -539,32 +648,61 @@
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    background-color: var(--color-base-100);
+    background-color: var(--field-bg);
     color: var(--color-base-content);
-    border: 1px solid var(--border-100);
+    border: 1px solid var(--field-border);
+    box-shadow: var(--field-shadow);
     border-radius: var(--radius-field);
     transition: all var(--animation-input) ease-in-out;
   }
 
   .input:hover:not(:disabled, :focus) {
-    border-color: var(--border-200);
+    border-color: var(--field-border-hover);
   }
 
+  /* The ring is a solid outline in the primary hue (3:1 or more on the card in every fixed
+     scheme), drawn outside the border so the field does not shift. A text field matches
+     :focus-visible on pointer focus too, so the ring always marks the field being edited. */
   .input:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+    background-color: var(--field-bg-focus);
   }
 
+  .input:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  /* Dimmed by colour, not opacity, so the value stays readable (it often shows a value
+     that applies, such as an inherited threshold). */
   .input:disabled {
-    opacity: 0.5;
     cursor: not-allowed;
-    background-color: var(--color-base-200);
+    background-color: var(--field-bg-disabled);
+    border-color: var(--field-border-disabled);
+    box-shadow: none;
+    color: var(--field-text-disabled);
   }
 
   .input::placeholder {
-    color: var(--color-base-content);
-    opacity: 0.5;
+    color: var(--text-subtle);
+    opacity: 1;
+  }
+
+  /* A value the browser's own constraints reject (min, max, step, pattern, required) is
+     marked once the user has edited the field, never while it is still untouched. */
+  .input:user-invalid,
+  .textarea:user-invalid {
+    border-color: var(--color-error);
+  }
+
+  .input:user-invalid:focus-visible,
+  .textarea:user-invalid:focus-visible {
+    outline-color: var(--color-error);
+  }
+
+  .input[type='number'] {
+    font-variant-numeric: tabular-nums;
   }
 
   /* Input sizes */
@@ -614,7 +752,7 @@
 
   .input-error:focus {
     border-color: var(--color-error);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 12%, transparent);
+    outline-color: var(--color-error);
   }
 
   .input-success {
@@ -623,7 +761,7 @@
 
   .input-success:focus {
     border-color: var(--color-success);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 12%, transparent);
+    outline-color: var(--color-success);
   }
 
   .input-warning {
@@ -632,7 +770,7 @@
 
   .input-warning:focus {
     border-color: var(--color-warning);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning) 12%, transparent);
+    outline-color: var(--color-warning);
   }
 
   /* Keep the state border on hover: the base hover rule is more specific than a plain state class */
@@ -648,6 +786,10 @@
     border-color: var(--color-warning);
   }
 
+  .input:user-invalid:hover:not(:disabled, :focus) {
+    border-color: var(--color-error);
+  }
+
   /* ----------------------------------------
      SELECT
      ---------------------------------------- */
@@ -657,9 +799,10 @@
     padding: 0.5rem 2.5rem 0.5rem 0.75rem;
     font-size: 0.875rem;
     line-height: 1.25rem;
-    background-color: var(--color-base-100);
+    background-color: var(--field-bg);
     color: var(--color-base-content);
-    border: 1px solid var(--border-100);
+    border: 1px solid var(--field-border);
+    box-shadow: var(--field-shadow);
     border-radius: var(--radius-field);
     cursor: pointer;
     transition: all var(--animation-input) ease-in-out;
@@ -671,19 +814,31 @@
   }
 
   .select:hover:not(:disabled, :focus) {
-    border-color: var(--border-200);
+    border-color: var(--field-border-hover);
   }
 
+  /* The ring is a solid outline in the primary hue (3:1 or more on the card in every fixed
+     scheme), drawn outside the border so the field does not shift. A text field matches
+     :focus-visible on pointer focus too, so the ring always marks the field being edited. */
   .select:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+    background-color: var(--field-bg-focus);
   }
 
+  .select:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  /* Dimmed by colour, not opacity, so the value stays readable (it often shows a value
+     that applies, such as an inherited threshold). */
   .select:disabled {
-    opacity: 0.5;
     cursor: not-allowed;
-    background-color: var(--color-base-200);
+    background-color: var(--field-bg-disabled);
+    border-color: var(--field-border-disabled);
+    box-shadow: none;
+    color: var(--field-text-disabled);
   }
 
   .select-bordered {
@@ -736,9 +891,10 @@
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     line-height: 1.5rem;
-    background-color: var(--color-base-100);
+    background-color: var(--field-bg);
     color: var(--color-base-content);
-    border: 1px solid var(--border-100);
+    border: 1px solid var(--field-border);
+    box-shadow: var(--field-shadow);
     border-radius: var(--radius-field);
     transition: all var(--animation-input) ease-in-out;
     resize: vertical;
@@ -746,19 +902,31 @@
   }
 
   .textarea:hover:not(:disabled, :focus) {
-    border-color: var(--border-200);
+    border-color: var(--field-border-hover);
   }
 
+  /* The ring is a solid outline in the primary hue (3:1 or more on the card in every fixed
+     scheme), drawn outside the border so the field does not shift. A text field matches
+     :focus-visible on pointer focus too, so the ring always marks the field being edited. */
   .textarea:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
+    background-color: var(--field-bg-focus);
   }
 
+  .textarea:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  /* Dimmed by colour, not opacity, so the value stays readable (it often shows a value
+     that applies, such as an inherited threshold). */
   .textarea:disabled {
-    opacity: 0.5;
     cursor: not-allowed;
-    background-color: var(--color-base-200);
+    background-color: var(--field-bg-disabled);
+    border-color: var(--field-border-disabled);
+    box-shadow: none;
+    color: var(--field-text-disabled);
   }
 
   .textarea-bordered {
@@ -784,6 +952,10 @@
 
   .textarea-success:hover:not(:disabled, :focus) {
     border-color: var(--color-success);
+  }
+
+  .textarea:user-invalid:hover:not(:disabled, :focus) {
+    border-color: var(--color-error);
   }
 
   /* ----------------------------------------
@@ -1023,7 +1195,9 @@
     appearance: none;
     width: 100%;
     height: 0.5rem;
-    background-color: var(--color-base-300);
+
+    /* --border-200, not base-300: base-300 is barely distinct from a white card. */
+    background-color: var(--border-200);
     border-radius: var(--radius-full);
     cursor: pointer;
   }
@@ -1039,7 +1213,7 @@
     box-shadow: var(--shadow-md);
   }
 
-  .range::-webkit-slider-thumb:hover {
+  .range:not(:disabled)::-webkit-slider-thumb:hover {
     transform: scale(1.1);
   }
 
@@ -1054,7 +1228,7 @@
     box-shadow: var(--shadow-md);
   }
 
-  .range::-moz-range-thumb:hover {
+  .range:not(:disabled)::-moz-range-thumb:hover {
     transform: scale(1.1);
   }
 
@@ -1063,8 +1237,22 @@
     outline-offset: 2px;
   }
 
+  /* Dimmed by colour, not opacity: a muted track and a neutral thumb, so a disabled slider
+     (for example a threshold that uses another classifier's value) still shows where it sits. */
   .range:disabled {
-    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: var(--border-100);
+  }
+
+  .range:disabled::-webkit-slider-thumb {
+    background-color: var(--border-300);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  .range:disabled::-moz-range-thumb {
+    background-color: var(--border-300);
+    box-shadow: none;
     cursor: not-allowed;
   }
 
@@ -1098,11 +1286,21 @@
     height: 0.75rem;
   }
 
+  .range-xs::-moz-range-thumb {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
   .range-sm {
     height: 0.375rem;
   }
 
   .range-sm::-webkit-slider-thumb {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .range-sm::-moz-range-thumb {
     width: 1rem;
     height: 1rem;
   }
@@ -1255,21 +1453,17 @@
 
   .alert-info {
     background-color: color-mix(in srgb, var(--color-info) 15%, transparent);
-    color: var(--color-info);
+    color: var(--text-info);
   }
 
   .alert-success {
     background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
-    color: var(--color-success);
+    color: var(--text-success);
   }
 
   .alert-warning {
     background-color: color-mix(in srgb, var(--color-warning) 15%, transparent);
-    color: #92400e; /* amber-800 for better contrast */
-  }
-
-  [data-theme='dark'] .alert-warning {
-    color: var(--color-warning);
+    color: var(--text-warning);
   }
 
   .alert-error {
@@ -1645,26 +1839,42 @@
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
-    color: var(--color-base-content);
-    opacity: 0.7;
+
+    /* The inactive label is dimmed through its colour, never through element opacity: opacity
+       multiplies with any colour alpha a caller adds and also fades the focus ring. 70% keeps
+       4.5:1 on base-100, base-200 and base-300 in both themes (color-contrast.test.ts). */
+    color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
     transition: all var(--animation-btn) ease-in-out;
     border-bottom: 2px solid transparent;
+
+    /* Forced colours paint every border, the transparent one included, so each tab would look
+       selected. Hide the unselected underline in the page colour. */
+    @media (forced-colors: active) {
+      border-bottom-color: Canvas;
+    }
   }
 
-  .tab:hover {
-    opacity: 1;
+  .tab:not(.tab-active):hover {
+    color: var(--color-base-content);
   }
 
   .tab-active {
-    opacity: 1;
     border-bottom-color: var(--color-primary);
-    color: var(--color-primary);
+    color: var(--text-primary);
     background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+
+    @media (forced-colors: active) {
+      border-bottom-color: CanvasText;
+    }
   }
 
   .tab:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
+
+    @media (forced-colors: active) {
+      outline-color: CanvasText;
+    }
   }
 
   .tab:disabled {
@@ -1709,6 +1919,14 @@
   .tabs-boxed .tab-active {
     background-color: var(--color-base-100);
     color: var(--color-base-content);
+
+    /* Forced colours drop the fill that marks the selected segment: paint the system selection
+       pair, as ViewToggle does. */
+    @media (forced-colors: active) {
+      forced-color-adjust: none;
+      background-color: Highlight;
+      color: HighlightText;
+    }
   }
 
   /* Tab sizes */
@@ -2357,26 +2575,6 @@
     border-right: 1px solid var(--border-100);
     border-bottom: none;
   }
-
-  /* ----------------------------------------
-     SKELETON
-     ---------------------------------------- */
-  .skeleton {
-    background-color: var(--color-base-300);
-    border-radius: var(--radius-field);
-    animation: skeleton-pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes skeleton-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-
-    50% {
-      opacity: 0.5;
-    }
-  }
 }
 
 /* ============================================
@@ -2419,12 +2617,12 @@
   /* Menu active state utilities - using color-mix for transparency with CSS variables */
   .menu-item-active {
     background-color: color-mix(in oklch, var(--color-primary) 15%, transparent);
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .menu-subitem-active {
     background-color: color-mix(in oklch, var(--color-primary) 15%, transparent);
-    color: var(--color-primary);
+    color: var(--text-primary);
     font-weight: 500;
   }
 
@@ -2438,7 +2636,7 @@
     background-color: var(--color-error);
   }
 
-  /* Error text uses --text-error; --color-error is for fills and borders */
+  /* Status text uses --text-<status>; --color-<status> is for fills and borders */
   .text-error {
     color: var(--text-error);
   }
@@ -2452,7 +2650,7 @@
   }
 
   .text-warning {
-    color: var(--color-warning);
+    color: var(--text-warning);
   }
 
   .text-warning-content {
@@ -2464,7 +2662,7 @@
   }
 
   .text-success {
-    color: var(--color-success);
+    color: var(--text-success);
   }
 
   .text-success-content {
@@ -2476,7 +2674,7 @@
   }
 
   .text-info {
-    color: var(--color-info);
+    color: var(--text-info);
   }
 
   .text-info-content {
@@ -2500,7 +2698,7 @@
   }
 
   .text-primary {
-    color: var(--color-primary);
+    color: var(--text-primary);
   }
 
   .text-primary-content {

@@ -1,7 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/svelte';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import { api } from '$lib/utils/api';
+import { get } from 'svelte/store';
+import { navigation } from '$lib/stores/navigation.svelte';
+import { unsavedChanges } from '$lib/stores/unsavedChanges.svelte';
+import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
+import { theme } from '$lib/stores/theme';
+import { tick } from 'svelte';
+import { shortcuts } from '$lib/stores/shortcuts.svelte';
 import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
+import HeaderSettingsMenuShortcutsHost from './HeaderSettingsMenu.shortcuts.test.svelte';
 
 /**
  * Guards the fix for issue #4112: dashboard customization (Edit + Reset) is an
@@ -17,7 +26,8 @@ import HeaderSettingsMenu from './HeaderSettingsMenu.svelte';
 // flow through the same mock).
 const EDIT_LABEL = t('dashboard.editMode.editDashboard');
 const RESET_LABEL = t('dashboard.editMode.resetDashboard');
-const THEME_LABEL = t('navigation.theme');
+const SWITCH_TO_DARK_LABEL = t('navigation.switchToDarkTheme');
+const SWITCH_TO_LIGHT_LABEL = t('navigation.switchToLightTheme');
 const REPORT_BUG_LABEL = t('navigation.reportBug');
 const MENU_LABEL = t('navigation.settingsMenu');
 
@@ -39,14 +49,20 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
   it('hides Edit and Reset Dashboard from unauthenticated guests', async () => {
+    theme.set('light');
     const menu = await renderAndOpen({ securityEnabled: true, accessAllowed: false });
 
     expect(menu.queryByText(EDIT_LABEL)).toBeNull();
     expect(menu.queryByText(RESET_LABEL)).toBeNull();
 
     // Neutral, guest-safe items remain available.
-    expect(menu.getByText(THEME_LABEL)).toBeInTheDocument();
+    expect(menu.getByText(SWITCH_TO_DARK_LABEL)).toBeInTheDocument();
     expect(menu.getByText(REPORT_BUG_LABEL)).toBeInTheDocument();
   });
 
@@ -62,5 +78,188 @@ describe('HeaderSettingsMenu dashboard customization gating (#4112)', () => {
 
     expect(menu.getByText(EDIT_LABEL)).toBeInTheDocument();
     expect(menu.getByText(RESET_LABEL)).toBeInTheDocument();
+  });
+
+  it('names the theme item by the theme it switches to', async () => {
+    theme.set('light');
+    const menu = await renderAndOpen({});
+    expect(menu.getByRole('button', { name: SWITCH_TO_DARK_LABEL })).toBeInTheDocument();
+    expect(menu.queryByRole('button', { name: SWITCH_TO_LIGHT_LABEL })).toBeNull();
+
+    await fireEvent.click(menu.getByRole('button', { name: SWITCH_TO_DARK_LABEL }));
+
+    expect(menu.getByRole('button', { name: SWITCH_TO_LIGHT_LABEL })).toBeInTheDocument();
+    expect(menu.queryByRole('button', { name: SWITCH_TO_DARK_LABEL })).toBeNull();
+  });
+
+  describe('focus after the Reset Dashboard confirmation closes', () => {
+    const CANCEL_LABEL = t('common.buttons.cancel');
+
+    async function pressWithKeyboard(item: HTMLElement) {
+      item.focus();
+      await fireEvent.click(item);
+    }
+
+    // Safari and iPadOS do not focus a pressed button
+    async function pressWithoutFocus(item: HTMLElement) {
+      await fireEvent.pointerDown(item);
+      await fireEvent.click(item);
+    }
+
+    async function dismissWithCancel() {
+      await fireEvent.click(await screen.findByRole('button', { name: CANCEL_LABEL }));
+    }
+
+    async function dismissWithEscape() {
+      await screen.findByRole('button', { name: CANCEL_LABEL });
+      await fireEvent.keyDown(document, { key: 'Escape' });
+    }
+
+    it('confirming resets the layout, goes to the dashboard and returns focus to the menu button', async () => {
+      const patch = vi.spyOn(api, 'patch').mockResolvedValue({});
+      const navigate = vi.spyOn(navigation, 'navigate').mockResolvedValue(true);
+      const menu = await renderAndOpen({ securityEnabled: false });
+      await pressWithKeyboard(menu.getByRole<HTMLButtonElement>('button', { name: RESET_LABEL }));
+      const dialog = await screen.findByRole('dialog');
+
+      await fireEvent.click(within(dialog).getByRole('button', { name: RESET_LABEL }));
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/ui/dashboard'));
+      expect(patch).toHaveBeenCalledWith('/api/v2/settings/dashboard', expect.anything());
+      await waitFor(() => expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus());
+    });
+
+    it.each([
+      ['keyboard activation', 'Cancel', pressWithKeyboard, dismissWithCancel],
+      ['keyboard activation', 'Escape', pressWithKeyboard, dismissWithEscape],
+      ['a press that does not focus the item', 'Cancel', pressWithoutFocus, dismissWithCancel],
+      ['a press that does not focus the item', 'Escape', pressWithoutFocus, dismissWithEscape],
+    ])(
+      'returns to the settings menu button after %s and %s',
+      async (_pressName, _dismissName, press, dismiss) => {
+        const menu = await renderAndOpen({ securityEnabled: false });
+        await press(menu.getByRole<HTMLButtonElement>('button', { name: RESET_LABEL }));
+        const trigger = screen.getByRole('button', { name: MENU_LABEL });
+
+        await dismiss();
+
+        await waitFor(() => expect(trigger).toHaveFocus());
+      }
+    );
+  });
+});
+
+describe('HeaderSettingsMenu keyboard shortcuts item', () => {
+  afterEach(() => {
+    cleanup();
+    shortcuts.closeHelp();
+    shortcuts.setEnabled(true);
+    localStorage.clear();
+  });
+
+  it('shows the question mark key on the item while shortcuts are on', async () => {
+    render(HeaderSettingsMenuShortcutsHost);
+    await fireEvent.click(screen.getByRole('button', { name: MENU_LABEL }));
+
+    const item = screen.getByRole('button', { name: 'shortcuts.menuItem' });
+
+    expect(item).toHaveAttribute('aria-keyshortcuts', '?');
+    const cap = item.querySelector('kbd');
+    expect(cap).toHaveTextContent('?');
+    expect(cap).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('keeps the item, without a key hint, while shortcuts are off, and it still opens the sheet', async () => {
+    shortcuts.setEnabled(false);
+    render(HeaderSettingsMenuShortcutsHost);
+    await fireEvent.click(screen.getByRole('button', { name: MENU_LABEL }));
+
+    const item = screen.getByRole('button', { name: 'shortcuts.menuItem' });
+
+    expect(item).not.toHaveAttribute('aria-keyshortcuts');
+    expect(item.querySelector('kbd')).toBeNull();
+    await fireEvent.click(item);
+    expect(shortcuts.helpOpen).toBe(true);
+  });
+
+  it('closes the menu, opens the cheat sheet, and returns focus to the gear when it closes', async () => {
+    render(HeaderSettingsMenuShortcutsHost);
+    const gear = screen.getByRole('button', { name: MENU_LABEL });
+    await fireEvent.click(gear);
+
+    await fireEvent.click(screen.getByRole('button', { name: 'shortcuts.menuItem' }));
+
+    expect(gear).toHaveAttribute('aria-expanded', 'false');
+    expect(shortcuts.helpOpen).toBe(true);
+    await tick();
+    await fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    await tick();
+    expect(shortcuts.helpOpen).toBe(false);
+    await waitFor(() => expect(gear).toHaveFocus());
+  });
+});
+
+describe('HeaderSettingsMenu Edit dashboard while a guard holds the move', () => {
+  const SETTINGS_PAGE = ['', 'ui', 'settings', 'main'].join('/');
+  let unregister: (() => void) | undefined;
+
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    dashboardEditMode.set(false);
+    navigation.redirect(SETTINGS_PAGE);
+    unregister = unsavedChanges.register({ isDirty: () => true });
+  });
+
+  afterEach(() => {
+    cleanup();
+    unregister?.();
+    unsavedChanges.resetForTesting();
+    dashboardEditMode.set(false);
+    vi.restoreAllMocks();
+  });
+
+  // The prompt is mounted by App and records the focused element as the place to return to;
+  // the focused menu item unmounts with the menu, so the trigger must hold focus by then.
+  it('moves focus to the menu button when the prompt opens', async () => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+    const item = menu.getByText(EDIT_LABEL).closest('button');
+    if (!item) throw new Error('Edit dashboard item not found');
+    item.focus();
+
+    await fireEvent.click(item);
+
+    expect(unsavedChanges.prompting).toBe(true);
+    expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus();
+  });
+
+  it('moves focus to the menu button when Report bug opens the prompt', async () => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+    const item = menu.getByText(REPORT_BUG_LABEL).closest('button');
+    if (!item) throw new Error('Report bug item not found');
+    item.focus();
+
+    await fireEvent.click(item);
+
+    expect(unsavedChanges.prompting).toBe(true);
+    expect(screen.getByRole('button', { name: MENU_LABEL })).toHaveFocus();
+  });
+
+  it.each([
+    { answer: 'stay', editMode: false },
+    { answer: 'leave', editMode: true },
+  ])('$answer leaves edit mode $editMode', async ({ answer, editMode }) => {
+    const menu = await renderAndOpen({ securityEnabled: false, accessAllowed: true });
+
+    await fireEvent.click(menu.getByText(EDIT_LABEL));
+    expect(unsavedChanges.prompting).toBe(true);
+    // Nothing is armed while the prompt is open.
+    expect(get(dashboardEditMode)).toBe(false);
+
+    if (answer === 'leave') unsavedChanges.leave();
+    else unsavedChanges.stay();
+
+    await waitFor(() => expect(unsavedChanges.prompting).toBe(false));
+    await waitFor(() => expect(get(dashboardEditMode)).toBe(editMode));
   });
 });

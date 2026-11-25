@@ -1,3 +1,7 @@
+> **Note:** Offline file analysis (`birdnet-go file`) is no longer part of BirdNET-Go, which focuses on real-time sound-card and network stream analysis. To analyze existing audio files offline using the same BirdNET and Perch models, use the companion tool **[birda](https://github.com/tphakala/birda)** (CLI) or **[birda-gui](https://github.com/tphakala/birda-gui)** (desktop GUI).
+
+The notes below are kept only as a historical reference for older releases.
+
 File analysis is enabled by **file** flag, you can define additional options such as BirdNET detection threshold, sensitivity or number of CPU threads used by tflite. Default format for file analysis results is Raven table and output is saved in _output/inputfilename.wav.txt_.
 
 File analysis works best with WAV files which are recorded in 48k sample rate, BirdNET-Go has very simple resampling algorithm which allows ingestion of audio files with alternative sample rates but detection accuracy will be degraded. Input file bit depths of 16, 24 and 32 (int) are supported.

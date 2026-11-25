@@ -1,6 +1,58 @@
 import { t } from '$lib/i18n';
 import { api } from '$lib/utils/api';
-import type { ChannelAnalysis } from '$lib/stores/settings';
+import { validateProtocolURL } from '$lib/utils/security';
+import { StreamTypes, type ChannelAnalysis, type StreamType } from '$lib/stores/settings';
+
+/** Longest stream URL the editors accept. */
+export const MAX_STREAM_URL_LENGTH = 2048;
+
+/**
+ * Longest stream name the server accepts, in UTF-8 bytes (MaxStreamNameLength,
+ * internal/conf/validate_audio.go:168, compared with len at :252). The fields
+ * keep maxlength as a soft cap in characters and check the bytes with
+ * isStreamNameTooLong.
+ */
+export const MAX_STREAM_NAME_LENGTH = 64;
+
+/** True when the name is longer than the server accepts, counted in UTF-8 bytes. */
+export function isStreamNameTooLong(name: string): boolean {
+  return new TextEncoder().encode(name).length > MAX_STREAM_NAME_LENGTH;
+}
+
+/** The reason a name is too long, for the add form and the card. */
+export function streamNameTooLongMessage(): string {
+  return t('settings.audio.streams.errors.nameTooLong', { max: MAX_STREAM_NAME_LENGTH });
+}
+
+/** What the save rules can find wrong with a stream name. */
+export type StreamNameProblem = 'required' | 'tooLong' | 'duplicate';
+
+/** What the save rules can find wrong with a stream URL. */
+export type StreamUrlProblem = 'required' | 'invalid' | 'duplicate' | 'untested';
+
+/** The message for a name problem of the save rules, for the add form and the card. */
+export function streamNameProblemMessage(problem: StreamNameProblem): string {
+  if (problem === 'required') return t('settings.audio.streams.errors.nameRequired');
+  if (problem === 'tooLong') return streamNameTooLongMessage();
+  return t('settings.audio.streams.errors.duplicateName');
+}
+
+/** The message for a URL problem of the save rules, for the add form and the card. */
+export function streamUrlProblemMessage(problem: StreamUrlProblem): string {
+  switch (problem) {
+    case 'required':
+      return t('settings.audio.streams.errors.urlRequired');
+    case 'invalid':
+      return t('settings.audio.streams.errors.invalidUrl');
+    case 'duplicate':
+      return t('settings.audio.streams.errors.duplicate');
+    case 'untested':
+      return t('settings.audio.streams.testRequired');
+  }
+}
+
+/** Rate a stream is assumed to deliver until a test reports its own. */
+export const DEFAULT_SAMPLE_RATE = 48000;
 
 export const streamTypeOptions = [
   { value: 'rtsp', label: 'RTSP' },
@@ -35,4 +87,46 @@ export async function analyzeStreamChannels(url: string): Promise<ChannelAnalysi
   return api.post<ChannelAnalysis>('/api/v2/streams/analyze-channels', {
     url: url.trim(),
   });
+}
+
+/** The stream type a URL names by its scheme or extension; RTSP when it names none. */
+export function detectStreamType(url: string): StreamType {
+  const urlLower = url.toLowerCase();
+  if (urlLower.startsWith('rtsp://') || urlLower.startsWith('rtsps://')) return 'rtsp';
+  if (urlLower.startsWith('rtmp://') || urlLower.startsWith('rtmps://')) return 'rtmp';
+  if (urlLower.startsWith('udp://') || urlLower.startsWith('rtp://')) return 'udp';
+  if (urlLower.includes('.m3u8')) return 'hls';
+  if (urlLower.startsWith('http://') || urlLower.startsWith('https://')) return 'http';
+  return 'rtsp';
+}
+
+/** URL schemes each stream type accepts. */
+function streamProtocols(type: StreamType): string[] {
+  switch (type) {
+    case 'rtmp':
+      return ['rtmp', 'rtmps'];
+    case 'http':
+    case 'hls':
+      return ['http', 'https'];
+    case 'udp':
+      return ['udp', 'rtp'];
+    case 'rtsp':
+    default:
+      return ['rtsp', 'rtsps'];
+  }
+}
+
+/** True when the URL is well formed and uses a scheme of the stream type. */
+export function isValidStreamUrl(url: string, type: StreamType): boolean {
+  return validateProtocolURL(url, streamProtocols(type), MAX_STREAM_URL_LENGTH);
+}
+
+/** True for the stream types that take a transport (TCP or UDP). */
+export function streamHasTransport(type: StreamType): boolean {
+  return type === 'rtsp' || type === 'rtmp';
+}
+
+/** The stream type a select option value names, or undefined for an unknown value. */
+export function toStreamType(value: string | string[]): StreamType | undefined {
+  return Object.values(StreamTypes).find(type => type === value);
 }

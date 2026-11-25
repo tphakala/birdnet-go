@@ -30,13 +30,16 @@
 -->
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { Play, Pause, Download, XCircle } from '@lucide/svelte';
   import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
   import AudibleBatsButton from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
   import { useAudibleBats } from '$lib/utils/useAudibleBats.svelte';
   import AudioToolbar from './AudioToolbar.svelte';
+  import PlaybackDefaultsModal from '$lib/desktop/components/modals/PlaybackDefaultsModal.svelte';
+  import { openDialogCount } from '$lib/desktop/components/ui/Modal.svelte';
+  import { isAuthenticated } from '$lib/utils/auth';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -51,9 +54,12 @@
     AUDIO_RETRY_DELAY_MS,
     isPlayInterruptedError,
     pendingRetryDelayMs,
+    playButtonAction,
     playButtonLabelKey,
     probeAudioSource,
+    type PlaybackControls,
   } from '$lib/utils/audio';
+  import { shortcutTitle, type ShortcutHint } from '$lib/utils/keyboard';
   import { formatTime } from '$lib/utils/formatters';
   import {
     clampSeconds,
@@ -90,13 +96,16 @@
     type SpectrogramGenerationStatus,
   } from '$lib/utils/spectrogramStatus';
   import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
-  import { get } from 'svelte/store';
-  import { dashboardSettings } from '$lib/stores/settings';
   import {
-    audioUrlFor,
-    getPlaybackDenoiseDefault,
-    swapSourceKeepingPosition,
-  } from '$lib/utils/playbackDenoise';
+    PLAYBACK_GAIN_MAX_DB,
+    PLAYBACK_GAIN_MIN_DB,
+    PLAYBACK_HIGH_PASS_MAX_HZ,
+    PLAYBACK_HIGH_PASS_MIN_HZ,
+    clampToRange,
+    getPlaybackDefaults,
+    type PlaybackDefaultValues,
+  } from '$lib/utils/playbackDefaults';
+  import { audioUrlFor, swapSourceKeepingPosition } from '$lib/utils/playbackDenoise';
 
   const logger = loggers.audio;
 
@@ -161,6 +170,14 @@
      * spectrogram, so rendering them never starts a denoise.
      */
     spectrogramFollowsDenoise?: boolean;
+    /**
+     * Opt-in: called once with the controls a keyboard shortcut can use, and again when this
+     * callback changes. Returns the function that detaches them; the player calls it on
+     * unmount and before attaching to a new callback.
+     */
+    onPlaybackControls?: (_controls: PlaybackControls) => () => void;
+    /** Key hint for the play button: sets aria-keyshortcuts and names the key in the title */
+    playShortcut?: ShortcutHint | null;
   }
 
   let {
@@ -182,10 +199,12 @@
     modelType = '',
     clipSampleRate,
     spectrogramFollowsDenoise = false,
+    onPlaybackControls,
+    playShortcut = null,
   }: Props = $props();
 
   // Audio and UI elements
-  let audioElement: HTMLAudioElement;
+  let audioElement: HTMLAudioElement | undefined;
   let playerContainer: HTMLDivElement;
   // svelte-ignore non_reactive_update
   let playPauseButton!: HTMLButtonElement; // Template-only binding
@@ -271,7 +290,15 @@
 
   // Audio processing state
   let audioContext: AudioContext | null = null;
-  let isInitializingContext = $state(false);
+  // The audio context start in flight, shared by every play press that arrives while
+  // it runs.
+  let contextStart: Promise<AudioContext | null> | undefined;
+  // Identifies the latest play request. A request that finds a newer id after its
+  // wait (another press, a stop, a source swap) must not play.
+  let playRequestId = 0;
+  const cancelPendingPlay = () => {
+    playRequestId++;
+  };
   let audioNodes: AudioNodeChain | null = null;
 
   // Cleanup tracking for memory leak prevention
@@ -285,11 +312,14 @@
   }> = [];
 
   // Control state
-  // Read persistent default from settings store (one-time, not reactive:
-  // changing the setting while a player is mounted should not cause gain to jump)
-  const defaultGainDb = get(dashboardSettings)?.defaultAudioGain ?? 0;
-  let gainValue = $state(defaultGainDb); // dB
-  let filterFreq = $state(20); // Hz
+  // Read the persistent defaults once (not reactive: changing a setting while a
+  // player is mounted should not cause gain or the filter to jump). A save from
+  // this player's playback defaults dialog updates them (applySavedDefaults).
+  const playbackDefaults = getPlaybackDefaults();
+  let defaultGainDb = $state(playbackDefaults.gainDb);
+  let defaultFilterFreq = $state(playbackDefaults.highPassHz);
+  let gainValue = $state(playbackDefaults.gainDb); // dB
+  let filterFreq = $state(playbackDefaults.highPassHz); // Hz
   let playbackSpeed = $state(1.0); // Playback rate multiplier
   let showControls = $state(true); // Will be set based on width
   let isMobile = $state(false);
@@ -315,9 +345,10 @@
 
   // Processing state
   // The playback denoise default, read once when the player mounts like the default
-  // gain. The toolbar starts on it, and it is what the first play loads.
-  const defaultDenoise = getPlaybackDenoiseDefault();
-  let processingDenoise = $state(defaultDenoise);
+  // gain (and updated by a save from this player's defaults dialog). The toolbar
+  // starts on it, and it is what the first play loads.
+  let defaultDenoise = $state(playbackDefaults.denoise);
+  let processingDenoise = $state(playbackDefaults.denoise);
   let processingNormalize = $state(false);
   let isProcessing = $state(false);
   let processedAudioUrl = $state<string | null>(null);
@@ -374,11 +405,6 @@
   // restored position) are ready, which avoids a race where play() starts from 0
   // before handleLoadedMetadata applies audibleBatsPendingFraction.
   let audibleBatsPendingAutoplay = false;
-
-  // Constants
-  const GAIN_MAX_DB = 24;
-  const FILTER_HP_MIN_FREQ = 20;
-  const FILTER_HP_MAX_FREQ = 10000;
 
   // Frequency scale overlay. Bird spectrograms are drawn for 24 kHz, so their
   // axis is a fixed 0-12 kHz. Bat spectrograms are rendered at the clip's own
@@ -791,9 +817,12 @@
     }
   };
 
-  const playSelection = () => {
-    if (!audioElement || selectionStartSec === null || selectionEndSec === null) return;
-    ensurePlaybackSource();
+  const playSelection = async () => {
+    if (!audioElement || !hasActiveSelection()) return;
+    const current = await prepareToPlay();
+    // The request may have been superseded, the player unmounted, or the selection
+    // cleared or moved, while the audio context started.
+    if (!current || !audioElement || selectionStartSec === null || selectionEndSec === null) return;
 
     const start = Math.min(selectionStartSec, selectionEndSec);
     const end = Math.max(selectionStartSec, selectionEndSec);
@@ -804,15 +833,16 @@
     }
 
     audioElement.currentTime = start;
-    audioElement
-      .play()
-      .then(() => {
-        isPlayingSelection = true;
-        scheduleSelectionEnd(start, end);
-      })
-      .catch((err: unknown) => {
-        logger.error('Failed to play selection:', err);
-      });
+    try {
+      await audioElement.play();
+    } catch (err) {
+      // While a load retry is pending handlePlayRejection queues the press, and the
+      // queued play resumes the whole clip, not this selection: drop the press instead.
+      if (!loadRetryPending()) handlePlayRejection(err);
+      return;
+    }
+    isPlayingSelection = true;
+    scheduleSelectionEnd(start, end);
   };
 
   const scheduleSelectionEnd = (start: number, end: number) => {
@@ -834,6 +864,7 @@
   };
 
   const stopSelection = () => {
+    cancelPendingPlay();
     if (!audioElement) return;
     if (selectionPlaybackTimeout) {
       clearTimeout(selectionPlaybackTimeout);
@@ -938,10 +969,21 @@
     // first so its stale copy never sits beside the new source. A copy that is still
     // being generated carries the old toolbar state too, so its request is aborted.
     if (audibleBats.active || audibleBats.generating) audibleBats.disable();
+    // A request still in flight carries the old state: end it now, not after the
+    // debounce, so the latest change wins and an older result never lands beside it.
+    abortProcessing();
     if (processDebounceTimer) clearTimeout(processDebounceTimer);
     processDebounceTimer = setTimeout(() => {
       processAudio();
     }, PROCESS_DEBOUNCE_MS);
+  }
+
+  // Ends the processing request in flight, if any, and its busy state.
+  function abortProcessing() {
+    if (!processAbortController) return;
+    processAbortController.abort();
+    processAbortController = null;
+    isProcessing = false;
   }
 
   // Loads a processing result into the element at the same position. An active
@@ -949,6 +991,7 @@
   // bats is turned off (currentSource).
   function swapProcessedSource(url: string) {
     if (!audioElement || audibleBats.active) return;
+    cancelPendingPlay();
     const pos = audioElement.currentTime;
     replaceSource(url);
     audioElement.currentTime = pos;
@@ -1001,6 +1044,8 @@
     }
 
     isProcessing = true;
+    // A play press still waiting for the audio context must not start the old clip.
+    cancelPendingPlay();
     // Pause playback while backend applies filters
     if (isPlaying && audioElement) {
       audioElement.pause();
@@ -1273,10 +1318,14 @@
     }
   }
 
+  // Whether a load retry, or the probe that may reschedule it, is pending.
+  const loadRetryPending = () =>
+    audioRetryTimer !== undefined || audioProbeController !== undefined;
+
   // Handle a rejected play(). While a retry timer is pending the retry can
   // still succeed, so only remember the play intent.
   function handlePlayRejection(err: unknown) {
-    if (audioRetryTimer !== undefined || audioProbeController !== undefined) {
+    if (loadRetryPending()) {
       playRequestedAfterRetry = true;
       return;
     }
@@ -1367,35 +1416,39 @@
     audioElement.load();
   }
 
-  // Audio event handlers
-  const handlePlayPause = async () => {
-    if (!audioElement) return;
-
-    if (!audioElement.paused && !audioElement.error) {
-      audioElement.pause();
-      return;
-    }
-
+  // Get the element ready for a play the user asked for: the playback source, a
+  // reload when the element failed, and the Web Audio graph (gain, high-pass,
+  // compressor). The play button and selection play both start here, so whichever
+  // comes first builds the graph, and presses that arrive while the audio context
+  // starts wait for the same start. Resolves true only when this is still the latest
+  // play request and the component is mounted: a newer press, a stop or a source
+  // swap during the wait cancels it.
+  const prepareToPlay = async (): Promise<boolean> => {
+    if (!audioElement) return false;
     error = null;
     ensurePlaybackSource();
     // A failed element cannot play (retries exhausted, or a retry timer pending):
     // reload it now instead of swallowing the click.
     if (audioElement.error) reloadAfterFailure();
+    // Taken after the source work above, which cancels older requests itself.
+    const requestId = ++playRequestId;
 
     // Initialize the audio context on first play, and re-enter whenever the
     // graph is not attached OR the context has fallen back to suspended
     // (e.g. tab backgrounding / audio-session interruption) so
     // getAudioContext() resumes it. Without the state re-check, an
     // already-attached graph on a re-suspended context plays silently.
-    // Guard against rapid clicks that could create multiple AudioContexts.
-    if ((!audioNodes || audioContext?.state !== 'running') && !isInitializingContext) {
-      isInitializingContext = true;
+    if (!audioNodes || audioContext?.state !== 'running') {
+      // Presses during the start share it, so it runs once.
+      contextStart ??= initializeAudioContext();
       try {
-        audioContext = await initializeAudioContext();
+        audioContext = await contextStart;
+        if (!audioElement) return false;
         // Attach the Web Audio graph only when the context is running;
         // while suspended the element plays through native output and the
         // graph is deferred to a later play (see attachAudioGraphWhenRunning).
-        audioNodes = attachAudioGraphWhenRunning(audioContext, audioElement, audioNodes, {
+        // The press that resumes first attaches it; later ones reuse it.
+        audioNodes ??= attachAudioGraphWhenRunning(audioContext, audioElement, null, {
           gainDb: gainValue,
           highPassFreq: filterFreq,
           includeCompressor: true,
@@ -1411,18 +1464,24 @@
         logger.warn('Audio graph setup failed, playing without processing', err);
         audioContextAvailable = false;
       } finally {
-        isInitializingContext = false;
+        contextStart = undefined;
       }
     }
+    return audioElement !== undefined && requestId === playRequestId;
+  };
 
-    // Safety check: component may have unmounted during async initialization
+  // Audio event handlers
+  const handlePlayPause = async () => {
     if (!audioElement) return;
 
-    try {
-      await audioElement.play();
-    } catch (err) {
-      handlePlayRejection(err);
+    if (!audioElement.paused && !audioElement.error) {
+      audioElement.pause();
+      return;
     }
+
+    const current = await prepareToPlay();
+    if (!current || !audioElement) return;
+    await audioElement.play().catch(handlePlayRejection);
   };
 
   const updateProgress = () => {
@@ -1492,6 +1551,7 @@
   const seekMax = $derived(usableDuration(duration));
   const seekNow = $derived(clampSeconds(currentTime, seekMax));
   const seekValueText = $derived(seekSliderValueText(seekNow, seekMax));
+  const overlayPlayLabel = $derived(t(playButtonLabelKey(isLoading, isPlaying)));
 
   // What the screen reader status region says about the spectrogram. It follows the same
   // conditions as the visible overlays: a rate resolve or an in-flight load is loading, and a
@@ -1513,6 +1573,37 @@
     updateProgress();
   };
 
+  // What a keyboard shortcut can ask of the player. The methods read live state when called.
+  const playbackControls: PlaybackControls = {
+    togglePlayback: () => {
+      // The visible play button is the toolbar's with clip extraction, the overlay's without
+      if (enableClipExtraction) {
+        if (isLoading || isProcessing) return;
+        const action = playButtonAction({
+          isPlaying,
+          isPlayingSelection,
+          hasSelection: hasActiveSelection(),
+        });
+        if (action === 'stopSelection') stopSelection();
+        else if (action === 'playSelection') void playSelection();
+        else void handlePlayPause();
+        return;
+      }
+      if (isLoading) return;
+      void handlePlayPause();
+    },
+    seekBy: seconds => {
+      // The reactive time lags the element by up to PROGRESS_UPDATE_INTERVAL_MS
+      if (!audioElement) return;
+      seekTo(audioElement.currentTime + seconds);
+    },
+  };
+
+  $effect(() => {
+    const attach = onPlaybackControls;
+    return attach ? untrack(() => attach(playbackControls)) : undefined;
+  });
+
   const handleProgressKeydown = (event: KeyboardEvent) => {
     const action = seekKeyAction(event, seekNow, seekMax);
     if (action.preventDefault) event.preventDefault();
@@ -1527,7 +1618,7 @@
 
   // Volume control
   const updateGain = (newGainDb: number) => {
-    gainValue = Math.max(-60, Math.min(GAIN_MAX_DB, newGainDb));
+    gainValue = clampToRange(newGainDb, PLAYBACK_GAIN_MIN_DB, PLAYBACK_GAIN_MAX_DB);
     if (audioNodes) {
       audioNodes.gain.gain.value = dbToGain(gainValue);
     }
@@ -1535,11 +1626,59 @@
 
   // Filter control
   const updateFilter = (newFreq: number) => {
-    filterFreq = Math.max(FILTER_HP_MIN_FREQ, Math.min(FILTER_HP_MAX_FREQ, newFreq));
+    filterFreq = clampToRange(newFreq, PLAYBACK_HIGH_PASS_MIN_HZ, PLAYBACK_HIGH_PASS_MAX_HZ);
     if (audioNodes) {
       audioNodes.highPass.frequency.value = filterFreq;
     }
   };
+
+  // Playback defaults dialog: mounted on its first open and kept, so Modal sees the
+  // pressed gear as its opener and returns focus there on close
+  let defaultsMounted = $state(false);
+  let defaultsOpen = $state(false);
+  // The clip the dialog was opened for
+  let defaultsClipUrl = $state('');
+
+  function openDefaults() {
+    defaultsMounted = true;
+    defaultsClipUrl = audioUrl;
+    defaultsOpen = true;
+  }
+
+  // The dialog belongs to this clip and its toolbar: close it when the player moves
+  // to another clip (the Search player is reused) or the toolbar or its gear goes
+  // away, so it does not open again by itself when they come back
+  $effect(() => {
+    if (
+      defaultsOpen &&
+      (audioUrl !== defaultsClipUrl || !enableClipExtraction || !$isAuthenticated)
+    ) {
+      defaultsOpen = false;
+    }
+  });
+
+  // After a save the saved items become this player's defaults (the overlay's Reset
+  // and modified dot, the denoise default's GET URL) and the player takes them
+  // through the same handlers the toolbar controls call; items that did not change
+  // keep their session value
+  function applySavedDefaults(changed: Partial<PlaybackDefaultValues>) {
+    if (changed.gainDb !== undefined) {
+      defaultGainDb = changed.gainDb;
+      updateGain(changed.gainDb);
+    }
+    if (changed.highPassHz !== undefined) {
+      defaultFilterFreq = changed.highPassHz;
+      updateFilter(changed.highPassHz);
+    }
+    if (changed.denoise !== undefined) {
+      defaultDenoise = changed.denoise;
+      denoiseFailed = false;
+      spectrogramFellBackId = null;
+      // Already playing that preset (Use current values, then Save): reprocessing
+      // the same preset would only pause playback
+      if (processingDenoise !== changed.denoise) handleDenoiseChange(changed.denoise);
+    }
+  }
 
   // Speed control
   const handleSpeedChange = (newSpeed: number) => {
@@ -1566,6 +1705,7 @@
     audibleBatsPendingFraction = frac;
     audibleBatsPendingAutoplay = isPlaying || playRequestedAfterRetry;
     resetRetryState();
+    cancelPendingPlay();
     replaceSource(newSrc);
     audioElement.load();
   }
@@ -2198,21 +2338,19 @@
       const absoluteUrl = new URL(audioUrl, window.location.origin).href;
       if (audioElement.src !== absoluteUrl) {
         debugLog('audioUrl changed, updating src', { from: audioElement.src, to: audioUrl });
+        cancelPendingPlay();
         audioElement.src = audioUrl;
         // Cancel in-flight processing and clean up state from previous audio
         if (processDebounceTimer) {
           clearTimeout(processDebounceTimer);
           processDebounceTimer = null;
         }
-        if (processAbortController) {
-          processAbortController.abort();
-          processAbortController = null;
-        }
+        abortProcessing();
         if (processedAudioUrl) {
           URL.revokeObjectURL(processedAudioUrl);
           processedAudioUrl = null;
         }
-        processingDenoise = defaultDenoise;
+        processingDenoise = untrack(() => defaultDenoise);
         processingNormalize = false;
         isProcessing = false;
         // The new detection starts from its stored clip: its first play switches to
@@ -2238,6 +2376,44 @@
         clearSelection();
       }
     }
+  });
+
+  const handleSelectionKeydown = (e: KeyboardEvent) => {
+    // A key pressed while a dialog is open belongs to that dialog (Escape closes it),
+    // even when the dialog was opened from this player
+    if (openDialogCount() > 0) return;
+    if (e.key === 'Escape' && (selectionStartSec !== null || selectionEndSec !== null)) {
+      clearSelection();
+    }
+  };
+
+  // Prevent native browser selection during drag operations
+  const handleSelectStart = (e: Event) => {
+    if (isDragSelecting || draggingHandle || isScrubbing) e.preventDefault();
+  };
+
+  // Document listeners for selection drag, click-to-seek and Escape. They follow
+  // enableClipExtraction, which can change while the player is mounted.
+  $effect(() => {
+    if (!enableClipExtraction) return;
+    document.addEventListener('mousemove', handleSelectionMouseMove);
+    document.addEventListener('mouseup', handleSelectionMouseUp);
+    document.addEventListener('keydown', handleSelectionKeydown);
+    document.addEventListener('selectstart', handleSelectStart);
+    return () => {
+      document.removeEventListener('mousemove', handleSelectionMouseMove);
+      document.removeEventListener('mouseup', handleSelectionMouseUp);
+      document.removeEventListener('keydown', handleSelectionKeydown);
+      document.removeEventListener('selectstart', handleSelectStart);
+      // A gesture cut off here never sees its mouseup or touchend, so end it now;
+      // otherwise it would resume when extraction is switched on again.
+      if (isDragSelecting) normalizeSelection();
+      isDragSelecting = false;
+      draggingHandle = null;
+      isScrubbing = false;
+      mouseDownInPlayer = false;
+      if (playerContainer) playerContainer.style.touchAction = '';
+    };
   });
 
   // Lifecycle
@@ -2280,7 +2456,7 @@
         // Clear any pending delay timeout and immediately signal play start
         clearPlayEndTimeout();
         // Apply playback rate when starting
-        applyPlaybackRate(audioElement, playbackSpeed);
+        if (audioElement) applyPlaybackRate(audioElement, playbackSpeed);
         if (onPlayStart) {
           onPlayStart();
         }
@@ -2403,36 +2579,6 @@
       spectrogramLoader.setLoading(false);
     }
 
-    // Global listeners for selection drag
-    if (enableClipExtraction) {
-      addTrackedEventListener(
-        document as unknown as HTMLElement,
-        'mousemove',
-        handleSelectionMouseMove as EventListener
-      );
-      addTrackedEventListener(
-        document as unknown as HTMLElement,
-        'mouseup',
-        handleSelectionMouseUp as EventListener
-      );
-      addTrackedEventListener(document as unknown as HTMLElement, 'keydown', ((
-        e: KeyboardEvent
-      ) => {
-        if (e.key === 'Escape') {
-          if (selectionStartSec !== null || selectionEndSec !== null) {
-            clearSelection();
-          }
-        }
-      }) as EventListener);
-
-      // Prevent native browser selection during drag operations
-      addTrackedEventListener(document as unknown as HTMLElement, 'selectstart', ((e: Event) => {
-        if (isDragSelecting || draggingHandle || isScrubbing) {
-          e.preventDefault();
-        }
-      }) as EventListener);
-    }
-
     // Cleanup function (Svelte 5 pattern)
     return () => {
       debugLog('cleanup: component destroying', {
@@ -2480,6 +2626,8 @@
       if (audioElement) {
         audioElement.pause();
         audioElement.src = '';
+        // Async work still in flight (context start, probes) checks this and stops.
+        audioElement = undefined;
       }
 
       // Clean up Web Audio API resources using shared utilities
@@ -2568,7 +2716,7 @@
         class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)]/75 rounded-md border border-[var(--color-base-300)]"
       >
         <div
-          class="loading loading-spinner loading-sm md:loading-md text-[var(--color-primary)]"
+          class="loading loading-spinner loading-sm md:loading-md text-[var(--text-primary)]"
           aria-hidden="true"
         ></div>
       </div>
@@ -2609,9 +2757,9 @@
             class="size-6 sm:size-8 mx-auto mb-1 text-[var(--color-base-content)]/30"
             aria-hidden="true"
           />
-          <span class="text-xs sm:text-sm text-[color:var(--text-muted)]"
-            >{t('components.audio.spectrogramUnavailable')}</span
-          >
+          <span class="text-xs sm:text-sm text-[color:var(--text-muted)]">
+            {t('components.audio.spectrogramUnavailable')}
+          </span>
         </div>
       </div>
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
@@ -2630,11 +2778,11 @@
           aria-live="polite"
         >
           {#if spectrogramStatus.status === 'queued'}
-            <span
-              >{t('components.audio.queuePosition', {
+            <span>
+              {t('components.audio.queuePosition', {
                 position: spectrogramStatus.queuePosition,
-              })}</span
-            >
+              })}
+            </span>
           {:else}
             <span>{t('components.audio.generating')}</span>
           {/if}
@@ -2666,9 +2814,9 @@
        bat axis is drawn only once its image has loaded) -->
   {#if showFreqAxis}
     {#each freqTicksKHz as freq (freq)}
-      <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
-        >{freq}k</span
-      >
+      <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true">
+        {freq}k
+      </span>
       <div
         class="freq-line"
         style:bottom="{(freq / freqNyquistKHz) * 100}%"
@@ -2709,6 +2857,7 @@
         {filterFreq}
         {playbackSpeed}
         defaultGainValue={defaultGainDb}
+        {defaultFilterFreq}
         onGainChange={updateGain}
         onFilterChange={updateFilter}
         onSpeedChange={handleSpeedChange}
@@ -2853,7 +3002,9 @@
           class="text-white p-1 rounded-full hover:bg-white/20 shrink-0"
           onclick={handlePlayPause}
           disabled={isLoading}
-          aria-label={t(playButtonLabelKey(isLoading, isPlaying))}
+          aria-label={overlayPlayLabel}
+          aria-keyshortcuts={playShortcut?.aria}
+          title={shortcutTitle(overlayPlayLabel, playShortcut)}
         >
           {#if isLoading}
             <div
@@ -2912,7 +3063,9 @@
       role="alert"
       class="pointer-events-none absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] rounded-md"
     >
-      <span class="text-[var(--color-error)] text-sm">{error}</span>
+      <span class="rounded bg-[var(--color-base-100)] px-2 py-0.5 text-sm text-[var(--text-error)]">
+        {error}
+      </span>
     </div>
   {/if}
 </div>
@@ -2950,7 +3103,17 @@
     onDenoiseChange={handleDenoiseChange}
     onNormalizeToggle={handleNormalizeToggle}
     onExport={handleToolbarExport}
+    {playShortcut}
+    onOpenDefaults={$isAuthenticated ? openDefaults : undefined}
   />
+  {#if defaultsMounted}
+    <PlaybackDefaultsModal
+      isOpen={defaultsOpen}
+      current={{ gainDb: gainValue, denoise: processingDenoise, highPassHz: filterFreq }}
+      onClose={() => (defaultsOpen = false)}
+      onSaved={applySavedDefaults}
+    />
+  {/if}
 {/if}
 
 <style>

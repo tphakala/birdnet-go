@@ -305,6 +305,33 @@ export function subscribeAcousticModels(): () => void {
   };
 }
 
+const topologyListeners = new Set<() => void>();
+
+/**
+ * Registers a listener for server topology changes: it runs once per quiet burst
+ * of topology events (after the debounced refresh is queued) and after a
+ * reconnect, using the one shared stream that watchAcousticModels keeps open.
+ * It never opens a stream of its own. Returns the unregister.
+ */
+export function onTopologyChanged(listener: () => void): () => void {
+  topologyListeners.add(listener);
+  return () => {
+    topologyListeners.delete(listener);
+  };
+}
+
+function notifyTopologyListeners(): void {
+  for (const listener of [...topologyListeners]) {
+    listener();
+  }
+}
+
+/** Queues the availability refresh for a topology change, then tells the listeners. */
+function refreshAndNotify(): void {
+  void invalidateAcousticModels();
+  notifyTopologyListeners();
+}
+
 function openTopologyStream(): void {
   if (topologySource || isGuestMode()) return;
   const url = buildAppUrl(
@@ -338,20 +365,20 @@ function openTopologyStream(): void {
       void refreshAcousticModels();
       return;
     }
-    void invalidateAcousticModels();
+    refreshAndNotify();
   });
 }
 
 /**
  * Refreshes once a burst of topology-changed events has gone quiet. The event
  * announces a server change that a request already running may predate, so the
- * refresh queues behind it.
+ * refresh queues behind it. Topology listeners run after the refresh is queued.
  */
 function scheduleTopologyRefresh(): void {
   cancelTopologyRefresh();
   topologyRefreshTimer = setTimeout(() => {
     topologyRefreshTimer = null;
-    void invalidateAcousticModels();
+    refreshAndNotify();
   }, TOPOLOGY_REFRESH_DEBOUNCE_MS);
 }
 
@@ -388,6 +415,7 @@ export function watchAcousticModels(): () => void {
 /** Test-only: close the stream and drop all cached state so each test starts cold. */
 export function resetAcousticModelsForTest(): void {
   closeTopologyStream();
+  topologyListeners.clear();
   state = null;
   defaultTargets = [];
   failingModels = [];

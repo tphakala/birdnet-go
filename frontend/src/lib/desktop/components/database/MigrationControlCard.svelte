@@ -65,14 +65,14 @@
   // State badge styling
   const stateStyles: Record<string, string> = {
     idle: 'bg-[var(--color-base-200)] text-[var(--color-base-content)]',
-    initializing: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-    dual_write: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
-    migrating: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-    paused: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
-    validating: 'bg-[var(--color-primary)]/10 text-[var(--color-primary)]',
-    cutover: 'bg-[var(--color-warning)]/10 text-[var(--color-warning)]',
-    completed: 'bg-[var(--color-success)]/10 text-[var(--color-success)]',
-    failed: 'bg-[var(--color-error)]/10 text-[var(--color-error)]',
+    initializing: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
+    dual_write: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
+    migrating: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
+    paused: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
+    validating: 'bg-[var(--color-primary)]/10 text-[var(--text-primary)]',
+    cutover: 'bg-[var(--color-warning)]/10 text-[var(--text-warning)]',
+    completed: 'bg-[var(--color-success)]/10 text-[var(--text-success)]',
+    failed: 'bg-[var(--color-error)]/10 text-[var(--text-error)]',
   };
 
   async function handlePause() {
@@ -153,7 +153,7 @@
       {#if isStarting}
         <!-- Starting indicator -->
         <div class="flex flex-col items-center justify-center py-6 gap-3">
-          <Loader2 class="size-8 animate-spin text-[var(--color-primary)]" />
+          <Loader2 class="size-8 animate-spin text-[var(--text-primary)]" />
           <span class="text-sm text-[var(--color-base-content)]/70">
             {t('system.database.migration.starting')}
           </span>
@@ -191,7 +191,7 @@
     {:else if status?.state === 'completed'}
       <!-- Completed State -->
       <div class="p-4 rounded-lg bg-[var(--color-success)]/10">
-        <div class="flex items-center gap-2 text-[var(--color-success)]">
+        <div class="flex items-center gap-2 text-[var(--text-success)]">
           <CheckCircle2 class="size-5" />
           <span class="font-medium">{t('system.database.migration.completedTitle')}</span>
         </div>
@@ -204,7 +204,7 @@
       <div class="space-y-4">
         <!-- Friendly status note -->
         <div class="p-3 rounded-lg bg-[var(--color-warning)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-warning)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-warning)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.paused')}
           </p>
@@ -245,7 +245,7 @@
           <button
             class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
-                   bg-[var(--color-error)]/10 text-[var(--color-error)]
+                   bg-[var(--color-error)]/10 text-[var(--text-error)]
                    hover:bg-[var(--color-error)]/20
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={() => (showCancelConfirm = true)}
@@ -282,7 +282,7 @@
           <button
             class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
-                   bg-[var(--color-error)]/10 text-[var(--color-error)]
+                   bg-[var(--color-error)]/10 text-[var(--text-error)]
                    hover:bg-[var(--color-error)]/20
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={() => (showCancelConfirm = true)}
@@ -298,7 +298,7 @@
       <div class="space-y-4">
         <!-- Info note -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.in_progress')}
           </p>
@@ -308,7 +308,7 @@
         <div
           class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
         >
-          <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+          <div class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
             <Loader2 class="size-4 animate-spin" />
             <span>{t('system.database.migration.status.validating')}</span>
           </div>
@@ -330,7 +330,7 @@
           <button
             class="w-full inline-flex items-center justify-center gap-2 px-4 py-2
                    text-sm font-medium rounded-lg transition-colors
-                   bg-[var(--color-error)]/10 text-[var(--color-error)]
+                   bg-[var(--color-error)]/10 text-[var(--text-error)]
                    hover:bg-[var(--color-error)]/20
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={() => (showCancelConfirm = true)}
@@ -346,7 +346,7 @@
       <div class="space-y-4">
         <!-- Info note at top -->
         <div class="p-3 rounded-lg bg-[var(--color-primary)]/10 flex items-start gap-3">
-          <Info class="size-5 shrink-0 text-[var(--color-primary)] mt-0.5" />
+          <Info class="size-5 shrink-0 text-[var(--text-primary)] mt-0.5" />
           <p class="text-sm text-[var(--color-base-content)]">
             {t('system.database.migration.notes.in_progress')}
           </p>
@@ -357,7 +357,7 @@
           <div
             class="p-3 rounded-lg border-2 border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5"
           >
-            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+            <div class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
               <Loader2 class="size-4 animate-spin" />
               <span>
                 {t('system.database.migration.phase.indicator', {
@@ -371,10 +371,10 @@
             <!-- Phase-specific progress bar within phase indicator -->
             <div class="mt-3">
               <div class="flex justify-between text-sm mb-1.5 text-[var(--color-base-content)]">
-                <span
-                  >{formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
-                  {t('system.database.migration.progress.records')}</span
-                >
+                <span>
+                  {formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
+                  {t('system.database.migration.progress.records')}
+                </span>
                 <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
               </div>
               <div class="w-full h-2.5 bg-[var(--color-base-200)] rounded-full overflow-hidden">
@@ -388,15 +388,15 @@
             <!-- Rate and ETA inside phase indicator -->
             {#if status.records_per_second && status.records_per_second > 0}
               <div class="flex justify-between text-sm mt-2 text-[var(--color-base-content)]/70">
-                <span
-                  >{t('system.database.migration.progress.rateValue', {
+                <span>
+                  {t('system.database.migration.progress.rateValue', {
                     rate: status.records_per_second.toFixed(1),
-                  })}</span
-                >
+                  })}
+                </span>
                 {#if status.estimated_remaining}
-                  <span
-                    >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
-                  >
+                  <span>
+                    {t('system.database.migration.progress.eta')}: {status.estimated_remaining}
+                  </span>
                 {/if}
               </div>
             {/if}
@@ -405,11 +405,9 @@
           <!-- Fallback progress for states without explicit phase info -->
           <div>
             <div class="flex justify-between text-sm mb-2 text-[var(--color-base-content)]">
-              <span
-                >{formatNumber(status.migrated_records)} / {formatNumber(
-                  status.total_records
-                )}</span
-              >
+              <span>
+                {formatNumber(status.migrated_records)} / {formatNumber(status.total_records)}
+              </span>
               <span class="font-medium">{status.progress_percent.toFixed(1)}%</span>
             </div>
             <div class="w-full h-2.5 bg-[var(--color-base-200)] rounded-full overflow-hidden">
@@ -421,15 +419,15 @@
             <!-- Rate and ETA for fallback -->
             {#if status.records_per_second && status.records_per_second > 0}
               <div class="flex justify-between text-sm mt-2 text-[var(--color-base-content)]/70">
-                <span
-                  >{t('system.database.migration.progress.rateValue', {
+                <span>
+                  {t('system.database.migration.progress.rateValue', {
                     rate: status.records_per_second.toFixed(1),
-                  })}</span
-                >
+                  })}
+                </span>
                 {#if status.estimated_remaining}
-                  <span
-                    >{t('system.database.migration.progress.eta')}: {status.estimated_remaining}</span
-                  >
+                  <span>
+                    {t('system.database.migration.progress.eta')}: {status.estimated_remaining}
+                  </span>
                 {/if}
               </div>
             {/if}
@@ -438,7 +436,7 @@
 
         <!-- Dirty IDs warning -->
         {#if status.dirty_id_count > 0}
-          <div class="text-sm text-[var(--color-warning)]">
+          <div class="text-sm text-[var(--text-warning)]">
             {t('system.database.migration.progress.dirtyIds', { count: status.dirty_id_count })}
           </div>
         {/if}
@@ -469,7 +467,7 @@
             <button
               class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2
                      text-sm font-medium rounded-lg transition-colors
-                     bg-[var(--color-error)]/10 text-[var(--color-error)]
+                     bg-[var(--color-error)]/10 text-[var(--text-error)]
                      hover:bg-[var(--color-error)]/20
                      disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={() => (showCancelConfirm = true)}

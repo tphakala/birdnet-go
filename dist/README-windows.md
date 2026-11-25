@@ -3,7 +3,7 @@
 ## Tarball Contents
 
 - `birdnet-go.exe` - application binary
-- `onnxruntime.dll` - ONNX Runtime library (required for Perch v2, BattyBirdNET, and geomodel features)
+- `onnxruntime.dll` - ONNX Runtime library (required for BirdNET+ v3.0, Perch v2, BattyBirdNET, BSG-BAT, and geomodel features)
 - `tensorflowlite_c.dll` - TensorFlow Lite C library (required for BirdNET v2.4)
 
 ## Quick Install
@@ -56,17 +56,26 @@ Open `http://localhost:8080` in your browser to access the dashboard.
 On first run, Windows may show a firewall prompt. Allow access on private
 networks so you can reach the dashboard from other devices on your LAN.
 
-## Alternative: System-Wide DLL Installation
+## Alternative: Run From Any Directory
 
-If you want to run `birdnet-go.exe` from any directory without carrying the
-DLLs alongside it, copy them to a directory in your system PATH:
+If you want to run `birdnet-go.exe` from any directory, keep the `.dll` files in the BirdNET-Go folder and add that folder to your user `PATH`. Avoid copying the DLLs into `C:\Windows\System32`: that is a global, system-wide change that affects other applications and is easy to get wrong.
 
 ```powershell
-copy onnxruntime.dll C:\Windows\System32\
-copy tensorflowlite_c.dll C:\Windows\System32\
+# Example: keep birdnet-go.exe and the DLLs in C:\BirdNET-Go and add that folder to your user PATH
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+$newPath = if ($userPath) { "$userPath;C:\BirdNET-Go" } else { "C:\BirdNET-Go" }
+[Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
 ```
 
-This requires Administrator privileges.
+This updates your user `PATH` only and does not require Administrator privileges. Open a new terminal afterwards for the change to take effect.
+
+## Optional: OpenVINO Acceleration
+
+BirdNET-Go can run its models through Intel OpenVINO instead of ONNX Runtime,
+for example on an Intel GPU. Install the OpenVINO runtime separately; no PATH
+change is needed when it is installed in a standard location, because BirdNET-Go
+searches for it there. See the
+[OpenVINO acceleration guide](https://github.com/tphakala/birdnet-go/wiki/openvino-acceleration#enabling-openvino-on-windows).
 
 ## Running as a Windows Service
 

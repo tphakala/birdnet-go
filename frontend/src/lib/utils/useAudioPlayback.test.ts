@@ -184,6 +184,39 @@ describe('useAudioPlayback', () => {
   });
 
   // ---------------------------------------------------------------
+  // Playback defaults: initial values and clamp ranges
+  // ---------------------------------------------------------------
+  it('starts from the given default gain and filter cutoff', async () => {
+    await renderAndWait({ defaultGainDb: -6.5, defaultFilterFreq: 300 });
+
+    expect(getState().gainValue).toBe(-6.5);
+    expect(getState().filterFreq).toBe(300);
+  });
+
+  it('starts with the filter at its floor when no default cutoff is given', async () => {
+    await renderAndWait();
+
+    expect(getState().gainValue).toBe(0);
+    expect(getState().filterFreq).toBe(20);
+  });
+
+  it('clamps gain and filter updates to the shared playback ranges', async () => {
+    await renderAndWait();
+
+    getState().updateGain(-30);
+    expect(getState().gainValue).toBe(-12);
+    getState().updateGain(-6.5);
+    expect(getState().gainValue).toBe(-6.5);
+    getState().updateGain(99);
+    expect(getState().gainValue).toBe(24);
+
+    getState().updateFilter(5);
+    expect(getState().filterFreq).toBe(20);
+    getState().updateFilter(99999);
+    expect(getState().filterFreq).toBe(5000);
+  });
+
+  // ---------------------------------------------------------------
   // 1. togglePlayPause() calls audio.play() when paused
   // ---------------------------------------------------------------
   it('togglePlayPause() calls audio.play() when paused', async () => {
