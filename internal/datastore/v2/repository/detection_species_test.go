@@ -797,6 +797,7 @@ func TestDetectionRepository_ChangeSpecies_CustomVariantMatchesOwnModel(t *testi
 		lowerCompeting   = "rousettus aegyptiacus"
 	)
 	customBirdnet := detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: customVariant}
+	birdnetV3 := detection.ModelInfo{Name: "BirdNET", Version: "3.0", Variant: "default"}
 	customPerch := detection.ModelInfo{Name: "Perch", Version: "2", Variant: customVariant}
 
 	seedCustomModel := func(t *testing.T, db *gorm.DB, info detection.ModelInfo, modelType entities.ModelType) *entities.Detection {
@@ -878,6 +879,20 @@ func TestDetectionRepository_ChangeSpecies_CustomVariantMatchesOwnModel(t *testi
 			},
 			wantName:  speciesTestMallard,
 			wantClass: "",
+		},
+		{
+			// Same Name with a different Version must not match: BirdNET 3.0 listed
+			// first cannot shadow the detection's BirdNET 2.4 own model.
+			name:      "same name with different version does not match own model",
+			model:     customBirdnet,
+			modelType: entities.ModelTypeBird,
+			request:   speciesTestMallard,
+			offer: []OfferedModel{
+				speciesTestKnownBy(birdnetV3, strings.ToLower(speciesTestMallard)),
+				speciesTestKnownBy(speciesTestModelBirdnet, speciesTestMallard),
+			},
+			wantName:  speciesTestMallard,
+			wantClass: entities.TaxonomicClassAves,
 		},
 	}
 
