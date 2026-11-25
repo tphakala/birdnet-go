@@ -3,12 +3,16 @@
 package v2
 
 import (
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"gorm.io/gorm"
 )
 
 // TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement runs every
@@ -144,4 +148,90 @@ func TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement(t *testing.T) {
 		require.NoError(t, db.Table("v2_detection_comments").Where("detection_id = ?", commentID).Count(&count).Error)
 		assert.Equal(t, int64(2), count)
 	})
+}
+
+// TestMySQL_LabelBatchGetOrCreate_MapsNamesTheServerTreatsAsEqual proves that
+// BatchGetOrCreate returns every requested name as a key. The v2 tables use the
+// server's default collation, which is case-insensitive, so a request for "X y"
+// matches a stored "X Y" row: the map must hold the requested spelling, and no
+// second row may be created.
+func TestMySQL_LabelBatchGetOrCreate_MapsNamesTheServerTreatsAsEqual(t *testing.T) {
+	dropAllTables(t, coexTestDB, coexTestDBName)
+
+	mgr := newTestMySQLManager(t, true)
+	require.NoError(t, mgr.Initialize())
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	ctx := t.Context()
+	db := mgr.DB()
+
+	labelType := entities.LabelType{Name: "collation_species"}
+	require.NoError(t, db.Create(&labelType).Error)
+	model := entities.AIModel{Name: "Collation", Version: "1", ModelType: entities.ModelTypeBird}
+	require.NoError(t, db.Create(&model).Error)
+	stored := entities.Label{ScientificName: "Homo Sapiens", ModelID: model.ID, LabelTypeID: labelType.ID}
+	require.NoError(t, db.Create(&stored).Error)
+
+	labelRepo := repository.NewLabelRepository(db, nil, true, true)
+
+	got, err := labelRepo.BatchGetOrCreate(ctx, []string{"Homo sapiens", "Homo Sapiens", "Homo sapiéns", "Turdus merula"}, model.ID, labelType.ID, nil)
+	require.NoError(t, err)
+	require.Contains(t, got, "Turdus merula")
+	// MySQL 8.4's default collation also ignores accents, and MariaDB's do too.
+	for _, name := range []string{"Homo sapiens", "Homo Sapiens", "Homo sapiéns"} {
+		require.Contains(t, got, name, "the requested spelling must be a key")
+		assert.Equal(t, stored.ID, got[name].ID, name)
+	}
+
+	var count int64
+	require.NoError(t, db.Table("v2_labels").Where("model_id = ?", model.ID).Count(&count).Error)
+	assert.Equal(t, int64(2), count, "the case variant must not create a second row")
+
+	// Two spellings of a new name in one call: one row is created, both resolve after the re-fetch.
+	got, err = labelRepo.BatchGetOrCreate(ctx, []string{"Picus Canus", "Picus canus"}, model.ID, labelType.ID, nil)
+	require.NoError(t, err)
+	require.Contains(t, got, "Picus Canus")
+	require.Contains(t, got, "Picus canus")
+	assert.Equal(t, got["Picus Canus"].ID, got["Picus canus"].ID)
+
+	// A name the server already matches to a stored row is resolved without an
+	// insert, so a repeat save does not run a doomed INSERT each time.
+	var inserts atomic.Int32
+	const countCallback = "test:count_inserts"
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register(countCallback, func(*gorm.DB) { inserts.Add(1) }))
+	t.Cleanup(func() { _ = db.Callback().Create().Remove(countCallback) })
+	got, err = labelRepo.BatchGetOrCreate(ctx, []string{"homo SAPIENS"}, model.ID, labelType.ID, nil)
+	require.NoError(t, err)
+	assert.Equal(t, stored.ID, got["homo SAPIENS"].ID)
+	assert.Zero(t, inserts.Load(), "a variant of a stored name must not be inserted")
+
+	// A failure of the per-name lookup is returned wrapped, from the pass after the
+	// first fetch and from the pass after the re-fetch.
+	const failCallback = "test:fail_single_name_lookup"
+	errLookup := errors.NewStd("injected lookup failure")
+	var lookups, failAt atomic.Int32
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register(failCallback, func(tx *gorm.DB) {
+		if strings.Contains(tx.Statement.SQL.String(), "scientific_name = ") && lookups.Add(1) == failAt.Load() {
+			_ = tx.AddError(errLookup)
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(failCallback) })
+	for _, tc := range []struct {
+		name   string
+		names  []string
+		failAt int32
+	}{
+		{"first pass", []string{"homo SAPIENS"}, 1},
+		// Both spellings are new: the first pass looks up both (lookups 1 and 2),
+		// the pass after the re-fetch looks up the one the insert skipped (3).
+		{"after the re-fetch", []string{"Quercus Robur", "Quercus robur"}, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lookups.Store(0)
+			failAt.Store(tc.failAt)
+			_, err := labelRepo.BatchGetOrCreate(ctx, tc.names, model.ID, labelType.ID, nil)
+			require.ErrorIs(t, err, errLookup)
+			assert.ErrorContains(t, err, "resolve label")
+		})
+	}
 }

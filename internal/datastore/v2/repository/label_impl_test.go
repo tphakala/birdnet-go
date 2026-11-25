@@ -86,3 +86,25 @@ func TestUpdateLabelType_NonExistentIDIsNotAnError(t *testing.T) {
 	err := repo.UpdateLabelType(ctx, 999999, 1)
 	assert.NoError(t, err, "UpdateLabelType on non-existent id should not error")
 }
+
+// TestBatchGetOrCreate_SQLiteKeepsCaseVariantsDistinct verifies that SQLite,
+// which compares names case-sensitively, stores a case variant as its own row
+// and keys the result by the requested spelling.
+func TestBatchGetOrCreate_SQLiteKeepsCaseVariantsDistinct(t *testing.T) {
+	t.Parallel()
+
+	db := setupLabelTestDB(t)
+	repo := NewLabelRepository(db, nil, false, false)
+	ctx := t.Context()
+
+	lt := entities.LabelType{Name: "species"}
+	require.NoError(t, db.Create(&lt).Error)
+	model := entities.AIModel{Name: "BirdNET", Version: "2.4", Variant: "default", ModelType: entities.ModelTypeBird}
+	require.NoError(t, db.Create(&model).Error)
+
+	got, err := repo.BatchGetOrCreate(ctx, []string{"Homo Sapiens", "Homo sapiens"}, model.ID, lt.ID, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.NotEqual(t, got["Homo Sapiens"].ID, got["Homo sapiens"].ID, "a case variant is a distinct row on SQLite")
+	assert.Equal(t, "Homo sapiens", got["Homo sapiens"].ScientificName)
+}

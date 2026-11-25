@@ -167,6 +167,11 @@ func (r *labelRepository) GetByScientificNamesAndModel(ctx context.Context, name
 }
 
 // BatchGetOrCreate retrieves or creates multiple labels in optimized batches.
+// Every requested (trimmed, non-empty) name is a key of the result. On MySQL and
+// MariaDB its row may be stored under another spelling that the server's
+// collation treats as equal; SQLite compares case-sensitively, so a case variant
+// is its own row. MySQL and MariaDB look up each name that is not stored under
+// its own spelling on its own, so a name that no row matches costs at least one extra query.
 func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames []string, modelID, labelTypeID uint, taxonomicClassID *uint) (map[string]*entities.Label, error) {
 	if len(scientificNames) == 0 {
 		return make(map[string]*entities.Label), nil
@@ -197,6 +202,34 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 
 	for _, label := range existing {
 		result[label.ScientificName] = label
+	}
+
+	// The fetch keys each row by its stored name. On MySQL a requested name that
+	// differs only in case or accents matches a stored row without being its key,
+	// and inserting it would be skipped on every call: look such a name up on its
+	// own and key the row by the requested spelling. A name that no row matches is
+	// normal before the insert (notFoundOK) and an error after it.
+	resolveCollationEqual := func(names []string, notFoundOK bool) error {
+		if !r.isMySQL {
+			return nil
+		}
+		for _, name := range names {
+			if _, found := result[name]; found {
+				continue
+			}
+			label, err := r.GetByScientificNameAndModel(ctx, name, modelID)
+			if notFoundOK && errors.Is(err, ErrLabelNotFound) {
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("resolve label %q: %w", name, err)
+			}
+			result[name] = label
+		}
+		return nil
+	}
+	if err := resolveCollationEqual(nameList, true); err != nil {
+		return nil, err
 	}
 
 	// Step 2: Identify missing names
@@ -238,6 +271,11 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 
 	for _, label := range created {
 		result[label.ScientificName] = label
+	}
+
+	// Two spellings of one new name in this call: the insert kept one row.
+	if err := resolveCollationEqual(missing, false); err != nil {
+		return nil, err
 	}
 
 	return result, nil
