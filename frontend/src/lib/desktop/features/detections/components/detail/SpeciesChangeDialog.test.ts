@@ -314,6 +314,42 @@ describe('SpeciesChangeDialog saving', () => {
       'detections.detail.species.conflict'
     );
   });
+
+  it.each([
+    {
+      name: 'a 400 with the unknown species key',
+      body: { error: 'x', error_key: 'detections.detail.species.unknownSpecies' },
+      message: 'detections.detail.species.unknownSpecies',
+    },
+    {
+      name: 'a 400 without an error key',
+      body: { error: 'x' },
+      message: 'detections.detail.species.changeFailed',
+    },
+    {
+      name: 'a 400 with another error key',
+      body: { error: 'x', error_key: 'detections.invalidId' },
+      message: 'detections.detail.species.changeFailed',
+    },
+  ])('maps $name to its message', async ({ body, message }) => {
+    renderDialog();
+    await fireEvent.click(radio('Song Thrush'));
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'detections.detail.species.confirmEmpty' })
+    );
+    await waitFor(() => expect(puts).toHaveLength(1));
+    answerPut?.(json(body, 400));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    const namedTheSpecies = vi
+      .mocked(t)
+      .mock.calls.some(
+        ([key, params]) =>
+          key === 'detections.detail.species.unknownSpecies' &&
+          (params as { species?: string } | undefined)?.species === 'Song Thrush'
+      );
+    expect(namedTheSpecies).toBe(message.endsWith('unknownSpecies'));
+  });
 });
 
 describe('SpeciesChangeDialog choosing', () => {

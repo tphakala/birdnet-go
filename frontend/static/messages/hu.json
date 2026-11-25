@@ -917,7 +917,7 @@
         "changed": "Faj módosítva erre: {species}",
         "changeFailed": "A faj módosítása sikertelen. Próbálja újra.",
         "conflict": "A faj most nem módosítható: az észlelés meg van tartva (zárolva), vagy a régi adatbázis-formátum van használatban.",
-        "notKnownHere": "A(z) {species} még sosem fordult elő és nem is volt előrejelezve ennél az állomásnál, ezért még nem választható ki.",
+        "unknownSpecies": "A(z) {species} már nincs rajta a fajlistán, ezért nem választható ki. Zárd be ezt a párbeszédablakot, és próbáld újra.",
         "predictionsTitle": "Egyéb előrejelzések",
         "noPredictions": "A modell nem tárolt más előrejelzést ehhez a felvételhez.",
         "allSpecies": "Minden faj",

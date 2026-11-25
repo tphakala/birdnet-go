@@ -917,7 +917,7 @@
         "changed": "Art ændret til {species}",
         "changeFailed": "Arten kunne ikke ændres. Prøv igen.",
         "conflict": "Arten kan ikke ændres nu: registreringen er bevaret (låst), eller det gamle databaseformat er i brug.",
-        "notKnownHere": "{species} er aldrig blevet registreret eller forudsagt på denne station, så den kan ikke vælges endnu.",
+        "unknownSpecies": "{species} er ikke længere på artslisten, så den kan ikke vælges. Luk dialogen og prøv igen.",
         "predictionsTitle": "Andre forudsigelser",
         "noPredictions": "Modellen gemte ingen andre forudsigelser for denne optagelse.",
         "allSpecies": "Alle arter",

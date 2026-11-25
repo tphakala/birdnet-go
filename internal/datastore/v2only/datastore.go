@@ -280,7 +280,7 @@ func New(cfg *Config) (*Datastore, error) {
 	avesClassID := cfg.AvesClassID
 	if avesClassID == nil {
 		var avesClass entities.TaxonomicClass
-		if err := db.Where("name = ?", "Aves").FirstOrCreate(&avesClass, entities.TaxonomicClass{Name: "Aves"}).Error; err != nil {
+		if err := db.Where("name = ?", entities.TaxonomicClassAves).FirstOrCreate(&avesClass, entities.TaxonomicClass{Name: entities.TaxonomicClassAves}).Error; err != nil {
 			return nil, fmt.Errorf("failed to get Aves taxonomic class: %w", err)
 		}
 		avesClassID = &avesClass.ID
@@ -290,7 +290,7 @@ func New(cfg *Config) (*Datastore, error) {
 	chiropteraClassID := cfg.ChiropteraClassID
 	if chiropteraClassID == nil {
 		var chiropteraClass entities.TaxonomicClass
-		if err := db.Where("name = ?", "Chiroptera").FirstOrCreate(&chiropteraClass, entities.TaxonomicClass{Name: "Chiroptera"}).Error; err != nil {
+		if err := db.Where("name = ?", entities.TaxonomicClassChiroptera).FirstOrCreate(&chiropteraClass, entities.TaxonomicClass{Name: entities.TaxonomicClassChiroptera}).Error; err != nil {
 			return nil, fmt.Errorf("failed to get Chiroptera taxonomic class: %w", err)
 		}
 		chiropteraClassID = &chiropteraClass.ID
@@ -718,16 +718,17 @@ func (ds *Datastore) labelTypeForRawLabel(rawLabel string, speciesTaxClassID *ui
 }
 
 // taxonomicClassForModel returns the appropriate taxonomic class ID for label
-// creation based on the model type. Bird models use Aves, bat models use
-// Chiroptera, and multi-taxa models use nil (no default taxonomic class).
+// creation based on the model type (see entities.ModelType.TaxonomicClass): bird
+// models use Aves, bat models use Chiroptera, and multi-taxa models use nil (no
+// default taxonomic class).
 func (ds *Datastore) taxonomicClassForModel(modelType entities.ModelType) *uint {
-	switch modelType {
-	case entities.ModelTypeBat:
+	switch modelType.TaxonomicClass() {
+	case entities.TaxonomicClassChiroptera:
 		return ds.chiropteraClassID
-	case entities.ModelTypeMulti:
-		return nil
-	default:
+	case entities.TaxonomicClassAves:
 		return ds.avesClassID
+	default:
+		return nil
 	}
 }
 

@@ -75,8 +75,6 @@
   const confirmHelpId = generateId('species-confirm-help');
   const searchId = generateId('species-search');
   const choiceName = generateId('species-choice');
-  // The server's answer for a species it has no label row for yet.
-  const HTTP_BAD_REQUEST = 400;
   // The answer when the legacy database is in use and when the detection is locked.
   const HTTP_CONFLICT = 409;
 
@@ -214,8 +212,11 @@
   });
 
   function failureMessage(error: unknown, chosen: CatalogSpecies): string {
-    if (error instanceof ApiError && error.status === HTTP_BAD_REQUEST) {
-      return t('detections.detail.species.notKnownHere', { species: chosen.commonName });
+    if (
+      error instanceof ApiError &&
+      error.errorKey === 'detections.detail.species.unknownSpecies'
+    ) {
+      return t('detections.detail.species.unknownSpecies', { species: chosen.commonName });
     }
     if (error instanceof ApiError && error.status === HTTP_CONFLICT) {
       return t('detections.detail.species.conflict');

@@ -9,7 +9,10 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
+	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -24,6 +27,24 @@ const (
 	setOriginalIfNullExpr  = "COALESCE(" + columnOriginalLabelID + ", " + columnLabelID + ")"
 )
 
+// SpeciesOffer describes a species that no label of the detection's model matches,
+// from the caller's live sources (the species lists and the loaded models). A nil
+// *SpeciesOffer means the species is not offered. Empty Models means a species list
+// offers it but no loaded model can classify it.
+type SpeciesOffer struct {
+	// Models lists the loaded models that can classify the species, in a stable
+	// order chosen by the caller.
+	Models []OfferedModel
+}
+
+// OfferedModel is one loaded model that can classify an offered species.
+type OfferedModel struct {
+	// Model is the model's ai_models identity as the save path stores it.
+	Model detection.ModelInfo
+	// ScientificName is the model's own scientific name of the species.
+	ScientificName string
+}
+
 // ChangeSpecies sets the species of a detection as a reviewer's correction.
 //
 // The reads of the detection, its lock and the label run before the
@@ -35,8 +56,9 @@ const (
 // delete committed meanwhile. A detection deleted or locked after those reads is
 // told apart after the transaction, as Update does. A request for the species
 // the current label already stands for, compared by canonical key, returns
-// before any label is resolved or made.
-func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scientificName string) error {
+// before any label is resolved or made. A species the detection's model has no
+// label of is made from offer (see speciesLabel); without an offer it is refused.
+func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scientificName string, offer *SpeciesOffer) error {
 	scientificName = strings.TrimSpace(scientificName)
 	// A name without a species part (empty, "_" or "_Blackbird") has an empty key,
 	// which would match a label whose key is empty too.
@@ -68,7 +90,7 @@ func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scient
 	case !errors.Is(err, ErrLabelNotFound):
 		return fmt.Errorf("load current label: %w", err)
 	}
-	label, err := r.speciesLabel(ctx, scientificName, det.ModelID)
+	label, err := r.speciesLabel(ctx, scientificName, det, offer)
 	if err != nil {
 		return err
 	}
@@ -125,18 +147,17 @@ func (r *detectionRepository) ChangeSpecies(ctx context.Context, id uint, scient
 	return ErrDetectionLocked
 }
 
-// speciesLabel returns the label of modelID for the species named scientificName.
-// It takes, in this order: the model's label of that exact name; a label of the
-// model whose name is a taxonomic alias of it (the predictions response gives
-// canonical names, which a model's label may store under an older name), the
-// oldest by label ID when the model holds several spellings of the species; a new
-// label for the model, made when only other models have a label of that name, with
-// the label type and taxonomic class of the oldest of those. A species no model has
-// a label for is ErrLabelNotFound.
-func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName string, modelID uint) (*entities.Label, error) {
+// speciesLabel returns the label of the detection's model for the species named
+// scientificName. It takes, in this order: the model's label of that exact name; a
+// label of the model whose name is a taxonomic alias of it (the predictions
+// response gives canonical names, which a model's label may store under an older
+// name), the oldest by label ID when the model holds several spellings of the
+// species; a new label for the model made from offer (see createOfferedLabel). A
+// species the model has no label of and that is not offered is ErrLabelNotFound.
+func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName string, det *entities.Detection, offer *SpeciesOffer) (*entities.Label, error) {
 	labels := NewLabelRepository(r.db, r.metrics, r.useV2Prefix, r.isMySQL)
 
-	label, err := labels.GetByScientificNameAndModel(ctx, scientificName, modelID)
+	label, err := labels.GetByScientificNameAndModel(ctx, scientificName, det.ModelID)
 	if err == nil {
 		return label, nil
 	}
@@ -144,7 +165,7 @@ func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName s
 		return nil, fmt.Errorf("load species label: %w", err)
 	}
 
-	modelLabels, err := labels.GetAllByModel(ctx, modelID)
+	modelLabels, err := labels.GetAllByModel(ctx, det.ModelID)
 	if err != nil {
 		return nil, fmt.Errorf("load model labels: %w", err)
 	}
@@ -156,19 +177,113 @@ func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName s
 		return oldestLabel(aliases), nil
 	}
 
-	known, err := labels.GetByScientificName(ctx, scientificName)
-	if err != nil {
-		return nil, fmt.Errorf("load labels of other models: %w", err)
-	}
-	if len(known) == 0 {
+	if offer == nil {
 		return nil, ErrLabelNotFound
 	}
-	oldest := oldestLabel(known)
-	label, err = labels.GetOrCreate(ctx, oldest.ScientificName, modelID, oldest.LabelTypeID, oldest.TaxonomicClassID)
+	return r.createOfferedLabel(ctx, scientificName, det.ModelID, offer)
+}
+
+// offeredSpelling is an offered model with its identity defaulted and its
+// scientific name reduced to the species part.
+type offeredSpelling struct {
+	info detection.ModelInfo
+	name string
+}
+
+// createOfferedLabel gets or creates the label of modelID for an offered species.
+//
+// The name is what the save path would store: the scientific name the detection's
+// own model spells the species with, run through openfauna.CanonicalName, so a
+// later detection of the species by that model finds the row. When the model does
+// not know the species (it never stores it), the first offered model's spelling is
+// used, and without any model the requested name. The label type comes from the
+// sound-event registry by the stored name, so it never depends on which models are
+// loaded. A taxonomic class is set only for the species type: none for a sound
+// class name; the detection model's own class when it knows the species; otherwise
+// the class every offered model that implies one agrees on.
+func (r *detectionRepository) createOfferedLabel(ctx context.Context, requested string, modelID uint, offer *SpeciesOffer) (*entities.Label, error) {
+	offered := make([]offeredSpelling, 0, len(offer.Models))
+	for _, m := range offer.Models {
+		if sci := strings.TrimSpace(detection.ExtractScientificName(m.ScientificName)); sci != "" {
+			offered = append(offered, offeredSpelling{info: m.Model.WithDefaults(), name: sci})
+		}
+	}
+
+	var own *offeredSpelling
+	var ownType entities.ModelType
+	if len(offered) > 0 {
+		row, err := NewModelRepository(r.db, r.metrics, r.useV2Prefix, r.isMySQL).GetByID(ctx, modelID)
+		switch {
+		case err == nil:
+			for i := range offered {
+				if offered[i].info.Name == row.Name && offered[i].info.Version == row.Version && offered[i].info.Variant == row.Variant {
+					own, ownType = &offered[i], row.ModelType
+					break
+				}
+			}
+		case !errors.Is(err, ErrModelNotFound):
+			return nil, fmt.Errorf("load detection model: %w", err)
+		}
+	}
+
+	var name string
+	switch {
+	case own != nil:
+		name = own.name
+	case len(offered) > 0:
+		name = offered[0].name
+	default:
+		name = strings.TrimSpace(detection.ExtractScientificName(requested))
+	}
+	name = openfauna.CanonicalName(name)
+
+	typeName := entities.LabelTypeSpecies
+	var className string
+	if category, ok := soundevent.CategoryOf(name); ok {
+		typeName = string(category)
+	} else if !soundevent.IsName(name) {
+		className = offeredTaxonomicClass(own != nil, ownType, offered)
+	}
+
+	labelType, err := NewLabelTypeRepository(r.db, r.metrics, r.useV2Prefix).GetOrCreate(ctx, typeName)
+	if err != nil {
+		return nil, fmt.Errorf("get label type %q: %w", typeName, err)
+	}
+	var classID *uint
+	if className != "" {
+		class, err := NewTaxonomicClassRepository(r.db, r.metrics, r.useV2Prefix).GetOrCreate(ctx, className)
+		if err != nil {
+			return nil, fmt.Errorf("get taxonomic class %q: %w", className, err)
+		}
+		classID = &class.ID
+	}
+	label, err := NewLabelRepository(r.db, r.metrics, r.useV2Prefix, r.isMySQL).GetOrCreate(ctx, name, modelID, labelType.ID, classID)
 	if err != nil {
 		return nil, fmt.Errorf("create species label: %w", err)
 	}
 	return label, nil
+}
+
+// offeredTaxonomicClass returns the taxonomic class name for a new species label,
+// "" for none. When the detection's own model knows the species its model type
+// decides, as in its save path; otherwise the class the offered models imply, when
+// they all agree.
+func offeredTaxonomicClass(ownKnows bool, ownType entities.ModelType, offered []offeredSpelling) string {
+	if ownKnows {
+		return ownType.TaxonomicClass()
+	}
+	var agreed string
+	for _, m := range offered {
+		class := detection.ResolveModelType(m.info.Name, m.info.Version).TaxonomicClass()
+		switch {
+		case class == "":
+		case agreed == "":
+			agreed = class
+		case agreed != class:
+			return ""
+		}
+	}
+	return agreed
 }
 
 // oldestLabel returns the label with the lowest ID, which is the oldest. labels

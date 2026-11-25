@@ -917,7 +917,7 @@
         "changed": "Species changed to {species}",
         "changeFailed": "The species could not be changed. Please try again.",
         "conflict": "The species cannot be changed now: the detection is kept (locked), or the legacy database format is in use.",
-        "notKnownHere": "{species} has never been detected or predicted at this station, so it cannot be chosen yet.",
+        "unknownSpecies": "{species} is no longer on the species list, so it cannot be chosen. Close this dialog and try again.",
         "predictionsTitle": "Other predictions",
         "noPredictions": "The model stored no other predictions for this recording.",
         "allSpecies": "All species",

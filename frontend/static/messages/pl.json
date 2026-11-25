@@ -917,7 +917,7 @@
         "changed": "Zmieniono gatunek na {species}",
         "changeFailed": "Nie udało się zmienić gatunku. Spróbuj ponownie.",
         "conflict": "Nie można teraz zmienić gatunku: detekcja jest zachowana (zablokowana) lub używany jest stary format bazy danych.",
-        "notKnownHere": "Gatunek {species} nie został jeszcze nigdy wykryty ani przewidziany na tej stacji, więc nie można go jeszcze wybrać.",
+        "unknownSpecies": "Gatunek {species} nie znajduje się już na liście gatunków, więc nie można go wybrać. Zamknij to okno i spróbuj ponownie.",
         "predictionsTitle": "Inne przewidywania",
         "noPredictions": "Model nie zapisał żadnych innych przewidywań dla tego nagrania.",
         "allSpecies": "Wszystkie gatunki",

@@ -917,7 +917,7 @@
         "changed": "Espèce remplacée par {species}",
         "changeFailed": "Impossible de modifier l'espèce. Veuillez réessayer.",
         "conflict": "L'espèce ne peut pas être modifiée maintenant : la détection est conservée (verrouillée), ou l'ancien format de base de données est utilisé.",
-        "notKnownHere": "L'espèce {species} n'a jamais été détectée ni prédite à cette station et ne peut donc pas encore être sélectionnée.",
+        "unknownSpecies": "L'espèce {species} ne figure plus dans la liste des espèces et ne peut donc pas être sélectionnée. Fermez cette boîte de dialogue et réessayez.",
         "predictionsTitle": "Autres prédictions",
         "noPredictions": "Le modèle n'a enregistré aucune autre prédiction pour cet enregistrement.",
         "allSpecies": "Toutes les espèces",

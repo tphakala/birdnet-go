@@ -917,7 +917,7 @@
         "changed": "Art ändrad till {species}",
         "changeFailed": "Det gick inte att byta art. Försök igen.",
         "conflict": "Arten kan inte ändras nu: detekteringen är sparad (låst), eller så används det gamla databasformatet.",
-        "notKnownHere": "{species} har aldrig detekterats eller förutspåtts vid denna station och kan därför inte väljas ännu.",
+        "unknownSpecies": "{species} finns inte längre i artlistan och kan därför inte väljas. Stäng dialogrutan och försök igen.",
         "predictionsTitle": "Andra förutsägelser",
         "noPredictions": "Modellen sparade inga andra förutsägelser för den här inspelningen.",
         "allSpecies": "Alla arter",

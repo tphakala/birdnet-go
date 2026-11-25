@@ -83,6 +83,24 @@ func TestModelSpecies_PerModelCanonicalKeys(t *testing.T) {
 
 	assert.False(t, knows(ms, "ModelSpecies_Unloaded", modelSpeciesBlackbird))
 	assert.False(t, ms.Knows(modelSpeciesIDA, ""), "the empty key is never known")
+
+	// ScientificName returns the model's own spelling of the species, not the alias
+	// asked for and not the label with its common name.
+	sci, ok := ms.ScientificName(modelSpeciesIDB, speciesindex.CanonicalKey(modelSpeciesDoveAlias))
+	assert.True(t, ok)
+	assert.Equal(t, "Streptopelia senegalensis", sci)
+	sci, ok = ms.ScientificName(modelSpeciesIDA, speciesindex.CanonicalKey("TURDUS MERULA"))
+	assert.True(t, ok)
+	assert.Equal(t, "Turdus merula", sci)
+	sci, ok = ms.ScientificName(modelSpeciesIDB, speciesindex.CanonicalKey(modelSpeciesSoundCls))
+	assert.True(t, ok)
+	assert.Equal(t, "Power_tool", sci)
+	_, ok = ms.ScientificName(modelSpeciesIDA, speciesindex.CanonicalKey(modelSpeciesDove))
+	assert.False(t, ok, "another model's species is unknown")
+	_, ok = ms.ScientificName("ModelSpecies_Unloaded", speciesindex.CanonicalKey(modelSpeciesBlackbird))
+	assert.False(t, ok, "an unloaded model knows nothing")
+	_, ok = ms.ScientificName(modelSpeciesIDA, "")
+	assert.False(t, ok, "the empty key is never known")
 }
 
 // TestModelSpecies_IncludesBirdNETAnchor pins that the v2.4 model, which the walk
@@ -126,6 +144,8 @@ func TestModelSpecies_NilSafe(t *testing.T) {
 	assert.Equal(t, uint64(0), ms.Generation())
 	assert.False(t, ms.HasModel(modelSpeciesIDA))
 	assert.False(t, ms.Knows(modelSpeciesIDA, "turdus merula"))
+	_, ok := ms.ScientificName(modelSpeciesIDA, "turdus merula")
+	assert.False(t, ok)
 
 	var nilOrch *Orchestrator
 	assert.Nil(t, nilOrch.ModelSpecies())

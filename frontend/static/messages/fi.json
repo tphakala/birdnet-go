@@ -917,7 +917,7 @@
         "changed": "Lajiksi vaihdettu {species}",
         "changeFailed": "Lajia ei voitu vaihtaa. Yritä uudelleen.",
         "conflict": "Lajia ei voi nyt vaihtaa: havainto on säilytetty (lukittu) tai käytössä on vanha tietokantamuoto.",
-        "notKnownHere": "Lajia {species} ei ole koskaan havaittu tai ennustettu tällä asemalla, joten sitä ei voi vielä valita.",
+        "unknownSpecies": "Laji {species} ei ole enää lajiluettelossa, joten sitä ei voi valita. Sulje tämä ikkuna ja yritä uudelleen.",
         "predictionsTitle": "Muut ennusteet",
         "noPredictions": "Malli ei tallentanut muita ennusteita tälle tallenteelle.",
         "allSpecies": "Kaikki lajit",

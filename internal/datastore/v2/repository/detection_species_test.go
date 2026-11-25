@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
@@ -28,12 +29,39 @@ const (
 	speciesTestInjectName = "test:inject_before_detection_update"
 )
 
+// The model identities an offer lists; they match the ai_models rows speciesTestDB
+// seeds under the IDs above.
+var (
+	speciesTestModelBirdnet = detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"}
+	speciesTestModelPerch   = detection.ModelInfo{Name: "Perch", Version: "2", Variant: "default"}
+	speciesTestModelBat     = detection.ModelInfo{Name: "BSG-BAT", Version: "1", Variant: "default"}
+)
+
+// speciesTestKnownBy is an offered model that spells the species as sci.
+func speciesTestKnownBy(model detection.ModelInfo, sci string) OfferedModel {
+	return OfferedModel{Model: model, ScientificName: sci}
+}
+
+// speciesTestOffer is an offer listing the models.
+func speciesTestOffer(models ...OfferedModel) *SpeciesOffer {
+	return &SpeciesOffer{Models: models}
+}
+
 // speciesTestDB opens a database with the tables a species change touches and a
 // repository on it.
 func speciesTestDB(t *testing.T) (*gorm.DB, DetectionRepository) {
 	t.Helper()
 	db := setupDetectionTestDBWithLabels(t)
-	require.NoError(t, db.AutoMigrate(&entities.DetectionPrediction{}), "failed to migrate predictions table")
+	require.NoError(t, db.AutoMigrate(&entities.DetectionPrediction{}, &entities.LabelType{}, &entities.TaxonomicClass{}, &entities.AIModel{}),
+		"failed to migrate predictions, lookup and model tables")
+	require.NoError(t, db.Create(entities.DefaultLabelTypes()).Error)
+	require.NoError(t, db.Create(entities.DefaultTaxonomicClasses()).Error)
+	// The detection models the creation tests use, with the IDs of the constants.
+	require.NoError(t, db.Create([]entities.AIModel{
+		{ID: speciesTestBirdnet, Name: "BirdNET", Version: "2.4", Variant: "default", ModelType: entities.ModelTypeBird},
+		{ID: speciesTestPerch, Name: "Perch", Version: "2", Variant: "default", ModelType: entities.ModelTypeMulti},
+		{ID: speciesTestThirdModel, Name: "BSG-BAT", Version: "1", Variant: "default", ModelType: entities.ModelTypeBat},
+	}).Error)
 	return db, NewDetectionRepository(db, nil, false, false)
 }
 
@@ -84,7 +112,7 @@ func TestDetectionRepository_ChangeSpecies_KeepsOriginalAcrossChanges(t *testing
 		{"the same request twice", speciesTestMallard, mallard},
 	}
 	for _, step := range steps {
-		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, step.species), step.name)
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, step.species, nil), step.name)
 
 		want := *det
 		want.LabelID = step.want.ID
@@ -112,7 +140,7 @@ func TestDetectionRepository_ChangeSpecies_ReadsLoadOriginalLabel(t *testing.T) 
 	// No other row holds the original label, so the read finds it only through the
 	// changed row's original id.
 	untouched := speciesTestDetection(t, db, mallard)
-	require.NoError(t, repo.ChangeSpecies(ctx, changed.ID, speciesTestMallard))
+	require.NoError(t, repo.ChangeSpecies(ctx, changed.ID, speciesTestMallard, nil))
 
 	got, err := repo.GetWithRelations(ctx, changed.ID)
 	require.NoError(t, err)
@@ -181,7 +209,7 @@ func TestDetectionRepository_ChangeSpecies_IndependentOfPredictionRows(t *testin
 			before, err := repo.GetPredictions(ctx, det.ID)
 			require.NoError(t, err)
 
-			require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard))
+			require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard, nil))
 
 			got, err := repo.Get(ctx, det.ID)
 			require.NoError(t, err)
@@ -204,44 +232,6 @@ func TestDetectionRepository_ChangeSpecies_IndependentOfPredictionRows(t *testin
 // TestDetectionRepository_ChangeSpecies_Label pins which label a species name
 // resolves to for the detection's model.
 func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
-	const (
-		animalLabelType = uint(7)
-		mammalClass     = uint(3)
-	)
-
-	t.Run("a species only another model has gets a label for the detection's model", func(t *testing.T) {
-		db, repo := speciesTestDB(t)
-		ctx := t.Context()
-		teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
-		perchMallard := &entities.Label{
-			ScientificName: speciesTestMallard, ModelID: speciesTestPerch,
-			LabelTypeID: animalLabelType, TaxonomicClassID: new(mammalClass),
-		}
-		require.NoError(t, db.Table(tableLabels).Create(perchMallard).Error)
-		// A newer label of the same species from a third model, with other values:
-		// copying from anything but the oldest label would show in the created label.
-		newerMallard := &entities.Label{
-			ScientificName: speciesTestMallard, ModelID: speciesTestThirdModel, LabelTypeID: animalLabelType + 1,
-		}
-		require.NoError(t, db.Table(tableLabels).Create(newerMallard).Error)
-		det := speciesTestDetection(t, db, teal)
-
-		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard))
-
-		got, err := repo.Get(ctx, det.ID)
-		require.NoError(t, err)
-		assert.Equal(t, speciesTestBirdnet, got.ModelID)
-		var created entities.Label
-		require.NoError(t, db.Table(tableLabels).First(&created, got.LabelID).Error)
-		assert.NotEqual(t, perchMallard.ID, created.ID, "the detection must not take another model's label")
-		assert.NotEqual(t, newerMallard.ID, created.ID, "the detection must not take another model's label")
-		assert.Equal(t, speciesTestMallard, created.ScientificName)
-		assert.Equal(t, speciesTestBirdnet, created.ModelID)
-		assert.Equal(t, animalLabelType, created.LabelTypeID, "the label type is copied from the existing label")
-		require.NotNil(t, created.TaxonomicClassID)
-		assert.Equal(t, mammalClass, *created.TaxonomicClassID, "the taxonomic class is copied from the existing label")
-	})
-
 	t.Run("a taxonomic alias resolves to the model's own label", func(t *testing.T) {
 		db, repo := speciesTestDB(t)
 		ctx := t.Context()
@@ -251,7 +241,7 @@ func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
 		det := speciesTestDetection(t, db, teal)
 		labelsBefore := speciesTestLabelCount(t, db)
 
-		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestDoveNew))
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestDoveNew, nil))
 
 		got, err := repo.Get(ctx, det.ID)
 		require.NoError(t, err)
@@ -268,7 +258,7 @@ func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
 		det := speciesTestDetection(t, db, teal)
 		labelsBefore := speciesTestLabelCount(t, db)
 
-		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestDoveNew))
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestDoveNew, nil))
 
 		got, err := repo.Get(ctx, det.ID)
 		require.NoError(t, err)
@@ -288,7 +278,7 @@ func TestDetectionRepository_ChangeSpecies_Label(t *testing.T) {
 		labelsBefore := speciesTestLabelCount(t, db)
 
 		// Neither stored spelling matches this one exactly.
-		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, strings.ToLower(speciesTestDoveOld)))
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, strings.ToLower(speciesTestDoveOld), nil))
 
 		got, err := repo.Get(ctx, det.ID)
 		require.NoError(t, err)
@@ -306,8 +296,8 @@ func TestDetectionRepository_ChangeSpecies_Refused(t *testing.T) {
 	ctx := t.Context()
 	teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
 	createTestLabel(t, db, speciesTestMallard, speciesTestBirdnet)
-	// Only another model has a label of this species, so changing to it would
-	// need a new label.
+	// Only another model has a label of this species; without an offer it is not
+	// a species the caller offers, so changing to it is refused.
 	createTestLabel(t, db, speciesTestGadwall, speciesTestPerch)
 	labelsBefore := speciesTestLabelCount(t, db)
 
@@ -325,34 +315,35 @@ func TestDetectionRepository_ChangeSpecies_Refused(t *testing.T) {
 
 	t.Run("the same species is a no-op", func(t *testing.T) {
 		det := speciesTestDetection(t, db, teal)
-		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, " "+speciesTestTeal+" "))
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, " "+speciesTestTeal+" ", nil))
 		untouched(t, det)
 	})
 
 	t.Run("a locked detection", func(t *testing.T) {
 		det := speciesTestDetection(t, db, teal)
 		require.NoError(t, db.Table(tableDetectionLocks).Create(&entities.DetectionLock{DetectionID: det.ID}).Error)
-		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard), ErrDetectionLocked)
-		// The lock is reported for the detection's own species too, and for a
-		// species that would need a new label, which is then not created.
-		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestTeal), ErrDetectionLocked)
-		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestGadwall), ErrDetectionLocked)
+		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard, nil), ErrDetectionLocked)
+		// The lock is reported for the detection's own species too, and for an
+		// offered species that would need a new label, which is then not created.
+		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestTeal, nil), ErrDetectionLocked)
+		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestGadwall, speciesTestOffer(speciesTestKnownBy(speciesTestModelPerch, speciesTestGadwall))), ErrDetectionLocked)
 		untouched(t, det)
 	})
 
 	for name, species := range map[string]string{
-		"a species no model has a label for": "Corvus corax",
-		"an empty species":                   "  ",
+		"a species not offered": "Corvus corax",
+		"a species only another model has a label for, not offered": speciesTestGadwall,
+		"an empty species": "  ",
 	} {
 		t.Run(name, func(t *testing.T) {
 			det := speciesTestDetection(t, db, teal)
-			require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, species), ErrLabelNotFound)
+			require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, species, nil), ErrLabelNotFound)
 			untouched(t, det)
 		})
 	}
 
 	t.Run("a missing detection", func(t *testing.T) {
-		require.ErrorIs(t, repo.ChangeSpecies(ctx, missingID, speciesTestMallard), ErrDetectionNotFound)
+		require.ErrorIs(t, repo.ChangeSpecies(ctx, missingID, speciesTestMallard, nil), ErrDetectionNotFound)
 	})
 }
 
@@ -396,7 +387,7 @@ func TestDetectionRepository_ChangeSpecies_LockOrDeleteDuringChange(t *testing.T
 			require.NoError(t, tx.Table(tableDetectionLocks).Create(&entities.DetectionLock{DetectionID: det.ID}).Error)
 		})
 
-		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard), ErrDetectionLocked)
+		require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard, nil), ErrDetectionLocked)
 
 		got, err := repo.Get(ctx, det.ID)
 		require.NoError(t, err)
@@ -412,7 +403,7 @@ func TestDetectionRepository_ChangeSpecies_LockOrDeleteDuringChange(t *testing.T
 			require.NoError(t, tx.Table(tableDetections).Delete(&entities.Detection{}, det.ID).Error)
 		})
 
-		require.ErrorIs(t, repo.ChangeSpecies(t.Context(), det.ID, speciesTestMallard), ErrDetectionNotFound)
+		require.ErrorIs(t, repo.ChangeSpecies(t.Context(), det.ID, speciesTestMallard, nil), ErrDetectionNotFound)
 	})
 }
 
@@ -432,7 +423,7 @@ func TestDetectionRepository_ChangeSpecies_RecordsLabelHeldAtUpdateTime(t *testi
 			UpdateColumn("label_id", gadwall.ID).Error)
 	})
 
-	require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard))
+	require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard, nil))
 
 	got, err := repo.Get(ctx, det.ID)
 	require.NoError(t, err)
@@ -472,7 +463,7 @@ func TestDetectionRepository_ChangeSpecies_ReviewFailureRollsBackLabel(t *testin
 	}))
 	t.Cleanup(func() { require.NoError(t, db.Callback().Create().Remove(callbackName)) })
 
-	require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard), errReviewInsert)
+	require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard, nil), errReviewInsert)
 
 	assert.True(t, onTransaction.Load(), "the review insert runs on the transaction of the label update")
 	got, err := repo.Get(ctx, det.ID)
@@ -514,7 +505,7 @@ func TestDetectionRepository_ChangeSpecies_SameSpeciesIsNoOp(t *testing.T) {
 			det := speciesTestDetection(t, db, held)
 			labelsBefore := speciesTestLabelCount(t, db)
 
-			require.NoError(t, repo.ChangeSpecies(ctx, det.ID, tt.request))
+			require.NoError(t, repo.ChangeSpecies(ctx, det.ID, tt.request, nil))
 
 			got, err := repo.Get(ctx, det.ID)
 			require.NoError(t, err)
@@ -533,7 +524,7 @@ func TestDetectionRepository_ChangeSpecies_SameSpeciesIsNoOp(t *testing.T) {
 		teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
 		det := speciesTestDetection(t, db, newer)
 
-		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestTeal))
+		require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestTeal, nil))
 
 		got, err := repo.Get(ctx, det.ID)
 		require.NoError(t, err)
@@ -557,7 +548,7 @@ func TestDetectionRepository_ChangeSpecies_EmptyKey(t *testing.T) {
 			det := speciesTestDetection(t, db, teal)
 			labelsBefore := speciesTestLabelCount(t, db)
 
-			require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, name), ErrLabelNotFound)
+			require.ErrorIs(t, repo.ChangeSpecies(ctx, det.ID, name, speciesTestOffer(speciesTestKnownBy(speciesTestModelBirdnet, name))), ErrLabelNotFound)
 
 			got, err := repo.Get(ctx, det.ID)
 			require.NoError(t, err)
@@ -581,7 +572,7 @@ func TestDetectionRepository_ChangeSpecies_CurrentLabelGone(t *testing.T) {
 	require.NoError(t, db.Table(tableLabels).Delete(&entities.Label{}, teal.ID).Error)
 	labelsBefore := speciesTestLabelCount(t, db)
 
-	require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard))
+	require.NoError(t, repo.ChangeSpecies(ctx, det.ID, speciesTestMallard, nil))
 
 	want := *det
 	want.LabelID = mallard.ID
@@ -593,4 +584,202 @@ func TestDetectionRepository_ChangeSpecies_CurrentLabelGone(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, entities.VerificationCorrect, review.Verified)
 	assert.Equal(t, labelsBefore, speciesTestLabelCount(t, db), "no label is created")
+}
+
+// speciesTestLabelAttributes returns the label type name and the taxonomic class
+// name ("" for none) of a label row.
+func speciesTestLabelAttributes(t *testing.T, db *gorm.DB, label *entities.Label) (typeName, className string) {
+	t.Helper()
+	var labelType entities.LabelType
+	require.NoError(t, db.First(&labelType, label.LabelTypeID).Error)
+	if label.TaxonomicClassID != nil {
+		var class entities.TaxonomicClass
+		require.NoError(t, db.First(&class, *label.TaxonomicClassID).Error)
+		className = class.Name
+	}
+	return labelType.Name, className
+}
+
+// TestDetectionRepository_ChangeSpecies_CreatesOfferedLabel pins the label made
+// for a species the detection's model has no label of: its name, owner, label type
+// and taxonomic class, for each way the offer describes the species.
+func TestDetectionRepository_ChangeSpecies_CreatesOfferedLabel(t *testing.T) {
+	const missingModel = uint(99)
+	tests := []struct {
+		name      string
+		model     uint // the detection's model
+		request   string
+		offer     []OfferedModel
+		other     *entities.Label // a pre-existing label of another model for the species
+		wantName  string
+		wantType  string
+		wantClass string
+	}{
+		{
+			name: "own model knows a bird", model: speciesTestBirdnet, request: speciesTestMallard,
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, speciesTestMallard), speciesTestKnownBy(speciesTestModelPerch, speciesTestMallard)},
+			wantName: speciesTestMallard, wantType: entities.LabelTypeSpecies, wantClass: entities.TaxonomicClassAves,
+		},
+		{
+			name: "only a multi model knows it", model: speciesTestBirdnet, request: "Canis familiaris",
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelPerch, "Canis familiaris")},
+			wantName: "Canis familiaris", wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "a bat and a multi model know a bat", model: speciesTestBirdnet, request: "Pipistrellus pipistrellus",
+			offer: []OfferedModel{
+				speciesTestKnownBy(speciesTestModelBat, "Pipistrellus pipistrellus"), speciesTestKnownBy(speciesTestModelPerch, "Pipistrellus pipistrellus"),
+			},
+			wantName: "Pipistrellus pipistrellus", wantType: entities.LabelTypeSpecies, wantClass: entities.TaxonomicClassChiroptera,
+		},
+		{
+			name: "a bird model and a bat model disagree on the class", model: speciesTestPerch, request: "Rousettus aegyptiacus",
+			offer: []OfferedModel{
+				speciesTestKnownBy(speciesTestModelBirdnet, "Rousettus aegyptiacus"), speciesTestKnownBy(speciesTestModelBat, "Rousettus aegyptiacus"),
+			},
+			wantName: "Rousettus aegyptiacus", wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "own multi model knows a species a bird model also knows", model: speciesTestPerch, request: "Canis latrans",
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, "Canis latrans"), speciesTestKnownBy(speciesTestModelPerch, "Canis latrans")},
+			wantName: "Canis latrans", wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "a sound class with a category", model: speciesTestBirdnet, request: "Dog",
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, "Dog_Dog"), speciesTestKnownBy(speciesTestModelPerch, "Dog")},
+			wantName: "Dog", wantType: entities.LabelTypeAnimal,
+		},
+		{
+			name: "a multi-word sound class", model: speciesTestBirdnet, request: "Power_tool",
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelPerch, "Power_tool")},
+			wantName: "Power_tool", wantType: entities.LabelTypeMechanical,
+		},
+		{
+			name: "a BirdNET class without a category", model: speciesTestBirdnet, request: "Human vocal",
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, "Human vocal_Human vocal")},
+			wantName: "Human vocal", wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "no model knows it", model: speciesTestBirdnet, request: "Corvus corax",
+			offer:    nil,
+			wantName: "Corvus corax", wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "the caller's case does not win over the own model", model: speciesTestBirdnet, request: "anas platyrhynchos",
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, "Anas platyrhynchos_Mallard")},
+			wantName: "Anas platyrhynchos", wantType: entities.LabelTypeSpecies, wantClass: entities.TaxonomicClassAves,
+		},
+		{
+			name: "the caller's case does not win over a model that knows it", model: speciesTestBirdnet, request: "canis familiaris",
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelPerch, "Canis familiaris")},
+			wantName: "Canis familiaris", wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "the own model's legacy spelling is stored under the accepted name", model: speciesTestBirdnet, request: speciesTestDoveNew,
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, speciesTestDoveOld)},
+			wantName: speciesTestDoveNew, wantType: entities.LabelTypeSpecies, wantClass: entities.TaxonomicClassAves,
+		},
+		{
+			name: "a legacy request spelling no model knows", model: speciesTestBirdnet, request: speciesTestDoveOld,
+			offer:    nil,
+			wantName: speciesTestDoveNew, wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "a request with a common name and no model", model: speciesTestBirdnet, request: "Corvus corax_Common Raven",
+			offer:    nil,
+			wantName: "Corvus corax", wantType: entities.LabelTypeSpecies,
+		},
+		{
+			name: "the detection's model row is missing", model: missingModel, request: speciesTestMallard,
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, speciesTestMallard)},
+			wantName: speciesTestMallard, wantType: entities.LabelTypeSpecies, wantClass: entities.TaxonomicClassAves,
+		},
+		{
+			name: "another model's row of the species is not copied", model: speciesTestBirdnet, request: speciesTestGadwall,
+			offer:    []OfferedModel{speciesTestKnownBy(speciesTestModelBirdnet, speciesTestGadwall)},
+			other:    &entities.Label{ScientificName: speciesTestGadwall, ModelID: speciesTestPerch, LabelTypeID: 5},
+			wantName: speciesTestGadwall, wantType: entities.LabelTypeSpecies, wantClass: entities.TaxonomicClassAves,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, repo := speciesTestDB(t)
+			ctx := t.Context()
+			old := createTestLabel(t, db, speciesTestTeal, tt.model)
+			det := speciesTestDetection(t, db, old)
+			if tt.other != nil {
+				require.NoError(t, db.Table(tableLabels).Create(tt.other).Error)
+			}
+			var offer *SpeciesOffer
+			if tt.offer != nil {
+				offer = speciesTestOffer(tt.offer...)
+			} else {
+				offer = speciesTestOffer()
+			}
+
+			require.NoError(t, repo.ChangeSpecies(ctx, det.ID, tt.request, offer))
+
+			got, err := repo.Get(ctx, det.ID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.model, got.ModelID, "the detection keeps its model")
+			require.NotNil(t, got.OriginalLabelID)
+			assert.Equal(t, old.ID, *got.OriginalLabelID)
+			var created entities.Label
+			require.NoError(t, db.Table(tableLabels).First(&created, got.LabelID).Error)
+			assert.NotEqual(t, old.ID, created.ID)
+			if tt.other != nil {
+				assert.NotEqual(t, tt.other.ID, created.ID, "the detection must not take another model's label")
+			}
+			assert.Equal(t, tt.wantName, created.ScientificName)
+			assert.Equal(t, tt.model, created.ModelID, "the label belongs to the detection's model")
+			typeName, className := speciesTestLabelAttributes(t, db, &created)
+			assert.Equal(t, tt.wantType, typeName)
+			assert.Equal(t, tt.wantClass, className)
+			review, err := repo.GetReview(ctx, det.ID)
+			require.NoError(t, err)
+			assert.Equal(t, entities.VerificationCorrect, review.Verified)
+		})
+	}
+}
+
+// TestDetectionRepository_ChangeSpecies_OfferedLabelIsReused follows a created
+// label through a repeated request, a second detection of the model and the save
+// path's own lookup: all of them must land on the one row.
+func TestDetectionRepository_ChangeSpecies_OfferedLabelIsReused(t *testing.T) {
+	db, repo := speciesTestDB(t)
+	ctx := t.Context()
+	teal := createTestLabel(t, db, speciesTestTeal, speciesTestBirdnet)
+	detA := speciesTestDetection(t, db, teal)
+	detB := speciesTestDetection(t, db, teal)
+	offer := speciesTestOffer(speciesTestKnownBy(speciesTestModelBirdnet, speciesTestDoveOld))
+
+	require.NoError(t, repo.ChangeSpecies(ctx, detA.ID, speciesTestDoveOld, offer))
+	gotA, err := repo.Get(ctx, detA.ID)
+	require.NoError(t, err)
+	var created entities.Label
+	require.NoError(t, db.Table(tableLabels).First(&created, gotA.LabelID).Error)
+	assert.Equal(t, speciesTestDoveNew, created.ScientificName)
+	labelsAfterFirst := speciesTestLabelCount(t, db)
+
+	// The same request again writes nothing.
+	reviewBefore, err := repo.GetReview(ctx, detA.ID)
+	require.NoError(t, err)
+	require.NoError(t, repo.ChangeSpecies(ctx, detA.ID, speciesTestDoveOld, offer))
+	assert.Equal(t, labelsAfterFirst, speciesTestLabelCount(t, db))
+	reviewAfter, err := repo.GetReview(ctx, detA.ID)
+	require.NoError(t, err)
+	assert.Equal(t, reviewBefore, reviewAfter)
+
+	// A second detection changed to the accepted name reuses the row.
+	require.NoError(t, repo.ChangeSpecies(ctx, detB.ID, speciesTestDoveNew, speciesTestOffer()))
+	gotB, err := repo.Get(ctx, detB.ID)
+	require.NoError(t, err)
+	assert.Equal(t, created.ID, gotB.LabelID)
+	assert.Equal(t, labelsAfterFirst, speciesTestLabelCount(t, db))
+
+	// The save path's GetOrCreate for the species finds the same row.
+	saved, err := NewLabelRepository(db, nil, false, false).GetOrCreate(ctx, speciesTestDoveNew, speciesTestBirdnet, created.LabelTypeID, created.TaxonomicClassID)
+	require.NoError(t, err)
+	assert.Equal(t, created.ID, saved.ID)
+	assert.Equal(t, labelsAfterFirst, speciesTestLabelCount(t, db))
 }

@@ -917,7 +917,7 @@
         "changed": "Suga nomainīta uz {species}",
         "changeFailed": "Neizdevās nomainīt sugu. Lūdzu, mēģiniet vēlreiz.",
         "conflict": "Sugu pašlaik nevar mainīt: noteikšana ir paturēta (bloķēta), vai arī tiek izmantots mantotais datubāzes formāts.",
-        "notKnownHere": "Suga {species} šajā stacijā vēl nekad nav tikusi noteikta vai prognozēta, tāpēc to vēl nevar izvēlēties.",
+        "unknownSpecies": "Suga {species} vairs nav sugu sarakstā, tāpēc to nevar izvēlēties. Aizveriet šo dialoglodziņu un mēģiniet vēlreiz.",
         "predictionsTitle": "Citas prognozes",
         "noPredictions": "Modelis šim ierakstam nav saglabājis citas prognozes.",
         "allSpecies": "Visas sugas",

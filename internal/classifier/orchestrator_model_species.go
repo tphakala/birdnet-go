@@ -3,6 +3,9 @@
 package classifier
 
 import (
+	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
@@ -13,9 +16,10 @@ type ModelSpecies struct {
 	// generation is the Orchestrator topology generation read before the models
 	// were walked.
 	generation uint64
-	// sets maps a registry ID to the canonical species keys of its labels. A model
-	// with a live instance but no labels has an entry with an empty set.
-	sets map[string]map[string]struct{}
+	// sets maps a registry ID to its species: canonical species key to the model's
+	// own scientific name for it (the first label with that key). A model with a
+	// live instance but no labels has an entry with an empty map.
+	sets map[string]map[string]string
 }
 
 // Generation returns the topology generation the snapshot was built for, or 0 on a
@@ -46,6 +50,18 @@ func (m *ModelSpecies) Knows(modelID, key string) bool {
 	}
 	_, ok := m.sets[modelID][key]
 	return ok
+}
+
+// ScientificName returns the model's own scientific name of the species with the
+// given canonical key (see speciesindex.CanonicalKey): the spelling its labels
+// carry, which may be an older or alternate name of the species. It is false for
+// an unknown model, an empty key, an unknown species, or a nil receiver.
+func (m *ModelSpecies) ScientificName(modelID, key string) (string, bool) {
+	if m == nil || key == "" {
+		return "", false
+	}
+	name, ok := m.sets[modelID][key]
+	return name, ok
 }
 
 // invalidateModelSpecies records a model-topology change (load, unload, reload or
@@ -93,12 +109,12 @@ func (o *Orchestrator) ModelSpecies() *ModelSpecies {
 // it, so entry.mu is not held across bn.mu. The anchor is keyed by its registry
 // constant; every other entry with a live instance is keyed by its o.models key
 // and takes part whatever its ID.
-func (o *Orchestrator) buildModelSpeciesSets() map[string]map[string]struct{} {
+func (o *Orchestrator) buildModelSpeciesSets() map[string]map[string]string {
 	index := o.SpeciesSnapshot()
 	primary, refs := o.orderedEntryRefs()
-	sets := make(map[string]map[string]struct{}, len(refs)+1)
+	sets := make(map[string]map[string]string, len(refs)+1)
 	if primary != nil {
-		sets[RegistryIDBirdNETV24] = canonicalKeySet(index, primary.Labels())
+		sets[RegistryIDBirdNETV24] = canonicalKeyNames(index, primary.Labels())
 	}
 	for _, ref := range refs {
 		ref.entry.mu.Lock()
@@ -107,21 +123,26 @@ func (o *Orchestrator) buildModelSpeciesSets() map[string]map[string]struct{} {
 		if instance == nil {
 			continue
 		}
-		sets[ref.id] = canonicalKeySet(index, instance.Labels())
+		sets[ref.id] = canonicalKeyNames(index, instance.Labels())
 	}
 	return sets
 }
 
-// canonicalKeySet returns the set of non-empty canonical keys of the labels. The
-// species-index snapshot supplies a key from its memo when the label is in the
-// index and computes it otherwise, so a snapshot that lags the topology only costs
-// a recompute.
-func canonicalKeySet(index *speciesindex.Snapshot, labels []string) map[string]struct{} {
-	set := make(map[string]struct{}, len(labels))
+// canonicalKeyNames returns, for the labels, a map from each non-empty canonical
+// key to the scientific name of the first label with that key. The species-index
+// snapshot supplies a key from its memo when the label is in the index and
+// computes it otherwise, so a snapshot that lags the topology only costs a
+// recompute.
+func canonicalKeyNames(index *speciesindex.Snapshot, labels []string) map[string]string {
+	names := make(map[string]string, len(labels))
 	for _, label := range labels {
-		if key := index.CanonicalKey(label); key != "" {
-			set[key] = struct{}{}
+		key := index.CanonicalKey(label)
+		if key == "" {
+			continue
+		}
+		if _, seen := names[key]; !seen {
+			names[key] = strings.TrimSpace(detection.ExtractScientificName(label))
 		}
 	}
-	return set
+	return names
 }
