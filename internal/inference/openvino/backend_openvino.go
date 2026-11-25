@@ -566,7 +566,8 @@ func bindLibrary(libraryPath string) error {
 // DestroyOV frees the process-global core and resets state so InitOV can run
 // again. Call it only on application shutdown or a catastrophic re-init, never
 // on a routine model reload (that path uses Classifier.Close). It returns nil
-// when nothing is loaded.
+// when nothing is loaded. When the GPU fault latch is set (see GPUFault) the core
+// is abandoned, not freed: freeing it would call into the failed GPU context.
 func DestroyOV() error {
 	ovMu.Lock()
 	defer ovMu.Unlock()
@@ -574,7 +575,12 @@ func DestroyOV() error {
 		return nil
 	}
 	if ovCore != nil {
-		C.ovbind_core_free(ovCore)
+		// After a GPU fault ov_core_free would tear down the poisoned GPU plugin and
+		// OpenCL context, and any call into it may hang. Abandon the core (a one-time
+		// leak at shutdown) instead of freeing it.
+		if !gpuFault.blocked() {
+			C.ovbind_core_free(ovCore)
+		}
 		ovCore = nil
 	}
 	ovLoaded = false
@@ -600,6 +606,35 @@ type classifier struct {
 	samples     int
 	outputIndex int
 	numClasses  int
+	// gpu is true when the classifier was compiled for a GPU device. Only GPU
+	// classifiers consult and feed the GPU fault latch.
+	gpu bool
+}
+
+// gpuAbandoned reports whether native objects of a classifier on the given
+// device class must be abandoned instead of freed: the GPU fault latch is set
+// and the target is a GPU, so any call into the GPU context may hang.
+func gpuAbandoned(gpu bool) bool { return gpu && gpuFault.blocked() }
+
+// releaseSetup frees the partially built native objects of a failed
+// NewClassifier, in reverse creation order, unless the GPU fault latch is set
+// for a GPU target (then they are abandoned). Nil arguments are skipped.
+func releaseSetup(gpu bool, inTensor *C.ov_tensor_t, inBuf unsafe.Pointer, req *C.ov_infer_request_t, compiled *C.ov_compiled_model_t) {
+	if gpuAbandoned(gpu) {
+		return
+	}
+	if inTensor != nil {
+		C.ovbind_tensor_free(inTensor)
+	}
+	if inBuf != nil {
+		C.free(inBuf)
+	}
+	if req != nil {
+		C.ovbind_infer_request_free(req)
+	}
+	if compiled != nil {
+		C.ovbind_compiled_model_free(compiled)
+	}
 }
 
 // reshapeToStaticBatch1 reshapes the model's single input to a static
@@ -631,8 +666,11 @@ func reshapeToStaticBatch1(model *C.ov_model_t, modelPath string) (int, error) {
 // sized to the model's input shape, and reads the element count of the selected
 // output port (opts.OutputIndex) from the compiled model so NumClasses reflects
 // the model rather than a label list. InitOV must have succeeded first;
-// otherwise it returns ErrOpenVINOUnavailable. The returned Classifier is not
-// goroutine-safe.
+// otherwise it returns ErrOpenVINOUnavailable. For a GPU device it returns an
+// error wrapping ErrGPUDeviceFault, without any native call, once the GPU fault
+// latch is set; a failure carrying a fatal OpenCL marker trips the latch, and
+// the native objects built so far are then abandoned instead of freed. The
+// returned Classifier is not goroutine-safe.
 func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	// Pin to one OS thread so every OpenVINO call here and any
 	// ov_get_last_err_msg fetch (C thread-local storage) run on the same thread.
@@ -666,6 +704,10 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		return nil, errors.Newf("openvino: negative output index %d", opts.OutputIndex).
 			Category(errors.CategoryModelInit).Build()
 	}
+	isGPU := IsGPUDevice(device)
+	if gpuAbandoned(isGPU) {
+		return nil, gpuFault.blockedErr()
+	}
 
 	threads := ""
 	// INFERENCE_NUM_THREADS is a CPU-plugin property; the GPU plugin rejects it,
@@ -697,16 +739,31 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	cThreads := C.CString(threads)
 	defer C.free(unsafe.Pointer(cThreads))
 
+	// Another goroutine may have tripped the latch while the model was read:
+	// do not start a GPU compile on a poisoned context. The read model is host
+	// memory, so freeing it is safe.
+	if gpuAbandoned(isGPU) {
+		C.ovbind_model_free(model)
+		return nil, gpuFault.blockedErr()
+	}
+
 	var compiled *C.ov_compiled_model_t
 	if st := C.ovbind_compile(core, model, cDev, cPrec, cThreads, &compiled); !ovOK(st) {
+		// Build the error first: it reads ov_get_last_err_msg before another C call
+		// can overwrite it.
+		err = gpuFault.setupFailed(isGPU, lastErr("ov_core_compile_model", st, modelPath))
 		C.ovbind_model_free(model)
-		return nil, lastErr("ov_core_compile_model", st, modelPath)
+		return nil, err
 	}
 	// The compiled model is self-contained; free the read model now to avoid
 	// doubling the per-classifier memory footprint (the create_infer_request
 	// below operates on the compiled model, not the read model).
 	C.ovbind_model_free(model)
 	model = nil
+	if gpuAbandoned(isGPU) {
+		// Tripped by another goroutine during the compile: abandon the compiled model.
+		return nil, gpuFault.blockedErr()
+	}
 
 	// Read the real element count of the selected output port from the compiled
 	// model (static after the batch-1 reshape). NumClasses reflects the model,
@@ -714,54 +771,56 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	// (issue #1112) and a wrong OutputIndex is rejected before any inference.
 	var classCount C.int64_t
 	if st := C.ovbind_output_class_count(compiled, C.size_t(opts.OutputIndex), &classCount); !ovOK(st) {
-		C.ovbind_compiled_model_free(compiled)
 		if int(st) == int(C.OVBIND_ERR_BAD_OUTPUT) {
+			releaseSetup(isGPU, nil, nil, nil, compiled)
 			return nil, errors.Newf("openvino: output index %d is out of range or has a non-static shape", opts.OutputIndex).
 				Category(errors.CategoryModelInit).Build()
 		}
-		return nil, lastErr("ov_compiled_model_output shape", st, modelPath)
+		err = gpuFault.setupFailed(isGPU, lastErr("ov_compiled_model_output shape", st, modelPath))
+		releaseSetup(isGPU, nil, nil, nil, compiled)
+		return nil, err
 	}
 
 	var req *C.ov_infer_request_t
 	if st := C.ovbind_compiled_model_create_infer_request(compiled, &req); !ovOK(st) {
-		C.ovbind_compiled_model_free(compiled)
-		return nil, lastErr("ov_compiled_model_create_infer_request", st, modelPath)
+		err = gpuFault.setupFailed(isGPU, lastErr("ov_compiled_model_create_infer_request", st, modelPath))
+		releaseSetup(isGPU, nil, nil, nil, compiled)
+		return nil, err
+	}
+	if gpuAbandoned(isGPU) {
+		// Tripped by another goroutine meanwhile: abandon the request and compiled model.
+		return nil, gpuFault.blockedErr()
 	}
 
 	// Allocate the input buffer in C memory so OpenVINO may retain the pointer
 	// across infer() without violating cgo pointer-passing rules.
 	inBuf := C.malloc(C.size_t(samples) * C.size_t(float32Bytes))
 	if inBuf == nil {
-		C.ovbind_infer_request_free(req)
-		C.ovbind_compiled_model_free(compiled)
+		releaseSetup(isGPU, nil, nil, req, compiled)
 		return nil, errors.Newf("openvino: failed to allocate %d-sample input buffer", samples).Build()
 	}
 
 	dims := []C.int64_t{1, C.int64_t(samples)}
 	var shape C.ov_shape_t
 	if st := C.ovbind_shape_create(expectedInputRank, &dims[0], &shape); !ovOK(st) {
-		C.free(inBuf)
-		C.ovbind_infer_request_free(req)
-		C.ovbind_compiled_model_free(compiled)
-		return nil, lastErr("ov_shape_create", st)
+		err = gpuFault.setupFailed(isGPU, lastErr("ov_shape_create", st))
+		releaseSetup(isGPU, nil, inBuf, req, compiled)
+		return nil, err
 	}
 
 	var inTensor *C.ov_tensor_t
 	if st := C.ovbind_tensor_create_from_host_ptr(C.F32, shape, inBuf, &inTensor); !ovOK(st) {
+		err = gpuFault.setupFailed(isGPU, lastErr("ov_tensor_create_from_host_ptr", st))
 		C.ovbind_shape_free(&shape)
-		C.free(inBuf)
-		C.ovbind_infer_request_free(req)
-		C.ovbind_compiled_model_free(compiled)
-		return nil, lastErr("ov_tensor_create_from_host_ptr", st)
+		releaseSetup(isGPU, nil, inBuf, req, compiled)
+		return nil, err
 	}
 	C.ovbind_shape_free(&shape)
 
 	if st := C.ovbind_set_input_tensor(req, inputPortIndex, inTensor); !ovOK(st) {
-		C.ovbind_tensor_free(inTensor)
-		C.free(inBuf)
-		C.ovbind_infer_request_free(req)
-		C.ovbind_compiled_model_free(compiled)
-		return nil, lastErr("ov_infer_request_set_input_tensor_by_index", st)
+		err = gpuFault.setupFailed(isGPU, lastErr("ov_infer_request_set_input_tensor_by_index", st))
+		releaseSetup(isGPU, inTensor, inBuf, req, compiled)
+		return nil, err
 	}
 	// The tensor keeps a reference to inBuf; the wrapper handle itself is no
 	// longer needed once the request holds it.
@@ -774,13 +833,16 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		samples:     samples,
 		outputIndex: opts.OutputIndex,
 		numClasses:  int(classCount),
+		gpu:         isGPU,
 	}, nil
 }
 
 // PredictRaw copies samples into the C input buffer, runs one inference, and
 // returns a freshly allocated Go slice of the raw output logits. It returns an
-// error if the input length does not match the model's input sample count. Not
-// goroutine-safe.
+// error if the input length does not match the model's input sample count. On a
+// GPU classifier it returns an error wrapping ErrGPUDeviceFault, without any
+// native call, once the GPU fault latch is set; a native failure with a fatal
+// OpenCL marker, or a streak of consecutive failures, sets it. Not goroutine-safe.
 func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	// Pin to one OS thread so the infer call and any ov_get_last_err_msg fetch
 	// (C thread-local storage) run on the same thread.
@@ -790,6 +852,9 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	if c.req == nil || c.inBuf == nil {
 		return nil, ErrOpenVINOUnavailable
 	}
+	if c.gpu && gpuFault.blocked() {
+		return nil, gpuFault.blockedErr()
+	}
 	if len(samples) != c.samples {
 		return nil, errors.Newf("openvino: input length %d does not match model input %d", len(samples), c.samples).Build()
 	}
@@ -798,23 +863,28 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	copy(dst, samples)
 
 	if st := C.ovbind_infer(c.req); !ovOK(st) {
-		return nil, lastErr("ov_infer_request_infer", st)
+		return nil, gpuFault.inferResult(c.gpu, lastErr("ov_infer_request_infer", st))
 	}
 
 	var outTensor *C.ov_tensor_t
 	if st := C.ovbind_get_output_tensor(c.req, C.size_t(c.outputIndex), &outTensor); !ovOK(st) {
-		return nil, lastErr("ov_infer_request_get_output_tensor_by_index", st)
+		return nil, gpuFault.inferResult(c.gpu, lastErr("ov_infer_request_get_output_tensor_by_index", st))
 	}
-	defer C.ovbind_tensor_free(outTensor)
+	defer func() {
+		// The output tensor belongs to the GPU request: leave it once the latch is set.
+		if !gpuAbandoned(c.gpu) {
+			C.ovbind_tensor_free(outTensor)
+		}
+	}()
 
 	var n C.size_t
 	if st := C.ovbind_tensor_get_size(outTensor, &n); !ovOK(st) {
-		return nil, lastErr("ov_tensor_get_size", st)
+		return nil, gpuFault.inferResult(c.gpu, lastErr("ov_tensor_get_size", st))
 	}
 
 	var dataPtr unsafe.Pointer
 	if st := C.ovbind_tensor_data(outTensor, &dataPtr); !ovOK(st) {
-		return nil, lastErr("ov_tensor_data", st)
+		return nil, gpuFault.inferResult(c.gpu, lastErr("ov_tensor_data", st))
 	}
 	// ov_tensor_data can return OK with a nil buffer; unsafe.Slice on a nil
 	// pointer with n > 0 is undefined behavior, so guard it.
@@ -825,6 +895,8 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	src := unsafe.Slice((*float32)(dataPtr), int(n))
 	out := make([]float32, int(n))
 	copy(out, src)
+	// A full successful inference resets the consecutive GPU failure streak.
+	_ = gpuFault.inferResult(c.gpu, nil)
 	return out, nil
 }
 
@@ -835,8 +907,16 @@ func (c *classifier) NumClasses() int { return c.numClasses }
 // Close frees the infer request, compiled model, and the C input buffer, in
 // that order. The read model was already freed right after compile in
 // NewClassifier. Close does not touch the process-global core. Close is
-// idempotent.
+// idempotent. On a GPU classifier whose GPU fault latch is set, Close abandons
+// the native objects without freeing them (a small one-time leak): freeing them
+// would call into the failed GPU context and may hang.
 func (c *classifier) Close() error {
+	if gpuAbandoned(c.gpu) {
+		c.req = nil
+		c.compiled = nil
+		c.inBuf = nil
+		return nil
+	}
 	if c.req != nil {
 		C.ovbind_infer_request_free(c.req)
 		c.req = nil

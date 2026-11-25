@@ -28,6 +28,7 @@ const (
 	ovReasonGPUUnavailable    = "gpu device requested but not available"
 	ovReasonGPUDeviceMissing  = "configured gpu device is not present"
 	ovReasonCPUUnsupported    = "cpu device not supported on this host (needs an ARMv8.2+/A76 CPU with native f16)"
+	ovReasonGPUFailed         = "the OpenVINO GPU failed earlier in this run; restart BirdNET-Go to use it again"
 	ovReasonNoDevice          = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
 	ovReasonORTPreferredARM64 = "ONNX Runtime is preferred on arm64 CPUs; set birdnet.backend to openvino to use the OpenVINO CPU"
 	ovReasonNotBirdNETv24     = "model is not the stock BirdNET v2.4 classifier"
@@ -103,16 +104,19 @@ type ovHostFacts struct {
 	nativeF16    bool                              // cpuspec.HasNativeF16()
 	ortAvailable bool                              // ONNX Runtime is available for this model's settings
 	gpus         func() []inference.OpenVINODevice // the OpenVINO GPU devices present, empty when none
+	gpuFailed    bool                              // the process-wide OpenVINO GPU fault latch is set (inference.OpenVINOGPUFault)
 }
 
 // liveOVHostFacts returns the facts of the running host with the given ONNX
 // Runtime answer.
 func liveOVHostFacts(libraryPath string, ortAvailable bool) *ovHostFacts {
+	gpuFailed, _ := ovGPUFault()
 	return &ovHostFacts{
 		goarch:       runtime.GOARCH,
 		nativeF16:    cpuspec.HasNativeF16(),
 		ortAvailable: ortAvailable,
 		gpus:         func() []inference.OpenVINODevice { return openVINOGPUs(libraryPath) },
+		gpuFailed:    gpuFailed,
 	}
 }
 
@@ -125,9 +129,19 @@ func liveOVHostFacts(libraryPath string, ortAvailable bool) *ovHostFacts {
 // "gpu" and "auto" plan OpenVINO's own "GPU" alias, which is the first GPU: the
 // planner never prefers one adapter over another. A concrete "GPU.<n>" plans that
 // name when the host enumerates exactly it (see planConcreteGPU).
+//
+// While the process-wide GPU fault latch is set (host.gpuFailed) the GPU is never
+// planned: a "gpu" or "GPU.<n>" preference declines with ovReasonGPUFailed without
+// probing, and "auto" skips the GPU and keeps the CPU, declining with
+// ovReasonGPUFailed when the CPU is not usable either. An explicit "cpu" is
+// unaffected.
 func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (device, deviceName string, ok bool, reason string) {
 	if backendPref == conf.BackendPrefONNX {
 		return "", "", false, ovReasonBackendONNX
+	}
+
+	if host.gpuFailed && (devicePref == conf.OVDeviceGPU || conf.IsOVGPUDeviceName(devicePref)) {
+		return "", "", false, ovReasonGPUFailed
 	}
 
 	if conf.IsOVGPUDeviceName(devicePref) {
@@ -157,11 +171,16 @@ func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (devi
 			}
 			return "", "", false, ovReasonORTPreferredARM64
 		}
-		if gpus := host.gpus(); len(gpus) > 0 {
-			return inference.OVDeviceGPU, aliasGPUName(gpus), true, ""
+		if !host.gpuFailed {
+			if gpus := host.gpus(); len(gpus) > 0 {
+				return inference.OVDeviceGPU, aliasGPUName(gpus), true, ""
+			}
 		}
 		if host.cpuAllowed(devicePref) {
 			return inference.OVDeviceCPU, "", true, ""
+		}
+		if host.gpuFailed {
+			return "", "", false, ovReasonGPUFailed
 		}
 		return "", "", false, ovReasonNoDevice
 	}
@@ -366,6 +385,7 @@ var (
 	ovInitCore          = inference.InitOpenVINO
 	ovProbeDeviceInfo   = inference.OpenVINOProbeDeviceInfo
 	ovLoadedLibraryPath = inference.OpenVINOLoadedLibraryPath
+	ovGPUFault          = inference.OpenVINOGPUFault
 )
 
 // openVINOGPUs lists the OpenVINO GPU devices (Intel iGPU/dGPU via the Intel GPU
