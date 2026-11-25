@@ -188,6 +188,9 @@ func (r *detectionRepository) speciesLabel(ctx context.Context, scientificName s
 type offeredSpelling struct {
 	info detection.ModelInfo
 	name string
+	// modelType is the ai_models type of the row; set only on the detection's own
+	// model.
+	modelType entities.ModelType
 }
 
 // createOfferedLabel gets or creates the label of modelID for an offered species.
@@ -210,14 +213,14 @@ func (r *detectionRepository) createOfferedLabel(ctx context.Context, requested 
 	}
 
 	var own *offeredSpelling
-	var ownType entities.ModelType
 	if len(offered) > 0 {
 		row, err := NewModelRepository(r.db, r.metrics, r.useV2Prefix, r.isMySQL).GetByID(ctx, modelID)
 		switch {
 		case err == nil:
 			for i := range offered {
 				if offered[i].info.Name == row.Name && offered[i].info.Version == row.Version && offered[i].info.Variant == row.Variant {
-					own, ownType = &offered[i], row.ModelType
+					offered[i].modelType = row.ModelType
+					own = &offered[i]
 					break
 				}
 			}
@@ -226,14 +229,12 @@ func (r *detectionRepository) createOfferedLabel(ctx context.Context, requested 
 		}
 	}
 
-	var name string
+	name := strings.TrimSpace(detection.ExtractScientificName(requested))
 	switch {
 	case own != nil:
 		name = own.name
 	case len(offered) > 0:
 		name = offered[0].name
-	default:
-		name = strings.TrimSpace(detection.ExtractScientificName(requested))
 	}
 	name = openfauna.CanonicalName(name)
 
@@ -242,7 +243,7 @@ func (r *detectionRepository) createOfferedLabel(ctx context.Context, requested 
 	if category, ok := soundevent.CategoryOf(name); ok {
 		typeName = string(category)
 	} else if !soundevent.IsName(name) {
-		className = offeredTaxonomicClass(own != nil, ownType, offered)
+		className = offeredTaxonomicClass(own, offered)
 	}
 
 	labelType, err := NewLabelTypeRepository(r.db, r.metrics, r.useV2Prefix).GetOrCreate(ctx, typeName)
@@ -268,9 +269,9 @@ func (r *detectionRepository) createOfferedLabel(ctx context.Context, requested 
 // "" for none. When the detection's own model knows the species its model type
 // decides, as in its save path; otherwise the class the offered models imply, when
 // they all agree.
-func offeredTaxonomicClass(ownKnows bool, ownType entities.ModelType, offered []offeredSpelling) string {
-	if ownKnows {
-		return ownType.TaxonomicClass()
+func offeredTaxonomicClass(own *offeredSpelling, offered []offeredSpelling) string {
+	if own != nil {
+		return own.modelType.TaxonomicClass()
 	}
 	var agreed string
 	for _, m := range offered {
