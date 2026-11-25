@@ -19,8 +19,7 @@ const (
 	gpuFailureStreakLimit = 3
 
 	// gpuBlockedHint is the short operator guidance appended to every fast-path
-	// error. It is what the inference failing notice shows, so it names both ways
-	// out.
+	// error. It reaches logs and error reports, so it names both ways out.
 	gpuBlockedHint = "GPU inference is stopped until BirdNET-Go restarts; restart it or set the OpenVINO device to CPU"
 )
 
