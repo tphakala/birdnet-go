@@ -171,7 +171,7 @@ func (r *labelRepository) GetByScientificNamesAndModel(ctx context.Context, name
 // MariaDB its row may be stored under another spelling that the server's
 // collation treats as equal; SQLite compares case-sensitively, so a case variant
 // is its own row. MySQL and MariaDB look up each name that is not stored under
-// its own spelling on its own, so a name that no row matches costs one extra query.
+// its own spelling on its own, so a name that no row matches costs at least one extra query.
 func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames []string, modelID, labelTypeID uint, taxonomicClassID *uint) (map[string]*entities.Label, error) {
 	if len(scientificNames) == 0 {
 		return make(map[string]*entities.Label), nil
