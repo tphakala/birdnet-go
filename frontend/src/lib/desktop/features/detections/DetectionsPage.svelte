@@ -16,6 +16,7 @@
   const logger = getLogger('app');
 
   let detectionsData = $state<DetectionsListData | null>(null);
+  let currentSortBy = $state<DetectionSortBy | undefined>(undefined);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -112,6 +113,7 @@
 
     try {
       const queryParams = getQueryParams();
+      currentSortBy = queryParams.sortBy ?? 'date_desc';
       // Build query string
       const queryString = new URLSearchParams();
       Object.entries(queryParams).forEach(([key, value]) => {
@@ -205,6 +207,7 @@
 
   // Handle sort change from DetectionsList
   function handleSortChange(newSortBy: DetectionSortBy) {
+    currentSortBy = newSortBy;
     // Save preference to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(SORT_BY_KEY, newSortBy);
@@ -280,6 +283,7 @@
     data={detectionsData}
     {loading}
     {error}
+    sortBy={currentSortBy}
     onPageChange={handlePageChange}
     onDetailsClick={handleDetailsClick}
     onRefresh={fetchDetections}

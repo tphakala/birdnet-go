@@ -23,6 +23,7 @@
   - data: DetectionsListData | null - Paginated detection data
   - loading?: boolean - Loading state indicator
   - error?: string | null - Error message display
+  - sortBy?: DetectionSortBy - Active backend sort order
   - onPageChange?: (page: number) => void - Pagination handler
   - onDetailsClick?: (id: number) => void - Detail view handler
   - onRefresh?: () => void - Data refresh handler
@@ -76,6 +77,7 @@
     data: DetectionsListData | null;
     loading?: boolean;
     error?: string | null;
+    sortBy?: DetectionSortBy;
     onPageChange?: (_page: number) => void;
     onDetailsClick?: (_id: number) => void;
     onRefresh?: () => void;
@@ -88,6 +90,7 @@
     data,
     loading = false,
     error = null,
+    sortBy,
     onPageChange,
     onDetailsClick,
     onRefresh,
@@ -154,9 +157,15 @@
     onNumResultsChange?.(numResults);
   }
 
-  // State for number of results - captures initial value without creating dependency
-  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
+  // State for number of results - synced when parent data.numResults changes
   let selectedNumResults = $state(untrack(() => String(data?.numResults ?? 25)));
+  const incomingNumResults = $derived(data?.numResults);
+
+  $effect(() => {
+    if (incomingNumResults !== undefined) {
+      selectedNumResults = String(incomingNumResults);
+    }
+  });
 
   // --- View mode state (persisted in localStorage) ---
   const VIEW_STORAGE_KEY = 'detectionsViewMode';
@@ -184,7 +193,7 @@
     }
   }
 
-  // --- Sort state (driven by backend via URL params) ---
+  // --- Sort state (driven by sortBy prop, falling back to URL params) ---
 
   /** Map backend sortBy value to frontend field + direction */
   function parseSortBy(sortBy?: string): { field: SortField; direction: SortDirection } {
@@ -220,14 +229,22 @@
     }
   }
 
-  // Initialize from URL sortBy parameter
+  // Initialize from sortBy prop if provided, otherwise fall back to URL sortBy parameter
   const initialSort = parseSortBy(
-    typeof window !== 'undefined'
-      ? (new URLSearchParams(window.location.search).get('sortBy') ?? undefined)
-      : undefined
+    untrack(() => sortBy) ??
+      (typeof window !== 'undefined'
+        ? (new URLSearchParams(window.location.search).get('sortBy') ?? undefined)
+        : undefined)
   );
   let sortField = $state<SortField>(initialSort.field);
   let sortDirection = $state<SortDirection>(initialSort.direction);
+
+  $effect(() => {
+    if (sortBy === undefined) return;
+    const parsed = parseSortBy(sortBy);
+    sortField = parsed.field;
+    sortDirection = parsed.direction;
+  });
 
   const SORT_FIELDS: Set<string> = new Set<string>(['dateTime', 'species', 'confidence', 'status']);
 
