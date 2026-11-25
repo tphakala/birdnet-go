@@ -39,7 +39,8 @@ type SpeciesOffer struct {
 
 // OfferedModel is one loaded model that can classify an offered species.
 type OfferedModel struct {
-	// Model is the model's ai_models identity as the save path stores it.
+	// Model is the model's ai_models identity; matching uses Name and Version
+	// and prefers an exact Variant match when present.
 	Model detection.ModelInfo
 	// ScientificName is the model's own scientific name of the species.
 	ScientificName string
