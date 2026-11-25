@@ -41,8 +41,8 @@ func ovGPUFaultLogCount(buf *bytes.Buffer) int {
 // many fault errors follow, and that the error is returned unchanged. Not
 // parallel: touches the process-wide ovGPUFaultLogged and the global logger.
 func TestLogOVGPUFaultOnce_FiresOncePerProcess(t *testing.T) {
-	ovGPUFaultLogged.Store(false)
-	t.Cleanup(func() { ovGPUFaultLogged.Store(false) })
+	prevLogged := ovGPUFaultLogged.Swap(false)
+	t.Cleanup(func() { ovGPUFaultLogged.Store(prevLogged) })
 	buf := logtest.CaptureBufferAt(t, slog.LevelError)
 
 	plain := errors.NewStd("some other failure")
@@ -76,8 +76,8 @@ func TestOpenVINOWrappers_LogGPUFault(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ovGPUFaultLogged.Store(false)
-			t.Cleanup(func() { ovGPUFaultLogged.Store(false) })
+			prevLogged := ovGPUFaultLogged.Swap(false)
+			t.Cleanup(func() { ovGPUFaultLogged.Store(prevLogged) })
 			buf := logtest.CaptureBufferAt(t, slog.LevelError)
 			require.ErrorIs(t, tt.call(), ov.ErrGPUDeviceFault)
 			assert.Equal(t, 1, ovGPUFaultLogCount(buf))

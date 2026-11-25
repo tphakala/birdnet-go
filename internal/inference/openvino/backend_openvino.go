@@ -851,7 +851,9 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 // error if the input length does not match the model's input sample count. On a
 // GPU classifier it returns an error wrapping ErrGPUDeviceFault, without any
 // native call, once the GPU fault latch is set; a native failure with a fatal
-// OpenCL marker, or a streak of consecutive failures, sets it. Not goroutine-safe.
+// OpenCL marker, or a streak of consecutive failures, sets it. When another
+// goroutine sets the latch while the inference runs, it returns the same error
+// without reading the output. Not goroutine-safe.
 func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 	// Pin to one OS thread so the infer call and any ov_get_last_err_msg fetch
 	// (C thread-local storage) run on the same thread.
@@ -873,6 +875,12 @@ func (c *classifier) PredictRaw(samples []float32) ([]float32, error) {
 
 	if st := C.ovbind_infer(c.req); !ovOK(st) {
 		return nil, gpuFault.inferResult(c.gpu, lastErr("ov_infer_request_infer", st))
+	}
+	// Another goroutine (a GPU compile in NewClassifier, or another classifier's
+	// inference) can trip the latch while this infer runs; do not read the output
+	// from a failed GPU context.
+	if gpuAbandoned(c.gpu) {
+		return nil, gpuFault.blockedErr()
 	}
 
 	var outTensor *C.ov_tensor_t
