@@ -3,12 +3,16 @@
 package v2
 
 import (
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"gorm.io/gorm"
 )
 
 // TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement runs every
@@ -189,4 +193,45 @@ func TestMySQL_LabelBatchGetOrCreate_MapsNamesTheServerTreatsAsEqual(t *testing.
 	require.Contains(t, got, "Picus Canus")
 	require.Contains(t, got, "Picus canus")
 	assert.Equal(t, got["Picus Canus"].ID, got["Picus canus"].ID)
+
+	// A name the server already matches to a stored row is resolved without an
+	// insert, so a repeat save does not run a doomed INSERT each time.
+	var inserts atomic.Int32
+	const countCallback = "test:count_inserts"
+	require.NoError(t, db.Callback().Create().Before("gorm:create").Register(countCallback, func(*gorm.DB) { inserts.Add(1) }))
+	t.Cleanup(func() { _ = db.Callback().Create().Remove(countCallback) })
+	got, err = labelRepo.BatchGetOrCreate(ctx, []string{"homo SAPIENS"}, model.ID, labelType.ID, nil)
+	require.NoError(t, err)
+	assert.Equal(t, stored.ID, got["homo SAPIENS"].ID)
+	assert.Zero(t, inserts.Load(), "a variant of a stored name must not be inserted")
+
+	// A failure of the per-name lookup is returned wrapped, from the pass after the
+	// first fetch and from the pass after the re-fetch.
+	const failCallback = "test:fail_single_name_lookup"
+	errLookup := errors.NewStd("injected lookup failure")
+	var lookups, failAt atomic.Int32
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register(failCallback, func(tx *gorm.DB) {
+		if strings.Contains(tx.Statement.SQL.String(), "scientific_name = ") && lookups.Add(1) == failAt.Load() {
+			_ = tx.AddError(errLookup)
+		}
+	}))
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(failCallback) })
+	for _, tc := range []struct {
+		name   string
+		names  []string
+		failAt int32
+	}{
+		{"first pass", []string{"homo SAPIENS"}, 1},
+		// Both spellings are new: the first pass looks up both (lookups 1 and 2),
+		// the pass after the re-fetch looks up the one the insert skipped (3).
+		{"after the re-fetch", []string{"Quercus Robur", "Quercus robur"}, 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lookups.Store(0)
+			failAt.Store(tc.failAt)
+			_, err := labelRepo.BatchGetOrCreate(ctx, tc.names, model.ID, labelType.ID, nil)
+			require.ErrorIs(t, err, errLookup)
+			assert.ErrorContains(t, err, "resolve label")
+		})
+	}
 }
