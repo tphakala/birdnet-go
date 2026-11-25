@@ -620,19 +620,18 @@ func gpuAbandoned(gpu bool) bool { return gpu && gpuFault.blocked() }
 // NewClassifier, in reverse creation order, unless the GPU fault latch is set
 // for a GPU target (then they are abandoned). Nil arguments are skipped.
 func releaseSetup(gpu bool, inTensor *C.ov_tensor_t, inBuf unsafe.Pointer, req *C.ov_infer_request_t, compiled *C.ov_compiled_model_t) {
-	if gpuAbandoned(gpu) {
-		return
-	}
-	if inTensor != nil {
+	// The latch is re-read before every free: another goroutine can trip it
+	// between two of them.
+	if inTensor != nil && !gpuAbandoned(gpu) {
 		C.ovbind_tensor_free(inTensor)
 	}
-	if inBuf != nil {
+	if inBuf != nil && !gpuAbandoned(gpu) {
 		C.free(inBuf)
 	}
-	if req != nil {
+	if req != nil && !gpuAbandoned(gpu) {
 		C.ovbind_infer_request_free(req)
 	}
-	if compiled != nil {
+	if compiled != nil && !gpuAbandoned(gpu) {
 		C.ovbind_compiled_model_free(compiled)
 	}
 }
@@ -781,6 +780,11 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		return nil, err
 	}
 
+	if gpuAbandoned(isGPU) {
+		// Tripped by another goroutine since the compile check: abandon the compiled model.
+		return nil, gpuFault.blockedErr()
+	}
+
 	var req *C.ov_infer_request_t
 	if st := C.ovbind_compiled_model_create_infer_request(compiled, &req); !ovOK(st) {
 		err = gpuFault.setupFailed(isGPU, lastErr("ov_compiled_model_create_infer_request", st, modelPath))
@@ -821,6 +825,11 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		err = gpuFault.setupFailed(isGPU, lastErr("ov_infer_request_set_input_tensor_by_index", st))
 		releaseSetup(isGPU, inTensor, inBuf, req, compiled)
 		return nil, err
+	}
+	if gpuAbandoned(isGPU) {
+		// Tripped by another goroutine meanwhile: do not hand out a dead GPU
+		// classifier; abandon everything built so far.
+		return nil, gpuFault.blockedErr()
 	}
 	// The tensor keeps a reference to inBuf; the wrapper handle itself is no
 	// longer needed once the request holds it.
@@ -911,24 +920,20 @@ func (c *classifier) NumClasses() int { return c.numClasses }
 // the native objects without freeing them (a small one-time leak): freeing them
 // would call into the failed GPU context and may hang.
 func (c *classifier) Close() error {
-	if gpuAbandoned(c.gpu) {
-		c.req = nil
-		c.compiled = nil
-		c.inBuf = nil
-		return nil
-	}
-	if c.req != nil {
+	// The latch is re-read before every free: another goroutine can trip it
+	// between two of them.
+	if c.req != nil && !gpuAbandoned(c.gpu) {
 		C.ovbind_infer_request_free(c.req)
-		c.req = nil
 	}
-	if c.compiled != nil {
+	c.req = nil
+	if c.compiled != nil && !gpuAbandoned(c.gpu) {
 		C.ovbind_compiled_model_free(c.compiled)
-		c.compiled = nil
 	}
-	if c.inBuf != nil {
+	c.compiled = nil
+	if c.inBuf != nil && !gpuAbandoned(c.gpu) {
 		C.free(c.inBuf)
-		c.inBuf = nil
 	}
+	c.inBuf = nil
 	return nil
 }
 
