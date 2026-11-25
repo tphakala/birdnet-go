@@ -104,3 +104,15 @@ func TestGPUGuard_BlockedErrIsSentinel(t *testing.T) {
 	assert.Contains(t, err.Error(), "restart")
 	assert.Contains(t, err.Error(), "CPU")
 }
+
+func TestGPUGuard_KeepsFirstCause(t *testing.T) {
+	t.Parallel()
+	var g gpuGuard
+	first := errors.NewStd("first: " + issueOutOfResources)
+	second := errors.NewStd("second: " + genericInvalidQueue)
+	require.ErrorIs(t, g.inferResult(true, first), ErrGPUDeviceFault)
+	require.ErrorIs(t, g.inferResult(true, second), ErrGPUDeviceFault)
+	faulted, cause := g.fault()
+	require.True(t, faulted)
+	assert.Same(t, first, cause)
+}
