@@ -172,13 +172,12 @@ func TestMySQL_LabelBatchGetOrCreate_MapsNamesTheServerTreatsAsEqual(t *testing.
 
 	got, err := labelRepo.BatchGetOrCreate(ctx, []string{"Homo sapiens", "Homo Sapiens", "Homo sapiéns", "Turdus merula"}, model.ID, labelType.ID, nil)
 	require.NoError(t, err)
-	require.Contains(t, got, "Homo sapiens", "the requested spelling must be a key")
-	require.Contains(t, got, "Homo Sapiens")
-	require.Contains(t, got, "Homo sapiéns", "MySQL 8.4's default collation also ignores accents")
 	require.Contains(t, got, "Turdus merula")
-	assert.Equal(t, stored.ID, got["Homo sapiens"].ID)
-	assert.Equal(t, stored.ID, got["Homo Sapiens"].ID)
-	assert.Equal(t, stored.ID, got["Homo sapiéns"].ID)
+	// MySQL 8.4's default collation also ignores accents, and MariaDB's do too.
+	for _, name := range []string{"Homo sapiens", "Homo Sapiens", "Homo sapiéns"} {
+		require.Contains(t, got, name, "the requested spelling must be a key")
+		assert.Equal(t, stored.ID, got[name].ID, name)
+	}
 
 	var count int64
 	require.NoError(t, db.Table("v2_labels").Where("model_id = ?", model.ID).Count(&count).Error)

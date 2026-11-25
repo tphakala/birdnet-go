@@ -167,13 +167,10 @@ func (r *labelRepository) GetByScientificNamesAndModel(ctx context.Context, name
 }
 
 // BatchGetOrCreate retrieves or creates multiple labels in optimized batches.
-//
-// Every requested name (trimmed, non-empty) is a key of the returned map, mapped
-// to the row the database considers equal to it. On MySQL and MariaDB that can
-// be a row stored under another spelling: the tables use the server's default
-// collation, which ignores case (and accents on MySQL 8.4), so a request for
-// "Homo sapiens" resolves to a stored "Homo Sapiens" row and no second row is
-// created. SQLite compares case-sensitively, so a case variant is its own row.
+// Every requested (trimmed, non-empty) name is a key of the result. On MySQL and
+// MariaDB its row may be stored under another spelling that the server's
+// collation treats as equal; SQLite compares case-sensitively, so a case variant
+// is its own row.
 func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames []string, modelID, labelTypeID uint, taxonomicClassID *uint) (map[string]*entities.Label, error) {
 	if len(scientificNames) == 0 {
 		return make(map[string]*entities.Label), nil
@@ -248,9 +245,8 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 	}
 
 	// The insert skipped names the database already holds under another
-	// spelling, and the re-fetch keyed those rows by their stored name. Resolve
-	// each requested name that is still unkeyed on its own, so the map holds the
-	// requested spelling.
+	// spelling, and the re-fetch keyed those rows by their stored name: look
+	// each one up on its own and key it by the requested spelling.
 	if r.isMySQL {
 		for _, name := range missing {
 			if _, found := result[name]; found {
