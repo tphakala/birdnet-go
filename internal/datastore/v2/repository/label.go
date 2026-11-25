@@ -37,7 +37,7 @@ type LabelRepository interface {
 	// stored under a different case or accent spelling, which the server's
 	// collation treats as the same name.
 	// Uses bulk operations to minimize database round-trips; on MySQL and MariaDB
-	// each name that is not stored under its own spelling costs one more lookup.
+	// each name that is not stored under its own spelling costs at least one more lookup.
 	BatchGetOrCreate(ctx context.Context, scientificNames []string, modelID, labelTypeID uint, taxonomicClassID *uint) (map[string]*entities.Label, error)
 
 	// GetAllByModel retrieves all labels for a specific model.
