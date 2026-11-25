@@ -783,3 +783,107 @@ func TestDetectionRepository_ChangeSpecies_OfferedLabelIsReused(t *testing.T) {
 	assert.Equal(t, created.ID, saved.ID)
 	assert.Equal(t, labelsAfterFirst, speciesTestLabelCount(t, db))
 }
+
+// TestDetectionRepository_ChangeSpecies_CustomVariantMatchesOwnModel pins that
+// a detection from a custom-variant classifier (stored with Variant "custom"
+// while the static registry identity carries "default") matches its own model
+// on Name and Version, and that an exact Variant match wins when multiple
+// variants share the same Name and Version.
+func TestDetectionRepository_ChangeSpecies_CustomVariantMatchesOwnModel(t *testing.T) {
+	const (
+		customModelID    = uint(4)
+		customVariant    = "custom"
+		competingSpecies = "Rousettus aegyptiacus"
+		lowerCompeting   = "rousettus aegyptiacus"
+	)
+	customBirdnet := detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: customVariant}
+	customPerch := detection.ModelInfo{Name: "Perch", Version: "2", Variant: customVariant}
+
+	seedCustomModel := func(t *testing.T, db *gorm.DB, info detection.ModelInfo, modelType entities.ModelType) *entities.Detection {
+		t.Helper()
+		require.NoError(t, db.Create(&entities.AIModel{
+			ID:        customModelID,
+			Name:      info.Name,
+			Version:   info.Version,
+			Variant:   info.Variant,
+			ModelType: modelType,
+		}).Error)
+		teal := createTestLabel(t, db, speciesTestTeal, customModelID)
+		return speciesTestDetection(t, db, teal)
+	}
+
+	tests := []struct {
+		name      string
+		model     detection.ModelInfo
+		modelType entities.ModelType
+		request   string
+		offer     []OfferedModel
+		wantName  string
+		wantClass string
+	}{
+		{
+			// The bat model appears first with a different casing and a conflicting
+			// taxonomic class (Chiroptera vs Aves); without matching the BirdNET row
+			// on Name and Version, the label would take the bat spelling and no class.
+			name:      "custom variant matches stock offer on name and version",
+			model:     customBirdnet,
+			modelType: entities.ModelTypeBird,
+			request:   competingSpecies,
+			offer: []OfferedModel{
+				speciesTestKnownBy(speciesTestModelBat, lowerCompeting),
+				speciesTestKnownBy(speciesTestModelBirdnet, competingSpecies),
+			},
+			wantName:  competingSpecies,
+			wantClass: entities.TaxonomicClassAves,
+		},
+		{
+			// BirdNET implies Aves, and an unstamped zero-value ModelType also defaults
+			// to Aves; only matching Perch on Name+Version and stamping ModelTypeMulti
+			// yields an empty taxonomic class and Perch's own spelling.
+			name:      "custom multi-taxa model keeps empty taxonomic class when bird model also offers species",
+			model:     customPerch,
+			modelType: entities.ModelTypeMulti,
+			request:   speciesTestMallard,
+			offer: []OfferedModel{
+				speciesTestKnownBy(speciesTestModelBirdnet, strings.ToLower(speciesTestMallard)),
+				speciesTestKnownBy(speciesTestModelPerch, speciesTestMallard),
+			},
+			wantName:  speciesTestMallard,
+			wantClass: "",
+		},
+		{
+			// Using ModelTypeMulti ensures an unstamped own.modelType on the
+			// fallback-to-exact-variant upgrade path fails (zero value yields Aves).
+			name:      "exact variant wins over another variant of the same name and version",
+			model:     customPerch,
+			modelType: entities.ModelTypeMulti,
+			request:   speciesTestMallard,
+			offer: []OfferedModel{
+				speciesTestKnownBy(speciesTestModelPerch, strings.ToLower(speciesTestMallard)),
+				speciesTestKnownBy(customPerch, speciesTestMallard),
+			},
+			wantName:  speciesTestMallard,
+			wantClass: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, repo := speciesTestDB(t)
+			ctx := t.Context()
+			det := seedCustomModel(t, db, tt.model, tt.modelType)
+
+			require.NoError(t, repo.ChangeSpecies(ctx, det.ID, tt.request, speciesTestOffer(tt.offer...)))
+
+			got, err := repo.Get(ctx, det.ID)
+			require.NoError(t, err)
+			var created entities.Label
+			require.NoError(t, db.Table(tableLabels).First(&created, got.LabelID).Error)
+			assert.Equal(t, customModelID, created.ModelID)
+			assert.Equal(t, tt.wantName, created.ScientificName)
+			typeName, className := speciesTestLabelAttributes(t, db, &created)
+			assert.Equal(t, entities.LabelTypeSpecies, typeName)
+			assert.Equal(t, tt.wantClass, className)
+		})
+	}
+}

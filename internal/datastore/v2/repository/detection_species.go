@@ -217,12 +217,22 @@ func (r *detectionRepository) createOfferedLabel(ctx context.Context, requested 
 		row, err := NewModelRepository(r.db, r.metrics, r.useV2Prefix, r.isMySQL).GetByID(ctx, modelID)
 		switch {
 		case err == nil:
+			// Match on Name and Version because a custom classifier in a registry slot
+			// stores Variant "custom" while DetectionModelInfoForID reports "default".
+			// Prefer an exact Variant match when one is present.
 			for i := range offered {
-				if offered[i].info.Name == row.Name && offered[i].info.Version == row.Version && offered[i].info.Variant == row.Variant {
-					offered[i].modelType = row.ModelType
-					own = &offered[i]
-					break
+				if offered[i].info.Name != row.Name || offered[i].info.Version != row.Version {
+					continue
 				}
+				if own == nil || offered[i].info.Variant == row.Variant {
+					own = &offered[i]
+					if offered[i].info.Variant == row.Variant {
+						break
+					}
+				}
+			}
+			if own != nil {
+				own.modelType = row.ModelType
 			}
 		case !errors.Is(err, ErrModelNotFound):
 			return nil, fmt.Errorf("load detection model: %w", err)
