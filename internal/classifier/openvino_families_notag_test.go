@@ -16,10 +16,11 @@ import (
 
 // TestOpenVINOFamilies_RefuseWithoutORT drives each OpenVINO-capable family on a build
 // without OpenVINO: an explicit selection is refused with the not-built code before any
-// ONNX Runtime build, and auto still takes the ONNX Runtime path. BirdNET v2.4, Perch and
-// the bat extractor go through their constructors or init path; v3.0 goes through its
-// try function (which needs no ONNX Runtime) and, when ONNX Runtime is installed, also
-// through NewBirdNETV3, so the caller's refusal handling is pinned too.
+// ONNX Runtime build, and auto still takes the ONNX Runtime path. BirdNET v2.4 goes through
+// initializeModel and Perch through NewPerch; the bat extractor goes through tryBatOpenVINO
+// only (NewBat is not driven, so its handling of the refusal is not pinned here); v3.0 goes
+// through its try function (which needs no ONNX Runtime) and, when ONNX Runtime is
+// installed, also through NewBirdNETV3, so the caller's refusal handling is pinned too.
 func TestOpenVINOFamilies_RefuseWithoutORT(t *testing.T) {
 	t.Parallel()
 	missing := filepath.Join(t.TempDir(), "missing_no_dft.onnx")
