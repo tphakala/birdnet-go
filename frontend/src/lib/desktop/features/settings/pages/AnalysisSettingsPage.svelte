@@ -687,9 +687,17 @@
   let inferenceBackends = $state<InferenceBackends | null>(null);
   let inferenceBackendsFailed = $state(false);
 
+  // Lookups are numbered when they start. A lookup that answers after a newer one already
+  // published is dropped, so an older healthy status cannot replace a newer GPU fault.
+  let inferenceLookupsStarted = 0;
+  let inferenceLookupPublished = 0;
+
   async function loadInferenceBackends() {
+    const lookup = ++inferenceLookupsStarted;
     try {
       const status = await api.get<InferenceStatusResponse>(INFERENCE_STATUS_ENDPOINT);
+      if (lookup < inferenceLookupPublished) return;
+      inferenceLookupPublished = lookup;
       inferenceBackends = status.backends;
       inferenceBackendsFailed = false;
     } catch (e) {
@@ -707,7 +715,8 @@
   // refetch the status and the failed alert and labels appear without a reload.
   $effect(() =>
     onTopologyChanged(() => {
-      if (inferenceBackends) void loadInferenceBackends();
+      // A lookup in flight may predate the change, so refetch once the tab asked for the list.
+      if (inferenceLookupsStarted > 0) void loadInferenceBackends();
     })
   );
 
