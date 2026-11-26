@@ -919,6 +919,26 @@ describe('AnalysisSettingsPage inference runtime', () => {
 
       expect(screen.getByText(GPU_FAILED_TEXT)).toBeInTheDocument();
     });
+
+    it('shows the fault an older lookup reports after a newer healthy status published', async () => {
+      const pending = mockPendingRuntime();
+      render(AnalysisSettingsPage);
+      await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+      const started = pending.length;
+
+      announceTopologyChange();
+      await waitFor(() => expect(pending.length).toBeGreaterThan(started));
+      // The newer lookup read the status before the latch tripped and answers first; the
+      // older one read it after the trip and answers last.
+      for (const settle of pending.slice(started)) settle(runtimeStatus(GPU_HOST));
+      await tick();
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
+      for (const settle of pending.slice(0, started)) {
+        settle(runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      }
+
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+    });
   });
 
   it('offers only Auto when the host reports neither ONNX Runtime nor OpenVINO', async () => {
