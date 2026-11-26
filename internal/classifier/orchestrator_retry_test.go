@@ -139,3 +139,81 @@ func TestRecordLoadFailure_KeyIsTakenBeforeTheLoad(t *testing.T) {
 	assert.Equal(t, []string{RegistryIDPerchV2}, o.RetryFailedLoadsForBackendChange(),
 		"the load never ran under the new backend, so the settings change must retry it")
 }
+
+// TestRetryFailedLoadsForBackendChange_RechecksCandidateMidRetry pins that the retry
+// re-checks each candidate just before loading it: a model disabled, or loaded by another
+// path, while an earlier candidate was loading is not loaded again or reported as retried.
+func TestRetryFailedLoadsForBackendChange_RechecksCandidateMidRetry(t *testing.T) {
+	// Not parallel: swaps modelLoaders and the global settings snapshot.
+	isolateTestConfig(t)
+
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{conf.ModelIDBirdNETPlusV3, conf.ModelIDPerchV2}
+	settings.BirdNET.Backend = conf.BackendPrefAuto
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o, err := NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(o.Delete)
+
+	cases := []struct {
+		name string
+		// during runs inside the BirdNET+ v3.0 load, which comes first in ID order.
+		during func(orc *Orchestrator)
+		// wantPerchLoaded is whether Perch ends up loaded (by the other path).
+		wantPerchLoaded bool
+	}{
+		{"disabled", func(*Orchestrator) {
+			changed := conftest.GetTestSettings()
+			changed.Models.Enabled = []string{conf.ModelIDBirdNETPlusV3}
+			conftest.SetTestSettings(changed)
+		}, false},
+		{"loaded by another path", func(orc *Orchestrator) {
+			orc.models[RegistryIDPerchV2] = &modelEntry{instance: &mockModelInstance{id: RegistryIDPerchV2}}
+		}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var perchCalls, v3Calls atomic.Int32
+			var noFail atomic.Bool
+			stubModelLoader(t, RegistryIDPerchV2, &perchCalls, &noFail)
+			origV3, hadV3 := modelLoaders[RegistryIDBirdNETPlusV3]
+			modelLoaders[RegistryIDBirdNETPlusV3] = func(orc *Orchestrator, _ int) error {
+				v3Calls.Add(1)
+				tc.during(orc)
+				orc.models[RegistryIDBirdNETPlusV3] = &modelEntry{instance: &mockModelInstance{id: RegistryIDBirdNETPlusV3}}
+				return nil
+			}
+			t.Cleanup(func() {
+				if hadV3 {
+					modelLoaders[RegistryIDBirdNETPlusV3] = origV3
+				} else {
+					delete(modelLoaders, RegistryIDBirdNETPlusV3)
+				}
+				require.NoError(t, o.UnloadModel(RegistryIDBirdNETPlusV3))
+				if tc.wantPerchLoaded {
+					require.NoError(t, o.UnloadModel(RegistryIDPerchV2))
+				}
+				for _, id := range []string{RegistryIDPerchV2, RegistryIDBirdNETPlusV3} {
+					o.modelLoadErrors.Delete(id)
+					o.modelUnloaded.Delete(id)
+				}
+				conftest.SetTestSettings(settings)
+			})
+
+			o.recordLoadFailure(RegistryIDBirdNETPlusV3, errors.NewStd("boom"))
+			o.recordLoadFailure(RegistryIDPerchV2, errors.NewStd("boom"))
+			changed := conftest.GetTestSettings()
+			changed.Models.Enabled = []string{conf.ModelIDBirdNETPlusV3, conf.ModelIDPerchV2}
+			changed.BirdNET.Backend = conf.BackendPrefOpenVINO
+			conftest.SetTestSettings(changed)
+
+			loaded := o.RetryFailedLoadsForBackendChange()
+			assert.Equal(t, []string{RegistryIDBirdNETPlusV3}, loaded, "only the candidate that was still wanted is retried")
+			assert.EqualValues(t, 1, v3Calls.Load())
+			assert.Zero(t, perchCalls.Load(), "the Perch loader must not run")
+			assert.Equal(t, tc.wantPerchLoaded, o.IsModelLoaded(RegistryIDPerchV2))
+		})
+	}
+}

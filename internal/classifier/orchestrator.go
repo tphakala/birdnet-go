@@ -2339,6 +2339,10 @@ func (o *Orchestrator) RetryFailedLoadsForBackendChange() []string {
 
 	var loaded []string
 	for _, id := range candidates {
+		// An earlier load can take seconds: re-check what the snapshot said.
+		if !o.modelIDEnabled(id) || o.IsModelLoaded(id) {
+			continue
+		}
 		if err := o.LoadModel(id); err != nil {
 			continue // LoadModel recorded the failure under the key it started with
 		}
