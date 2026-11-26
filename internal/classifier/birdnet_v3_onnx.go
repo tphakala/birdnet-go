@@ -56,8 +56,10 @@ type BirdNETV3Config struct {
 	// OpenVINO opt-in, sourced from BirdNET settings. The v3.0 GPU-native model runs
 	// on OpenVINO directly (its mel front-end is a Conv1d, not the STFT op that
 	// blocks OpenVINO), so there is no model-variant gate; when the gate allows it
-	// BirdNET v3.0 runs on OpenVINO (ARM A76 f16 CPU or Intel iGPU) and any failure
-	// falls back to ORT.
+	// BirdNET v3.0 runs on OpenVINO (ARM A76 f16 CPU or Intel iGPU). Under an auto
+	// selection a decline or failure falls back to ORT; under an explicit one (see
+	// openVINOSelectionExplicit) NewBirdNETV3 returns an *OpenVINORefusalError and builds
+	// no ORT classifier.
 	Backend        string // BirdNET.Backend ("auto"/"onnx"/"openvino")
 	OpenVINOPath   string // BirdNET.OpenVINOPath (libopenvino_c location)
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto", "cpu", "gpu" or "GPU.<n>")
@@ -120,9 +122,9 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	// OpenVINO path's predictions-port detection (DetectPredictionsOutput) reads the
 	// model metadata through ONNX Runtime, and the ORT fallback classifier needs it
 	// too; InitONNXRuntime is idempotent. Doing this here (mirroring NewBat) ensures
-	// OpenVINO is not silently skipped when v3.0 is the first ONNX model loaded: an
-	// uninitialized runtime would make DetectPredictionsOutput fail and force the ORT
-	// fallback even when the user selected the OpenVINO backend.
+	// OpenVINO is not skipped when v3.0 is the first ONNX model loaded: an
+	// uninitialized runtime would make DetectPredictionsOutput fail, which an auto
+	// selection answers with the ORT fallback and an explicit one with a refusal.
 	if err := inference.InitONNXRuntime(cfg.ONNXRuntimePath); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryModelInit).

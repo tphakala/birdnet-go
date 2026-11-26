@@ -152,7 +152,7 @@ func TestOpenVINORefusalNotices_Sequence(t *testing.T) {
 // errToggle holds the error a fake builder returns; nil makes it succeed.
 type errToggle struct{ err error }
 
-// refusingPerchBuilder replaces the Perch secondary builder and loader with fakes for
+// refusingPerchBuilder replaces the Perch builder and loader with fakes for
 // the test: the builder returns refuse (a refusal) while it is non-nil, else a fresh
 // fake instance. Not for parallel tests: it swaps package globals.
 func refusingPerchBuilder(t *testing.T, refuse *errToggle) {

@@ -517,8 +517,8 @@ func isLibraryAbsent(err error) bool {
 // OpenVINO path in the Perch ModelInstance (perch_onnx.go), never through this
 // primary path. The plan carries the device (CPU, GPU or GPU.<n>), logits output index, and
 // the precision hint (f32 on every device for BirdNET v2.4, see openVINOPrecisionFor;
-// INT8 or unrecognized weights are declined on auto and run at f32 on an explicit
-// openvino backend, see applyOpenVINOQuantizationPolicy). The weight precision is
+// INT8 or unrecognized weights are declined on auto and run at f32 under an explicit
+// selection, see applyOpenVINOQuantizationPolicy). The weight precision is
 // read from the model file name, exactly as the installed-variant load gate reads
 // it, so the two cannot disagree.
 //

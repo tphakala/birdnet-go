@@ -55,7 +55,9 @@ type BatModelConfig struct {
 	// global BirdNET inference backend / OpenVINO device preference. When the gate
 	// allows it, the heavy embedding extractor runs on OpenVINO (forced f32, since the
 	// embedding head overflows at f16); the tiny bat classifier head always stays on
-	// ORT. Any failure falls back to ORT.
+	// ORT. Under an auto selection a decline or failure falls back to ORT for the
+	// extractor; under an explicit one (see openVINOSelectionExplicit) NewBat returns an
+	// *OpenVINORefusalError and builds no ORT extractor.
 	Backend        string // BirdNET.Backend ("auto"/"onnx"/"openvino")
 	OpenVINOPath   string // BirdNET.OpenVINOPath (libopenvino_c location)
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto", "cpu", "gpu" or "GPU.<n>")

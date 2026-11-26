@@ -377,9 +377,11 @@ func (bn *BirdNET) usesONNXBackend() bool {
 
 // initializeModel loads and initializes the primary BirdNET model.
 // Dispatches to OpenVINO (gated per host and settings, see openVINOPlanFor), ONNX, or TFLite (see
-// usesONNXBackend / openVINOPlan). When OpenVINO is declined or fails, the selection
-// decides (see openVINONotUsed): auto builds the ONNX Runtime model, an explicit
-// selection returns an *OpenVINORefusalError and loads nothing. The reason is always logged.
+// usesONNXBackend / openVINOPlan). A TFLite model never consults OpenVINO, so it loads
+// on TFLite whatever the selection. For an ONNX model, when OpenVINO is declined or
+// fails the selection decides (see openVINONotUsed): auto builds the ONNX Runtime
+// model, an explicit selection returns an *OpenVINORefusalError and loads nothing. The
+// reason is logged unless an auto selection declines on a build without OpenVINO.
 func (bn *BirdNET) initializeModel() error {
 	if !bn.usesONNXBackend() {
 		return bn.initializeTFLiteModel()

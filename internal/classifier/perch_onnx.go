@@ -69,7 +69,9 @@ type PerchConfig struct {
 
 	// OpenVINO opt-in, sourced from BirdNET settings. When the configured model is
 	// the no_dft Perch variant and the gate allows it, Perch runs on OpenVINO
-	// (ARM A76 f16 CPU or Intel iGPU); any failure falls back to ORT.
+	// (ARM A76 f16 CPU or Intel iGPU). Under an auto selection a decline or failure
+	// falls back to ORT; under an explicit one (see openVINOSelectionExplicit) NewPerch
+	// returns an *OpenVINORefusalError and builds no ORT instance.
 	Backend        string // BirdNET.Backend ("auto"/"onnx"/"openvino")
 	OpenVINOPath   string // BirdNET.OpenVINOPath (libopenvino_c location)
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto", "cpu", "gpu" or "GPU.<n>")

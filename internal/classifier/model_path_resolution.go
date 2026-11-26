@@ -656,7 +656,7 @@ func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 		return true
 	}
 
-	GetLogger().Warn("installed primary variant cannot load on this host (OpenVINO cannot run it and ONNX Runtime is not an option); using the built-in model instead",
+	GetLogger().Warn("installed BirdNET v2.4 variant cannot load on this host (OpenVINO cannot run it and ONNX Runtime is not an option); using the built-in model instead",
 		logger.String("model_path", modelPath),
 		logger.Bool("explicit_openvino_selection", explicit))
 	return false
