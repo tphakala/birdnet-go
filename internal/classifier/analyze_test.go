@@ -3,10 +3,15 @@ package classifier
 import (
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -871,6 +876,76 @@ func TestFirstNonFinite(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.want, firstNonFinite(tt.scores))
+		})
+	}
+}
+
+const (
+	ownLabelsInstanceSensitivity  = 1.0
+	ownLabelsPublishedSensitivity = 1.5
+	ownLabelsLogit                = 3.0
+	ownLabelsConfidenceDelta      = 1e-6
+)
+
+// TestBirdNETPredict_PairsOwnLabelsWithLiveSensitivity verifies Predict pairs
+// scores with the labels the instance loaded itself, whatever the published
+// snapshot holds (none after a late load, an older generation after a reload),
+// while sensitivity still comes live from the published snapshot.
+// It publishes the global snapshot, so neither it nor its subtests run in parallel.
+func TestBirdNETPredict_PairsOwnLabelsWithLiveSensitivity(t *testing.T) {
+	// Exactly three non-empty lines: loadLabelsFromText keeps blank lines verbatim.
+	wantLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+		"Erithacus rubecula_European Robin",
+	}
+	labelsFile := strings.Join(wantLabels, "\n") + "\n"
+
+	tests := []struct {
+		name            string
+		publishedLabels []string
+	}{
+		{name: "late load, published labels empty", publishedLabels: nil},
+		{
+			name: "older generation, published labels differ",
+			publishedLabels: []string{
+				"Turdus merula_Mustarastas",
+				"Parus major_Talitiainen",
+				"Erithacus rubecula_Punarinta",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "labels.txt")
+			require.NoError(t, os.WriteFile(path, []byte(labelsFile), 0o600))
+
+			bn := newExternalLabelBirdNET(path)
+			bn.Settings.BirdNET.Sensitivity = ownLabelsInstanceSensitivity
+			bn.settingsAtomic.Store(bn.Settings)
+			require.NoError(t, bn.loadLabels())
+			bn.classifier = &predTelemetryClassifier{logits: []float32{ownLabelsLogit, 2, 1}}
+			require.NoError(t, bn.validateModelAndLabels())
+
+			published := &conf.Settings{}
+			published.BirdNET.Sensitivity = ownLabelsPublishedSensitivity
+			published.BirdNET.Labels = tt.publishedLabels
+			conftest.SetTestSettings(published)
+			t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+			results, err := bn.Predict(t.Context(), [][]float32{{0}})
+			require.NoError(t, err)
+			require.Len(t, results, len(wantLabels))
+
+			gotLabels := make([]string, len(results))
+			for i := range results {
+				gotLabels[i] = results[i].Species
+			}
+			assert.Equal(t, wantLabels, gotLabels, "species must come from the instance's own labels")
+			assert.InDelta(t, customSigmoid(ownLabelsLogit, ownLabelsPublishedSensitivity),
+				float64(results[0].Confidence), ownLabelsConfidenceDelta,
+				"sensitivity must come live from the published snapshot")
 		})
 	}
 }

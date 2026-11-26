@@ -35,10 +35,15 @@ func (o *Orchestrator) loadBirdNETV24(_ int) error {
 	// Startup passes the published settings UNCLONED so construction-time loadLabels
 	// writes BirdNET.Labels into the published snapshot, the historical behavior
 	// every downstream reader of settings.BirdNET.Labels relies on. A post-publish
-	// load (test-only in Phase 3) clones first so a concurrent reader never observes
-	// loadLabels mutate the live object, then republishes the populated clone via
-	// updateSettings (LoadModel has no updateSettings step of its own, unlike the
-	// reload path).
+	// load (ReconcileEnabledModels when v2.4 is enabled at runtime, and the
+	// loadInstalledModels retry after a construction failure) clones first so a
+	// concurrent reader never observes loadLabels mutate the live object, then
+	// hands it to updateSettings (LoadModel has no updateSettings step of
+	// its own, unlike the reload path). That updateSettings stores only the
+	// orchestrator's own pointer, so the clone's labels never reach the published
+	// snapshot: readers of settings.BirdNET.Labels see none after a late load
+	// unless they fall back themselves (the range filter's covered-label
+	// selection does), while Predict and Labels() read them from the instance.
 	cloned := o.published.Load()
 	if cloned {
 		settings = conf.CloneSettings(settings)

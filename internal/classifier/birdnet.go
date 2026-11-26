@@ -86,7 +86,7 @@ type BirdNET struct {
 	// an interpreter mid-call (issue #3336). The range filter used to live here too;
 	// since the model de-privilege epic, Phase 2b it is owned by the orchestrator's rangeFilterService.
 	classifier     inference.Classifier // species classification backend
-	Settings       *conf.Settings       // Deprecated: use settingsAtomic instead. Kept for struct-literal compatibility in tests.
+	Settings       *conf.Settings       // Settings this instance was built from; loadLabels writes its label set here (read under mu). Live tunables: currentSettings().
 	settingsAtomic atomic.Pointer[conf.Settings]
 	ModelInfo      ModelInfo // Information about the current model
 	modelVersion   string    // Human-readable model version string (per-instance to avoid shared global state)
@@ -132,8 +132,9 @@ type BirdNET struct {
 	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
 }
 
-// currentSettings returns the latest settings snapshot so UI changes to
-// sensitivity, location, and labels take effect without restarting the service.
+// currentSettings returns the latest settings snapshot so UI changes to live
+// tunables such as sensitivity and debug logging take effect without restarting
+// the service. It reads the published snapshot and falls back to the instance's own settings.
 func (bn *BirdNET) currentSettings() *conf.Settings {
 	if s := bn.settingsAtomic.Load(); s != nil {
 		return conf.CurrentOrFallback(s)

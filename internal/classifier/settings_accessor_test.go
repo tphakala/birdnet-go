@@ -9,7 +9,7 @@ import (
 )
 
 // TestBirdNET_UpdateSettings_SyncsBothFields verifies updateSettings keeps the
-// deprecated bn.Settings field and the lock-free settingsAtomic pointer pointing
+// bn.Settings field and the lock-free settingsAtomic pointer pointing
 // at the same snapshot. currentSettings() and the lock-guarded readers
 // (NumSpecies/Labels/initialize*) rely on this invariant; if the two ever
 // diverged, lock-free and lock-guarded readers would observe different settings,
@@ -50,12 +50,12 @@ func TestOrchestrator_UpdateSettings_SyncsBothFields(t *testing.T) {
 	assert.Same(t, s2, o.settingsAtomic.Load())
 }
 
-// TestBirdNET_CurrentSettings_PrefersAtomicOverDeprecatedField verifies that
+// TestBirdNET_CurrentSettings_PrefersAtomicOverSettingsField verifies that
 // currentSettings() reads through the atomic pointer, not the raw bn.Settings
 // field, when no global snapshot is published. This is the test-mode contract
 // that lets struct-literal test fixtures (which set Settings but not the atomic)
 // keep working while production code relies on the atomic for race-free reads.
-func TestBirdNET_CurrentSettings_PrefersAtomicOverDeprecatedField(t *testing.T) {
+func TestBirdNET_CurrentSettings_PrefersAtomicOverSettingsField(t *testing.T) {
 	// Not parallel: temporarily clears the conf global snapshot, which is
 	// process-wide. Restored on cleanup.
 	saved := conf.GetSettings()
