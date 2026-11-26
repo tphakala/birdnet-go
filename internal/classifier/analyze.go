@@ -96,12 +96,17 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	// Use optimized sigmoid function with buffer reuse
 	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
 
+	// Pair with the labels this instance loaded and validated at construction (read
+	// under bn.mu). The published snapshot lacks them after a late load and lags
+	// after a locale or label-file reload. Sensitivity stays live from settings.
+	labels := bn.Settings.BirdNET.Labels
+
 	// Use the pre-allocated buffer to reduce memory allocations
-	results, err := pairLabelsAndConfidenceReuse(settings.BirdNET.Labels, confidence, bn.resultsBuffer)
+	results, err := pairLabelsAndConfidenceReuse(labels, confidence, bn.resultsBuffer)
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryValidation).
-			Context("label_count", len(settings.BirdNET.Labels)).
+			Context("label_count", len(labels)).
 			Context("confidence_count", len(confidence)).
 			Timing("prediction-total", time.Since(start)).
 			Build()
