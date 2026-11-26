@@ -271,11 +271,12 @@ type InferenceModelStatus struct {
 
 // Model health states reported in ModelHealthInfo.State.
 const (
-	// modelHealthOK: the latest analysis windows succeed (or failed fewer than
-	// classifier.InferenceFailureNoticeThreshold times in a row).
+	// modelHealthOK: the latest analysis windows succeed (or failed fewer times in
+	// a row than the model's failure threshold).
 	modelHealthOK = "ok"
-	// modelHealthFailing: the model failed its last
-	// classifier.InferenceFailureNoticeThreshold or more windows in a row.
+	// modelHealthFailing: the model failed its last failure-threshold or more windows
+	// in a row: classifier.InferenceFailureNoticeThreshold, or one window when the
+	// latest failure is the OpenVINO GPU fault.
 	modelHealthFailing = "failing"
 	// modelHealthIdle: loaded, but no analysis window has run yet.
 	modelHealthIdle = "idle"

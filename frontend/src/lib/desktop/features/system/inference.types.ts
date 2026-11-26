@@ -241,7 +241,7 @@ export interface InferenceModelHealth {
   lastInferenceAtUnix?: number;
   /** Unix seconds of the last successful window; absent when none has. */
   lastSuccessAtUnix?: number;
-  /** Class of the latest failure ("non_finite_output", "inference_error"). */
+  /** Class of the latest failure ("non_finite_output", "inference_error", "gpu_device_fault"). */
   errorClass?: string;
 }
 
