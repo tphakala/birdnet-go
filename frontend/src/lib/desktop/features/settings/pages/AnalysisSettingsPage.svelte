@@ -687,10 +687,11 @@
   let inferenceBackends = $state<InferenceBackends | null>(null);
   let inferenceBackendsFailed = $state(false);
 
-  // Lookups are numbered when they start. A lookup that answers after a newer one already
-  // published is dropped, so an older healthy status cannot replace a newer GPU fault. The
-  // GPU fault never clears while the server runs, so a status that reports it is always the
-  // newer state: an older lookup that reports the fault still replaces a healthy status.
+  // Lookups are numbered when they start, and one that answers after a newer one already
+  // published is dropped. Lookups can read the server in a different order than they start,
+  // so the GPU fault is handled by its own rule: it never clears while the server runs, so a
+  // status that reports it always publishes, and a status without it never replaces a shown
+  // fault (after a server restart the page needs a reload to clear the alert).
   let inferenceLookupsStarted = 0;
   let inferenceLookupPublished = 0;
 
@@ -698,10 +699,10 @@
     const lookup = ++inferenceLookupsStarted;
     try {
       const status = await api.get<InferenceStatusResponse>(INFERENCE_STATUS_ENDPOINT);
-      const revealsFault =
-        status.backends.openvino.gpuFailed === true &&
-        inferenceBackends?.openvino.gpuFailed !== true;
-      if (lookup < inferenceLookupPublished && !revealsFault) return;
+      const shownFault = inferenceBackends?.openvino.gpuFailed === true;
+      const reportedFault = status.backends.openvino.gpuFailed === true;
+      if (shownFault && !reportedFault) return;
+      if (lookup < inferenceLookupPublished && !(reportedFault && !shownFault)) return;
       inferenceLookupPublished = Math.max(lookup, inferenceLookupPublished);
       inferenceBackends = status.backends;
       inferenceBackendsFailed = false;
