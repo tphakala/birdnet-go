@@ -567,10 +567,11 @@ func defaultORTAvailable(configuredPath string) bool {
 
 // applyOpenVINOQuantizationPolicy adjusts an OpenVINO plan for the weight
 // precision of the model file, which openVINOPrecisionFor cannot see (it keys on
-// the registry ID only). A plan for FP32 or FP16 weights passes through unchanged,
-// and so does a decline for backend onnx or a binary without OpenVINO. An
-// unverified file on a backend other than openvino declines with
-// ovReasonUnverifiedWeights even when the base plan declined for a device reason. Every other precision (INT8, or unrecognized
+// the registry ID only). A plan for FP32 or FP16 weights passes through
+// unchanged, and so does a decline for backend onnx or a binary without
+// OpenVINO. An unverified file on a backend other than openvino declines with
+// ovReasonUnverifiedWeights even when the base plan declined for a device
+// reason. Every other precision (INT8, or unrecognized
 // because the file name carries no precision token) is unverified.
 //
 // INT8 BirdNET v2.4 weights overflow under OpenVINO's default f16 execution on
@@ -596,13 +597,11 @@ func defaultORTAvailable(configuredPath string) bool {
 // with the auto backend and device, an FP32 or FP16 file reaches OpenVINO only when
 // ONNX Runtime is unavailable.
 func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason OpenVINOReason, backendPref string, quant Quantization) (outPlan openVINOPlan, outOK bool, outReason OpenVINOReason) {
-	if quant == QuantizationFP32 || quant == QuantizationFP16 {
-		return plan, ok, reason
-	}
 	// Backend onnx and a binary without OpenVINO come first in the reason order, so
 	// they pass through; any other decline of an unverified file on a backend other
 	// than openvino reports the file, which is the model-specific reason.
-	if !ok && (reason == ovReasonBackendONNX || reason == ovReasonNotBuilt) {
+	if quant == QuantizationFP32 || quant == QuantizationFP16 ||
+		(!ok && (reason == ovReasonBackendONNX || reason == ovReasonNotBuilt)) {
 		return plan, ok, reason
 	}
 	if backendPref != conf.BackendPrefOpenVINO {

@@ -159,9 +159,15 @@ func TestOpenVINOSelectionExplicit(t *testing.T) {
 // that the codes keep the stable openvino. prefix.
 func TestOpenVINOReasonDescription(t *testing.T) {
 	t.Parallel()
-	for code, text := range ovReasonDescriptions {
+	all := []OpenVINOReason{
+		ovReasonNotBuilt, ovReasonBackendONNX, ovReasonGPUUnavailable, ovReasonGPUDeviceMissing,
+		ovReasonCPUUnsupported, ovReasonGPUFailed, ovReasonNoDevice, ovReasonORTPreferredARM64,
+		ovReasonNotBirdNETv24, ovReasonNotPerchNoDFT, ovReasonUnverifiedWeights,
+	}
+	assert.Len(t, ovReasonDescriptions, len(all))
+	for _, code := range all {
 		assert.Truef(t, strings.HasPrefix(string(code), "openvino."), "code %q", code)
-		assert.Equal(t, text, code.Description())
+		assert.NotEqualf(t, string(code), code.Description(), "code %q has no description", code)
 	}
 	assert.Equal(t, "openvino.unknown", OpenVINOReason("openvino.unknown").Description())
 }

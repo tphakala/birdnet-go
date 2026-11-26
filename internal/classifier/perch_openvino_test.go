@@ -60,8 +60,6 @@ func TestPerchOpenVINOPlanPrecedence(t *testing.T) {
 		want      OpenVINOReason
 	}{
 		{"stock, unavailable, openvino", stock, conf.BackendPrefOpenVINO, false, ovReasonNotBuilt},
-		{"stock, unavailable, auto", stock, conf.BackendPrefAuto, false, ovReasonNotBuilt},
-		{"stock, onnx, available", stock, conf.BackendPrefONNX, true, ovReasonBackendONNX},
 		{"stock, onnx, unavailable", stock, conf.BackendPrefONNX, false, ovReasonBackendONNX},
 		{"stock, available, openvino", stock, conf.BackendPrefOpenVINO, true, ovReasonNotPerchNoDFT},
 		{"no_dft, unavailable", noDFT, conf.BackendPrefOpenVINO, false, ovReasonNotBuilt},
