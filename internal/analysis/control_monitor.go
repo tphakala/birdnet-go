@@ -516,14 +516,14 @@ func (cm *ControlMonitor) retryFailedLoads() []string {
 	return cm.bn.RetryFailedLoadsForBackendChange()
 }
 
-// loadedModelIDs returns the sorted registry IDs of the loaded models.
+// loadedModelIDs returns the registry IDs of the loaded models in the
+// deterministic order Orchestrator.ModelInfos reports them.
 func (cm *ControlMonitor) loadedModelIDs() []string {
 	infos := cm.bn.ModelInfos()
 	ids := make([]string, 0, len(infos))
 	for i := range infos {
 		ids = append(ids, infos[i].ID)
 	}
-	slices.Sort(ids)
 	return ids
 }
 

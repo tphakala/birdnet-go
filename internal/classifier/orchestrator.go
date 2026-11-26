@@ -2335,9 +2335,7 @@ func (o *Orchestrator) RetryFailedLoadsForBackendChange() []string {
 		if err := o.LoadModel(id); err != nil {
 			continue // LoadModel recorded the failure under the current key
 		}
-		if o.IsModelLoaded(id) {
-			loaded = append(loaded, id)
-		}
+		loaded = append(loaded, id)
 	}
 	return loaded
 }

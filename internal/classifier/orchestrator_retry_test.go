@@ -56,13 +56,10 @@ func TestRetryFailedLoadsForBackendChange(t *testing.T) {
 	stubModelLoader(t, RegistryIDPerchV2, &perchCalls, &perchFail)
 	stubModelLoader(t, RegistryIDBirdNETPlusV3, &v3Calls, &v3Fail)
 
-	enable := func(s *conf.Settings, ids ...string) {
-		s.Models.Enabled = ids
-	}
 	withBackend := func(backend string, ids ...string) {
 		s := conftest.GetTestSettings()
 		s.BirdNET.Backend = backend
-		enable(s, ids...)
+		s.Models.Enabled = ids
 		conftest.SetTestSettings(s)
 	}
 
