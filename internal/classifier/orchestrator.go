@@ -1744,11 +1744,8 @@ func newEntryRevision(registryID string, entry *modelEntry) entryRevision {
 
 // unloadRefusedModel records an OpenVINO refusal as the model's last load failure and
 // then unloads the model, provided the entry still holds the instance the refused reload
-// started from (rev). It runs under reloadMu, like every other swap, so no reload can
-// bump the generation after it is checked; a LoadModel that replaced the entry is
-// caught by unloadModel, which compares the entry under the o.mu write lock that
-// detaches it. When either replaced the instance, the model keeps serving and nothing
-// is recorded. The failure is recorded during the detach, before the
+// started from (rev). When a reload or a load replaced it, the model keeps serving and
+// nothing is recorded. The failure is recorded during the detach, before the
 // acoustic-model notice is re-evaluated, so that notice already sees it (a
 // load_failed state, one notice). It does not sync the refusal notices: callers do
 // that once after a batch. It relies only on the refusal, never on the entry's
@@ -1774,8 +1771,6 @@ func (o *Orchestrator) unloadRefusedModel(rev entryRevision, refusal error, key 
 	}
 	record := func() { o.recordLoadFailureUnder(registryID, refusal, key) }
 	if err := o.unloadModel(registryID, rev.entry, record); err != nil {
-		// Replaced by a concurrent load, or already unloaded by a concurrent
-		// uninstall or delete: nothing of this instance is left to stop.
 		GetLogger().Debug("refused model was replaced or already unloaded; keeping the current state",
 			logger.String("registry_id", registryID), logger.Error(err))
 		return
@@ -2706,8 +2701,7 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 	return o.unloadModel(registryID, nil, nil)
 }
 
-// errEntryReplaced reports that unloadModel found a different entry under the
-// registry ID than the one the caller expected, so it left the model loaded.
+// errEntryReplaced is unloadModel's result when the expected entry was replaced.
 var errEntryReplaced = errors.NewStd("model entry was replaced")
 
 // unloadModel is UnloadModel with an optional guard. When expected is non-nil the
