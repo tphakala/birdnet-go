@@ -228,10 +228,11 @@ func TestListModels_ReportsLoadState(t *testing.T) {
 	}
 }
 
-// TestListModels_ReportsFailureReason verifies that a not-loaded model with a
-// recorded OpenVINO reason code carries it as failureReason, and that the field
-// is withheld from an anonymous caller on an auth-enabled instance (it describes
-// the host) and from a model that is loaded or has no recorded reason.
+// TestListModels_ReportsFailureReason verifies that a model in the failed state
+// with a recorded OpenVINO reason code carries it as failureReason, and that the
+// field is withheld from an anonymous caller on an auth-enabled instance (it
+// describes the host) and from a model that is loaded, pending or has no
+// recorded reason.
 func TestListModels_ReportsFailureReason(t *testing.T) {
 	// Mutates the process-global settings snapshot: not parallel.
 	runtime := map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX"}}
@@ -253,7 +254,7 @@ func TestListModels_ReportsFailureReason(t *testing.T) {
 		want          map[string]string // failureReason by config alias
 	}{
 		{
-			name: "only the not-loaded model with a reason carries it",
+			name: "only the failed model with a reason carries it",
 			want: map[string]string{
 				conf.ModelIDBirdNET: "",
 				conf.ModelIDPerchV2: "openvino.gpu_unavailable",
