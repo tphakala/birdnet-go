@@ -1317,6 +1317,49 @@ describe('SystemInference', () => {
     });
   });
 
+  it('gives a model that failed with the GPU fault its own help text', async () => {
+    const model = makeModel({
+      health: {
+        state: 'failing',
+        consecutiveFailures: 1,
+        failureThreshold: 1,
+        inferenceCount: 1,
+        errorClass: 'gpu_device_fault',
+      },
+    });
+    installApi(makeSnapshot([model]));
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="model-failing-help"]')).not.toBeNull();
+    });
+    expect(container.querySelector('[data-testid="model-failing-help"]')?.textContent).toContain(
+      'system.inference.modelFailingGPUFault'
+    );
+    expect(t).not.toHaveBeenCalledWith('system.inference.modelFailingHelp', expect.anything());
+  });
+
+  it('marks the OpenVINO GPU device as failed once the GPU fault latch tripped', async () => {
+    const snapshot = makeSnapshot([makeModel()]);
+    snapshot.backends.openvino = {
+      supported: true,
+      active: true,
+      devices: ['CPU', 'GPU'],
+      gpuFailed: true,
+    };
+    installApi(snapshot);
+
+    const { container } = inferenceTest.render({});
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('system.inference.deviceFailed');
+    });
+    expect(t).toHaveBeenCalledWith('system.inference.deviceFailed', { device: 'GPU' });
+    // The CPU device keeps its plain badge.
+    expect(t).not.toHaveBeenCalledWith('system.inference.deviceFailed', { device: 'CPU' });
+  });
+
   it('shows the date and time of the last success once a model has succeeded', async () => {
     const lastSuccessAtUnix = 1750000000;
     const model = makeModel({
