@@ -98,7 +98,8 @@ func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
 
 // TestOpenVINOPlanForBat_NotBuilt verifies that in the default (no-tag) build the
 // planner reports the not-built reason for the bat embedding model, so tryBatOpenVINO
-// logs why OpenVINO was declined rather than falling back silently.
+// logs why OpenVINO was declined rather than falling back silently, and the
+// backend-onnx reason when the backend is onnx.
 func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 	t.Parallel()
 	// Output index 1 is the 2-output backbone's embedding port; its exact value is
@@ -106,6 +107,12 @@ func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 	_, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, RegistryIDBat, "", 1)
 	assert.False(t, ok)
 	assert.Equal(t, ovReasonNotBuilt, reason)
+
+	// Backend onnx is reported before a binary without OpenVINO, for every model
+	// that plans through openVINOPlanFor (bat, BirdNET v3, Perch).
+	_, ok, reason = openVINOPlanFor(conf.BackendPrefONNX, conf.OVDeviceGPU, RegistryIDBat, "", 1)
+	assert.False(t, ok)
+	assert.Equal(t, ovReasonBackendONNX, reason)
 }
 
 // TestLogOpenVINODeclined_StandardBuild verifies the noise-control policy on a
