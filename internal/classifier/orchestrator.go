@@ -1688,8 +1688,8 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // explicit and OpenVINO cannot run it), the model is recorded as failed and unloaded
 // instead of left serving on the old instance, so a settings reload leaves the same
 // loaded set a restart with those settings would; the refusal is returned. The unload
-// is skipped when another reload or a variant swap published a newer instance while the
-// refused build ran (see unloadRefusedModel).
+// is skipped when another reload or a variant swap published a newer instance after the
+// refused reload returned and before the unload (see unloadRefusedModel).
 func (o *Orchestrator) ReloadModel() error {
 	return o.reloadV24(v24ReloadBuilder)
 }
