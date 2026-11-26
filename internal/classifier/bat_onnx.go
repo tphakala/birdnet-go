@@ -99,11 +99,7 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	// ORT fallback overrides backend, device, and precision below.
 	backend := BackendOpenVINO
 	if !ok {
-		embClassifier, cerr := inference.NewONNXClassifier(cfg.EmbeddingModelPath, inference.ONNXClassifierOptions{
-			Labels:              cfg.EmbeddingLabels,
-			Threads:             cfg.Threads,
-			SkipLabelValidation: true,
-		})
+		embClassifier, cerr := inference.NewONNXClassifier(cfg.EmbeddingModelPath, batEmbeddingClassifierOptions(cfg))
 		if cerr != nil {
 			batCC.Close()
 			return nil, errors.New(cerr).
@@ -412,4 +408,31 @@ func (b *Bat) Close() error {
 		b.embeddingExtractor = nil
 	}
 	return nil
+}
+
+// batEmbeddingPlaceholderLabel satisfies inference.NewONNXClassifier's non-empty
+// Labels requirement when BirdNET v2.4 is disabled (settings.BirdNET.Labels is
+// empty). Bat only extracts embeddings via SkipLabelValidation: true and never
+// reads classifier labels from the embedding backbone.
+const batEmbeddingPlaceholderLabel = "placeholder"
+
+func batEmbeddingClassifierOptions(cfg *BatModelConfig) inference.ONNXClassifierOptions {
+	var labels []string
+	threads := 0
+	if cfg != nil {
+		labels = cfg.EmbeddingLabels
+		threads = cfg.Threads
+	}
+	return inference.ONNXClassifierOptions{
+		Labels:              embeddingLabelsOrPlaceholder(labels),
+		Threads:             threads,
+		SkipLabelValidation: true,
+	}
+}
+
+func embeddingLabelsOrPlaceholder(labels []string) []string {
+	if len(labels) > 0 {
+		return labels
+	}
+	return []string{batEmbeddingPlaceholderLabel}
 }
