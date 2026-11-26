@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
@@ -137,4 +139,25 @@ func TestBirdNETV24BasePlan_ORTAnswerDecidesArm64Auto(t *testing.T) {
 	plan, ok, reason := birdnetV24BasePlan(cfg, answer(false))
 	assert.True(t, ok, "auto keeps the OpenVINO CPU when ONNX Runtime is missing, got reason %q", reason)
 	assert.Equal(t, inference.OVDeviceCPU, plan.device)
+}
+
+// TestTryPerchOpenVINO_StockModelFollowsSelection pins what the stock perch_v2.onnx
+// (the variant with the DFT layer) gets with OpenVINO built in: an explicit selection refuses it
+// with not_perch_no_dft instead of building ONNX Runtime, auto declines to ORT (a nil
+// classifier and no error). The file check loads no library, so this runs anywhere.
+func TestTryPerchOpenVINO_StockModelFollowsSelection(t *testing.T) {
+	t.Parallel()
+	stock := &PerchConfig{ModelPath: "/models/perch_v2.onnx", Backend: conf.BackendPrefOpenVINO, OpenVINODevice: conf.OVDeviceAuto}
+	c, device, precision, err := tryPerchOpenVINO(stock, []string{"a", "b"})
+	refusal, ok := errors.AsType[*OpenVINORefusalError](err)
+	require.True(t, ok, "an explicit selection must refuse the stock model, got %v", err)
+	assert.Equal(t, ovReasonNotPerchNoDFT, refusal.Reason)
+	assert.Nil(t, c)
+	assert.Empty(t, device)
+	assert.Empty(t, precision)
+
+	stock.Backend = conf.BackendPrefAuto
+	c, _, _, err = tryPerchOpenVINO(stock, []string{"a", "b"})
+	require.NoError(t, err, "auto keeps the ONNX Runtime fallback for the stock model")
+	assert.Nil(t, c)
 }
