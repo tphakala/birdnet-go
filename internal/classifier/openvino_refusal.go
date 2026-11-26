@@ -19,14 +19,12 @@ type OpenVINORefusalError struct {
 	Cause   error
 }
 
-// Error describes the refusal without paths: the model, the stable code and, when
-// there is one, the cause.
+// Error describes the refusal without paths: the model, the description and the stable
+// code. The cause is left out because its text can carry file paths and this text is
+// stored as the model's load error and returned in variant-swap failures; it stays
+// reachable through Unwrap and is logged by openVINONotUsed.
 func (r *OpenVINORefusalError) Error() string {
-	msg := "OpenVINO cannot run model " + r.ModelID + ": " + r.Reason.Description() + " (" + string(r.Reason) + ")"
-	if r.Cause != nil {
-		msg += ": " + r.Cause.Error()
-	}
-	return msg
+	return "OpenVINO cannot run model " + r.ModelID + ": " + r.Reason.Description() + " (" + string(r.Reason) + ")"
 }
 
 // Unwrap returns the cause so errors.Is and errors.As reach it, such as

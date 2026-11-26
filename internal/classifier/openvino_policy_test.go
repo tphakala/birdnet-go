@@ -72,6 +72,18 @@ func TestOpenVINOBuildFailed(t *testing.T) {
 	assert.Equal(t, ovReasonGPUFailed, openVINOBuildFailed(ovReasonLoadFailed, wrapped))
 }
 
+// TestOpenVINORefusalError_ErrorOmitsCause pins that the error text carries no cause
+// text (it can hold file paths), while the cause stays reachable through Unwrap.
+func TestOpenVINORefusalError_ErrorOmitsCause(t *testing.T) {
+	t.Parallel()
+	cause := errors.NewStd("open /home/user/models/secret.onnx: permission denied")
+	err := &OpenVINORefusalError{ModelID: RegistryIDPerchV2, Reason: ovReasonLoadFailed, Device: "GPU", Cause: cause}
+	assert.NotContains(t, err.Error(), "/home/user")
+	assert.Contains(t, err.Error(), string(ovReasonLoadFailed))
+	assert.Contains(t, err.Error(), RegistryIDPerchV2)
+	require.ErrorIs(t, err, cause)
+}
+
 // TestOpenVINORefusal_UnwrapsCause checks that errors.Is reaches the GPU fault
 // sentinel through a refusal.
 func TestOpenVINORefusal_UnwrapsCause(t *testing.T) {
