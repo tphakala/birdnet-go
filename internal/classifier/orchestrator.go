@@ -2138,9 +2138,14 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 				Build()
 		}
 
+		// One settings snapshot serves the thread count, the failure key and the
+		// published record, so a concurrent settings save cannot stamp a failure
+		// with settings the load never used (the retry would then skip it).
+		settings := o.currentSettings()
+
 		// Give the new model the full thread budget. Inference is serialized by
 		// inferenceMu so concurrent CPU contention cannot occur.
-		dynamicThreads := o.currentSettings().BirdNET.Threads
+		dynamicThreads := settings.BirdNET.Threads
 		if dynamicThreads <= 0 {
 			dynamicThreads = runtime.NumCPU()
 		}
@@ -2149,12 +2154,12 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			logger.String("registry_id", registryID),
 			logger.Int("threads", dynamicThreads))
 
-		key := inferenceLoadKeyFor(o.currentSettings())
+		key := inferenceLoadKeyFor(settings)
 		if err := loader(o, dynamicThreads); err != nil {
 			o.recordLoadFailureUnder(registryID, err, key)
 			return err
 		}
-		o.publishLoadedModelLocked(registryID, o.currentSettings(), dynamicThreads)
+		o.publishLoadedModelLocked(registryID, settings, dynamicThreads)
 		// The model registered successfully; clear any stale unload tombstone and the
 		// stored load error so a later not-loaded diagnosis reports the model's actual
 		// current state rather than a now-superseded unload or failure. The cumulative
