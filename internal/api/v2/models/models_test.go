@@ -241,6 +241,9 @@ func TestListModels_ReportsFailureReason(t *testing.T) {
 	reasons := map[string]string{
 		classifier.RegistryIDBirdNETV24: "openvino.gpu_failed",
 		classifier.RegistryIDPerchV2:    "openvino.gpu_unavailable",
+		// A reason without a load error is the pending state caught between the
+		// handler's two reads of the orchestrator; it must not be reported.
+		classifier.RegistryIDBat: "openvino.gpu_failed",
 	}
 	tests := []struct {
 		name     string

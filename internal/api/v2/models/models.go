@@ -451,10 +451,11 @@ func modelState(loaded bool, loadErrors map[string]string, registryID string) st
 	return ModelStatePending
 }
 
-// modelFailureReason returns the recorded OpenVINO reason code of a model that is
-// not loaded, else "".
-func modelFailureReason(loaded bool, failureReasons map[string]string, registryID string) string {
-	if loaded {
+// modelFailureReason returns the recorded OpenVINO reason code of a model in the
+// failed state, else "". Requiring the state keeps a reason from appearing beside
+// pending or loaded when a load completes between the handler's reads.
+func modelFailureReason(state string, failureReasons map[string]string, registryID string) string {
+	if state != ModelStateFailed {
 		return ""
 	}
 	return failureReasons[registryID]
@@ -491,8 +492,8 @@ func catalogCategory(catalog []classifier.CatalogEntry, registryID string) strin
 // ListModels returns classifier models that are enabled in the configuration,
 // each with its load state (loaded, failed or pending). Loaded models also carry
 // their live backend and precision, for requests that may receive host-derived
-// data (see recommendationsAllowed). A model that is not loaded also carries the
-// OpenVINO reason code of its last load failure, under the same condition.
+// data (see recommendationsAllowed). A model in the failed state also carries
+// the OpenVINO reason code of its last load failure, under the same condition.
 func (c *Handler) ListModels(ctx echo.Context) error {
 	// Read from the live settings (atomic pointer) so that models added
 	// at runtime (via gallery install) are immediately visible.
@@ -549,7 +550,7 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 					Backend:               live.backend,
 					Precision:             live.precision,
 					State:                 modelState(loaded, loadErrors, id),
-					FailureReason:         modelFailureReason(loaded, failureReasons, id),
+					FailureReason:         modelFailureReason(modelState(loaded, loadErrors, id), failureReasons, id),
 				})
 				break // one entry per model
 			}
