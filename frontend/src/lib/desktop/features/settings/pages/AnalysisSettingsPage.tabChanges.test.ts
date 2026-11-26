@@ -907,7 +907,7 @@ describe('AnalysisSettingsPage inference runtime', () => {
       expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
     });
 
-    it('keeps the newer status when an older lookup answers last', async () => {
+    it('keeps the newer status when a status read earlier answers last', async () => {
       const pending = mockPendingRuntime();
       render(AnalysisSettingsPage);
       await waitFor(() => expect(pending.length).toBeGreaterThan(0));
@@ -916,7 +916,9 @@ describe('AnalysisSettingsPage inference runtime', () => {
       announceTopologyChange();
       await waitFor(() => expect(pending.length).toBeGreaterThan(started));
       for (const settle of pending.slice(started)) {
-        settle(runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+        settle(
+          runtimeStatus({ ...GPU_HOST, gpuFailed: true, snapshotAtUnix: DEFAULT_SNAPSHOT + 1 })
+        );
       }
       expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
       for (const settle of pending.slice(0, started)) settle(runtimeStatus(GPU_HOST));
