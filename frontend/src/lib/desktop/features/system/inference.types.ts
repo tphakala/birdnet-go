@@ -110,7 +110,7 @@ export interface OpenVINOGPU {
 export interface OpenVINOBackendStatus {
   supported: boolean;
   active: boolean;
-  /** True once the OpenVINO GPU fault latch tripped in this run; GPU models fail until restart. */
+  /** True once the OpenVINO GPU fault latch tripped in this run; explicit-selection GPU models fail until restart; under auto they move to the CPU unless the rebuild fails. */
   gpuFailed?: boolean;
   /** Device classes the host can target ("CPU", "GPU"); several GPUs still give one "GPU". */
   devices?: string[];

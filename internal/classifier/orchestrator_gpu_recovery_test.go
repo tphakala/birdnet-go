@@ -16,7 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// gpuRecoveryCPUID is a third synthetic secondary that runs on the OpenVINO CPU,
+// gpuRecoveryCPUID is a third synthetic model that runs on the OpenVINO CPU,
 // so a recovery pass must leave it alone.
 const gpuRecoveryCPUID = "TestZZZOpenVINOCPU_OV"
 

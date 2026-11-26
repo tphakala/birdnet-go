@@ -341,7 +341,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	o.settingsAtomic.Store(settings)
 
 	// Watch for the OpenVINO GPU fault latch before any model loads, so a fault in
-	// a startup warm-up is seen. The observer only schedules a notice reconcile.
+	// a startup warm-up is seen. The observer marks the GPU recovery due and schedules a notice reconcile.
 	o.unregisterGPUFaultObserver = inference.RegisterOpenVINOGPUFaultObserver(o.onOpenVINOGPUFault)
 
 	// Resolve the gallery models directory up front, before the loaders run below.

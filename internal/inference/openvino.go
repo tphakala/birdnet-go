@@ -97,7 +97,7 @@ func logOVGPUFaultOnce(err error) error {
 	}
 	_, cause := ov.GPUFault()
 	logger.Global().Module("inference").Error(
-		"OpenVINO GPU failed; GPU inference is stopped until restart, and models on the OpenVINO GPU fail until BirdNET-Go restarts or the OpenVINO device is set to CPU",
+		"OpenVINO GPU failed; GPU inference is stopped until restart, and models on the OpenVINO GPU fail until BirdNET-Go restarts or the OpenVINO device is set to CPU, unless an auto selection moves them to the CPU",
 		logger.Error(cause))
 	if obs := ovGPUFaultObserver.Load(); obs != nil && *obs != nil {
 		(*obs)()

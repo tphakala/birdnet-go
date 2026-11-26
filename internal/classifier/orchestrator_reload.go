@@ -73,8 +73,11 @@ type reloadSnapshot struct {
 // reloadEntry rebuilds one loaded model from the current settings and swaps it in
 // transactionally. It returns swapped=true only when the entry's instance was actually
 // replaced. Serialized by o.reloadMu for the whole operation. A new instance whose
-// OpenVINO GPU faulted during its warm-up or probe is never published: it is closed,
-// the previous instance stays published and open, and the error wraps
+// OpenVINO GPU faulted during its warm-up or probe is never published: it is closed.
+// Under an explicit selection the previous instance stays published and open and the
+// error is an OpenVINORefusalError. Under auto the model is rebuilt once from the same
+// settings, which now plan without the GPU, and that instance is published; when the
+// rebuild faults too, the previous instance stays and the error wraps
 // inference.ErrOpenVINOGPUFault.
 //
 // Lock order: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
@@ -268,7 +271,7 @@ type reloadCandidate struct {
 func (o *Orchestrator) prepareReloadCandidate(registryID string, entry *modelEntry, build entryBuilder, settings *conf.Settings, opts reloadOpts) (*reloadCandidate, error) {
 	// Build holding only o.reloadMu (NOT o.mu / entry.mu / inferenceMu), so the build never
 	// blocks inference on other models. Use the caller-supplied thread budget (opts.threads):
-	// the v2.4 builder ignores it, secondary builders use it, and ReloadSecondaryModels
+	// the v2.4 builder ignores it, the other builders use it, and ReloadSecondaryModels
 	// computes it once for the batch. Capture RSS-before only when we will record it (the
 	// warm-up): the in-place v2.4 reload never recorded modelRSS, so the anchor skips it.
 	recordRSS := registryID != RegistryIDBirdNETV24
@@ -305,10 +308,10 @@ func (o *Orchestrator) prepareReloadCandidate(registryID string, entry *modelEnt
 		}
 	}
 
-	// Warm up the private instance under inferenceMu, SECONDARIES ONLY. The in-place
+	// Warm up the private instance under inferenceMu, except for the v2.4 anchor. The in-place
 	// v2.4 reload never warmed up or re-recorded RSS (it served the fresh classifier
 	// cold and left modelRSS[v24] at its startup value), so PR3 skips warm-up+RSS for
-	// the v2.4 anchor to stay byte-identical. Secondaries warm up exactly as before,
+	// the v2.4 anchor to stay byte-identical. Every other model warms up exactly as before,
 	// serialized behind live inference on inferenceMu (bounded by warmupTimeout).
 	cand := &reloadCandidate{next: next}
 	input := silentInput(next.Spec())
@@ -474,7 +477,7 @@ func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
 // the recovery pass that moves a model off a failed OpenVINO GPU (onlyIfOnFailedGPU
 // skips an entry that is no longer on it). A failed build leaves the previous instance
 // serving. The v2.4 builder ignores the thread budget (NewBirdNET reads
-// settings.BirdNET.Threads); other builders use it. Every model except the anchor
+// settings.BirdNET.Threads); the other builders use it. Every model except the anchor
 // records the settings triplet it was built from. It returns an error when there are
 // no settings.
 func (o *Orchestrator) rebuildFromCurrentSettings(registryID string, onlyIfOnFailedGPU bool) (swapped bool, err error) {

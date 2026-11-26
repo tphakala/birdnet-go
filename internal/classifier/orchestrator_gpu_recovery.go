@@ -233,7 +233,7 @@ func (o *Orchestrator) notifyGPURecoveryMoved() {
 
 // SetGPURecoveryCallback registers cb, called after a recovery pass moved at least
 // one model so the pipeline can re-plan its cadence and the UI refresh. It runs
-// holding no orchestrator lock, on the pass goroutine, and must not call this
+// holding no orchestrator lock, on the pass goroutine (a replay runs on the registering goroutine), and must not call this
 // setter. Registering waits for a call in flight, and replays once a move that
 // happened while no callback was registered, unless Delete already stopped recovery.
 // A nil cb clears it, also waiting.
