@@ -6242,7 +6242,7 @@
       "backendsLoading": "Pārbauda, kuras izpildvides šī ierīce atbalsta.",
       "backendsUnavailable": "Neizdevās nolasīt, kuras izpildvides šī ierīce atbalsta. Aizmugursistēmu un ierīci var mainīt pēc ielādes.",
       "gpuFailed": "OpenVINO GPU šajā darbināšanas reizē atteicās, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Iestatiet zemāk OpenVINO ierīci uz CPU vai restartējiet BirdNET-Go, lai vēlreiz izmēģinātu GPU.",
-      "gpuFailedMoved": "OpenVINO GPU šajā palaišanā atteicās, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Modeļi, kas darbojās uz tā, tagad darbojas uz CPU, un noteikšana turpinās. Restartējiet BirdNET-Go, lai atkal izmantotu GPU.",
+      "gpuFailedMoved": "OpenVINO GPU šajā palaišanā atteicās, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Modeļi, kas darbojās uz tā, tiek pārvietoti uz CPU, un paziņojums nosauc katru modeli, ko nevarēja pārvietot. Restartējiet BirdNET-Go, lai atkal izmantotu GPU.",
       "running": {
         "title": "Pašlaik darbojas",
         "description": "Izpildvide un precizitāte, ar kādu darbojas katrs iespējotais klasifikators.",

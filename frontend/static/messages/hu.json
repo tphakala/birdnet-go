@@ -6242,7 +6242,7 @@
       "backendsLoading": "Annak ellenőrzése, mely futtatókörnyezeteket támogatja ez az eszköz.",
       "backendsUnavailable": "Nem sikerült kiolvasni, mely futtatókörnyezeteket támogatja ez az eszköz. A háttérrendszer és az eszköz betöltés után módosítható.",
       "gpuFailed": "Az OpenVINO GPU ebben a futásban meghibásodott, ezért a BirdNET-Go a következő újraindításig nem használja. Állítsa lent az OpenVINO eszközt CPU-ra, vagy indítsa újra a BirdNET-Go-t a GPU újbóli kipróbálásához.",
-      "gpuFailedMoved": "Az OpenVINO GPU ebben a futásban meghibásodott, ezért a BirdNET-Go a következő újraindításig nem használja. A rajta futó modellek most a CPU-n futnak, és az észlelés folytatódik. Indítsa újra a BirdNET-Go-t a GPU ismételt használatához.",
+      "gpuFailedMoved": "Az OpenVINO GPU ebben a futásban meghibásodott, ezért a BirdNET-Go a következő újraindításig nem használja. A rajta futó modelleket a CPU-ra helyezi át, és egy értesítés megnevezi azt a modellt, amelyet nem sikerült áthelyezni. Indítsa újra a BirdNET-Go-t a GPU ismételt használatához.",
       "running": {
         "title": "Jelenleg futó",
         "description": "Az egyes engedélyezett osztályozók által használt futtatókörnyezet és pontosság.",

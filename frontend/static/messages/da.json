@@ -6242,7 +6242,7 @@
       "backendsLoading": "Kontrollerer, hvilke runtimes denne enhed understøtter.",
       "backendsUnavailable": "Kunne ikke aflæse, hvilke runtimes denne enhed understøtter. Backend og enhed kan ændres, når den er indlæst.",
       "gpuFailed": "OpenVINO-GPU'en fejlede i denne kørsel, så BirdNET-Go er holdt op med at bruge den indtil næste genstart. Sæt OpenVINO-enheden til CPU herunder, eller genstart BirdNET-Go for at prøve GPU'en igen.",
-      "gpuFailedMoved": "OpenVINO-GPU'en fejlede under denne kørsel, så BirdNET-Go er holdt op med at bruge den indtil næste genstart. De modeller, der kørte på den, kører nu på CPU'en, og registreringen fortsætter. Genstart BirdNET-Go for at bruge GPU'en igen.",
+      "gpuFailedMoved": "OpenVINO-GPU'en fejlede under denne kørsel, så BirdNET-Go er holdt op med at bruge den indtil næste genstart. De modeller, der kørte på den, flyttes til CPU'en, og en meddelelse nævner enhver model, der ikke kunne flyttes. Genstart BirdNET-Go for at bruge GPU'en igen.",
       "running": {
         "title": "Kører nu",
         "description": "Den runtime og præcision, som hver aktiveret klassifikator kører med.",

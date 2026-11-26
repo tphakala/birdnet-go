@@ -6242,7 +6242,7 @@
       "backendsLoading": "Comprobando qué entornos de ejecución admite este dispositivo.",
       "backendsUnavailable": "No se pudo leer qué entornos de ejecución admite este dispositivo. El backend y el dispositivo se pueden cambiar cuando cargue.",
       "gpuFailed": "La GPU de OpenVINO falló en esta ejecución, así que BirdNET-Go dejó de usarla hasta el próximo reinicio. Configure el dispositivo OpenVINO en CPU a continuación, o reinicie BirdNET-Go para volver a probar la GPU.",
-      "gpuFailedMoved": "La GPU de OpenVINO falló durante esta ejecución, así que BirdNET-Go dejó de usarla hasta el próximo reinicio. Los modelos que se ejecutaban en ella ahora se ejecutan en la CPU y la detección continúa. Reinicie BirdNET-Go para volver a usar la GPU.",
+      "gpuFailedMoved": "La GPU de OpenVINO falló durante esta ejecución, así que BirdNET-Go dejó de usarla hasta el próximo reinicio. Los modelos que se ejecutaban en ella se mueven a la CPU, y una notificación nombra cualquier modelo que no se pudo mover. Reinicie BirdNET-Go para volver a usar la GPU.",
       "running": {
         "title": "En ejecución",
         "description": "El entorno de ejecución y la precisión con los que se ejecuta cada clasificador activado.",

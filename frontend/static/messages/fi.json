@@ -6242,7 +6242,7 @@
       "backendsLoading": "Tarkistetaan, mitä suoritusympäristöjä tämä laite tukee.",
       "backendsUnavailable": "Ei voitu lukea, mitä suoritusympäristöjä tämä laite tukee. Taustajärjestelmä ja laite voidaan vaihtaa latauksen jälkeen.",
       "gpuFailed": "OpenVINO-GPU epäonnistui tässä ajossa, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Vaihda alla OpenVINO-laitteeksi CPU tai käynnistä BirdNET-Go uudelleen kokeillaksesi GPU:ta uudestaan.",
-      "gpuFailedMoved": "OpenVINO-GPU epäonnistui tämän ajon aikana, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Sillä ajetut mallit toimivat nyt CPU:lla ja tunnistus jatkuu. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen.",
+      "gpuFailedMoved": "OpenVINO-GPU epäonnistui tämän ajon aikana, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Sillä ajetut mallit siirretään CPU:lle, ja ilmoitus nimeää mallin, jota ei voitu siirtää. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen.",
       "running": {
         "title": "Nyt käynnissä",
         "description": "Suoritusympäristö ja tarkkuus, joilla kukin käytössä oleva luokittelija toimii.",

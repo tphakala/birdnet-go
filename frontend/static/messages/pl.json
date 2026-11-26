@@ -6242,7 +6242,7 @@
       "backendsLoading": "Sprawdzanie, jakie środowiska uruchomieniowe obsługuje to urządzenie.",
       "backendsUnavailable": "Nie udało się odczytać, jakie środowiska uruchomieniowe obsługuje to urządzenie. Backend i urządzenie można zmienić po załadowaniu.",
       "gpuFailed": "GPU OpenVINO uległo awarii w tym uruchomieniu, więc BirdNET-Go nie używa go do następnego restartu. Ustaw poniżej urządzenie OpenVINO na CPU albo uruchom ponownie BirdNET-Go, aby jeszcze raz spróbować użyć GPU.",
-      "gpuFailedMoved": "GPU OpenVINO uległo awarii w tym uruchomieniu, więc BirdNET-Go nie używa go do następnego restartu. Modele, które na nim działały, działają teraz na CPU, a wykrywanie trwa nadal. Uruchom BirdNET-Go ponownie, aby znów używać GPU.",
+      "gpuFailedMoved": "GPU OpenVINO uległo awarii w tym uruchomieniu, więc BirdNET-Go nie używa go do następnego restartu. Modele, które na nim działały, są przenoszone na CPU, a powiadomienie wymienia każdy model, którego nie udało się przenieść. Uruchom BirdNET-Go ponownie, aby znów używać GPU.",
       "running": {
         "title": "Aktualnie uruchomione",
         "description": "Środowisko uruchomieniowe i precyzja, z jakimi działa każdy włączony klasyfikator.",
