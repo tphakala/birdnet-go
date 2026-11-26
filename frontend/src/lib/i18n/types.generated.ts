@@ -459,6 +459,9 @@ export type TranslationKey =
   | 'notifications.content.storage.anonymousVolumeMessage' // params: paths
   | 'notifications.content.openvinoGpu.stoppedTitle'
   | 'notifications.content.openvinoGpu.stoppedMessage'
+  | 'notifications.content.openvinoGpu.movedTitle'
+  | 'notifications.content.openvinoGpu.movedMessage'
+  | 'notifications.content.openvinoGpu.movedPartialMessage' // params: models
   | 'notifications.content.openvinoRefused.title' // params: count
   | 'notifications.content.openvinoRefused.notBuiltMessage' // params: models
   | 'notifications.content.openvinoRefused.deviceMissingMessage' // params: device, models
@@ -4879,6 +4882,7 @@ export type TranslationParams = {
   };
   'notifications.content.storage.notPersistentMessage': { paths: string | number };
   'notifications.content.storage.anonymousVolumeMessage': { paths: string | number };
+  'notifications.content.openvinoGpu.movedPartialMessage': { models: string | number };
   'notifications.content.openvinoRefused.title': { count: string | number };
   'notifications.content.openvinoRefused.notBuiltMessage': { models: string | number };
   'notifications.content.openvinoRefused.deviceMissingMessage': {

@@ -556,7 +556,10 @@
       },
       "openvinoGpu": {
         "stoppedTitle": "GPU OpenVINO selhala",
-        "stoppedMessage": "GPU OpenVINO přestala fungovat, proto ji BirdNET-Go přestal používat až do dalšího restartu. Modely nastavené na běh na GPU do té doby nic nedetekují. Restartujte BirdNET-Go, abyste GPU mohli znovu používat, nebo nastavte zařízení OpenVINO na CPU v Nastavení > Analýza > Inference."
+        "stoppedMessage": "GPU OpenVINO přestala fungovat, proto ji BirdNET-Go přestal používat až do dalšího restartu. Modely nastavené na běh na GPU do té doby nic nedetekují. Restartujte BirdNET-Go, abyste GPU mohli znovu používat, nebo nastavte zařízení OpenVINO na CPU v Nastavení > Analýza > Inference.",
+        "movedTitle": "GPU OpenVINO selhala, modely přesunuty na CPU",
+        "movedMessage": "GPU OpenVINO přestala fungovat, proto ji BirdNET-Go přestal používat až do dalšího restartu a modely, které na ní běžely, přesunul na CPU. Detekce pokračuje. Restartujte BirdNET-Go, abyste GPU mohli znovu používat.",
+        "movedPartialMessage": "GPU OpenVINO přestala fungovat, proto ji BirdNET-Go přestal používat až do dalšího restartu. Tyto modely se nepodařilo přesunout na CPU a do té doby nic nedetekují: {models}. Ostatní modely, které běžely na GPU, nyní běží na CPU. Restartujte BirdNET-Go, abyste GPU mohli znovu používat."
       },
       "openvinoRefused": {
         "title": "{count, plural, one {# model není načten} few {# modely nejsou načteny} many {# modelů není načteno} other {# modelů není načteno}}",

@@ -417,6 +417,19 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	p.ctrlMonitor.updateSourceGainsFn = func() { p.applySourceGains(apiAudioLevelChan) }
 	p.ctrlMonitor.Start()
 
+	// After an OpenVINO GPU fault under an auto selection the orchestrator rebuilds the
+	// models that ran on the GPU on the CPU. The loaded set does not change, so no audio
+	// reconfigure: only the cadence is re-planned (the new instances have other
+	// latencies) and open UIs refresh, as after a BirdNET reload.
+	if bn := p.birdNET(); bn != nil {
+		bn.SetGPURecoveryCallback(func() {
+			p.replanCadence()
+			if apiController != nil {
+				apiController.BroadcastInferenceTopologyChanged()
+			}
+		})
+	}
+
 	// Start restart loop goroutine.
 	p.wg.Go(func() {
 		for {
@@ -451,6 +464,12 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 
 	log.Info("initiating audio pipeline shutdown",
 		logger.String("operation", "graceful_shutdown"))
+
+	// Clear the GPU recovery callback first; it waits for a call in flight, which
+	// re-plans the cadence the shutdown below tears down.
+	if bn := p.birdNET(); bn != nil {
+		bn.SetGPURecoveryCallback(nil)
+	}
 
 	// Stop control monitor.
 	if p.ctrlMonitor != nil {

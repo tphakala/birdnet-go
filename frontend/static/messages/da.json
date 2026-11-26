@@ -556,7 +556,10 @@
       },
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU'en fejlede",
-        "stoppedMessage": "OpenVINO-GPU'en holdt op med at virke, så BirdNET-Go er holdt op med at bruge den indtil næste genstart. Modeller, der er sat til at køre på GPU'en, registrerer intet indtil da. Genstart BirdNET-Go for at bruge GPU'en igen, eller sæt OpenVINO-enheden til CPU under Indstillinger > Analyse > Inferens."
+        "stoppedMessage": "OpenVINO-GPU'en holdt op med at virke, så BirdNET-Go er holdt op med at bruge den indtil næste genstart. Modeller, der er sat til at køre på GPU'en, registrerer intet indtil da. Genstart BirdNET-Go for at bruge GPU'en igen, eller sæt OpenVINO-enheden til CPU under Indstillinger > Analyse > Inferens.",
+        "movedTitle": "OpenVINO-GPU'en fejlede, modeller flyttet til CPU'en",
+        "movedMessage": "OpenVINO-GPU'en holdt op med at virke, så BirdNET-Go er holdt op med at bruge den indtil næste genstart og har flyttet de modeller, der kørte på den, til CPU'en. Registreringen fortsætter. Genstart BirdNET-Go for at bruge GPU'en igen.",
+        "movedPartialMessage": "OpenVINO-GPU'en holdt op med at virke, så BirdNET-Go er holdt op med at bruge den indtil næste genstart. Disse modeller kunne ikke flyttes til CPU'en og registrerer intet indtil da: {models}. Andre modeller, der kørte på GPU'en, kører nu på CPU'en. Genstart BirdNET-Go for at bruge GPU'en igen."
       },
       "openvinoRefused": {
         "title": "{count, plural, one {# model er ikke indlæst} other {# modeller er ikke indlæst}}",

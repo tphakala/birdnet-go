@@ -556,7 +556,10 @@
       },
       "openvinoGpu": {
         "stoppedTitle": "Az OpenVINO GPU meghibásodott",
-        "stoppedMessage": "Az OpenVINO GPU leállt, ezért a BirdNET-Go a következő újraindításig nem használja. A GPU-n futásra beállított modellek addig semmit sem észlelnek. Indítsa újra a BirdNET-Go-t a GPU ismételt használatához, vagy állítsa az OpenVINO eszközt CPU-ra a Beállítások > Elemzés > Következtetés oldalon."
+        "stoppedMessage": "Az OpenVINO GPU leállt, ezért a BirdNET-Go a következő újraindításig nem használja. A GPU-n futásra beállított modellek addig semmit sem észlelnek. Indítsa újra a BirdNET-Go-t a GPU ismételt használatához, vagy állítsa az OpenVINO eszközt CPU-ra a Beállítások > Elemzés > Következtetés oldalon.",
+        "movedTitle": "Az OpenVINO GPU meghibásodott, a modellek átkerültek a CPU-ra",
+        "movedMessage": "Az OpenVINO GPU leállt, ezért a BirdNET-Go a következő újraindításig nem használja, és a rajta futó modelleket átvitte a CPU-ra. Az észlelés folytatódik. Indítsa újra a BirdNET-Go-t a GPU ismételt használatához.",
+        "movedPartialMessage": "Az OpenVINO GPU leállt, ezért a BirdNET-Go a következő újraindításig nem használja. Ezeket a modelleket nem sikerült átvinni a CPU-ra, ezért addig semmit sem észlelnek: {models}. A GPU-n futó többi modell most a CPU-n fut. Indítsa újra a BirdNET-Go-t a GPU ismételt használatához."
       },
       "openvinoRefused": {
         "title": "{count, plural, one {# modell nincs betöltve} other {# modell nincs betöltve}}",

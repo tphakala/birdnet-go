@@ -556,7 +556,10 @@
       },
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO GPU atteicās",
-        "stoppedMessage": "OpenVINO GPU pārstāja darboties, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Modeļi, kas iestatīti darbam uz GPU, līdz tam neko nenosaka. Restartējiet BirdNET-Go, lai atkal izmantotu GPU, vai iestatiet OpenVINO ierīci uz CPU sadaļā Iestatījumi > Analīze > Secinājumi."
+        "stoppedMessage": "OpenVINO GPU pārstāja darboties, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Modeļi, kas iestatīti darbam uz GPU, līdz tam neko nenosaka. Restartējiet BirdNET-Go, lai atkal izmantotu GPU, vai iestatiet OpenVINO ierīci uz CPU sadaļā Iestatījumi > Analīze > Secinājumi.",
+        "movedTitle": "OpenVINO GPU atteicās, modeļi pārvietoti uz CPU",
+        "movedMessage": "OpenVINO GPU pārstāja darboties, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai un pārvietoja uz CPU modeļus, kas darbojās uz tā. Noteikšana turpinās. Restartējiet BirdNET-Go, lai atkal izmantotu GPU.",
+        "movedPartialMessage": "OpenVINO GPU pārstāja darboties, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Šos modeļus neizdevās pārvietot uz CPU, un tie līdz tam neko nenosaka: {models}. Pārējie modeļi, kas darbojās uz GPU, tagad darbojas uz CPU. Restartējiet BirdNET-Go, lai atkal izmantotu GPU."
       },
       "openvinoRefused": {
         "title": "{count, plural, zero {# modeļi nav ielādēti} one {# modelis nav ielādēts} other {# modeļi nav ielādēti}}",

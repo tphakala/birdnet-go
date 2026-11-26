@@ -556,7 +556,10 @@
       },
       "openvinoGpu": {
         "stoppedTitle": "GPU OpenVINO uległo awarii",
-        "stoppedMessage": "GPU OpenVINO przestało działać, więc BirdNET-Go nie używa go do następnego restartu. Modele ustawione do działania na GPU do tego czasu niczego nie wykrywają. Uruchom BirdNET-Go ponownie, aby znów używać GPU, lub ustaw urządzenie OpenVINO na CPU w Ustawienia > Analiza > Wnioskowanie."
+        "stoppedMessage": "GPU OpenVINO przestało działać, więc BirdNET-Go nie używa go do następnego restartu. Modele ustawione do działania na GPU do tego czasu niczego nie wykrywają. Uruchom BirdNET-Go ponownie, aby znów używać GPU, lub ustaw urządzenie OpenVINO na CPU w Ustawienia > Analiza > Wnioskowanie.",
+        "movedTitle": "GPU OpenVINO uległo awarii, modele przeniesiono na CPU",
+        "movedMessage": "GPU OpenVINO przestało działać, więc BirdNET-Go nie używa go do następnego restartu i przeniósł modele, które na nim działały, na CPU. Wykrywanie trwa nadal. Uruchom BirdNET-Go ponownie, aby znów używać GPU.",
+        "movedPartialMessage": "GPU OpenVINO przestało działać, więc BirdNET-Go nie używa go do następnego restartu. Tych modeli nie udało się przenieść na CPU i do tego czasu niczego nie wykrywają: {models}. Pozostałe modele, które działały na GPU, działają teraz na CPU. Uruchom BirdNET-Go ponownie, aby znów używać GPU."
       },
       "openvinoRefused": {
         "title": "{count, plural, one {# model nie jest załadowany} few {# modele nie są załadowane} many {# modeli nie jest załadowanych} other {# modeli nie jest załadowanych}}",
