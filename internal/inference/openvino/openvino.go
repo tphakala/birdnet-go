@@ -82,6 +82,11 @@ type Options struct {
 	// Threads sets INFERENCE_NUM_THREADS (CPU device only; ignored for GPU).
 	// 0 lets OpenVINO auto-tune.
 	Threads int
+	// LargeAllocations requests GPU_ENABLE_LARGE_ALLOCATIONS=YES when compiling for a
+	// GPU device; it is ignored for the CPU, whose plugin rejects the key. When the
+	// loaded library rejects the key, the compile is retried once without it and later
+	// compiles in this process omit it (see GPULargeAllocationsUnsupported).
+	LargeAllocations bool
 	// Device is the OpenVINO device to compile for: DeviceCPU (default), DeviceGPU
 	// (OpenVINO's alias for the first GPU) or a concrete "GPU.<n>" name as
 	// enumerated by the probe. An empty string is treated as DeviceCPU.

@@ -78,6 +78,19 @@ func logOVGPUFaultOnce(err error) error {
 	return err
 }
 
+// ovLargeAllocationsLogged makes the large allocations INFO log fire once per process.
+var ovLargeAllocationsLogged atomic.Bool
+
+// logOVLargeAllocationsUnsupportedOnce logs one INFO the first time it observes
+// that the bound OpenVINO library rejected GPU_ENABLE_LARGE_ALLOCATIONS.
+func logOVLargeAllocationsUnsupportedOnce() {
+	if !ov.GPULargeAllocationsUnsupported() || !ovLargeAllocationsLogged.CompareAndSwap(false, true) {
+		return
+	}
+	logger.Global().Module("inference").Info(
+		"OpenVINO library rejects GPU_ENABLE_LARGE_ALLOCATIONS; GPU models that request it compile without it")
+}
+
 // OVPrecisionF32 is the INFERENCE_PRECISION_HINT for full f32 inference, used to
 // override the f16 default where the GPU plugin miscompiles a model at f16.
 const OVPrecisionF32 = ov.PrecisionF32
@@ -89,6 +102,9 @@ type OpenVINOClassifierOptions struct {
 	PrecisionHint string   // INFERENCE_PRECISION_HINT; "" defaults to f16
 	Device        string   // ov.DeviceCPU (default), ov.DeviceGPU or a concrete "GPU.<n>"
 	OutputIndex   int      // logits output port index; 0 default, 3 for Perch v2
+	// LargeAllocations requests GPU_ENABLE_LARGE_ALLOCATIONS on a GPU device only;
+	// see ov.Options.LargeAllocations.
+	LargeAllocations bool
 }
 
 type openvinoClassifier struct {
@@ -100,6 +116,8 @@ type openvinoClassifier struct {
 // backend. InitOpenVINO must be called first; if the OpenVINO core is not
 // initialized (or the backend is not compiled in), construction returns
 // ov.ErrOpenVINOUnavailable, which the caller treats as fall back to ORT.
+//
+//nolint:gocritic // hugeParam: options are built once per model load
 func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Classifier, error) {
 	if len(opts.Labels) == 0 {
 		return nil, errors.Newf("OpenVINO classifier requires labels").Build()
@@ -110,11 +128,13 @@ func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Cl
 	}
 	threads := max(opts.Threads, 0)
 	c, err := ov.NewClassifier(modelPath, ov.Options{
-		PrecisionHint: prec,
-		Threads:       threads,
-		Device:        opts.Device,
-		OutputIndex:   opts.OutputIndex,
+		PrecisionHint:    prec,
+		Threads:          threads,
+		Device:           opts.Device,
+		OutputIndex:      opts.OutputIndex,
+		LargeAllocations: opts.LargeAllocations,
 	})
+	logOVLargeAllocationsUnsupportedOnce()
 	if err != nil {
 		return nil, logOVGPUFaultOnce(err)
 	}

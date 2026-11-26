@@ -158,15 +158,18 @@ static ov_status_e ovbind_core_read_model(const ov_core_t* core, const char* mod
 #define OVBIND_COMPILE_ARGS_2PROPS 4
 
 // ovbind_compile wraps the variadic ov_core_compile_model (cgo cannot call C
-// variadic functions). Ported verbatim from the spike's ovspike_compile: each
-// property is a (key, value) pair, so property_args_size is 2 per pair.
+// variadic functions). Each property is a (key, value) pair, so property_args_size
+// is 2 per pair. The precision hint is always sent; the second pair is the
+// optional device-specific property chosen in Go (key2 and val2 are NULL or
+// empty for none).
 static ov_status_e ovbind_compile(const ov_core_t* core, const ov_model_t* model,
-                                  const char* dev, const char* prec, const char* nthreads,
+                                  const char* dev, const char* prec,
+                                  const char* key2, const char* val2,
                                   ov_compiled_model_t** out) {
-    if (nthreads != NULL && nthreads[0] != '\0') {
+    if (key2 != NULL && key2[0] != '\0' && val2 != NULL) {
         return OVB.core_compile_model(core, model, dev, OVBIND_COMPILE_ARGS_2PROPS, out,
                                       "INFERENCE_PRECISION_HINT", prec,
-                                      "INFERENCE_NUM_THREADS", nthreads);
+                                      key2, val2);
     }
     return OVB.core_compile_model(core, model, dev, OVBIND_COMPILE_ARGS_1PROP, out,
                                   "INFERENCE_PRECISION_HINT", prec);
@@ -397,7 +400,6 @@ import "unsafe" //nolint:gocritic // dupImport: false positive with cgo import "
 import (
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -668,8 +670,10 @@ func reshapeToStaticBatch1(model *C.ov_model_t, modelPath string) (int, error) {
 // otherwise it returns ErrOpenVINOUnavailable. For a GPU device it returns an
 // error wrapping ErrGPUDeviceFault, without any native call, once the GPU fault
 // latch is set; a failure carrying a fatal OpenCL marker trips the latch, and
-// the native objects built so far are then abandoned instead of freed. The
-// returned Classifier is not goroutine-safe.
+// the native objects built so far are then abandoned instead of freed. With
+// opts.LargeAllocations on a GPU device the compile sends
+// GPU_ENABLE_LARGE_ALLOCATIONS, and when the library rejects that key it compiles
+// once more without it (see GPULargeAllocationsUnsupported). The returned Classifier is not goroutine-safe.
 func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	// Pin to one OS thread so every OpenVINO call here and any
 	// ov_get_last_err_msg fetch (C thread-local storage) run on the same thread.
@@ -708,13 +712,6 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 		return nil, gpuFault.blockedErr()
 	}
 
-	threads := ""
-	// INFERENCE_NUM_THREADS is a CPU-plugin property; the GPU plugin rejects it,
-	// so only pass a thread count when compiling for the CPU device.
-	if device == DeviceCPU && opts.Threads > 0 {
-		threads = strconv.Itoa(opts.Threads)
-	}
-
 	cPath := C.CString(modelPath)
 	defer C.free(unsafe.Pointer(cPath))
 
@@ -735,8 +732,6 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	defer C.free(unsafe.Pointer(cDev))
 	cPrec := C.CString(precision)
 	defer C.free(unsafe.Pointer(cPrec))
-	cThreads := C.CString(threads)
-	defer C.free(unsafe.Pointer(cThreads))
 
 	// Another goroutine may have tripped the latch while the model was read:
 	// do not start a GPU compile on a poisoned context. The read model is host
@@ -747,18 +742,33 @@ func NewClassifier(modelPath string, opts Options) (Classifier, error) {
 	}
 
 	var compiled *C.ov_compiled_model_t
-	if st := C.ovbind_compile(core, model, cDev, cPrec, cThreads, &compiled); !ovOK(st) {
+	err = compileWithLargeAllocationsRetry(device, opts, func(key, value string) error {
+		compiled = nil
+		// An empty key means no second property: pass NULL pointers.
+		var cKey, cVal *C.char
+		if key != "" {
+			cKey = C.CString(key)
+			defer C.free(unsafe.Pointer(cKey))
+			cVal = C.CString(value)
+			defer C.free(unsafe.Pointer(cVal))
+		}
+		st := C.ovbind_compile(core, model, cDev, cPrec, cKey, cVal, &compiled)
+		if ovOK(st) {
+			return nil
+		}
 		// Build the error first: it reads ov_get_last_err_msg before another C call
 		// can overwrite it.
-		err = gpuFault.setupFailed(isGPU, lastErr("ov_core_compile_model", st, modelPath))
-		C.ovbind_model_free(model)
-		return nil, err
-	}
-	// The compiled model is self-contained; free the read model now to avoid
-	// doubling the per-classifier memory footprint (the create_infer_request
-	// below operates on the compiled model, not the read model).
+		return gpuFault.setupFailed(isGPU, lastErr("ov_core_compile_model", st, modelPath))
+	})
+	// The compiled model is self-contained; free the read model now (it was kept
+	// only for a possible retry) to avoid doubling the per-classifier memory
+	// footprint (the create_infer_request below operates on the compiled model,
+	// not the read model).
 	C.ovbind_model_free(model)
 	model = nil
+	if err != nil {
+		return nil, err
+	}
 	if gpuAbandoned(isGPU) {
 		// Tripped by another goroutine during the compile: abandon the compiled model.
 		return nil, gpuFault.blockedErr()

@@ -206,7 +206,8 @@ func logPerchCalibration(log logger.Logger, c perchCalibrationLookup, labelCount
 // denied, init/compile/validation error) is logged and swallowed: OpenVINO must
 // never make Perch fail to load. OV is only attempted for the no_dft model
 // variant, since the stock perch_v2.onnx cannot compile on OpenVINO (a
-// dynamic-rank DFT op).
+// dynamic-rank DFT op). The compile requests GPU large allocations, which the
+// backend applies only on a GPU device.
 func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.Classifier, device, precisionHint string, ok bool) {
 	if !isPerchNoDFT(cfg.ModelPath) {
 		logOpenVINODeclined(RegistryIDPerchV2, cfg.Backend, ovReasonNotPerchNoDFT)
@@ -234,6 +235,10 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.C
 		Device:        plan.device,
 		OutputIndex:   plan.outputIndex,
 		PrecisionHint: plan.precision, // f32 on the GPU (f16 returns NaN on Intel Arc), else the f16 default
+		// The GPU plugin needs large allocations for Perch v2 on some Intel GPUs (an
+		// Arc Pro B50 faults without it, GitHub #5281). The backend applies it only
+		// on a GPU device; the CPU ignores it.
+		LargeAllocations: true,
 	})
 	if err != nil {
 		log.Warn("Perch OpenVINO classifier init failed; using ONNX Runtime",
