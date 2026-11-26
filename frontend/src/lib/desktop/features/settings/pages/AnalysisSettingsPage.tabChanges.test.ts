@@ -742,20 +742,26 @@ describe('AnalysisSettingsPage inference runtime', () => {
   const DEVICE_LABEL = 'analysis.inference.device.label';
 
   /** A runtime status as GET /api/v2/system/inference reports it. */
+  /** Server time a test status was read at, unless a test sets its own. */
+  const DEFAULT_SNAPSHOT = 1_700_000_000;
+
   function runtimeStatus({
     onnx = true,
     openvino = true,
     devices = ['CPU'],
     gpus,
     gpuFailed,
+    snapshotAtUnix = DEFAULT_SNAPSHOT,
   }: {
     onnx?: boolean;
     openvino?: boolean;
     devices?: string[];
     gpus?: OpenVINOGPU[];
     gpuFailed?: boolean;
+    snapshotAtUnix?: number;
   } = {}) {
     return {
+      snapshotAtUnix,
       backends: {
         tflite: { available: true },
         onnx: { available: onnx },
@@ -920,7 +926,7 @@ describe('AnalysisSettingsPage inference runtime', () => {
       expect(screen.getByText(GPU_FAILED_TEXT)).toBeInTheDocument();
     });
 
-    it('shows the fault an older lookup reports after a newer healthy status published', async () => {
+    it('shows a fault read later even when its lookup started first and answers last', async () => {
       const pending = mockPendingRuntime();
       render(AnalysisSettingsPage);
       await waitFor(() => expect(pending.length).toBeGreaterThan(0));
@@ -929,18 +935,20 @@ describe('AnalysisSettingsPage inference runtime', () => {
       announceTopologyChange();
       await waitFor(() => expect(pending.length).toBeGreaterThan(started));
       // The newer lookup read the status before the latch tripped and answers first; the
-      // older one read it after the trip and answers last.
+      // older one read it a second later, after the trip, and answers last.
       for (const settle of pending.slice(started)) settle(runtimeStatus(GPU_HOST));
       await tick();
       expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
       for (const settle of pending.slice(0, started)) {
-        settle(runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+        settle(
+          runtimeStatus({ ...GPU_HOST, gpuFailed: true, snapshotAtUnix: DEFAULT_SNAPSHOT + 1 })
+        );
       }
 
       expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
     });
 
-    it('keeps a shown fault when a newer lookup that read the status before the trip answers last', async () => {
+    it('keeps a shown fault when a status read in the same second without it answers last', async () => {
       const pending = mockPendingRuntime();
       render(AnalysisSettingsPage);
       await waitFor(() => expect(pending.length).toBeGreaterThan(0));
@@ -957,6 +965,22 @@ describe('AnalysisSettingsPage inference runtime', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(screen.getByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+    });
+
+    it('clears the alert when a server restart reports a healthy GPU', async () => {
+      let restarted = false;
+      mockRuntime(async () =>
+        restarted
+          ? runtimeStatus({ ...GPU_HOST, snapshotAtUnix: DEFAULT_SNAPSHOT + 60 })
+          : runtimeStatus({ ...GPU_HOST, gpuFailed: true })
+      );
+      render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+
+      restarted = true;
+      announceTopologyChange();
+
+      await waitFor(() => expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull());
     });
   });
 

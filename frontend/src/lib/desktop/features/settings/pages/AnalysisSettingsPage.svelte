@@ -687,23 +687,24 @@
   let inferenceBackends = $state<InferenceBackends | null>(null);
   let inferenceBackendsFailed = $state(false);
 
-  // Lookups are numbered when they start, and one that answers after a newer one already
-  // published is dropped. Lookups can read the server in a different order than they start,
-  // so the GPU fault is handled by its own rule: it never clears while the server runs, so a
-  // status that reports it always publishes, and a status without it never replaces a shown
-  // fault (after a server restart the page needs a reload to clear the alert).
-  let inferenceLookupsStarted = 0;
-  let inferenceLookupPublished = 0;
+  // Lookups can overlap and answer in any order, so a status publishes only when the server
+  // read it no earlier than the shown one (snapshotAtUnix). Within the same second the GPU
+  // fault wins: the server never clears it while it runs. A server restart stamps later
+  // snapshots, so its healthy status replaces a fault from the previous run.
+  let inferenceLookupRequested = false;
+  let inferenceSnapshotShown = Number.NEGATIVE_INFINITY;
 
   async function loadInferenceBackends() {
-    const lookup = ++inferenceLookupsStarted;
+    inferenceLookupRequested = true;
     try {
       const status = await api.get<InferenceStatusResponse>(INFERENCE_STATUS_ENDPOINT);
-      const shownFault = inferenceBackends?.openvino.gpuFailed === true;
-      const reportedFault = status.backends.openvino.gpuFailed === true;
-      if (shownFault && !reportedFault) return;
-      if (lookup < inferenceLookupPublished && !(reportedFault && !shownFault)) return;
-      inferenceLookupPublished = Math.max(lookup, inferenceLookupPublished);
+      const snapshot = status.snapshotAtUnix;
+      if (snapshot < inferenceSnapshotShown) return;
+      const hidesShownFault =
+        inferenceBackends?.openvino.gpuFailed === true &&
+        status.backends.openvino.gpuFailed !== true;
+      if (snapshot === inferenceSnapshotShown && hidesShownFault) return;
+      inferenceSnapshotShown = snapshot;
       inferenceBackends = status.backends;
       inferenceBackendsFailed = false;
     } catch (e) {
@@ -722,7 +723,7 @@
   $effect(() =>
     onTopologyChanged(() => {
       // A lookup in flight may predate the change, so refetch once the tab asked for the list.
-      if (inferenceLookupsStarted > 0) void loadInferenceBackends();
+      if (inferenceLookupRequested) void loadInferenceBackends();
     })
   );
 
