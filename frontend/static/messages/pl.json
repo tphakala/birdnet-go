@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Wypróbuj inną wersję tego modelu w Ustawienia > Analiza > Modele lub sprawdź backend i precyzję widoczne powyżej.",
       "modelFailingReasonNonFinite": "Wszystkie ostatnie analizy nie powiodły się, ponieważ model zwrócił nieprawidłowe wyniki (NaN lub nieskończone), więc niczego nie wykrywa.",
       "modelFailingReasonError": "Wszystkie ostatnie analizy nie powiodły się, ponieważ wnioskowanie zwróciło błąd, więc model niczego nie wykrywa.",
-      "modelFailingGPUFault": "Wszystkie ostatnie analizy nie powiodły się, ponieważ GPU OpenVINO uległo awarii. Wnioskowanie na GPU jest zatrzymane do restartu BirdNET-Go. Aby to naprawić, ustaw urządzenie OpenVINO na CPU w ustawieniach wnioskowania albo uruchom ponownie BirdNET-Go, aby spróbować GPU jeszcze raz.",
+      "modelFailingGPUFault": "Wszystkie ostatnie analizy nie powiodły się, ponieważ GPU OpenVINO uległo awarii. Wnioskowanie na GPU jest zatrzymane do restartu BirdNET-Go. Aby to naprawić, ustaw urządzenie OpenVINO na CPU w ustawieniach wnioskowania albo uruchom ponownie BirdNET-Go, aby jeszcze raz spróbować użyć GPU.",
       "deviceFailed": "{device} (awaria)"
     },
     "metrics": {
@@ -6230,7 +6230,7 @@
       "reloadNote": "Zmiana backendu lub urządzenia powoduje przeładowanie modeli, więc detekcja wstrzymuje się na kilka sekund.",
       "backendsLoading": "Sprawdzanie, jakie środowiska uruchomieniowe obsługuje to urządzenie.",
       "backendsUnavailable": "Nie udało się odczytać, jakie środowiska uruchomieniowe obsługuje to urządzenie. Backend i urządzenie można zmienić po załadowaniu.",
-      "gpuFailed": "GPU OpenVINO uległo awarii w tym uruchomieniu, więc BirdNET-Go nie używa go do następnego restartu. Ustaw poniżej urządzenie OpenVINO na CPU albo uruchom ponownie BirdNET-Go, aby spróbować GPU jeszcze raz.",
+      "gpuFailed": "GPU OpenVINO uległo awarii w tym uruchomieniu, więc BirdNET-Go nie używa go do następnego restartu. Ustaw poniżej urządzenie OpenVINO na CPU albo uruchom ponownie BirdNET-Go, aby jeszcze raz spróbować użyć GPU.",
       "running": {
         "title": "Aktualnie uruchomione",
         "description": "Środowisko uruchomieniowe i precyzja, z jakimi działa każdy włączony klasyfikator.",

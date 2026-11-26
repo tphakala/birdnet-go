@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Pruebe otra versión de este modelo en Configuración > Análisis > Modelos, o revise el backend y la precisión que se muestran arriba.",
       "modelFailingReasonNonFinite": "Todos los análisis recientes fallaron porque el modelo devolvió puntuaciones no válidas (NaN o infinitas), así que no detecta nada.",
       "modelFailingReasonError": "Todos los análisis recientes fallaron porque la inferencia devolvió un error, así que el modelo no detecta nada.",
-      "modelFailingGPUFault": "Todos los análisis recientes fallaron porque la GPU de OpenVINO falló. La inferencia en la GPU está detenida hasta que BirdNET-Go se reinicie. Para solucionarlo, configure el dispositivo OpenVINO en CPU en los ajustes de inferencia, o reinicie BirdNET-Go para volver a probar la GPU.",
+      "modelFailingGPUFault": "Todos los análisis recientes fallaron porque la GPU de OpenVINO falló. La inferencia en la GPU está detenida hasta que BirdNET-Go se reinicie. Para solucionarlo, configure el dispositivo OpenVINO en CPU en la configuración de inferencia, o reinicie BirdNET-Go para volver a probar la GPU.",
       "deviceFailed": "{device} (fallo)"
     },
     "metrics": {

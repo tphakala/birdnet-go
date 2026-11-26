@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Skúste iné zostavenie tohto modelu v Nastavenia > Analýza > Modely alebo skontrolujte backend a presnosť uvedené vyššie.",
       "modelFailingReasonNonFinite": "Všetky nedávne analýzy zlyhali, pretože model vrátil neplatné skóre (NaN alebo nekonečné), takže nič nedeteguje.",
       "modelFailingReasonError": "Všetky nedávne analýzy zlyhali, pretože inferencia vrátila chybu, takže model nič nedeteguje.",
-      "modelFailingGPUFault": "Všetky nedávne analýzy zlyhali, pretože GPU OpenVINO zlyhala. Inferencia na GPU je zastavená do reštartu BirdNET-Go. Opravíte to nastavením zariadenia OpenVINO na CPU v nastaveniach inferencie, alebo reštartujte BirdNET-Go a skúste GPU znova.",
+      "modelFailingGPUFault": "Všetky nedávne analýzy zlyhali, pretože GPU OpenVINO zlyhala. Inferencia na GPU je zastavená do reštartu BirdNET-Go. Ak to chcete opraviť, nastavte zariadenie OpenVINO na CPU v nastaveniach inferencie, alebo reštartujte BirdNET-Go a skúste GPU znova.",
       "deviceFailed": "{device} (zlyhalo)"
     },
     "metrics": {

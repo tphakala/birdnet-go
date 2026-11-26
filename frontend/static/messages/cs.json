@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Zkuste jiné sestavení tohoto modelu v Nastavení > Analýza > Modely nebo zkontrolujte backend a přesnost uvedené výše.",
       "modelFailingReasonNonFinite": "Všechny nedávné analýzy selhaly, protože model vrátil neplatné skóre (NaN nebo nekonečné), takže nic nedetekuje.",
       "modelFailingReasonError": "Všechny nedávné analýzy selhaly, protože inference vrátila chybu, takže model nic nedetekuje.",
-      "modelFailingGPUFault": "Všechny nedávné analýzy selhaly, protože selhala GPU OpenVINO. Inference na GPU je zastavena do restartu BirdNET-Go. Opravíte to nastavením zařízení OpenVINO na CPU v nastavení inference, nebo restartujte BirdNET-Go a zkuste GPU znovu.",
+      "modelFailingGPUFault": "Všechny nedávné analýzy selhaly, protože selhala GPU OpenVINO. Inference na GPU je zastavena do restartu BirdNET-Go. Chcete-li to opravit, nastavte zařízení OpenVINO na CPU v nastavení inference, nebo restartujte BirdNET-Go a zkuste GPU znovu.",
       "deviceFailed": "{device} (selhalo)"
     },
     "metrics": {
