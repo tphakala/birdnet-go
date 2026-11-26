@@ -36,6 +36,9 @@ func TestGPURecovery_StopsWhenSelectionBecomesExplicitMidPass(t *testing.T) {
 	env := newGPURecoveryEnv(t, "auto", "auto",
 		map[string]*recoveryBuilder{testSecondaryID: a, gpuFaultHealthySecondaryID: b},
 		[]string{testSecondaryID, gpuFaultHealthySecondaryID})
+	// Cleanups run last in, first out: release the builder, then join the pass goroutines
+	// before the seams and settings are restored.
+	t.Cleanup(env.settle)
 	t.Cleanup(func() { releaseOnce(a) })
 	env.faulted.Store(true)
 	env.o.onOpenVINOGPUFault()
