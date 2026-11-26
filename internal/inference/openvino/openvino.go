@@ -87,6 +87,9 @@ type Options struct {
 	// loaded library rejects the key, the compile is retried once without it and later
 	// compiles in this process omit it (see GPULargeAllocationsUnsupported).
 	LargeAllocations bool
+	// largeAllocationsKey replaces the GPU property name sent for LargeAllocations.
+	// Only tests set it, to send a key the GPU plugin rejects.
+	largeAllocationsKey string
 	// Device is the OpenVINO device to compile for: DeviceCPU (default), DeviceGPU
 	// (OpenVINO's alias for the first GPU) or a concrete "GPU.<n>" name as
 	// enumerated by the probe. An empty string is treated as DeviceCPU.

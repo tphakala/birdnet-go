@@ -17,6 +17,7 @@ const (
 	// does not know the large allocations key.
 	gpuKeyRejectedText = "openvino: ov_core_compile_model failed: status=-1: Check 'it != m_options_map.end()' failed at runtime/plugin_config.hpp:214: Option not found: GPU_ENABLE_LARGE_ALLOCATIONS"
 	gpuOtherFailText   = "openvino: ov_core_compile_model failed: status=-1: unsupported operation Foo"
+	testOverrideKey    = "GPU_ENABLE_LARGE_ALLOCATIONZ"
 	cpuThreadsRejected = "openvino: ov_core_compile_model failed: status=-1: Unsupported property INFERENCE_NUM_THREADS by CPU plugin."
 )
 
@@ -122,6 +123,15 @@ func TestCompileWithLargeAllocationsRetry_Sequences(t *testing.T) {
 		require.Error(t, err)
 		assert.Same(t, second, err)
 		assert.Equal(t, []propCall{gpuKeyCall, noKeyCall}, calls)
+		assert.True(t, GPULargeAllocationsUnsupported())
+	})
+
+	t.Run("an overridden key is sent and retried without it", func(t *testing.T) {
+		reset(t)
+		opts := Options{LargeAllocations: true, largeAllocationsKey: testOverrideKey}
+		calls, err := run(DeviceGPU, opts, errors.NewStd("Option not found: "+testOverrideKey), nil)
+		require.NoError(t, err)
+		assert.Equal(t, []propCall{{testOverrideKey, propValueYes}, noKeyCall}, calls)
 		assert.True(t, GPULargeAllocationsUnsupported())
 	})
 

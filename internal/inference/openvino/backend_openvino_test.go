@@ -260,7 +260,7 @@ const rejectedLargeAllocationsKey = "GPU_ENABLE_LARGE_ALLOCATIONZ"
 // retry glue: a GPU compile with a key the plugin rejects must be retried once
 // without it on the same read model and yield a working classifier. It needs
 // OV_TEST_PERCH_MODEL, optionally OV_TEST_LIB, and a GPU. Not parallel: it
-// overrides process-wide state.
+// clears the process-wide memo.
 func TestOpenVINOLargeAllocationsRetry_RealDevice(t *testing.T) {
 	model := os.Getenv("OV_TEST_PERCH_MODEL")
 	if model == "" {
@@ -277,18 +277,15 @@ func TestOpenVINOLargeAllocationsRetry_RealDevice(t *testing.T) {
 		t.Skipf("no GPU device enumerated (have %v)", devs)
 	}
 
-	savedKey := gpuLargeAllocationsKey
-	gpuLargeAllocationsKey = rejectedLargeAllocationsKey
-	t.Cleanup(func() {
-		gpuLargeAllocationsKey = savedKey
-		largeAllocationsUnsupported.Store(false)
-	})
+	t.Cleanup(func() { largeAllocationsUnsupported.Store(false) })
 
 	c, err := NewClassifier(model, Options{
 		PrecisionHint:    PrecisionF32,
 		Device:           DeviceGPU,
 		OutputIndex:      perchLogitsOutputIndex,
 		LargeAllocations: true,
+
+		largeAllocationsKey: rejectedLargeAllocationsKey,
 	})
 	require.NoError(t, err, "the retry must compile the same read model without the key")
 	t.Cleanup(func() { _ = c.Close() })

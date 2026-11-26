@@ -16,12 +16,14 @@ const (
 	propValueYes = "YES"
 )
 
-// gpuLargeAllocationsKey is the property name sent to the GPU plugin. It is a
-// variable only so the hardware-gated test can send a key the plugin rejects and
-// exercise the retry path; production code never assigns it.
-//
-//nolint:gochecknoglobals // test seam for the hardware-gated retry test
-var gpuLargeAllocationsKey = propGPULargeAllocations
+// gpuLargeAllocationsKey returns the property name sent to the GPU plugin for
+// LargeAllocations: propGPULargeAllocations unless a test overrode it.
+func (o Options) gpuLargeAllocationsKey() string {
+	if o.largeAllocationsKey != "" {
+		return o.largeAllocationsKey
+	}
+	return propGPULargeAllocations
+}
 
 // largeAllocationsUnsupported is the process-wide memo that the bound OpenVINO
 // library rejected the large allocations key. It is only ever set, never reset
@@ -46,7 +48,7 @@ func extraCompileProperty(device string, opts Options) (key, value string) {
 	case device == DeviceCPU && opts.Threads > 0:
 		return propInferenceNumThreads, strconv.Itoa(opts.Threads)
 	case IsGPUDevice(device) && opts.LargeAllocations && !largeAllocationsUnsupported.Load():
-		return gpuLargeAllocationsKey, propValueYes
+		return opts.gpuLargeAllocationsKey(), propValueYes
 	default:
 		return "", ""
 	}
@@ -56,8 +58,8 @@ func extraCompileProperty(device string, opts Options) (key, value string) {
 // the large allocations key. It matches the key name, not a message, because the
 // wording differs across runtimes. It refuses while the GPU fault latch is set,
 // because the retry is another GPU compile.
-func largeAllocationsRejected(key string, err error) bool {
-	return err != nil && key == gpuLargeAllocationsKey && !gpuFault.blocked() &&
+func largeAllocationsRejected(key string, opts Options, err error) bool {
+	return err != nil && key == opts.gpuLargeAllocationsKey() && !gpuFault.blocked() &&
 		strings.Contains(err.Error(), key)
 }
 
@@ -69,7 +71,7 @@ func largeAllocationsRejected(key string, err error) bool {
 func compileWithLargeAllocationsRetry(device string, opts Options, compile func(key, value string) error) error {
 	key, value := extraCompileProperty(device, opts)
 	err := compile(key, value)
-	if !largeAllocationsRejected(key, err) {
+	if !largeAllocationsRejected(key, opts, err) {
 		return err
 	}
 	largeAllocationsUnsupported.Store(true)
