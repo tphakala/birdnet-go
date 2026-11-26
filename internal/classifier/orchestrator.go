@@ -2324,9 +2324,11 @@ func inferenceLoadKeyFor(settings *conf.Settings) inferenceLoadKey {
 
 // RetryFailedLoadsForBackendChange loads every enabled model that is not loaded
 // and whose last load failed under different inference settings than the current
-// ones, in registry ID order. It returns the IDs that loaded. A model that fails
-// again records the key its load started under, so it is not retried until the
-// settings change once more. Call it after a settings reload, so a corrected
+// ones, in registry ID order. Each candidate is checked again just before its
+// load, since an earlier load can take seconds: it is skipped when it was disabled,
+// loaded by another path, or the settings went back to the ones it failed under.
+// It returns the IDs that loaded. A model that fails again records the key its
+// load started under, so it is not retried until the settings change once more. Call it after a settings reload, so a corrected
 // backend or OpenVINO device takes effect without a restart. The ONNX Runtime
 // and OpenVINO library paths are part of the key but are restart-only settings,
 // so a change to them alone does not trigger a reload. Holds no lock across the
@@ -2346,8 +2348,9 @@ func (o *Orchestrator) RetryFailedLoadsForBackendChange() []string {
 
 	var loaded []string
 	for _, id := range candidates {
-		// An earlier load can take seconds: re-check what the snapshot said.
-		if !o.modelIDEnabled(id) || o.IsModelLoaded(id) {
+		// An earlier load can take seconds: re-check what the snapshot said, including
+		// whether the settings went back to the ones this model already failed under.
+		if !o.modelIDEnabled(id) || o.IsModelLoaded(id) || o.failedUnderCurrentSettings(id) {
 			continue
 		}
 		if err := o.LoadModel(id); err != nil {
@@ -2356,6 +2359,18 @@ func (o *Orchestrator) RetryFailedLoadsForBackendChange() []string {
 		loaded = append(loaded, id)
 	}
 	return loaded
+}
+
+// failedUnderCurrentSettings reports whether id's recorded load failure was taken
+// under the inference settings that are current now, so retrying it would repeat a
+// load already known to fail.
+func (o *Orchestrator) failedUnderCurrentSettings(id string) bool {
+	value, ok := o.modelLoadErrors.Load(id)
+	if !ok {
+		return false
+	}
+	failure, ok := value.(loadFailure)
+	return ok && failure.key == inferenceLoadKeyFor(o.currentSettings())
 }
 
 // LoadFailures returns a snapshot of the per-model load-failure counts accumulated
@@ -2983,8 +2998,10 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) {
 		}
 		registryID := m.registryID
 
-		// The inference settings this load starts under, for the failure record.
-		loadKey := inferenceLoadKeyFor(o.currentSettings())
+		// The inference settings this load starts under, for the failure record: the
+		// snapshot the loop iterates, so the key matches the startup settings the
+		// thread budget in threadAlloc was computed from.
+		loadKey := inferenceLoadKeyFor(settings)
 
 		// Closure with defer ensures the mutex is released even if a
 		// loader panics during model initialization.

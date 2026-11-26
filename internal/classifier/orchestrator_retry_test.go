@@ -101,8 +101,9 @@ func TestRecordLoadFailure_KeyIsTakenBeforeTheLoad(t *testing.T) {
 	// Not parallel: swaps modelLoaders and the global settings snapshot.
 	isolateTestConfig(t)
 
+	// Construct with nothing enabled so no production loader runs before the stub.
 	settings := conftest.GetTestSettings()
-	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	settings.Models.Enabled = []string{}
 	settings.BirdNET.Backend = conf.BackendPrefAuto
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
@@ -133,6 +134,10 @@ func TestRecordLoadFailure_KeyIsTakenBeforeTheLoad(t *testing.T) {
 		}
 	})
 
+	enabled := conftest.GetTestSettings()
+	enabled.Models.Enabled = []string{conf.ModelIDPerchV2}
+	conftest.SetTestSettings(enabled)
+
 	require.Error(t, o.LoadModel(RegistryIDPerchV2))
 	require.EqualValues(t, 1, calls.Load())
 
@@ -147,8 +152,10 @@ func TestRetryFailedLoadsForBackendChange_RechecksCandidateMidRetry(t *testing.T
 	// Not parallel: swaps modelLoaders and the global settings snapshot.
 	isolateTestConfig(t)
 
+	// Construct with nothing enabled so no production loader runs before the stubs;
+	// each case enables the models itself.
 	settings := conftest.GetTestSettings()
-	settings.Models.Enabled = []string{conf.ModelIDBirdNETPlusV3, conf.ModelIDPerchV2}
+	settings.Models.Enabled = []string{}
 	settings.BirdNET.Backend = conf.BackendPrefAuto
 	conftest.SetTestSettings(settings)
 	t.Cleanup(func() { conftest.SetTestSettings(nil) })
@@ -172,6 +179,12 @@ func TestRetryFailedLoadsForBackendChange_RechecksCandidateMidRetry(t *testing.T
 		{"loaded by another path", func(orc *Orchestrator) {
 			orc.models[RegistryIDPerchV2] = &modelEntry{instance: &mockModelInstance{id: RegistryIDPerchV2}}
 		}, true},
+		{"settings back to the ones it failed under", func(*Orchestrator) {
+			changed := conftest.GetTestSettings()
+			changed.Models.Enabled = []string{conf.ModelIDBirdNETPlusV3, conf.ModelIDPerchV2}
+			changed.BirdNET.Backend = conf.BackendPrefAuto
+			conftest.SetTestSettings(changed)
+		}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
