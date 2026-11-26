@@ -134,7 +134,7 @@ type BirdNET struct {
 
 // currentSettings returns the latest settings snapshot so UI changes to live
 // tunables such as sensitivity and debug logging take effect without restarting
-// the service. It reads the published snapshot and falls back to settingsAtomic.
+// the service. It reads the published snapshot and falls back to the instance's own settings.
 func (bn *BirdNET) currentSettings() *conf.Settings {
 	if s := bn.settingsAtomic.Load(); s != nil {
 		return conf.CurrentOrFallback(s)

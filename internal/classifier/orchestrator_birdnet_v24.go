@@ -38,11 +38,12 @@ func (o *Orchestrator) loadBirdNETV24(_ int) error {
 	// load (ReconcileEnabledModels when v2.4 is enabled at runtime, and the
 	// loadInstalledModels retry after a construction failure) clones first so a
 	// concurrent reader never observes loadLabels mutate the live object, then
-	// republishes the populated clone via updateSettings (LoadModel has no
-	// updateSettings step of its own, unlike the reload path). That updateSettings
-	// stores only the orchestrator's own pointer, so the clone's labels are not
-	// visible through the published snapshot; the instance's own consumers
-	// (Predict, Labels()) read them from the instance.
+	// hands it to updateSettings (LoadModel has no updateSettings step of
+	// its own, unlike the reload path). That updateSettings stores only the
+	// orchestrator's own pointer, so the clone's labels never reach the published
+	// snapshot: readers of settings.BirdNET.Labels see none after a late load
+	// unless they fall back themselves (the range filter's covered-label
+	// selection does), while Predict and Labels() read them from the instance.
 	cloned := o.published.Load()
 	if cloned {
 		settings = conf.CloneSettings(settings)
