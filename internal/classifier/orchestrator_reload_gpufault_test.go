@@ -24,6 +24,10 @@ const gpuFaultTestDevice = "GPU.0"
 // gpuFaultTestRSS is a previously recorded RSS figure the reload must restore.
 const gpuFaultTestRSS int64 = 123456
 
+// gpuFaultHealthySecondaryID is a second synthetic secondary that never faults. It
+// sorts after testSecondaryID, so ReloadSecondaryModels visits it after the refusal.
+const gpuFaultHealthySecondaryID = "TestZZZHealthy_OV"
+
 // Spec values for the GPU fake; any non-empty clip makes the warm-up and probe run.
 const (
 	gpuFaultTestWait       = 2 * time.Second
@@ -39,6 +43,8 @@ type gpuFaultFakeModel struct {
 	trip      func()
 	onSpec    func()
 	predicted atomic.Int32
+	// device and backend override the reported runtime when set.
+	device, backend string
 }
 
 func (m *gpuFaultFakeModel) Predict(ctx context.Context, in [][]float32) ([]datastore.Results, error) {
@@ -49,7 +55,14 @@ func (m *gpuFaultFakeModel) Predict(ctx context.Context, in [][]float32) ([]data
 }
 
 func (m *gpuFaultFakeModel) RuntimeInfo() (device, backend, precision string) {
-	return gpuFaultTestDevice, BackendOpenVINO, ""
+	device, backend = gpuFaultTestDevice, BackendOpenVINO
+	if m.device != "" {
+		device = m.device
+	}
+	if m.backend != "" {
+		backend = m.backend
+	}
+	return device, backend, ""
 }
 
 // newGPUFaultFake returns a GPU fake that flips faulted on its first Predict.
@@ -89,6 +102,10 @@ func TestBuiltOnFailedOpenVINOGPU(t *testing.T) {
 	assert.True(t, builtOnFailedOpenVINOGPU(gpu), "OpenVINO GPU instance under a fault")
 	assert.False(t, builtOnFailedOpenVINOGPU(cpu), "an ONNX CPU instance is unaffected by the GPU fault")
 	assert.False(t, builtOnFailedOpenVINOGPU(nil), "a nil instance is not a faulted GPU instance")
+	assert.False(t, builtOnFailedOpenVINOGPU(&gpuFaultFakeModel{device: deviceCPU}),
+		"an OpenVINO CPU instance must survive a GPU fault: the CPU device is the recovery path")
+	assert.False(t, builtOnFailedOpenVINOGPU(&gpuFaultFakeModel{backend: BackendONNX}),
+		"a non-OpenVINO backend is never a faulted OpenVINO GPU instance, whatever device it reports")
 }
 
 // TestReloadEntry_GPUFaultDuringWarmupKeepsOldInstance pins that a reload whose
@@ -165,6 +182,8 @@ func TestReplaceVariant_GPUFaultDuringWarmupRollsBackKeepingOldFiles(t *testing.
 	assert.Equal(t, int32(0), old.closes.Load())
 	assert.Equal(t, int32(1), next.closes.Load())
 	assert.FileExists(t, fp32Path, "the old variant's file must be kept")
+	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID, "model_int8.onnx"))
+	assert.True(t, os.IsNotExist(statErr), "the refused new variant's file must be removed")
 	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID)
 }
 
@@ -241,4 +260,55 @@ func TestReloadEntry_RSSSnapshotTakenUnderInferenceMu(t *testing.T) {
 	o.rssMu.Unlock()
 	<-done
 	require.True(t, holdsInference)
+}
+
+// TestReloadEntry_GPUFaultDuringProbeRefusesAnchor pins the v2.4 anchor path: it
+// skips the warm-up, so the latency probe is its first inference and the only
+// place the latch can trip before the swap.
+func TestReloadEntry_GPUFaultDuringProbeRefusesAnchor(t *testing.T) {
+	faulted := setGPUFaultSeam(t)
+
+	old := &mockModelInstance{id: RegistryIDBirdNETV24}
+	o := newTestOrchestrator(t, old)
+	next := newGPUFaultFake(RegistryIDBirdNETV24, faulted)
+
+	swapped, err := o.reloadEntry(RegistryIDBirdNETV24, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		return next, nil
+	}, reloadOpts{settings: conftest.GetTestSettings()})
+
+	require.ErrorIs(t, err, inference.ErrOpenVINOGPUFault)
+	assert.False(t, swapped)
+	assert.Same(t, ModelInstance(old), o.models[RegistryIDBirdNETV24].instance, "the anchor keeps serving")
+	assert.Equal(t, int32(1), next.closes.Load(), "the faulted instance must be closed")
+}
+
+// TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel pins that a refusal
+// does not stop the batch: the faulting secondary is visited first and keeps its old
+// instance, and the secondary visited after it still swaps.
+func TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel(t *testing.T) {
+	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+	faulted := setGPUFaultSeam(t)
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	oldFaulty := &reloadFakeModel{id: testSecondaryID}
+	oldHealthy := &reloadFakeModel{id: gpuFaultHealthySecondaryID}
+	onnx := secondaryBackendKey{backend: "onnx"}
+	o.models[testSecondaryID] = &modelEntry{instance: oldFaulty, backend: onnx}
+	o.models[gpuFaultHealthySecondaryID] = &modelEntry{instance: oldHealthy, backend: onnx}
+
+	newFaulty := newGPUFaultFake(testSecondaryID, faulted)
+	newHealthy := &reloadFakeModel{id: gpuFaultHealthySecondaryID}
+	registerTestSecondaryBuilder(t, testSecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		return newFaulty, nil
+	})
+	registerTestSecondaryBuilder(t, gpuFaultHealthySecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		return newHealthy, nil
+	})
+
+	require.ErrorIs(t, o.ReloadSecondaryModels(), inference.ErrOpenVINOGPUFault)
+
+	assert.Same(t, ModelInstance(oldFaulty), o.models[testSecondaryID].instance, "the faulted model keeps its old instance")
+	assert.Same(t, ModelInstance(newHealthy), o.models[gpuFaultHealthySecondaryID].instance, "the other model must still swap")
+	assert.Equal(t, int32(1), newFaulty.closes.Load())
+	assert.Equal(t, int32(1), oldHealthy.closes.Load())
 }
