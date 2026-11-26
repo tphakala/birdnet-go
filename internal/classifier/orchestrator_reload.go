@@ -147,14 +147,15 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	var prevRSS int64
 	var hadPrevRSS bool
 	if recordRSS {
-		// Remember the serving model's figure: the warm-up overwrites it, and a refused
-		// swap must put it back.
-		o.rssMu.Lock()
-		prevRSS, hadPrevRSS = o.modelRSS[registryID]
-		o.rssMu.Unlock()
 		func() {
 			o.inferenceMu.Lock()
 			defer o.inferenceMu.Unlock()
+			// Remember the serving model's figure: the warm-up overwrites it, and a
+			// refused swap must put it back. Read under inferenceMu, the lock the warm-up
+			// writers hold, so a warm-up that just finished is not missed.
+			o.rssMu.Lock()
+			prevRSS, hadPrevRSS = o.modelRSS[registryID]
+			o.rssMu.Unlock()
 			warmedUp = o.warmupAndRecordRSS(registryID, before, next, input)
 		}()
 	}
@@ -201,12 +202,14 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	// both swallow errors: publishing it would replace the working instance with a dead
 	// one and close the old. The previous instance keeps serving.
 	if builtOnFailedOpenVINOGPU(next) {
-		entry.mu.Unlock()
-		o.closeDiscardedReloadInstance(registryID, next)
 		if recordRSS {
-			// Put back the serving model's figure that step 5 overwrote.
+			// Put back the serving model's figure that step 5 overwrote, before entry.mu
+			// is released: an unload clears the figure under entry.mu, so a restore after
+			// the unlock could bring back the figure of a model that was just unloaded.
 			o.restoreModelRSS(registryID, prevRSS, hadPrevRSS)
 		}
+		entry.mu.Unlock()
+		o.closeDiscardedReloadInstance(registryID, next)
 		gpuErr := errors.Newf("%w: built on the OpenVINO GPU, which failed during its warm-up; the previous instance keeps serving", inference.ErrOpenVINOGPUFault).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).

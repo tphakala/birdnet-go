@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +26,8 @@ const gpuFaultTestRSS int64 = 123456
 
 // Spec values for the GPU fake; any non-empty clip makes the warm-up and probe run.
 const (
+	gpuFaultTestWait       = 2 * time.Second
+	gpuFaultTestPoll       = 5 * time.Millisecond
 	gpuFaultTestSampleRate = 48000
 	gpuFaultTestClipLength = 3 * time.Second
 )
@@ -34,6 +37,7 @@ const (
 type gpuFaultFakeModel struct {
 	reloadFakeModel
 	trip      func()
+	onSpec    func()
 	predicted atomic.Int32
 }
 
@@ -58,6 +62,9 @@ func newGPUFaultFake(id string, faulted *atomic.Bool) *gpuFaultFakeModel {
 // Spec gives the fake a model spec with samples so the warm-up and
 // the latency probe actually run.
 func (m *gpuFaultFakeModel) Spec() ModelSpec {
+	if m.onSpec != nil {
+		m.onSpec()
+	}
 	return ModelSpec{SampleRate: gpuFaultTestSampleRate, ClipLength: gpuFaultTestClipLength}
 }
 
@@ -158,4 +165,79 @@ func TestReplaceVariant_GPUFaultDuringWarmupRollsBackKeepingOldFiles(t *testing.
 	assert.Equal(t, int32(1), next.closes.Load())
 	assert.FileExists(t, fp32Path, "the old variant's file must be kept")
 	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID)
+}
+
+// TestReloadEntry_GPUFaultRSSRestoreDoesNotResurrectUnloadedModel pins that the
+// refused swap restores the RSS figure before the model's lock is released, so an
+// unload that clears the figure while the refused instance is being closed is not
+// undone.
+func TestReloadEntry_GPUFaultRSSRestoreDoesNotResurrectUnloadedModel(t *testing.T) {
+	faulted := setGPUFaultSeam(t)
+
+	old := &reloadFakeModel{id: testSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.models[testSecondaryID] = &modelEntry{instance: old}
+	o.modelRSS[testSecondaryID] = gpuFaultTestRSS
+
+	next := newGPUFaultFake(testSecondaryID, faulted)
+	// An unload clears the figure under rssMu; running it from the close hook puts it
+	// after the entry lock is released.
+	next.onClose = func() {
+		o.rssMu.Lock()
+		delete(o.modelRSS, testSecondaryID)
+		o.rssMu.Unlock()
+	}
+
+	_, err := o.reloadEntry(testSecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		return next, nil
+	}, reloadOpts{settings: conftest.GetTestSettings()})
+
+	require.ErrorIs(t, err, inference.ErrOpenVINOGPUFault)
+	_, hasRSS := o.modelRSS[testSecondaryID]
+	assert.False(t, hasRSS, "a figure cleared by an unload must stay cleared")
+}
+
+// TestReloadEntry_RSSSnapshotTakenUnderInferenceMu pins that the previous RSS
+// figure is read while inferenceMu is held, the lock the warm-up writers hold, so a warm-up that finishes just before the reload's own cannot be missed.
+func TestReloadEntry_RSSSnapshotTakenUnderInferenceMu(t *testing.T) {
+	faulted := setGPUFaultSeam(t)
+
+	old := &reloadFakeModel{id: testSecondaryID}
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	o.models[testSecondaryID] = &modelEntry{instance: old}
+	next := newGPUFaultFake(testSecondaryID, faulted)
+	reachedWarmup := make(chan struct{})
+	proceed := make(chan struct{})
+	var once sync.Once
+	next.onSpec = func() {
+		once.Do(func() {
+			close(reachedWarmup)
+			<-proceed
+		})
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = o.reloadEntry(testSecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+			return next, nil
+		}, reloadOpts{settings: conftest.GetTestSettings()})
+	}()
+	<-reachedWarmup
+	o.rssMu.Lock()
+	close(proceed)
+
+	// With rssMu held, a reload that snapshots under inferenceMu takes it and then
+	// waits on rssMu; one that snapshots first never takes it.
+	holdsInference := assert.Eventually(t, func() bool {
+		if o.inferenceMu.TryLock() {
+			o.inferenceMu.Unlock()
+			return false
+		}
+		return true
+	}, gpuFaultTestWait, gpuFaultTestPoll, "the RSS snapshot must wait on rssMu while holding inferenceMu")
+
+	o.rssMu.Unlock()
+	<-done
+	require.True(t, holdsInference)
 }
