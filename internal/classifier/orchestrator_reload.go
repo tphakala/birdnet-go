@@ -209,7 +209,6 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	// both swallow errors: publishing it would replace the working instance with a dead
 	// one and close the old. The previous instance stays published and open.
 	if builtOnFailedOpenVINOGPU(next) {
-		nextDevice, _, _ := next.RuntimeInfo()
 		if recordRSS {
 			// Put back the serving model's figure that step 5 overwrote, before entry.mu
 			// is released: an unload clears the figure under entry.mu, so a restore after
@@ -227,8 +226,8 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		// (the settings callers unload the model; a variant swap keeps the old
 		// instance and its files). An auto selection keeps the plain error.
 		if openVINOSelectionExplicit(settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice) {
-			refusal := &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: nextDevice, Cause: gpuErr}
-			return false, refusal
+			nextDevice, _, _ := next.RuntimeInfo()
+			return false, &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: nextDevice, Cause: gpuErr}
 		}
 		o.logReloadFailure(registryID, gpuErr)
 		return false, gpuErr

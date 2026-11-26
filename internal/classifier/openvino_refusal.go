@@ -45,13 +45,18 @@ func openVINOBuildFailed(step OpenVINOReason, err error) OpenVINOReason {
 
 // openVINONotUsed is the single place that handles OpenVINO not running a model,
 // whether the planner declined (cause nil) or a build failed after the plan. The
-// selection decides: with auto it logs and returns nil, so the caller builds the
+// selection decides: with auto it returns nil (logging, except for a planner decline on a build without OpenVINO, which stays silent), so the caller builds the
 // ONNX Runtime instance; with an explicit selection it logs at WARN and returns an
 // *OpenVINORefusalError, so the caller leaves the model unloaded. Backend onnx is never
 // explicit, so it always gets nil. device is the configured preference for a
 // decline and the planned target for a failure.
 func openVINONotUsed(modelID, backendPref, devicePref, device string, reason OpenVINOReason, cause error) error {
 	explicit := openVINOSelectionExplicit(backendPref, devicePref)
+	if !explicit && cause == nil && !openvinoBackendAvailable {
+		// A build without OpenVINO stays silent on the auto path: a line at every
+		// startup would add nothing.
+		return nil
+	}
 	fields := []logger.Field{
 		logger.String("model", modelID),
 		logger.String("reason", reason.Description()),
@@ -66,14 +71,11 @@ func openVINONotUsed(modelID, backendPref, devicePref, device string, reason Ope
 		log.Warn("OpenVINO cannot run this model; it is not loaded (no ONNX Runtime fallback with an explicit OpenVINO selection)", fields...)
 		return &OpenVINORefusalError{ModelID: modelID, Reason: reason, Device: device, Cause: cause}
 	}
-	switch {
-	case cause != nil:
+	if cause != nil {
 		log.Warn("OpenVINO failed; using ONNX Runtime", fields...)
-	case openvinoBackendAvailable:
+	} else {
 		log.Info("OpenVINO not used; using ONNX Runtime", fields...)
 	}
-	// A build without OpenVINO stays silent on the auto path: it would add a line to
-	// every startup.
 	return nil
 }
 
