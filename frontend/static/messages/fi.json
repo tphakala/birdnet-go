@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomiluokitus",
+      "subspecies": "Alalajit",
       "noData": "Taksonomiatietoja ei ole saatavilla.",
       "labels": {
         "kingdom": "Kunta",

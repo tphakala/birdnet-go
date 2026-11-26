@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomisk klassifikation",
+      "subspecies": "Underart",
       "noData": "Ingen taksonomiske data tilgængelige.",
       "labels": {
         "kingdom": "Rige",

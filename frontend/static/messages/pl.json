@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Klasyfikacja Taksonomiczna",
+      "subspecies": "Podgatunek",
       "noData": "Brak dostępnych danych taksonomicznych.",
       "labels": {
         "kingdom": "Królestwo",

@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomisk klassifisering",
+      "subspecies": "Underart",
       "noData": "Ingen taksonomidata tilgjengelig.",
       "labels": {
         "kingdom": "Rike",

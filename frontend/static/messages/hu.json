@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonómiai besorolás",
+      "subspecies": "Alfajok",
       "noData": "Nem érhető el taxonómia adat.",
       "labels": {
         "kingdom": "Ország",

@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Classificazione Tassonomica",
+      "subspecies": "Sottospecie",
       "noData": "Nessun dato tassonomico disponibile.",
       "labels": {
         "kingdom": "Regno",

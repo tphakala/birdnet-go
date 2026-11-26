@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomische klassificatie",
+      "subspecies": "Ondersoort",
       "noData": "Geen taxonomische informatie beschikbaar.",
       "labels": {
         "kingdom": "Rijk",

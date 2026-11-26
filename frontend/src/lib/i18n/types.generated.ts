@@ -1007,6 +1007,7 @@ export type TranslationKey =
   | 'species.rarity.statuses.very_rare'
   | 'species.rarity.statuses.unknown'
   | 'species.taxonomy.hierarchy'
+  | 'species.taxonomy.subspecies'
   | 'species.taxonomy.noData'
   | 'species.taxonomy.labels.kingdom'
   | 'species.taxonomy.labels.phylum'

@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Taksonomiskā klasifikācija",
+      "subspecies": "Pasugas",
       "noData": "Taksonomijas dati nav pieejami.",
       "labels": {
         "kingdom": "Valsts",

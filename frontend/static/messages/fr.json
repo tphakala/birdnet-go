@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Classification taxonomique",
+      "subspecies": "Sous-espèces",
       "noData": "Aucune donnée taxonomique disponible.",
       "labels": {
         "kingdom": "Règne",

@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Taxonomická klasifikácia",
+      "subspecies": "Poddruh",
       "noData": "Žiadne taxonomické údaje nie sú k dispozícii.",
       "labels": {
         "kingdom": "Ríša",

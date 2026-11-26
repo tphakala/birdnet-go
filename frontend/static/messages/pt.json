@@ -1264,6 +1264,7 @@
     },
     "taxonomy": {
       "hierarchy": "Classificação taxonômica",
+      "subspecies": "Subespécie",
       "noData": "Sem dados de taxonomia disponíveis.",
       "labels": {
         "kingdom": "Reino",
