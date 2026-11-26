@@ -47,21 +47,13 @@ func TestBirdNETV3OpenVINO_ForcesF32AndStaysFinite(t *testing.T) {
 	}
 
 	model, err := NewBirdNETV3(&cfg)
-	require.NoError(t, err)
+	requireNotRefused(t, err, os.Getenv("OV_V3_DEVICE"))
 	t.Cleanup(func() { assert.NoError(t, model.Close()) })
 
 	device, backend, precision := model.RuntimeInfo()
 	t.Logf("backend=%s device=%s precision=%s species=%d", backend, device, precision, model.NumSpecies())
-	if backend != BackendOpenVINO {
-		// A fallback to ORT is legitimate when no usable OpenVINO device was requested
-		// or available (amd64 "auto" with no Intel GPU, or a non-A76 ARM CPU), so skip
-		// there. But when OV_V3_DEVICE explicitly named a device, OpenVINO was expected,
-		// so an ORT fallback is a regression in the OV path rather than a silent skip.
-		if dev := os.Getenv("OV_V3_DEVICE"); dev != "" {
-			t.Fatalf("OV_V3_DEVICE=%s requested but BirdNET v3.0 fell back to %s; the OpenVINO path regressed", dev, backend)
-		}
-		t.Skipf("OpenVINO backend not active on this host (backend=%s); set OV_V3_DEVICE to require it", backend)
-	}
+	// The selection is explicit (backend openvino), so the model never runs on ORT.
+	require.Equal(t, BackendOpenVINO, backend, "an explicit OpenVINO selection must not fall back to ONNX Runtime")
 
 	// The fix: v3.0 on OpenVINO must compile at FP32 on every device, so the f16
 	// overflow/inflation cannot occur. A regression that reverted the forcing would

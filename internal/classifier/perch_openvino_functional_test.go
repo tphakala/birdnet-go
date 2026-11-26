@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
 )
 
@@ -52,9 +53,9 @@ func TestPerchOpenVINO_Functional(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = inference.DestroyOpenVINO() })
 
-	c, boundDevice, precisionHint, ok := tryPerchOpenVINO(&cfg, labels)
-	require.True(t, ok, "Perch OpenVINO classifier must be created for the no_dft model")
-	require.NotNil(t, c)
+	c, boundDevice, precisionHint, err := tryPerchOpenVINO(&cfg, labels)
+	requireNotRefused(t, err, os.Getenv("OV_TEST_DEVICE"))
+	require.NotNil(t, c, "Perch OpenVINO classifier must be created for the no_dft model")
 	if inference.OpenVINOIsGPUDevice(boundDevice) {
 		assert.Equal(t, inference.OVPrecisionF32, precisionHint,
 			"Perch on the GPU must compile at f32 (f16 returns NaN logits on Intel Arc)")
@@ -68,4 +69,19 @@ func TestPerchOpenVINO_Functional(t *testing.T) {
 	logits, err := c.Predict(make([]float32, perchInputSampleCount))
 	require.NoError(t, err)
 	require.Len(t, logits, len(labels), "Perch OV must return the index-3 logits, one per label")
+}
+
+// requireNotRefused is the functional-test rule for an explicit OpenVINO selection,
+// which never falls back to ONNX Runtime: an OpenVINO refusal is a skip when no
+// device was requested (the host may simply have none) and a failure when one was,
+// since OpenVINO was then expected to run. Any other error fails.
+func requireNotRefused(t *testing.T, err error, requestedDevice string) {
+	t.Helper()
+	if refusal, ok := errors.AsType[*OpenVINORefusalError](err); ok {
+		if requestedDevice == "" {
+			t.Skipf("OpenVINO is not usable on this host (%s); set a device to require it", refusal.Reason)
+		}
+		t.Fatalf("device %q was requested but OpenVINO refused the model: %v", requestedDevice, err)
+	}
+	require.NoError(t, err)
 }

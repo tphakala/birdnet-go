@@ -377,21 +377,27 @@ func (bn *BirdNET) usesONNXBackend() bool {
 
 // initializeModel loads and initializes the primary BirdNET model.
 // Dispatches to OpenVINO (gated per host and settings, see openVINOPlanFor), ONNX, or TFLite (see
-// usesONNXBackend / openVINOPlan). OpenVINO failures fall back to ONNX, and a
-// declined OpenVINO attempt is logged with the reason (see logOpenVINODeclined),
-// so the chosen backend is never silent in the journal.
+// usesONNXBackend / openVINOPlan). When OpenVINO is declined or fails, the selection
+// decides (see openVINONotUsed): auto builds the ONNX Runtime model, an explicit
+// selection returns an *OpenVINORefusalError and loads nothing. The reason is always logged.
 func (bn *BirdNET) initializeModel() error {
 	if !bn.usesONNXBackend() {
 		return bn.initializeTFLiteModel()
 	}
-	if _, ok, reason := bn.openVINOPlan(); ok {
-		err := bn.initializeOpenVINOModel()
-		if err == nil {
-			return nil
+	backend, devicePref := bn.Settings.BirdNET.Backend, bn.Settings.BirdNET.OpenVINODevice
+	plan, ok, reason := bn.openVINOPlan()
+	if !ok {
+		if err := openVINONotUsed(bn.ModelInfo.ID, backend, devicePref, devicePref, reason, nil); err != nil {
+			return err
 		}
-		GetLogger().Warn("OpenVINO backend unavailable, falling back to ONNX Runtime", logger.Error(err))
-	} else {
-		logOpenVINODeclined(bn.ModelInfo.ID, bn.Settings.BirdNET.Backend, bn.Settings.BirdNET.OpenVINODevice, reason)
+		return bn.initializeONNXModel()
+	}
+	step, err := bn.initializeOpenVINOModel(plan)
+	if err == nil {
+		return nil
+	}
+	if rerr := openVINOStepFailed(bn.ModelInfo.ID, backend, devicePref, plan.device, step, err); rerr != nil {
+		return rerr
 	}
 	return bn.initializeONNXModel()
 }

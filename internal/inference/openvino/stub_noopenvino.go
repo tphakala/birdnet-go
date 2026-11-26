@@ -3,7 +3,7 @@
 package openvino
 
 // This file is built when the "openvino" tag is absent. Every entry point
-// reports ErrOpenVINOUnavailable so the classifier falls back to ORT and no
+// reports ErrOpenVINOUnavailable so the classifier layer decides what happens next and no
 // libopenvino_c symbol is referenced.
 
 // Supported reports whether the OpenVINO backend is compiled into this build.

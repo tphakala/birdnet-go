@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "GPU OpenVINO zlyhala",
         "stoppedMessage": "GPU OpenVINO prestala fungovať, preto ju BirdNET-Go prestal používať až do ďalšieho reštartu. Modely nastavené na beh na GPU dovtedy nič nedeteguju. Reštartujte BirdNET-Go, aby ste GPU mohli znova používať, alebo nastavte zariadenie OpenVINO na CPU v Nastavenia > Analýza > Inferencia."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# model nie je načítaný} few {# modely nie sú načítané} many {# modelov nie je načítaných} other {# modelov nie je načítaných}}",
+        "notBuiltMessage": "Tieto modely sú nastavené na beh v OpenVINO, ale toto zostavenie BirdNET-Go nemá podporu OpenVINO, preto nie sú načítané: {models}. Nastavte inferenčný backend a zariadenie OpenVINO na Automaticky v Nastavenia > Analýza > Inferencia.",
+        "deviceMissingMessage": "Tieto modely sú nastavené na beh na zariadení OpenVINO {device}, ktoré sa v tomto systéme nedá použiť, preto nie sú načítané: {models}. Vyberte iné zariadenie OpenVINO alebo nastavte backend a zariadenie OpenVINO na Automaticky v Nastavenia > Analýza > Inferencia.",
+        "noDeviceMessage": "Inferenčný backend je nastavený na OpenVINO, ale tento systém nemá žiadne zariadenie OpenVINO, ktoré by tieto modely mohlo spustiť, preto nie sú načítané: {models}. Nastavte backend na Automaticky alebo ONNX Runtime v Nastavenia > Analýza > Inferencia.",
+        "modelUnsupportedMessage": "Tieto modely sú nastavené na beh v OpenVINO, ale ich súbory modelov v OpenVINO bežať nemôžu, preto nie sú načítané: {models}. Nainštalujte ich variant pre OpenVINO z galérie modelov v Nastavenia > Analýza > Modely alebo nastavte backend a zariadenie OpenVINO na Automaticky v Nastavenia > Analýza > Inferencia.",
+        "loadFailedMessage": "OpenVINO nemohlo načítať tieto modely na zariadení {device}, preto nie sú načítané: {models}. Protokol aplikácie uvádza chybu OpenVINO. Vyberte iné zariadenie OpenVINO alebo nastavte backend a zariadenie OpenVINO na Automaticky v Nastavenia > Analýza > Inferencia."
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "Zariadenie OpenVINO",
-        "helpText": "Používa sa pre modely bežiace na OpenVINO.",
-        "helpTextMultipleGpus": "Používa sa pre modely bežiace na OpenVINO. Toto zariadenie má viac ako jednu GPU, vyberte tú, na ktorej majú modely bežať.",
-        "notDetectedHint": "Vybraná GPU nebola nájdená. Modely bežia na ONNX Runtime, kým nevyberiete iné zariadenie.",
+        "helpText": "Používa sa pre modely bežiace na OpenVINO. Pri inom zariadení ako Automaticky sa model, ktorý na ňom nemôže bežať, nenačíta.",
+        "helpTextMultipleGpus": "Používa sa pre modely bežiace na OpenVINO. Toto zariadenie má viac ako jednu GPU, vyberte tú, na ktorej majú modely bežať. Pri inom zariadení ako Automaticky sa model, ktorý na ňom nemôže bežať, nenačíta.",
+        "notDetectedHint": "Vybraná GPU nebola nájdená. Modely nastavené na OpenVINO sa nenačítajú, kým nevyberiete iné zariadenie.",
         "options": {
           "auto": "Automaticky",
           "cpu": "CPU",

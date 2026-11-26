@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU epäonnistui",
         "stoppedMessage": "OpenVINO-GPU lakkasi toimimasta, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. GPU:lla ajettaviksi asetetut mallit eivät tunnista mitään siihen asti. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen tai aseta OpenVINO-laitteeksi CPU kohdassa Asetukset > Analyysi > Inferenssi."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# mallia ei ole ladattu} other {# mallia ei ole ladattu}}",
+        "notBuiltMessage": "Nämä mallit on asetettu suoritettavaksi OpenVINO:ssa, mutta tässä BirdNET-Go-versiossa ei ole OpenVINO-tukea, joten niitä ei ladata: {models}. Aseta inferenssin taustajärjestelmäksi ja OpenVINO-laitteeksi Automaattinen kohdassa Asetukset > Analyysi > Inferenssi.",
+        "deviceMissingMessage": "Nämä mallit on asetettu suoritettavaksi OpenVINO-laitteella {device}, jota ei voi käyttää tässä järjestelmässä, joten niitä ei ladata: {models}. Valitse toinen OpenVINO-laite tai aseta taustajärjestelmäksi ja OpenVINO-laitteeksi Automaattinen kohdassa Asetukset > Analyysi > Inferenssi.",
+        "noDeviceMessage": "Inferenssin taustajärjestelmäksi on asetettu OpenVINO, mutta tässä järjestelmässä ei ole OpenVINO-laitetta, joka voisi suorittaa nämä mallit, joten niitä ei ladata: {models}. Aseta taustajärjestelmäksi Automaattinen tai ONNX Runtime kohdassa Asetukset > Analyysi > Inferenssi.",
+        "modelUnsupportedMessage": "Nämä mallit on asetettu suoritettavaksi OpenVINO:ssa, mutta niiden mallitiedostot eivät toimi OpenVINO:ssa, joten niitä ei ladata: {models}. Asenna niiden OpenVINO-versio malligalleriasta kohdassa Asetukset > Analyysi > Mallit tai aseta taustajärjestelmäksi ja OpenVINO-laitteeksi Automaattinen kohdassa Asetukset > Analyysi > Inferenssi.",
+        "loadFailedMessage": "OpenVINO ei voinut ladata näitä malleja laitteelle {device}, joten niitä ei ladata: {models}. Sovelluksen loki kertoo OpenVINO:n virheen. Valitse toinen OpenVINO-laite tai aseta taustajärjestelmäksi ja OpenVINO-laitteeksi Automaattinen kohdassa Asetukset > Analyysi > Inferenssi."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO-laite",
-        "helpText": "Käytetään malleille, jotka suoritetaan OpenVINO:ssa.",
-        "helpTextMultipleGpus": "Käytetään malleille, jotka suoritetaan OpenVINO:ssa. Tässä laitteessa on useampi kuin yksi GPU, joten valitse se, jolla mallit suoritetaan.",
-        "notDetectedHint": "Valittua GPU:ta ei löydy. Mallit suoritetaan ONNX Runtimella, kunnes valitaan toinen laite.",
+        "helpText": "Käytetään malleille, jotka suoritetaan OpenVINO:ssa. Muulla laitteella kuin Automaattinen mallia, joka ei voi toimia siinä, ei ladata.",
+        "helpTextMultipleGpus": "Käytetään malleille, jotka suoritetaan OpenVINO:ssa. Tässä laitteessa on useampi kuin yksi GPU, joten valitse se, jolla mallit suoritetaan. Muulla laitteella kuin Automaattinen mallia, joka ei voi toimia siinä, ei ladata.",
+        "notDetectedHint": "Valittua GPU:ta ei löydy. OpenVINO:lle asetettuja malleja ei ladata, ennen kuin valitaan toinen laite.",
         "options": {
           "auto": "Automaattinen",
           "cpu": "CPU",

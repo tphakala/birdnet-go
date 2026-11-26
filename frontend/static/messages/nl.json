@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU is uitgevallen",
         "stoppedMessage": "De OpenVINO-GPU werkt niet meer, dus BirdNET-Go gebruikt hem tot de volgende herstart niet meer. Modellen die op de GPU draaien, detecteren tot die tijd niets. Start BirdNET-Go opnieuw op om de GPU weer te gebruiken, of zet het OpenVINO-apparaat op CPU via Instellingen > Analyse > Inferentie."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# model is niet geladen} other {# modellen zijn niet geladen}}",
+        "notBuiltMessage": "Deze modellen zijn ingesteld om op OpenVINO te draaien, maar deze build van BirdNET-Go heeft geen OpenVINO-ondersteuning, dus ze zijn niet geladen: {models}. Zet de inferentie-backend en het OpenVINO-apparaat op Automatisch via Instellingen > Analyse > Inferentie.",
+        "deviceMissingMessage": "Deze modellen zijn ingesteld om op het OpenVINO-apparaat {device} te draaien, dat op dit systeem niet gebruikt kan worden, dus ze zijn niet geladen: {models}. Kies een ander OpenVINO-apparaat, of zet de backend en het OpenVINO-apparaat op Automatisch, via Instellingen > Analyse > Inferentie.",
+        "noDeviceMessage": "De inferentie-backend staat op OpenVINO, maar dit systeem heeft geen OpenVINO-apparaat dat deze modellen kan uitvoeren, dus ze zijn niet geladen: {models}. Zet de backend op Automatisch of ONNX Runtime via Instellingen > Analyse > Inferentie.",
+        "modelUnsupportedMessage": "Deze modellen zijn ingesteld om op OpenVINO te draaien, maar hun modelbestanden kunnen niet op OpenVINO draaien, dus ze zijn niet geladen: {models}. Installeer hun OpenVINO-variant uit de modellengalerij via Instellingen > Analyse > Modellen, of zet de backend en het OpenVINO-apparaat op Automatisch via Instellingen > Analyse > Inferentie.",
+        "loadFailedMessage": "OpenVINO kon deze modellen niet laden op {device}, dus ze zijn niet geladen: {models}. Het applicatielogboek noemt de OpenVINO-fout. Kies een ander OpenVINO-apparaat, of zet de backend en het OpenVINO-apparaat op Automatisch, via Instellingen > Analyse > Inferentie."
       }
     },
     "loading": "Meldingen laden..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO-apparaat",
-        "helpText": "Gebruikt voor modellen die op OpenVINO draaien.",
-        "helpTextMultipleGpus": "Gebruikt voor modellen die op OpenVINO draaien. Dit apparaat heeft meer dan één GPU, dus kies de GPU waarop de modellen draaien.",
-        "notDetectedHint": "De gekozen GPU wordt niet gevonden. De modellen draaien op ONNX Runtime tot een ander apparaat wordt gekozen.",
+        "helpText": "Gebruikt voor modellen die op OpenVINO draaien. Bij een ander apparaat dan Automatisch wordt een model dat daar niet kan draaien, niet geladen.",
+        "helpTextMultipleGpus": "Gebruikt voor modellen die op OpenVINO draaien. Dit apparaat heeft meer dan één GPU, dus kies de GPU waarop de modellen draaien. Bij een ander apparaat dan Automatisch wordt een model dat daar niet kan draaien, niet geladen.",
+        "notDetectedHint": "De gekozen GPU wordt niet gevonden. Modellen die op OpenVINO zijn ingesteld, worden niet geladen tot een ander apparaat is gekozen.",
         "options": {
           "auto": "Automatisch",
           "cpu": "CPU",

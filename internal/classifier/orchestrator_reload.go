@@ -117,7 +117,13 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	}
 	next, buildErr := build(o, settings, opts.threads)
 	if buildErr != nil {
-		o.logReloadFailure(registryID, buildErr) // old keeps serving
+		// A refusal (explicit OpenVINO selection, OpenVINO cannot run the model) is not
+		// a failed reload that leaves the old instance serving: the settings callers
+		// unload the model, and they log it, so it is returned without the "keeping the
+		// previous model instance" warning that would be untrue for them.
+		if _, refused := errors.AsType[*OpenVINORefusalError](buildErr); !refused {
+			o.logReloadFailure(registryID, buildErr) // old keeps serving
+		}
 		return false, buildErr
 	}
 
@@ -203,6 +209,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	// both swallow errors: publishing it would replace the working instance with a dead
 	// one and close the old. The previous instance stays published and open.
 	if builtOnFailedOpenVINOGPU(next) {
+		nextDevice, _, _ := next.RuntimeInfo()
 		if recordRSS {
 			// Put back the serving model's figure that step 5 overwrote, before entry.mu
 			// is released: an unload clears the figure under entry.mu, so a restore after
@@ -216,6 +223,13 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 			Category(errors.CategoryModelInit).
 			Context("registry_id", registryID).
 			Build()
+		// An explicit selection never falls back, so the dead GPU is a refusal there
+		// (the settings callers unload the model; a variant swap keeps the old
+		// instance and its files). An auto selection keeps the plain error.
+		if openVINOSelectionExplicit(settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice) {
+			refusal := &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: nextDevice, Cause: gpuErr}
+			return false, refusal
+		}
 		o.logReloadFailure(registryID, gpuErr)
 		return false, gpuErr
 	}

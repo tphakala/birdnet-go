@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "GPU OpenVINO uległo awarii",
         "stoppedMessage": "GPU OpenVINO przestało działać, więc BirdNET-Go nie używa go do następnego restartu. Modele ustawione do działania na GPU do tego czasu niczego nie wykrywają. Uruchom BirdNET-Go ponownie, aby znów używać GPU, lub ustaw urządzenie OpenVINO na CPU w Ustawienia > Analiza > Wnioskowanie."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# model nie jest załadowany} few {# modele nie są załadowane} many {# modeli nie jest załadowanych} other {# modeli nie jest załadowanych}}",
+        "notBuiltMessage": "Te modele są ustawione do działania w OpenVINO, ale ta wersja BirdNET-Go nie ma obsługi OpenVINO, więc nie są załadowane: {models}. Ustaw backend wnioskowania i urządzenie OpenVINO na Automatyczny w Ustawienia > Analiza > Wnioskowanie.",
+        "deviceMissingMessage": "Te modele są ustawione do działania na urządzeniu OpenVINO {device}, którego nie można użyć w tym systemie, więc nie są załadowane: {models}. Wybierz inne urządzenie OpenVINO albo ustaw backend i urządzenie OpenVINO na Automatyczny w Ustawienia > Analiza > Wnioskowanie.",
+        "noDeviceMessage": "Backend wnioskowania jest ustawiony na OpenVINO, ale ten system nie ma urządzenia OpenVINO, które mogłoby uruchomić te modele, więc nie są załadowane: {models}. Ustaw backend na Automatyczny lub ONNX Runtime w Ustawienia > Analiza > Wnioskowanie.",
+        "modelUnsupportedMessage": "Te modele są ustawione do działania w OpenVINO, ale ich pliki modeli nie mogą działać w OpenVINO, więc nie są załadowane: {models}. Zainstaluj ich wariant dla OpenVINO z galerii modeli w Ustawienia > Analiza > Modele albo ustaw backend i urządzenie OpenVINO na Automatyczny w Ustawienia > Analiza > Wnioskowanie.",
+        "loadFailedMessage": "OpenVINO nie mogło załadować tych modeli na urządzeniu {device}, więc nie są załadowane: {models}. Dziennik aplikacji podaje błąd OpenVINO. Wybierz inne urządzenie OpenVINO albo ustaw backend i urządzenie OpenVINO na Automatyczny w Ustawienia > Analiza > Wnioskowanie."
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "Urządzenie OpenVINO",
-        "helpText": "Używane dla modeli działających w OpenVINO.",
-        "helpTextMultipleGpus": "Używane dla modeli działających w OpenVINO. To urządzenie ma więcej niż jedno GPU, wybierz to, na którym mają działać modele.",
-        "notDetectedHint": "Nie wykryto wybranego GPU. Modele działają w ONNX Runtime, dopóki nie zostanie wybrane inne urządzenie.",
+        "helpText": "Używane dla modeli działających w OpenVINO. Przy urządzeniu innym niż Automatyczny model, który nie może na nim działać, nie jest ładowany.",
+        "helpTextMultipleGpus": "Używane dla modeli działających w OpenVINO. To urządzenie ma więcej niż jedno GPU, wybierz to, na którym mają działać modele. Przy urządzeniu innym niż Automatyczny model, który nie może na nim działać, nie jest ładowany.",
+        "notDetectedHint": "Nie wykryto wybranego GPU. Modele ustawione na OpenVINO nie są ładowane, dopóki nie zostanie wybrane inne urządzenie.",
         "options": {
           "auto": "Automatyczny",
           "cpu": "CPU",

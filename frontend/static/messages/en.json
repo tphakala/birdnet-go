@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO GPU failed",
         "stoppedMessage": "The OpenVINO GPU stopped working, so BirdNET-Go stopped using it until the next restart. Models set to run on the GPU detect nothing until then. Restart BirdNET-Go to use the GPU again, or set the OpenVINO device to CPU in Settings > Analysis > Inference."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# model is not loaded} other {# models are not loaded}}",
+        "notBuiltMessage": "These models are set to run on OpenVINO, but this build of BirdNET-Go has no OpenVINO support, so they are not loaded: {models}. Set the inference backend and the OpenVINO device to Auto in Settings > Analysis > Inference.",
+        "deviceMissingMessage": "These models are set to run on the OpenVINO device {device}, which cannot be used on this system, so they are not loaded: {models}. Choose another OpenVINO device, or set the backend and the OpenVINO device to Auto, in Settings > Analysis > Inference.",
+        "noDeviceMessage": "The inference backend is set to OpenVINO, but this system has no OpenVINO device that can run these models, so they are not loaded: {models}. Set the backend to Auto or ONNX Runtime in Settings > Analysis > Inference.",
+        "modelUnsupportedMessage": "These models are set to run on OpenVINO, but their model files cannot run on OpenVINO, so they are not loaded: {models}. Install their OpenVINO variant from the model gallery in Settings > Analysis > Models, or set the backend and the OpenVINO device to Auto in Settings > Analysis > Inference.",
+        "loadFailedMessage": "OpenVINO could not load these models on {device}, so they are not loaded: {models}. The application log names the OpenVINO error. Choose another OpenVINO device, or set the backend and the OpenVINO device to Auto, in Settings > Analysis > Inference."
       }
     },
     "loading": "Loading notifications..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO device",
-        "helpText": "Used for models that run on OpenVINO.",
-        "helpTextMultipleGpus": "Used for models that run on OpenVINO. This device has more than one GPU, so pick the one the models run on.",
-        "notDetectedHint": "The selected GPU is not detected. Models run on ONNX Runtime until another device is chosen.",
+        "helpText": "Used for models that run on OpenVINO. With a device other than Auto, a model that cannot run there is not loaded.",
+        "helpTextMultipleGpus": "Used for models that run on OpenVINO. This device has more than one GPU, so pick the one the models run on. With a device other than Auto, a model that cannot run there is not loaded.",
+        "notDetectedHint": "The selected GPU is not detected. Models set to OpenVINO do not load until another device is chosen.",
         "options": {
           "auto": "Auto",
           "cpu": "CPU",

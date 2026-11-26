@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU:n har fallerat",
         "stoppedMessage": "OpenVINO-GPU:n slutade fungera, så BirdNET-Go har slutat använda den till nästa omstart. Modeller som är inställda på att köras på GPU:n upptäcker ingenting tills dess. Starta om BirdNET-Go för att använda GPU:n igen, eller ställ in OpenVINO-enheten på CPU under Inställningar > Analys > Inferens."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# modell är inte laddad} other {# modeller är inte laddade}}",
+        "notBuiltMessage": "Dessa modeller är inställda på att köras på OpenVINO, men den här versionen av BirdNET-Go saknar stöd för OpenVINO, så de är inte laddade: {models}. Ställ in inferens-backend och OpenVINO-enheten på Automatiskt under Inställningar > Analys > Inferens.",
+        "deviceMissingMessage": "Dessa modeller är inställda på att köras på OpenVINO-enheten {device}, som inte kan användas på det här systemet, så de är inte laddade: {models}. Välj en annan OpenVINO-enhet, eller ställ in backend och OpenVINO-enheten på Automatiskt, under Inställningar > Analys > Inferens.",
+        "noDeviceMessage": "Inferens-backend är inställd på OpenVINO, men det här systemet har ingen OpenVINO-enhet som kan köra dessa modeller, så de är inte laddade: {models}. Ställ in backend på Automatiskt eller ONNX Runtime under Inställningar > Analys > Inferens.",
+        "modelUnsupportedMessage": "Dessa modeller är inställda på att köras på OpenVINO, men deras modellfiler kan inte köras på OpenVINO, så de är inte laddade: {models}. Installera deras OpenVINO-variant från modellgalleriet under Inställningar > Analys > Modeller, eller ställ in backend och OpenVINO-enheten på Automatiskt under Inställningar > Analys > Inferens.",
+        "loadFailedMessage": "OpenVINO kunde inte ladda dessa modeller på {device}, så de är inte laddade: {models}. Programloggen anger OpenVINO-felet. Välj en annan OpenVINO-enhet, eller ställ in backend och OpenVINO-enheten på Automatiskt, under Inställningar > Analys > Inferens."
       }
     },
     "loading": "Laddar aviseringar..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO-enhet",
-        "helpText": "Används för modeller som körs på OpenVINO.",
-        "helpTextMultipleGpus": "Används för modeller som körs på OpenVINO. Den här enheten har mer än en GPU, så välj den som modellerna ska köras på.",
-        "notDetectedHint": "Den valda GPU:n hittades inte. Modellerna körs på ONNX Runtime tills en annan enhet väljs.",
+        "helpText": "Används för modeller som körs på OpenVINO. Med en annan enhet än Automatiskt laddas inte en modell som inte kan köras där.",
+        "helpTextMultipleGpus": "Används för modeller som körs på OpenVINO. Den här enheten har mer än en GPU, så välj den som modellerna ska köras på. Med en annan enhet än Automatiskt laddas inte en modell som inte kan köras där.",
+        "notDetectedHint": "Den valda GPU:n hittades inte. Modeller som är inställda på OpenVINO laddas inte förrän en annan enhet väljs.",
         "options": {
           "auto": "Automatiskt",
           "cpu": "CPU",

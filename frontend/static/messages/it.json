@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "GPU OpenVINO non funzionante",
         "stoppedMessage": "La GPU OpenVINO ha smesso di funzionare, quindi BirdNET-Go ha smesso di usarla fino al prossimo riavvio. I modelli impostati per girare sulla GPU non rilevano nulla fino ad allora. Riavvia BirdNET-Go per usare di nuovo la GPU, oppure imposta il dispositivo OpenVINO su CPU in Impostazioni > Analisi > Inferenza."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# modello non è caricato} other {# modelli non sono caricati}}",
+        "notBuiltMessage": "Questi modelli sono impostati per girare su OpenVINO, ma questa versione di BirdNET-Go non ha il supporto OpenVINO, quindi non sono caricati: {models}. Imposta il backend di inferenza e il dispositivo OpenVINO su Automatico in Impostazioni > Analisi > Inferenza.",
+        "deviceMissingMessage": "Questi modelli sono impostati per girare sul dispositivo OpenVINO {device}, che non può essere usato su questo sistema, quindi non sono caricati: {models}. Scegli un altro dispositivo OpenVINO, oppure imposta il backend e il dispositivo OpenVINO su Automatico, in Impostazioni > Analisi > Inferenza.",
+        "noDeviceMessage": "Il backend di inferenza è impostato su OpenVINO, ma questo sistema non ha alcun dispositivo OpenVINO in grado di eseguire questi modelli, quindi non sono caricati: {models}. Imposta il backend su Automatico o ONNX Runtime in Impostazioni > Analisi > Inferenza.",
+        "modelUnsupportedMessage": "Questi modelli sono impostati per girare su OpenVINO, ma i loro file del modello non possono essere eseguiti su OpenVINO, quindi non sono caricati: {models}. Installa la loro variante OpenVINO dalla galleria modelli in Impostazioni > Analisi > Modelli, oppure imposta il backend e il dispositivo OpenVINO su Automatico in Impostazioni > Analisi > Inferenza.",
+        "loadFailedMessage": "OpenVINO non ha potuto caricare questi modelli su {device}, quindi non sono caricati: {models}. Il registro dell'applicazione indica l'errore di OpenVINO. Scegli un altro dispositivo OpenVINO, oppure imposta il backend e il dispositivo OpenVINO su Automatico, in Impostazioni > Analisi > Inferenza."
       }
     },
     "loading": "Caricamento notifiche..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "Dispositivo OpenVINO",
-        "helpText": "Usato per i modelli eseguiti su OpenVINO.",
-        "helpTextMultipleGpus": "Usato per i modelli eseguiti su OpenVINO. Questo dispositivo ha più di una GPU: scegli quella su cui eseguire i modelli.",
-        "notDetectedHint": "La GPU selezionata non è stata rilevata. I modelli vengono eseguiti su ONNX Runtime finché non si sceglie un altro dispositivo.",
+        "helpText": "Usato per i modelli eseguiti su OpenVINO. Con un dispositivo diverso da Automatico, un modello che non può girare su di esso non viene caricato.",
+        "helpTextMultipleGpus": "Usato per i modelli eseguiti su OpenVINO. Questo dispositivo ha più di una GPU: scegli quella su cui eseguire i modelli. Con un dispositivo diverso da Automatico, un modello che non può girare su di esso non viene caricato.",
+        "notDetectedHint": "La GPU selezionata non è stata rilevata. I modelli impostati su OpenVINO non vengono caricati finché non si sceglie un altro dispositivo.",
         "options": {
           "auto": "Automatico",
           "cpu": "CPU",

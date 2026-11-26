@@ -248,6 +248,10 @@ type Orchestrator struct {
 	// notification; see syncGeomodelNotice for its triggers and lock rule.
 	geomodelNotice notification.PersistentNotice
 
+	// openVINORefusals latches the bell notices for models OpenVINO refused under an
+	// explicit selection; see syncOpenVINORefusalNotices.
+	openVINORefusals openVINORefusalNotices
+
 	// inferenceHealth latches the per-model "fails every analysis" bell notices and
 	// the observer of the failing set; see syncInferenceHealth.
 	inferenceHealth inferenceHealthState
@@ -311,7 +315,9 @@ func (o *Orchestrator) updateSettings(s *conf.Settings) {
 // This is the primary constructor - callers should use this instead of NewBirdNET.
 // The range filter service it builds re-evaluates the BirdNET Geomodel notice after
 // every reload, including the ones during construction. It registers the
-// OpenVINO GPU fault observer before any model loads; Delete removes it.
+// OpenVINO GPU fault observer before any model loads; Delete removes it. A model that
+// OpenVINO refuses under an explicit selection fails to load like any other failure
+// and raises its refusal notice once construction is done.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Build o with an empty models map; the models load below through the same
 	// modelLoaders path the secondaries use. The primary's identity is resolved
@@ -424,6 +430,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// published. If the notification service is not up yet at construction, the sync latches
 	// nothing and ScanInstalled re-syncs it once startup loading completes.
 	o.syncAcousticModelsNotice()
+	o.syncOpenVINORefusalNotices()
 
 	return o, nil
 }
@@ -1676,9 +1683,35 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // settings and labels, re-emits the missing-taxonomy diagnostics, then rebuilds the range
 // filter (non-fatal) and the species index. Inference keeps flowing on the previous
 // instance until the fresh one is swapped in.
+//
+// When OpenVINO refuses the rebuilt model (an *OpenVINORefusalError: the selection is
+// explicit and OpenVINO cannot run it), the model is recorded as failed and unloaded
+// instead of left serving on the old instance, so a settings reload leaves the same
+// loaded set a restart with those settings would; the refusal is returned.
 func (o *Orchestrator) ReloadModel() error {
 	_, err := o.reloadEntry(RegistryIDBirdNETV24, v24ReloadBuilder, reloadOpts{check: v24SettingsReloadCheck})
+	if _, refused := errors.AsType[*OpenVINORefusalError](err); refused {
+		o.unloadRefusedModel(RegistryIDBirdNETV24, err, inferenceLoadKeyFor(o.currentSettings()))
+		o.syncOpenVINORefusalNotices()
+	}
 	return err
+}
+
+// unloadRefusedModel records an OpenVINO refusal as the model's last load failure and
+// then unloads the model. Recording comes first so the acoustic-model notice that
+// UnloadModel re-evaluates already sees the failure (a load_failed state, one
+// notice). It does not sync the refusal notices: callers do that once after a batch.
+// It relies only on the refusal, never on the entry's recorded backend triplet.
+func (o *Orchestrator) unloadRefusedModel(registryID string, refusal error, key inferenceLoadKey) {
+	o.recordLoadFailureUnder(registryID, refusal, key)
+	if err := o.UnloadModel(registryID); err != nil {
+		// Already unloaded by a concurrent uninstall or delete: nothing left to stop.
+		GetLogger().Debug("refused model was already unloaded",
+			logger.String("registry_id", registryID), logger.Error(err))
+		return
+	}
+	GetLogger().Info("model unloaded because OpenVINO cannot run it and the OpenVINO selection is explicit",
+		logger.String("registry_id", registryID), logger.Error(refusal))
 }
 
 // reloadAnchorRangeFilter rebuilds the range-filter backend from the current
@@ -1733,6 +1766,11 @@ func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
 // unconditionally once its rebuild is reconciled: a hard build failure is
 // reported once and the gate still advances, so it is not retried on every
 // subsequent unrelated reload; the user re-toggles the device setting to retry.
+//
+// An *OpenVINORefusalError (explicit selection that OpenVINO cannot honor for the
+// model) is not a build error to report: the model is recorded as failed and
+// unloaded after the loop, so the reload leaves the loaded set a restart would, and
+// a bell notice names the reason (syncOpenVINORefusalNotices).
 //
 // Returns the first build error encountered (for caller notification). The
 // reload itself does not fail on a secondary error because the primary model
@@ -1790,6 +1828,14 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	}
 
 	var firstErr error
+	// refused collects the entries OpenVINO refused (explicit selection): they are
+	// unloaded after the loop, since the unload rebuilds the species index and must not
+	// interleave with the per-entry gate reads.
+	type refusedEntry struct {
+		id  string
+		err error
+	}
+	var refused []refusedEntry
 	// swapped tracks whether any entry's instance was actually replaced, so the species-name
 	// index is rebuilt at most once, after the loop.
 	swapped := false
@@ -1837,6 +1883,12 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 			settings:         settings,
 		})
 		if rerr != nil {
+			if _, isRefusal := errors.AsType[*OpenVINORefusalError](rerr); isRefusal {
+				// Not a build error to report: the entry is unloaded below and a bell
+				// notice names the reason. No gate advance, the entry goes away.
+				refused = append(refused, refusedEntry{id: ref.id, err: rerr})
+				continue
+			}
 			if firstErr == nil {
 				firstErr = rerr
 			}
@@ -1866,6 +1918,17 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		}
 	}
 
+	// Unload the refused entries now that the loop is done. The failure is recorded under
+	// the batch's pinned settings, so the retry after a settings reload does not try it
+	// again until the inference settings change once more.
+	if len(refused) > 0 {
+		key := inferenceLoadKeyFor(settings)
+		for _, r := range refused {
+			o.unloadRefusedModel(r.id, r.err, key)
+		}
+		o.syncOpenVINORefusalNotices()
+	}
+
 	// Rebuild once if any instance was swapped, with no orchestrator lock held. A
 	// backend/device/threads swap keeps the label set, so the union is unchanged; the single
 	// rebuild keeps the "last trigger in a reload sequence republishes with the newest-locale
@@ -1891,6 +1954,7 @@ func (o *Orchestrator) Delete() {
 	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
 	// for this torn-down orchestrator.
 	o.acousticNotice.Stop()
+	o.stopOpenVINORefusalNotices()
 	// The GPU notice is stopped too, and the observer removed, so a late fault
 	// raises nothing for this torn-down orchestrator. A notice already raised stays
 	// in the in-memory store; it only matters at shutdown.
@@ -2091,6 +2155,11 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			Build()
 	}
 
+	// Re-evaluate the OpenVINO refusal notices on every return path: a failed load
+	// that was an OpenVINO refusal raises its notice, a successful one clears it. The
+	// deferred call runs after the locked closure below released o.mu.
+	defer o.syncOpenVINORefusalNotices()
+
 	// Drain any queued configuration repair after o.mu is released: loaders queue
 	// it under o.mu, and applying it writes config.yaml, so it must run outside the
 	// lock. Registered BEFORE the warm-up drain so that, defers being LIFO, it runs
@@ -2220,6 +2289,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 // The acoustic-model notice is re-evaluated once at the end regardless of per-model outcome.
 func (o *Orchestrator) ReconcileEnabledModels() (loaded, unloaded []string, err error) {
 	defer o.syncAcousticModelsNotice()
+	defer o.syncOpenVINORefusalNotices() // a disabled model's refusal notice goes
 
 	settings := o.currentSettings()
 
@@ -2290,15 +2360,22 @@ func (o *Orchestrator) recordLoadFailureUnder(registryID string, err error, key 
 	v, _ := o.modelLoadFailures.LoadOrStore(registryID, new(atomic.Int64))
 	v.(*atomic.Int64).Add(1)
 	if err != nil {
-		o.modelLoadErrors.Store(registryID, loadFailure{msg: err.Error(), key: key})
+		failure := loadFailure{msg: err.Error(), key: key}
+		if refusal, ok := errors.AsType[*OpenVINORefusalError](err); ok {
+			failure.reason, failure.device = refusal.Reason, refusal.Device
+		}
+		o.modelLoadErrors.Store(registryID, failure)
 	}
 }
 
-// loadFailure is the stored record of a failed model load: the error text and
-// the inference settings the load ran under.
+// loadFailure is the stored record of a failed model load: the error text, the
+// inference settings the load ran under and, when OpenVINO refused the model, the
+// stable reason code and the device the refusal names (see OpenVINORefusalError).
 type loadFailure struct {
-	msg string
-	key inferenceLoadKey
+	msg    string
+	key    inferenceLoadKey
+	reason OpenVINOReason // "" unless the load was an OpenVINO refusal
+	device string         // OpenVINORefusalError.Device; "" without a refusal
 }
 
 // inferenceLoadKey identifies the inference settings that decide how a model is
@@ -2399,6 +2476,23 @@ func (o *Orchestrator) LoadErrors() map[string]string {
 		v, vok := value.(loadFailure)
 		if kok && vok && o.modelIDEnabled(k) {
 			result[k] = v.msg
+		}
+		return true
+	})
+	return result
+}
+
+// LoadFailureReasons returns the stable OpenVINO reason code (OpenVINOReason) of the last
+// load failure of each currently-enabled model whose last load was an OpenVINO refusal. A
+// model that failed for another reason, loaded since, or is disabled has no entry. The
+// returned map is a copy; safe to call concurrently.
+func (o *Orchestrator) LoadFailureReasons() map[string]string {
+	result := make(map[string]string)
+	o.modelLoadErrors.Range(func(key, value any) bool {
+		id, idOK := key.(string)
+		failure, failureOK := value.(loadFailure)
+		if idOK && failureOK && failure.reason != "" && o.modelIDEnabled(id) {
+			result[id] = string(failure.reason)
 		}
 		return true
 	})

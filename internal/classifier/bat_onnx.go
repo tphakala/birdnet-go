@@ -88,17 +88,22 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	}
 
 	// Prefer the OpenVINO backend for the heavy embedding extractor when eligible
-	// (same device gate as BirdNET v2.4), falling back to ORT on any failure.
-	// OpenVINO must never make the bat model fail to load, so tryBatOpenVINO logs and
-	// swallows OV errors and returns ok=false. device records the compute device the
-	// extractor actually bound to (the OpenVINO device on the OV path).
-	embExtractor, device, precision, ok := tryBatOpenVINO(cfg, batCC.InputDim())
+	// (same device gate as BirdNET v2.4). With an auto selection a decline or failure
+	// falls back to ORT (tryBatOpenVINO returns a nil extractor and no error); with an
+	// explicit selection it returns an *OpenVINORefusalError and no ORT extractor is
+	// built. device records the compute device the extractor actually bound to (the
+	// OpenVINO device on the OV path).
+	embExtractor, device, precision, err := tryBatOpenVINO(cfg, batCC.InputDim())
+	if err != nil {
+		batCC.Close()
+		return nil, err
+	}
 	// The OpenVINO path reports the precision it actually compiled at:
 	// openVINOPrecisionFor forces f32 for the bat embedding model on every device
 	// (its embedding head overflows at f16), matching the BirdNET v3.0 policy. The
 	// ORT fallback overrides backend, device, and precision below.
 	backend := BackendOpenVINO
-	if !ok {
+	if embExtractor == nil {
 		embClassifier, cerr := inference.NewONNXClassifier(cfg.EmbeddingModelPath, inference.ONNXClassifierOptions{
 			Labels:              cfg.EmbeddingLabels,
 			Threads:             cfg.Threads,
@@ -154,20 +159,18 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 }
 
 // tryBatOpenVINO attempts to build an OpenVINO embedding extractor for the bat
-// pipeline's heavy embedding model. It returns (extractor, device, precision, true)
-// on success or (nil, "", "", false) to fall back to ORT, where device is the
-// concrete OpenVINO device the extractor bound to (CPU, GPU or a concrete GPU.<n>)
-// and precision is the effective runtime precision label (FP32 for the bat model on
-// every device). Any failure
-// (gate denied, init/compile/validation error) is logged and swallowed: OpenVINO
-// must never make the bat model fail to load. The device gate matches BirdNET v2.4;
-// the bat embedding model is forced to f32 on every device by
+// pipeline's heavy embedding model. It returns (extractor, device, precision, nil)
+// on success, where device is the concrete OpenVINO device the extractor bound to
+// (CPU, GPU or a concrete GPU.<n>) and precision is the effective runtime precision
+// label (FP32 for the bat model on every device). When OpenVINO is not used (gate
+// denied, init/compile/validation error) the selection decides (see
+// openVINONotUsed): auto returns (nil, "", "", nil) so the caller builds the ORT
+// extractor, an explicit selection returns an *OpenVINORefusalError. The device gate
+// matches BirdNET v2.4; the bat embedding model is forced to f32 on every device by
 // openVINOPrecisionFor(RegistryIDBat, ...) because its embedding head overflows at
 // f16. expectedDim is the bat classifier's input dimension, used to reject a wrong
 // output port before any inference.
-func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.EmbeddingExtractor, device, precision string, ok bool) {
-	log := GetLogger()
-
+func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.EmbeddingExtractor, device, precision string, err error) {
 	// openVINOPlanFor gates on the build tag, backend preference, device
 	// availability and, on arm64 auto, ONNX Runtime preference without needing the output port, so run it first; only read the
 	// model metadata to resolve the embedding port once OpenVINO is actually in play.
@@ -176,30 +179,26 @@ func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.E
 	// below once detected.
 	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDBat, cfg.OpenVINOPath, 0)
 	if !ok {
-		logOpenVINODeclined(RegistryIDBat, cfg.Backend, cfg.OpenVINODevice, reason)
-		return nil, "", "", false
+		return nil, "", "", openVINONotUsed(RegistryIDBat, cfg.Backend, cfg.OpenVINODevice, cfg.OpenVINODevice, reason, nil)
 	}
 
 	// Resolve which output port carries the [1024] embedding: index 1 for the 2-output
 	// backbone (logits@0 + embedding@1), index 0 for the head-pruned, embedding-only
-	// model. The OpenVINO extractor binds to a fixed port at compile time. On any
-	// detection failure, decline OpenVINO and fall back to ORT, which derives the
-	// embedding port internally. ORT is initialized by NewBat before this runs.
+	// model. The OpenVINO extractor binds to a fixed port at compile time. A detection
+	// failure means OpenVINO cannot bind the model, which ORT does not need (it
+	// derives the embedding port internally). ORT is initialized by NewBat before this
+	// runs.
 	embIndex, _, err := inference.DetectEmbeddingOutput(cfg.EmbeddingModelPath)
 	if err != nil {
-		log.Warn("Bat OpenVINO embedding-output detection failed; using ONNX Runtime",
-			logger.String("embedding_model", cfg.EmbeddingModelPath),
-			logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(RegistryIDBat, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonLoadFailed, err)
 	}
 	plan.outputIndex = embIndex
 
 	// InitOpenVINO is idempotent: the auto/GPU plan above may already have loaded the
 	// core to enumerate devices, but the explicit-CPU plan path does not, so init here
-	// to cover it. A load failure means no usable OpenVINO; fall back to ORT.
+	// to cover it. A load failure means no usable OpenVINO.
 	if err := inference.InitOpenVINO(cfg.OpenVINOPath); err != nil {
-		log.Warn("Bat OpenVINO init failed; using ONNX Runtime", logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(RegistryIDBat, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonInitFailed, err)
 	}
 
 	start := time.Now()
@@ -211,17 +210,14 @@ func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.E
 		ExpectedDim:   expectedDim,
 	})
 	if err != nil {
-		log.Warn("Bat OpenVINO embedding extractor init failed; using ONNX Runtime",
-			logger.String("device", plan.device),
-			logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(RegistryIDBat, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonLoadFailed, err)
 	}
 
-	log.Info("Bat embedding extractor using OpenVINO backend", append(openVINODeviceFields(plan),
+	GetLogger().Info("Bat embedding extractor using OpenVINO backend", append(openVINODeviceFields(plan),
 		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("embedding_dim", extractor.NumSpecies()),
 		logger.String("init_time", time.Since(start).String()))...)
-	return extractor, plan.device, openVINOEffectivePrecision(plan.precision), true
+	return extractor, plan.device, openVINOEffectivePrecision(plan.precision), nil
 }
 
 // Predict runs the two-stage bat detection pipeline: embedding extraction then bat classification.

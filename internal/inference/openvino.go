@@ -32,7 +32,7 @@ var (
 // ovActiveClassifiers counts OpenVINO classifiers currently serving inference.
 // It is NOT the same as ovInitialized: the device planner loads the OpenVINO core
 // (setting ovInitialized) merely to enumerate devices, even on a host that then
-// falls back to ORT. Diagnostics must report "OpenVINO active" only when a
+// does not use OpenVINO. Diagnostics must report "OpenVINO active" only when a
 // classifier is actually running on it, so they read this counter, not the
 // core-loaded flag.
 var ovActiveClassifiers atomic.Int64
@@ -142,7 +142,7 @@ type openvinoClassifier struct {
 // NewOpenVINOClassifier creates a Classifier backed by the native OpenVINO
 // backend. InitOpenVINO must be called first; if the OpenVINO core is not
 // initialized (or the backend is not compiled in), construction returns
-// ov.ErrOpenVINOUnavailable, which the caller treats as fall back to ORT.
+// ov.ErrOpenVINOUnavailable, which the caller turns into an ONNX Runtime fallback or a refusal.
 //
 //nolint:gocritic // hugeParam: options are built once per model load
 func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Classifier, error) {
@@ -168,7 +168,7 @@ func NewOpenVINOClassifier(modelPath string, opts OpenVINOClassifierOptions) (Cl
 	// Validate the model's real output dimension against the label count. The OV
 	// backend reports NumClasses from the compiled model (not the label list), so
 	// a mismatch is a genuine model/label inconsistency: reject it and let the
-	// caller fall back to ORT. (Issue #1112: when numSpecies was len(labels) this
+	// caller decide on ONNX Runtime. (Issue #1112: when numSpecies was len(labels) this
 	// check was tautological and could never catch a wrong model or label file.)
 	if n := c.NumClasses(); n != len(opts.Labels) {
 		_ = c.Close()
@@ -296,10 +296,10 @@ type openvinoEmbeddingExtractor struct {
 // OpenVINO backend that reads a model's embedding output port (opts.OutputIndex).
 // InitOpenVINO must be called first; if the OpenVINO core is not initialized (or the
 // backend is not compiled in), construction returns ov.ErrOpenVINOUnavailable, which
-// the caller treats as fall back to ORT. The compiled embedding port's element count
+// the caller turns into an ONNX Runtime fallback or a refusal. The compiled embedding port's element count
 // is validated against opts.ExpectedDim (the consumer's required embedding dimension):
 // a mismatch (a wrong OutputIndex or an unexpected model) is rejected so the caller
-// falls back to ORT rather than feeding a malformed embedding downstream.
+// decides on ONNX Runtime rather than feeding a malformed embedding downstream.
 func NewOpenVINOEmbeddingExtractor(modelPath string, opts OpenVINOEmbeddingExtractorOptions) (EmbeddingExtractor, error) {
 	if opts.ExpectedDim <= 0 {
 		return nil, errors.Newf("OpenVINO embedding extractor requires a positive ExpectedDim").
@@ -322,7 +322,7 @@ func NewOpenVINOEmbeddingExtractor(modelPath string, opts OpenVINOEmbeddingExtra
 	// Validate the compiled embedding port dimension against the consumer's expected
 	// embedding size (the bat classifier's input dim). The OV backend reports
 	// NumClasses from the selected output port of the compiled model, so a mismatch is
-	// a genuine model/port inconsistency: reject it and let the caller fall back to ORT.
+	// a genuine model/port inconsistency: reject it and let the caller decide on ONNX Runtime.
 	if n := c.NumClasses(); n != opts.ExpectedDim {
 		_ = c.Close()
 		return nil, errors.Newf("OpenVINO embedding output dimension %d does not match expected %d", n, opts.ExpectedDim).
@@ -447,8 +447,8 @@ type OpenVINOStatus struct {
 	Supported bool `json:"supported"`
 	// Active is true when at least one classifier is currently running on the
 	// OpenVINO backend. This is deliberately NOT "core loaded": the device planner
-	// loads the core just to enumerate devices even on hosts that then fall back to
-	// ORT, so the core-loaded flag would falsely report OpenVINO as in use.
+	// loads the core just to enumerate devices even on hosts that then do not use
+	// OpenVINO, so the core-loaded flag would falsely report OpenVINO as in use.
 	Active bool `json:"active"`
 }
 

@@ -282,6 +282,16 @@ const (
 	MsgOpenVINOGPUStoppedTitle   = "notifications.content.openvinoGpu.stoppedTitle"
 	MsgOpenVINOGPUStoppedMessage = "notifications.content.openvinoGpu.stoppedMessage"
 
+	// OpenVINO refusal notices: models set to run on OpenVINO (an explicit selection) that
+	// OpenVINO cannot run are not loaded and never fall back to ONNX Runtime. One notice
+	// per group of reasons that share a fix.
+	MsgOpenVINORefusedTitle                   = "notifications.content.openvinoRefused.title"
+	MsgOpenVINORefusedNotBuiltMessage         = "notifications.content.openvinoRefused.notBuiltMessage"
+	MsgOpenVINORefusedDeviceMissingMessage    = "notifications.content.openvinoRefused.deviceMissingMessage"
+	MsgOpenVINORefusedNoDeviceMessage         = "notifications.content.openvinoRefused.noDeviceMessage"
+	MsgOpenVINORefusedModelUnsupportedMessage = "notifications.content.openvinoRefused.modelUnsupportedMessage"
+	MsgOpenVINORefusedLoadFailedMessage       = "notifications.content.openvinoRefused.loadFailedMessage"
+
 	// Analysis cadence notices: the first cadence plan of the process limits the
 	// analysis overlap to what the hardware sustains (capped), or even zero overlap
 	// exceeds it (overloaded).

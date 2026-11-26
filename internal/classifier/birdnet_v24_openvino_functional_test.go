@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 )
 
@@ -79,18 +78,8 @@ func TestBirdNETV24OpenVINO_LowFrequencyParity(t *testing.T) {
 	candidate := newV24ForParity(t, modelPath, conf.BackendPrefOpenVINO)
 	device, backend, precision := candidate.RuntimeInfo()
 	t.Logf("candidate backend=%s device=%s precision=%s", backend, device, precision)
-	if backend != BackendOpenVINO {
-		// the openvino backend plans OpenVINO for an fp32-token v2.4 file on an
-		// ARMv8.2+ CPU with native f16 (and on an Intel GPU, which only an explicit
-		// device can demand here), so a fallback is the regression on such a host.
-		dev := os.Getenv("OV_V24_DEVICE")
-		if dev == "" && !cpuspec.HasNativeF16() {
-			t.Skipf("OpenVINO backend not active on this host (backend=%s); set OV_V24_DEVICE to require it", backend)
-		}
-		require.Equalf(t, BackendOpenVINO, backend,
-			"BirdNET v2.4 fell back to %s (OV_V24_DEVICE=%q, native f16 CPU=%t): libopenvino_c is not loadable, the model file lacks the fp32 token, or the OpenVINO path regressed",
-			backend, dev, cpuspec.HasNativeF16())
-	}
+	// Backend openvino is an explicit selection: the model runs on OpenVINO or is refused.
+	require.Equal(t, BackendOpenVINO, backend, "an explicit OpenVINO selection must not fall back to ONNX Runtime")
 	require.Equal(t, string(QuantizationFP32), precision,
 		"BirdNET v2.4 on OpenVINO must run at FP32 (openVINOPrecisionFor), not the f16 default; see GitHub #4986")
 
@@ -140,6 +129,9 @@ func newV24ForParity(t *testing.T, modelPath, backendPref string) *BirdNET {
 	settings.BirdNET.ONNXRuntimePath = os.Getenv("OV_V24_ORT_LIB")
 
 	bn, err := NewBirdNET(settings, nil, nil)
+	if backendPref == conf.BackendPrefOpenVINO {
+		requireNotRefused(t, err, os.Getenv("OV_V24_DEVICE"))
+	}
 	require.NoError(t, err)
 	t.Cleanup(bn.Delete)
 	return bn

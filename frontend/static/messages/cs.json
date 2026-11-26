@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "GPU OpenVINO selhala",
         "stoppedMessage": "GPU OpenVINO přestala fungovat, proto ji BirdNET-Go přestal používat až do dalšího restartu. Modely nastavené na běh na GPU do té doby nic nedetekují. Restartujte BirdNET-Go, abyste GPU mohli znovu používat, nebo nastavte zařízení OpenVINO na CPU v Nastavení > Analýza > Inference."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# model není načten} few {# modely nejsou načteny} many {# modelů není načteno} other {# modelů není načteno}}",
+        "notBuiltMessage": "Tyto modely jsou nastaveny na běh v OpenVINO, ale toto sestavení BirdNET-Go nemá podporu OpenVINO, proto nejsou načteny: {models}. Nastavte inferenční backend a zařízení OpenVINO na Automaticky v Nastavení > Analýza > Inference.",
+        "deviceMissingMessage": "Tyto modely jsou nastaveny na běh na zařízení OpenVINO {device}, které na tomto systému nelze použít, proto nejsou načteny: {models}. Vyberte jiné zařízení OpenVINO, nebo nastavte backend a zařízení OpenVINO na Automaticky, v Nastavení > Analýza > Inference.",
+        "noDeviceMessage": "Inferenční backend je nastaven na OpenVINO, ale tento systém nemá žádné zařízení OpenVINO, které by tyto modely mohlo spustit, proto nejsou načteny: {models}. Nastavte backend na Automaticky nebo ONNX Runtime v Nastavení > Analýza > Inference.",
+        "modelUnsupportedMessage": "Tyto modely jsou nastaveny na běh v OpenVINO, ale jejich soubory modelů v OpenVINO běžet nemohou, proto nejsou načteny: {models}. Nainstalujte jejich variantu pro OpenVINO z galerie modelů v Nastavení > Analýza > Modely, nebo nastavte backend a zařízení OpenVINO na Automaticky v Nastavení > Analýza > Inference.",
+        "loadFailedMessage": "OpenVINO nemohlo načíst tyto modely na zařízení {device}, proto nejsou načteny: {models}. Chybu OpenVINO uvádí protokol aplikace. Vyberte jiné zařízení OpenVINO, nebo nastavte backend a zařízení OpenVINO na Automaticky, v Nastavení > Analýza > Inference."
       }
     },
     "loading": "Načítání oznámení…"
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "Zařízení OpenVINO",
-        "helpText": "Používá se pro modely běžící na OpenVINO.",
-        "helpTextMultipleGpus": "Používá se pro modely běžící na OpenVINO. Toto zařízení má více než jednu GPU, vyberte tu, na které mají modely běžet.",
-        "notDetectedHint": "Vybraná GPU nebyla nalezena. Modely běží na ONNX Runtime, dokud nevyberete jiné zařízení.",
+        "helpText": "Používá se pro modely běžící na OpenVINO. U jiného zařízení než Automaticky se model, který na něm nemůže běžet, nenačte.",
+        "helpTextMultipleGpus": "Používá se pro modely běžící na OpenVINO. Toto zařízení má více než jednu GPU, vyberte tu, na které mají modely běžet. U jiného zařízení než Automaticky se model, který na něm nemůže běžet, nenačte.",
+        "notDetectedHint": "Vybraná GPU nebyla nalezena. Modely nastavené na OpenVINO se nenačtou, dokud nevyberete jiné zařízení.",
         "options": {
           "auto": "Automaticky",
           "cpu": "CPU",
