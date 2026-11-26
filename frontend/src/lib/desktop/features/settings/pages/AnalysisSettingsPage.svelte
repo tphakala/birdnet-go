@@ -642,6 +642,12 @@
   const selectedDevice = $derived(birdnet?.openVinoDevice || INFERENCE_AUTO);
   const savedBackend = $derived(store.originalData.birdnet?.backend || INFERENCE_AUTO);
   const savedDevice = $derived(store.originalData.birdnet?.openVinoDevice || INFERENCE_AUTO);
+  // Under an auto selection (backend and OpenVINO device both auto) the server moves the
+  // models that ran on a failed GPU to the CPU; any other saved selection is explicit and
+  // its GPU models stay stopped.
+  const gpuFaultMovesModels = $derived(
+    savedBackend === INFERENCE_AUTO && savedDevice === INFERENCE_AUTO
+  );
   const inferenceChange: ChangePair = $derived({
     original: {
       backend: savedBackend,
@@ -3207,7 +3213,11 @@
       {/if}
       {#if inferenceBackends?.openvino.gpuFailed}
         <ErrorAlert type="error" className="mb-6" data-testid="inference-gpu-failed">
-          {t('analysis.inference.gpuFailed')}
+          {t(
+            gpuFaultMovesModels
+              ? 'analysis.inference.gpuFailedMoved'
+              : 'analysis.inference.gpuFailed'
+          )}
         </ErrorAlert>
       {/if}
       <div class="grid grid-cols-1 gap-6 md:grid-cols-2">

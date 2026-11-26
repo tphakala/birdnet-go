@@ -6242,6 +6242,7 @@
       "backendsLoading": "Verifica dei runtime supportati da questo dispositivo.",
       "backendsUnavailable": "Impossibile leggere quali runtime supporta questo dispositivo. Il backend e il dispositivo possono essere modificati al termine del caricamento.",
       "gpuFailed": "La GPU OpenVINO ha avuto un guasto in questa esecuzione, quindi BirdNET-Go ha smesso di usarla fino al prossimo riavvio. Imposta il dispositivo OpenVINO su CPU qui sotto, oppure riavvia BirdNET-Go per riprovare la GPU.",
+      "gpuFailedMoved": "La GPU OpenVINO ha smesso di funzionare in questa esecuzione, quindi BirdNET-Go ha smesso di usarla fino al prossimo riavvio. I modelli che giravano su di essa ora girano sulla CPU e il rilevamento continua. Riavvia BirdNET-Go per usare di nuovo la GPU.",
       "running": {
         "title": "In esecuzione",
         "description": "Il runtime e la precisione con cui viene eseguito ciascun classificatore abilitato.",

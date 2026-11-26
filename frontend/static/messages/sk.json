@@ -6242,6 +6242,7 @@
       "backendsLoading": "Zisťuje sa, ktoré runtime prostredia toto zariadenie podporuje.",
       "backendsUnavailable": "Nepodarilo sa zistiť, ktoré runtime prostredia toto zariadenie podporuje. Backend a zariadenie možno zmeniť po načítaní.",
       "gpuFailed": "GPU OpenVINO v tomto behu zlyhala, preto ju BirdNET-Go prestal používať až do ďalšieho reštartu. Nastavte nižšie zariadenie OpenVINO na CPU, alebo reštartujte BirdNET-Go a skúste GPU znova.",
+      "gpuFailedMoved": "GPU OpenVINO v tomto behu zlyhala, preto ju BirdNET-Go prestal používať až do ďalšieho reštartu. Modely, ktoré na nej bežali, teraz bežia na CPU a detekcia pokračuje. Reštartujte BirdNET-Go, aby ste GPU mohli znova používať.",
       "running": {
         "title": "Aktuálne spustené",
         "description": "Runtime prostredie a presnosť, s ktorými beží každý povolený klasifikátor.",

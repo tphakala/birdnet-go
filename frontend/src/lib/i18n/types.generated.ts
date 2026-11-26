@@ -4593,6 +4593,7 @@ export type TranslationKey =
   | 'analysis.inference.backendsLoading'
   | 'analysis.inference.backendsUnavailable'
   | 'analysis.inference.gpuFailed'
+  | 'analysis.inference.gpuFailedMoved'
   | 'analysis.inference.running.title'
   | 'analysis.inference.running.description'
   | 'analysis.inference.running.unknown'

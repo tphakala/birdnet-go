@@ -6242,6 +6242,7 @@
       "backendsLoading": "Kontrollerar vilka körtider den här enheten stöder.",
       "backendsUnavailable": "Kunde inte läsa vilka körtider den här enheten stöder. Backend och enhet kan ändras när den har lästs in.",
       "gpuFailed": "OpenVINO-GPU:n fallerade i den här körningen, så BirdNET-Go har slutat använda den till nästa omstart. Ställ in OpenVINO-enheten på CPU nedan, eller starta om BirdNET-Go för att försöka med GPU:n igen.",
+      "gpuFailedMoved": "OpenVINO-GPU:n fallerade under den här körningen, så BirdNET-Go har slutat använda den till nästa omstart. Modellerna som körde på den körs nu på CPU:n och detekteringen fortsätter. Starta om BirdNET-Go för att använda GPU:n igen.",
       "running": {
         "title": "Körs nu",
         "description": "Körtiden och precisionen som varje aktiverad klassificerare körs med.",

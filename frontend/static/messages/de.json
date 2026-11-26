@@ -6242,6 +6242,7 @@
       "backendsLoading": "Es wird geprüft, welche Laufzeitumgebungen dieses Gerät unterstützt.",
       "backendsUnavailable": "Es konnte nicht gelesen werden, welche Laufzeitumgebungen dieses Gerät unterstützt. Backend und Gerät können nach dem Laden geändert werden.",
       "gpuFailed": "Die OpenVINO-GPU ist in diesem Lauf ausgefallen, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Stellen Sie unten das OpenVINO-Gerät auf CPU um oder starten Sie BirdNET-Go neu, um es erneut mit der GPU zu versuchen.",
+      "gpuFailedMoved": "Die OpenVINO-GPU ist in diesem Lauf ausgefallen, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Die Modelle, die darauf liefen, laufen jetzt auf der CPU, und die Erkennung läuft weiter. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden.",
       "running": {
         "title": "Aktuell aktiv",
         "description": "Laufzeitumgebung und Präzision, mit der jeder aktivierte Klassifikator läuft.",

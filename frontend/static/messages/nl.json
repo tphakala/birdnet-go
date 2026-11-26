@@ -6242,6 +6242,7 @@
       "backendsLoading": "Controleren welke runtimes dit apparaat ondersteunt.",
       "backendsUnavailable": "Kon niet lezen welke runtimes dit apparaat ondersteunt. De backend en het apparaat kunnen worden gewijzigd zodra dit is geladen.",
       "gpuFailed": "De OpenVINO-GPU is in deze run uitgevallen, dus BirdNET-Go gebruikt hem tot de volgende herstart niet meer. Zet het OpenVINO-apparaat hieronder op CPU, of herstart BirdNET-Go om de GPU opnieuw te proberen.",
+      "gpuFailedMoved": "De OpenVINO-GPU is tijdens deze run uitgevallen, dus BirdNET-Go gebruikt hem tot de volgende herstart niet meer. De modellen die erop draaiden, draaien nu op de CPU en de detectie gaat door. Start BirdNET-Go opnieuw op om de GPU weer te gebruiken.",
       "running": {
         "title": "Nu actief",
         "description": "De runtime en precisie waarmee elke ingeschakelde classificator draait.",

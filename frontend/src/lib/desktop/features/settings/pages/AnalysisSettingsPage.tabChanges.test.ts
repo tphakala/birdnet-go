@@ -852,7 +852,9 @@ describe('AnalysisSettingsPage inference runtime', () => {
   });
 
   describe('GPU fault', () => {
-    const GPU_FAILED_TEXT = 'analysis.inference.gpuFailed';
+    // The default test selection is auto, where the models move to the CPU.
+    const GPU_FAILED_TEXT = 'analysis.inference.gpuFailedMoved';
+    const GPU_FAILED_EXPLICIT_TEXT = 'analysis.inference.gpuFailed';
     const GPU_HOST = { devices: ['CPU', 'GPU'], gpus: [{ id: 'GPU', name: 'Iris Xe' }] };
 
     /** Announce a topology change to every registered listener. */
@@ -866,6 +868,20 @@ describe('AnalysisSettingsPage inference runtime', () => {
       mockRuntime(() => new Promise(resolve => pending.push(resolve)));
       return pending;
     }
+
+    it('keeps the fix advice under an explicit device and the moved text under auto', async () => {
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: 'auto', openVinoDevice: 'gpu' });
+      mockRuntime(async () => runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      const explicit = render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_EXPLICIT_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
+      explicit.unmount();
+
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: 'auto', openVinoDevice: 'auto' });
+      render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_EXPLICIT_TEXT)).toBeNull();
+    });
 
     it('shows no alert while the GPU works', async () => {
       mockRuntime(async () => runtimeStatus(GPU_HOST));

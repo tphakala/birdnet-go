@@ -6242,6 +6242,7 @@
       "backendsLoading": "Vérification des moteurs d'exécution pris en charge par cet appareil.",
       "backendsUnavailable": "Impossible de lire les moteurs d'exécution pris en charge par cet appareil. Le backend et l'appareil peuvent être modifiés après le chargement.",
       "gpuFailed": "Le GPU OpenVINO a échoué pendant cette exécution, donc BirdNET-Go a arrêté de l'utiliser jusqu'au prochain redémarrage. Réglez l'appareil OpenVINO sur CPU ci-dessous, ou redémarrez BirdNET-Go pour réessayer le GPU.",
+      "gpuFailedMoved": "Le GPU OpenVINO a échoué pendant cette exécution, donc BirdNET-Go a arrêté de l'utiliser jusqu'au prochain redémarrage. Les modèles qui y tournaient tournent maintenant sur le CPU et la détection continue. Redémarrez BirdNET-Go pour réutiliser le GPU.",
       "running": {
         "title": "En cours d'exécution",
         "description": "Le moteur d'exécution et la précision utilisés par chaque classificateur activé.",
