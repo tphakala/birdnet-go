@@ -31,7 +31,9 @@ type recoveryBuilder struct {
 	entered chan struct{} // closed on the first build when non-nil
 	release chan struct{} // the build waits on it when non-nil
 	err     error
-	once    sync.Once
+	// order, when non-nil, receives the model ID of every build.
+	order *[]string
+	once  sync.Once
 	// releaseOnce makes closing release idempotent for the tests that also release in a cleanup.
 	releaseOnce sync.Once
 	mu          sync.Mutex
@@ -40,6 +42,11 @@ type recoveryBuilder struct {
 
 func (b *recoveryBuilder) build(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
 	b.builds.Add(1)
+	if b.order != nil {
+		b.mu.Lock()
+		*b.order = append(*b.order, b.id)
+		b.mu.Unlock()
+	}
 	if b.entered != nil {
 		b.once.Do(func() { close(b.entered) })
 	}
@@ -257,34 +264,73 @@ func TestGPURecovery_DueBeforePublish(t *testing.T) {
 }
 
 func TestGPURecovery_DeleteStops(t *testing.T) {
-	a := &recoveryBuilder{id: testSecondaryID, entered: make(chan struct{}), release: make(chan struct{})}
-	env := newGPURecoveryEnv(t, "auto", "auto", map[string]*recoveryBuilder{testSecondaryID: a}, []string{testSecondaryID})
+	// A moves first and finishes, B blocks: the pass is in flight with a move to report.
+	a := &recoveryBuilder{id: testSecondaryID}
+	b := &recoveryBuilder{id: gpuFaultHealthySecondaryID, entered: make(chan struct{}), release: make(chan struct{})}
+	env := newGPURecoveryEnv(t, "auto", "auto",
+		map[string]*recoveryBuilder{testSecondaryID: a, gpuFaultHealthySecondaryID: b},
+		[]string{testSecondaryID, gpuFaultHealthySecondaryID})
+	t.Cleanup(func() { releaseOnce(b) })
 
 	env.faulted.Store(true)
 	env.o.onOpenVINOGPUFault()
-	<-a.entered
+	select {
+	case <-b.entered:
+	case <-time.After(gpuRecoveryWait):
+		require.FailNow(t, "the recovery pass did not reach the second builder")
+	}
 
 	deleted := make(chan struct{})
 	go func() {
 		env.o.Delete()
 		close(deleted)
 	}()
+	// Delete closes the models, the old instance of B among them, before it waits for
+	// the pass; once that happened, a Delete that does not wait would have returned.
+	oldB := env.old[gpuFaultHealthySecondaryID].(*gpuFaultFakeModel)
+	require.Eventually(t, func() bool { return oldB.closes.Load() == 1 }, gpuRecoveryWait, gpuFaultTestPoll)
 	select {
 	case <-deleted:
 		require.FailNow(t, "Delete returned while a recovery build was in flight")
-	case <-time.After(100 * time.Millisecond):
+	default:
 	}
-	close(a.release)
+	releaseOnce(b)
 	select {
 	case <-deleted:
 	case <-time.After(gpuRecoveryWait):
 		require.FailNow(t, "Delete did not return after the build finished")
 	}
 	assert.Equal(t, int32(0), env.callbacks.Load(), "no callback once Delete began")
+	// Delete cleared the callback before the pass finished, so a move reported after it
+	// would only be remembered for a later registration: nothing may be remembered.
+	env.o.gpuRecovery.callbackMu.Lock()
+	remembered := env.o.gpuRecovery.moved
+	env.o.gpuRecovery.callbackMu.Unlock()
+	assert.False(t, remembered, "a move finished after Delete began is not reported or remembered")
 
 	env.o.onOpenVINOGPUFault()
 	env.settle()
-	assert.Equal(t, int32(1), a.builds.Load(), "a stopped orchestrator starts no pass")
+	assert.Equal(t, int32(1), b.builds.Load(), "a stopped orchestrator starts no pass")
+}
+
+func TestGPURecovery_FailedModelDoesNotStopLaterOnesAndOrderIsSorted(t *testing.T) {
+	var order []string
+	a := &recoveryBuilder{id: testSecondaryID, err: errors.NewStd("build failed"), order: &order}
+	b := &recoveryBuilder{id: gpuFaultHealthySecondaryID, order: &order}
+	c := &recoveryBuilder{id: "TestZZZZLast_OV", order: &order}
+	env := newGPURecoveryEnv(t, "auto", "auto",
+		map[string]*recoveryBuilder{gpuFaultHealthySecondaryID: b, "TestZZZZLast_OV": c, testSecondaryID: a},
+		[]string{"TestZZZZLast_OV", testSecondaryID, gpuFaultHealthySecondaryID})
+
+	env.faulted.Store(true)
+	env.o.onOpenVINOGPUFault()
+	env.settle()
+
+	assert.Equal(t, []string{testSecondaryID, gpuFaultHealthySecondaryID, "TestZZZZLast_OV"}, order, "models are rebuilt in registry ID order")
+	assert.False(t, builtOnFailedOpenVINOGPU(env.o.instanceFor(gpuFaultHealthySecondaryID)), "a model after the failed one is still moved")
+	assert.False(t, builtOnFailedOpenVINOGPU(env.o.instanceFor("TestZZZZLast_OV")))
+	assert.True(t, builtOnFailedOpenVINOGPU(env.o.instanceFor(testSecondaryID)), "the failed model keeps its instance")
+	assert.Equal(t, int32(1), env.callbacks.Load(), "a partial move still reports")
 }
 
 func TestSetGPURecoveryCallback(t *testing.T) {
@@ -315,16 +361,14 @@ func TestSetGPURecoveryCallback(t *testing.T) {
 	env.o.gpuRecovery.callbackMu.Unlock()
 	go env.o.notifyGPURecoveryMoved()
 	<-inCallback
+	// The callback runs holding callbackMu, which clearing must take: that is what
+	// makes it wait for a call in flight.
+	require.False(t, env.o.gpuRecovery.callbackMu.TryLock(), "a running callback holds callbackMu")
 	cleared := make(chan struct{})
 	go func() {
 		env.o.SetGPURecoveryCallback(nil)
 		close(cleared)
 	}()
-	select {
-	case <-cleared:
-		require.FailNow(t, "clearing returned while the callback was running")
-	case <-time.After(100 * time.Millisecond):
-	}
 	close(release)
 	select {
 	case <-cleared:
