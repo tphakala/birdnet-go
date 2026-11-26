@@ -29,7 +29,7 @@ type gpuRecoveryState struct {
 	// failedMoves holds the IDs of models a pass tried and failed to move off the
 	// GPU, guarded by mu. The partial notice names only these: a model still on the
 	// GPU that no pass has tried yet means recovery is not done, not that it failed.
-	failedMoves map[string]bool
+	failedMoves map[string]struct{}
 
 	callbackMu sync.Mutex
 	callback   func()
@@ -55,7 +55,8 @@ func (o *Orchestrator) requestGPURecovery() {
 // published and no pass is running. A true result has set running and counted the
 // pass in wg (under mu, so a Delete that set stopped before waiting never misses
 // it); the caller runs runGPURecovery and calls wg.Done. The selection is read under
-// mu, and an explicit one clears the due mark instead of setting it.
+// mu, and an explicit one clears the due mark instead of setting it. Setting it also
+// forgets the moves earlier passes failed.
 func (o *Orchestrator) claimGPURecovery() bool {
 	faulted, _ := ovGPUFault()
 	if !faulted {
@@ -74,6 +75,9 @@ func (o *Orchestrator) claimGPURecovery() bool {
 		return false
 	}
 	st.due = true
+	// Every pass starts from "untried": a failure recorded by an earlier pass says
+	// nothing about the retry this trigger asks for.
+	st.failedMoves = nil
 	if st.running || !o.published.Load() {
 		return false
 	}
@@ -200,9 +204,9 @@ func (o *Orchestrator) setMoveFailed(id string, failed bool) {
 		return
 	}
 	if st.failedMoves == nil {
-		st.failedMoves = make(map[string]bool)
+		st.failedMoves = make(map[string]struct{})
 	}
-	st.failedMoves[id] = true
+	st.failedMoves[id] = struct{}{}
 }
 
 // moveFailed reports whether a pass tried and failed to move id.
@@ -210,7 +214,8 @@ func (o *Orchestrator) moveFailed(id string) bool {
 	st := &o.gpuRecovery
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return st.failedMoves[id]
+	_, failed := st.failedMoves[id]
+	return failed
 }
 
 // loadedModelIDsSorted returns the loaded model IDs in order.
