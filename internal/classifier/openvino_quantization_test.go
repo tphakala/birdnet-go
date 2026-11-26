@@ -32,6 +32,7 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 		ok          bool
 		reason      OpenVINOReason
 		backendPref string
+		devicePref  string
 		quant       Quantization
 		wantPlan    openVINOPlan
 		wantOK      bool
@@ -57,6 +58,22 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 			backendPref: conf.BackendPrefOpenVINO, quant: QuantizationINT8,
 			wantPlan: openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex, precision: inference.OVPrecisionF32},
 			wantOK:   true,
+		},
+		{
+			name: "INT8 with an explicit cpu device under auto runs at f32", plan: cpuF16, ok: true,
+			backendPref: conf.BackendPrefAuto, devicePref: conf.OVDeviceCPU, quant: QuantizationINT8,
+			wantPlan: openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex, precision: inference.OVPrecisionF32},
+			wantOK:   true,
+		},
+		{
+			name: "unrecognized weights with an explicit GPU.<n> device run at f32", plan: gpuF32, ok: true,
+			backendPref: conf.BackendPrefAuto, devicePref: "GPU.1", quant: QuantizationUnknown,
+			wantPlan: gpuF32, wantOK: true,
+		},
+		{
+			name: "INT8 with device auto stays declined", plan: cpuF16, ok: true,
+			backendPref: conf.BackendPrefAuto, devicePref: conf.OVDeviceAuto, quant: QuantizationINT8,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonUnverifiedWeights,
 		},
 		{
 			name: "FP32 weights keep the plan unchanged", plan: cpuF16, ok: true,
@@ -108,7 +125,7 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			plan, ok, reason := applyOpenVINOQuantizationPolicy(tt.plan, tt.ok, tt.reason, tt.backendPref, tt.quant)
+			plan, ok, reason := applyOpenVINOQuantizationPolicy(tt.plan, tt.ok, tt.reason, tt.backendPref, tt.devicePref, tt.quant)
 			assert.Equal(t, tt.wantPlan, plan)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantReason, reason)
@@ -152,6 +169,17 @@ func stubBirdNETV24BasePlan(t *testing.T, plan openVINOPlan) {
 	orig := birdnetV24BasePlan
 	birdnetV24BasePlan = func(*conf.BirdNETConfig, func(string) bool) (openVINOPlan, bool, OpenVINOReason) {
 		return plan, true, ""
+	}
+	t.Cleanup(func() { birdnetV24BasePlan = orig })
+}
+
+// stubBirdNETV24BasePlanDeclined replaces the base OpenVINO plan with a decline for
+// the rest of the test. Callers must NOT run in parallel.
+func stubBirdNETV24BasePlanDeclined(t *testing.T, reason OpenVINOReason) {
+	t.Helper()
+	orig := birdnetV24BasePlan
+	birdnetV24BasePlan = func(*conf.BirdNETConfig, func(string) bool) (openVINOPlan, bool, OpenVINOReason) {
+		return openVINOPlan{}, false, reason
 	}
 	t.Cleanup(func() { birdnetV24BasePlan = orig })
 }
@@ -245,6 +273,54 @@ func TestPrimaryVariantUsable_QuantizationPolicyWired(t *testing.T) {
 			}
 			o.updateSettings(settings)
 			assert.Equal(t, tt.want, o.primaryVariantUsable(filepath.Join("models", "birdnet-v2.4", tt.file)))
+		})
+	}
+}
+
+// TestPrimaryVariantUsable_ExplicitSelectionHasNoORTLeg pins that the installed-variant
+// gate follows the fallback rule: with an explicit selection a variant OpenVINO
+// cannot plan or load is not usable even when ONNX Runtime is present, while auto
+// still accepts it through ONNX Runtime. Not parallel: stubs package state and the
+// process-wide settings snapshot.
+func TestPrimaryVariantUsable_ExplicitSelectionHasNoORTLeg(t *testing.T) {
+	origSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(origSettings) })
+
+	entry, ok := primaryCatalogEntry()
+	require.True(t, ok, "the catalog must carry the BirdNET v2.4 entry")
+	fp32File := filepath.Join("models", "birdnet-v2.4", modelRoleLocalName(t, variantByID(t, &entry, "fp32-dfttrunc").Files))
+
+	tests := []struct {
+		name            string
+		backend, device string
+		declined        bool // the base plan declines (no_device) instead of accepting
+		ovLoads         bool
+		want            bool
+	}{
+		{"explicit openvino, plan declined, ORT present", conf.BackendPrefOpenVINO, conf.OVDeviceAuto, true, true, false},
+		{"explicit gpu under auto, plan declined, ORT present", conf.BackendPrefAuto, conf.OVDeviceGPU, true, true, false},
+		{"auto, plan declined, ORT present", conf.BackendPrefAuto, conf.OVDeviceAuto, true, true, true},
+		{"explicit openvino, plan accepted, library fails, ORT present", conf.BackendPrefOpenVINO, conf.OVDeviceAuto, false, false, false},
+		{"explicit cpu under auto, plan accepted, library fails, ORT present", conf.BackendPrefAuto, conf.OVDeviceCPU, false, false, false},
+		{"auto, plan accepted, library fails, ORT present", conf.BackendPrefAuto, conf.OVDeviceAuto, false, false, true},
+		{"explicit openvino, plan accepted, library loads", conf.BackendPrefOpenVINO, conf.OVDeviceAuto, false, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.declined {
+				stubBirdNETV24BasePlanDeclined(t, ovReasonNoDevice)
+			} else {
+				stubBirdNETV24BasePlan(t, openVINOPlan{device: inference.OVDeviceCPU, outputIndex: birdnetLogitsOutputIndex})
+			}
+			settings := &conf.Settings{}
+			settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice = tt.backend, tt.device
+			conf.StoreSettings(settings)
+			o := &Orchestrator{
+				ortAvailable: func(string) bool { return true },
+				ovLoadable:   func(string) bool { return tt.ovLoads },
+			}
+			o.updateSettings(settings)
+			assert.Equal(t, tt.want, o.primaryVariantUsable(fp32File))
 		})
 	}
 }

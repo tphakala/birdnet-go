@@ -601,7 +601,7 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // tries OPENVINO FIRST for the v2.4 identity and only falls through to ONNX
 // Runtime when OpenVINO declines, so an openvino-tagged build on an A76/Pi5 or an
 // Intel iGPU runs these variants with no ORT installed at all (except an INT8 or
-// unrecognized-precision build on the auto backend, which OpenVINO declines; see
+// unrecognized-precision build under an auto selection, which OpenVINO declines; see
 // applyOpenVINOQuantizationPolicy). On arm64 the auto backend with the default
 // device plans the A76 CPU only when ONNX Runtime is unavailable, which is exactly
 // this case; the plan
@@ -609,6 +609,10 @@ func (o *Orchestrator) resolvePrimaryModelPath(configured string) pathResolution
 // below, so the two cannot disagree. Gating on ORT alone would refuse a variant
 // that would have loaded, silently dropping such a host to the embedded model and
 // telling the user no installed model was available, which is false.
+//
+// Under an explicit OpenVINO selection (see openVINOSelectionExplicit) initializeModel
+// never falls through to ONNX Runtime, so the ONNX Runtime leg below does not
+// apply: the variant is usable only when OpenVINO plans it and its library loads.
 //
 // CheckORTAvailability is used rather than checkORTOrFail because the latter logs
 // and raises a user notification, which would be wrong for a path we are choosing
@@ -645,12 +649,16 @@ func (o *Orchestrator) primaryVariantUsable(modelPath string) bool {
 		return true
 	}
 
-	if available(settings.BirdNET.ONNXRuntimePath) {
+	// An explicit selection never falls back to ONNX Runtime (see openVINONotUsed),
+	// so initializeModel would refuse this variant too.
+	explicit := openVINOSelectionExplicit(settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice)
+	if !explicit && available(settings.BirdNET.ONNXRuntimePath) {
 		return true
 	}
 
-	GetLogger().Warn("installed primary variant cannot load on this host (no OpenVINO plan and no ONNX Runtime); using the built-in model instead",
-		logger.String("model_path", modelPath))
+	GetLogger().Warn("installed BirdNET v2.4 variant cannot load on this host (OpenVINO cannot run it and ONNX Runtime is not an option); using the built-in model instead",
+		logger.String("model_path", modelPath),
+		logger.Bool("explicit_openvino_selection", explicit))
 	return false
 }
 

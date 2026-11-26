@@ -69,7 +69,9 @@ type PerchConfig struct {
 
 	// OpenVINO opt-in, sourced from BirdNET settings. When the configured model is
 	// the no_dft Perch variant and the gate allows it, Perch runs on OpenVINO
-	// (ARM A76 f16 CPU or Intel iGPU); any failure falls back to ORT.
+	// (ARM A76 f16 CPU or Intel iGPU). Under an auto selection a decline or failure
+	// falls back to ORT; under an explicit one (see openVINOSelectionExplicit) NewPerch
+	// returns an *OpenVINORefusalError and builds no ORT instance.
 	Backend        string // BirdNET.Backend ("auto"/"onnx"/"openvino")
 	OpenVINOPath   string // BirdNET.OpenVINOPath (libopenvino_c location)
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto", "cpu", "gpu" or "GPU.<n>")
@@ -102,18 +104,22 @@ func NewPerch(cfg *PerchConfig) (*Perch, error) {
 			Build()
 	}
 
-	// Prefer the OpenVINO backend when eligible (Perch no_dft model + gate),
-	// falling back to ORT on any failure. OpenVINO must never make Perch fail to
-	// load, so tryPerchOpenVINO logs and swallows OV errors and returns ok=false.
-	// device records the compute device actually bound to (the OpenVINO device on
-	// the OV path, else the ONNX Runtime CPU EP).
-	classifier, device, precisionHint, ok := tryPerchOpenVINO(cfg, labels)
+	// Prefer the OpenVINO backend when eligible (Perch no_dft model + gate). With an
+	// auto selection a decline or failure falls back to ORT (tryPerchOpenVINO
+	// returns a nil classifier and no error); with an explicit selection it returns
+	// an *OpenVINORefusalError and no ORT instance is built. device records the compute
+	// device actually bound to (the OpenVINO device on the OV path, else the ONNX
+	// Runtime CPU EP).
+	classifier, device, precisionHint, err := tryPerchOpenVINO(cfg, labels)
+	if err != nil {
+		return nil, err
+	}
 	// On the OV path the effective runtime precision follows the compiled
 	// INFERENCE_PRECISION_HINT (f32 on the GPU per openVINOPrecisionFor, else the
 	// f16 default). The ORT path overrides both below.
 	backend := BackendOpenVINO
 	precision := openVINOEffectivePrecision(precisionHint)
-	if !ok {
+	if classifier == nil {
 		// Initialize ONNX Runtime
 		if err := inference.InitONNXRuntime(cfg.ONNXRuntimePath); err != nil {
 			return nil, errors.New(err).
@@ -215,35 +221,33 @@ func perchOpenVINOPlan(cfg *PerchConfig, available bool) (plan openVINOPlan, ok 
 }
 
 // tryPerchOpenVINO attempts to build an OpenVINO classifier for Perch v2. It
-// returns (classifier, device, precisionHint, true) on success or
-// (nil, "", "", false) to fall back to ORT, where device is the concrete OpenVINO
-// device the classifier bound to (CPU, GPU or a concrete GPU.<n>) and
-// precisionHint is the INFERENCE_PRECISION_HINT the model was compiled with
-// ("" = backend f16 default). Any failure (ineligible model, gate
-// denied, init/compile/validation error) is logged and swallowed: OpenVINO must
-// never make Perch fail to load. OV is only attempted for the no_dft model
-// variant, since the stock perch_v2.onnx cannot compile on OpenVINO (a
-// dynamic-rank DFT op); perchOpenVINOPlan makes that decision and names the
-// reason. The compile requests GPU large allocations, which the
-// backend applies only on a GPU device.
-func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.Classifier, device, precisionHint string, ok bool) {
+// returns (classifier, device, precisionHint, nil) on success, where device is the
+// concrete OpenVINO device the classifier bound to (CPU, GPU or a concrete GPU.<n>)
+// and precisionHint is the INFERENCE_PRECISION_HINT the model was compiled with
+// ("" = backend f16 default). When OpenVINO is not used (ineligible model, gate
+// denied, init/compile/validation error) the selection decides (see
+// openVINONotUsed): auto returns (nil, "", "", nil) so the caller builds the ORT
+// instance, an explicit selection returns an *OpenVINORefusalError. OV is only attempted
+// for the no_dft model variant, since the stock perch_v2.onnx cannot compile on
+// OpenVINO (a dynamic-rank DFT op); perchOpenVINOPlan makes that decision and names
+// the reason. The compile requests GPU large allocations, which the backend applies
+// only on a GPU device.
+func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.Classifier, device, precisionHint string, err error) {
 	plan, ok, reason := perchOpenVINOPlan(cfg, openvinoBackendAvailable)
 	if !ok {
-		logOpenVINODeclined(RegistryIDPerchV2, cfg.Backend, cfg.OpenVINODevice, reason)
-		return nil, "", "", false
+		return nil, "", "", openVINONotUsed(RegistryIDPerchV2, cfg.Backend, cfg.OpenVINODevice, cfg.OpenVINODevice, reason, nil)
 	}
 
 	log := GetLogger()
 	// InitOpenVINO is idempotent: the auto/GPU plan above may already have loaded the
 	// core to enumerate devices, but the explicit-CPU plan path does not, so init
-	// here to cover it. A load failure means no usable OpenVINO; fall back to ORT.
+	// here to cover it. A load failure means no usable OpenVINO.
 	if err := inference.InitOpenVINO(cfg.OpenVINOPath); err != nil {
-		log.Warn("Perch OpenVINO init failed; using ONNX Runtime", logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(RegistryIDPerchV2, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonInitFailed, err)
 	}
 
 	start := time.Now()
-	classifier, err := inference.NewOpenVINOClassifier(cfg.ModelPath, inference.OpenVINOClassifierOptions{
+	classifier, err = inference.NewOpenVINOClassifier(cfg.ModelPath, inference.OpenVINOClassifierOptions{
 		Labels:        labels,
 		Threads:       cfg.Threads,
 		Device:        plan.device,
@@ -253,17 +257,14 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.C
 		LargeAllocations: true,
 	})
 	if err != nil {
-		log.Warn("Perch OpenVINO classifier init failed; using ONNX Runtime",
-			logger.String("device", plan.device),
-			logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(RegistryIDPerchV2, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonLoadFailed, err)
 	}
 
 	log.Info("Perch v2 model using OpenVINO backend", append(openVINODeviceFields(plan),
 		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
 		logger.String("init_time", time.Since(start).String()))...)
-	return classifier, plan.device, plan.precision, true
+	return classifier, plan.device, plan.precision, nil
 }
 
 // isPerchNoDFT reports whether the model file is the OpenVINO-compatible Perch

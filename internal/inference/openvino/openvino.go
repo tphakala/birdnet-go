@@ -51,7 +51,7 @@ func IsGPUDevice(name string) bool {
 
 // ErrOpenVINOUnavailable is returned when the OpenVINO backend is not compiled
 // in (no "openvino" build tag) or libopenvino_c cannot be loaded at runtime.
-// Callers treat it as "fall back to ORT". Declared with errors.NewStd (the
+// The caller decides whether ONNX Runtime may run the model instead. Declared with errors.NewStd (the
 // internal/errors passthrough to stdlib errors.New) so it is a plain sentinel
 // usable with errors.Is.
 var ErrOpenVINOUnavailable = errors.NewStd("openvino: backend unavailable")

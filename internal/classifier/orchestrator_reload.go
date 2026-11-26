@@ -53,6 +53,17 @@ type reloadOpts struct {
 	// ReloadSecondaryModels computes the per-model budget once for the whole batch and
 	// passes it here, so reloadEntry does not recompute the allocation per entry.
 	threads int
+	// snapshot, when non-nil, receives what this reload started from, read under
+	// o.reloadMu just before the build: the entry's revision, so a caller that unloads on
+	// a refusal can tell whether another reload published a newer instance since (see
+	// unloadRefusedModel), and the settings the build used.
+	snapshot *reloadSnapshot
+}
+
+// reloadSnapshot is what a reload started from; see reloadOpts.snapshot.
+type reloadSnapshot struct {
+	revision entryRevision
+	settings *conf.Settings
 }
 
 // reloadEntry rebuilds one loaded model from the current settings and swaps it in
@@ -104,6 +115,9 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	if settings == nil {
 		settings = conf.CloneSettings(o.currentSettings())
 	}
+	if opts.snapshot != nil {
+		*opts.snapshot = reloadSnapshot{revision: newEntryRevision(registryID, entry), settings: settings}
+	}
 
 	// 3. Build holding only o.reloadMu (NOT o.mu / entry.mu / inferenceMu), so the build never
 	//    blocks inference on other models. Use the caller-supplied thread budget (opts.threads):
@@ -117,7 +131,13 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	}
 	next, buildErr := build(o, settings, opts.threads)
 	if buildErr != nil {
-		o.logReloadFailure(registryID, buildErr) // old keeps serving
+		// A refusal (explicit OpenVINO selection, OpenVINO cannot run the model) is not
+		// a failed reload that leaves the old instance serving: the settings callers
+		// unload the model, and they log it, so it is returned without the "keeping the
+		// previous model instance" warning that would be untrue for them.
+		if _, refused := errors.AsType[*OpenVINORefusalError](buildErr); !refused {
+			o.logReloadFailure(registryID, buildErr) // old keeps serving
+		}
 		return false, buildErr
 	}
 
@@ -216,6 +236,13 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 			Category(errors.CategoryModelInit).
 			Context("registry_id", registryID).
 			Build()
+		// An explicit selection never falls back, so the dead GPU is a refusal there
+		// (the settings callers unload the model; a variant swap keeps the old
+		// instance and its files). An auto selection keeps the plain error.
+		if openVINOSelectionExplicit(settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice) {
+			// snap.Device was read from next before it was closed above.
+			return false, &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: snap.Device, Cause: gpuErr}
+		}
 		o.logReloadFailure(registryID, gpuErr)
 		return false, gpuErr
 	}

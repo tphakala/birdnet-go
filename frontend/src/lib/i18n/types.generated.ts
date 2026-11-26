@@ -459,6 +459,12 @@ export type TranslationKey =
   | 'notifications.content.storage.anonymousVolumeMessage' // params: paths
   | 'notifications.content.openvinoGpu.stoppedTitle'
   | 'notifications.content.openvinoGpu.stoppedMessage'
+  | 'notifications.content.openvinoRefused.title' // params: count
+  | 'notifications.content.openvinoRefused.notBuiltMessage' // params: models
+  | 'notifications.content.openvinoRefused.deviceMissingMessage' // params: device, models
+  | 'notifications.content.openvinoRefused.noDeviceMessage' // params: models
+  | 'notifications.content.openvinoRefused.modelUnsupportedMessage' // params: models
+  | 'notifications.content.openvinoRefused.loadFailedMessage' // params: device, models
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -4873,6 +4879,18 @@ export type TranslationParams = {
   };
   'notifications.content.storage.notPersistentMessage': { paths: string | number };
   'notifications.content.storage.anonymousVolumeMessage': { paths: string | number };
+  'notifications.content.openvinoRefused.title': { count: string | number };
+  'notifications.content.openvinoRefused.notBuiltMessage': { models: string | number };
+  'notifications.content.openvinoRefused.deviceMissingMessage': {
+    device: string | number;
+    models: string | number;
+  };
+  'notifications.content.openvinoRefused.noDeviceMessage': { models: string | number };
+  'notifications.content.openvinoRefused.modelUnsupportedMessage': { models: string | number };
+  'notifications.content.openvinoRefused.loadFailedMessage': {
+    device: string | number;
+    models: string | number;
+  };
   'search.resultsCountOther': { count: string | number };
   'search.review.reviewDetection': { species: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };

@@ -102,7 +102,8 @@ func (g *gpuGuard) inferResult(gpu bool, err error) error {
 
 // setupFailed classifies a compile, request-create or input-binding failure on
 // a GPU target. It trips on a fatal marker only: an unsupported op is a normal
-// initialization failure that falls back to ONNX Runtime, so setup failures never
+// initialization failure that the caller decides on (ONNX Runtime may run the model
+// only under an auto selection), so setup failures never
 // count toward the streak.
 func (g *gpuGuard) setupFailed(gpu bool, err error) error {
 	if gpu && hasFatalMarker(err) {

@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU ausgefallen",
         "stoppedMessage": "Die OpenVINO-GPU funktioniert nicht mehr, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Modelle, die auf der GPU laufen sollen, erkennen bis dahin nichts. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden, oder stellen Sie das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf CPU."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# Modell ist nicht geladen} other {# Modelle sind nicht geladen}}",
+        "notBuiltMessage": "Diese Modelle sind für OpenVINO eingestellt, aber diese BirdNET-Go-Version hat keine OpenVINO-Unterstützung, daher sind sie nicht geladen: {models}. Stellen Sie das Inferenz-Backend und das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf Automatisch.",
+        "deviceMissingMessage": "Diese Modelle sind für das OpenVINO-Gerät {device} eingestellt, das auf diesem System nicht verwendet werden kann, daher sind sie nicht geladen: {models}. Wählen Sie ein anderes OpenVINO-Gerät oder stellen Sie das Backend und das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf Automatisch.",
+        "noDeviceMessage": "Das Inferenz-Backend ist auf OpenVINO eingestellt, aber dieses System hat kein OpenVINO-Gerät, das diese Modelle ausführen kann, daher sind sie nicht geladen: {models}. Stellen Sie das Backend unter Einstellungen > Analyse > Inferenz auf Automatisch oder ONNX Runtime.",
+        "modelUnsupportedMessage": "Diese Modelle sind für OpenVINO eingestellt, aber ihre Modelldateien können nicht auf OpenVINO laufen, daher sind sie nicht geladen: {models}. Installieren Sie ihre OpenVINO-Variante aus der Modellgalerie unter Einstellungen > Analyse > Modelle oder stellen Sie das Backend und das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf Automatisch.",
+        "loadFailedMessage": "OpenVINO konnte diese Modelle auf {device} nicht laden, daher sind sie nicht geladen: {models}. Das Anwendungsprotokoll nennt den OpenVINO-Fehler. Wählen Sie ein anderes OpenVINO-Gerät oder stellen Sie das Backend und das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf Automatisch."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO-Gerät",
-        "helpText": "Wird für Modelle verwendet, die auf OpenVINO laufen.",
-        "helpTextMultipleGpus": "Wird für Modelle verwendet, die auf OpenVINO laufen. Dieses Gerät hat mehr als eine GPU, wähle die aus, auf der die Modelle laufen sollen.",
-        "notDetectedHint": "Die ausgewählte GPU wurde nicht erkannt. Die Modelle laufen mit ONNX Runtime, bis ein anderes Gerät gewählt wird.",
+        "helpText": "Wird für Modelle verwendet, die auf OpenVINO laufen. Bei einem anderen Gerät als Automatisch wird ein Modell, das dort nicht laufen kann, nicht geladen.",
+        "helpTextMultipleGpus": "Wird für Modelle verwendet, die auf OpenVINO laufen. Dieses Gerät hat mehr als eine GPU, wähle die aus, auf der die Modelle laufen sollen. Bei einem anderen Gerät als Automatisch wird ein Modell, das dort nicht laufen kann, nicht geladen.",
+        "notDetectedHint": "Die ausgewählte GPU wurde nicht erkannt. Für OpenVINO eingestellte Modelle werden nicht geladen, bis ein anderes Gerät gewählt wird.",
         "options": {
           "auto": "Automatisch",
           "cpu": "CPU",

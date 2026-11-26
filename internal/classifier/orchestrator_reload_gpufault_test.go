@@ -109,9 +109,10 @@ func TestBuiltOnFailedOpenVINOGPU(t *testing.T) {
 }
 
 // TestReloadEntry_GPUFaultDuringWarmupKeepsOldInstance pins that a reload whose
-// warm-up trips the GPU fault latch never publishes the dead instance.
+// warm-up trips the GPU fault latch never publishes the dead instance. Under an
+// auto selection the old instance keeps serving.
 func TestReloadEntry_GPUFaultDuringWarmupKeepsOldInstance(t *testing.T) {
-	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+	setGlobalBackend(t, "auto", "auto", "/opt/ov")
 	faulted := setGPUFaultSeam(t)
 
 	old := &reloadFakeModel{id: testSecondaryID}
@@ -286,7 +287,7 @@ func TestReloadEntry_GPUFaultDuringProbeRefusesAnchor(t *testing.T) {
 // does not stop the batch: the faulting secondary is visited first and keeps its old
 // instance, and the secondary visited after it still swaps.
 func TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel(t *testing.T) {
-	setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+	setGlobalBackend(t, "auto", "auto", "/opt/ov")
 	faulted := setGPUFaultSeam(t)
 
 	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
@@ -311,4 +312,42 @@ func TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel(t *testing.T) 
 	assert.Same(t, ModelInstance(newHealthy), o.models[gpuFaultHealthySecondaryID].instance, "the other model must still swap")
 	assert.Equal(t, int32(1), newFaulty.closes.Load())
 	assert.Equal(t, int32(1), oldHealthy.closes.Load())
+}
+
+// TestReloadSecondaryModels_ExplicitGPUFaultRefusesAndUnloads pins that under an explicit
+// selection a GPU fault during the reload's warm-up is a gpu_failed refusal, not a
+// build error: the faulted model is unloaded with the code on record (the GPU notice,
+// not a refusal notice, covers it) and the other model still swaps.
+func TestReloadSecondaryModels_ExplicitGPUFaultRefusesAndUnloads(t *testing.T) {
+	svc := setupTestNotification(t)
+	publishRefusalSettings(t, conf.BackendPrefAuto, conf.OVDeviceGPU, conf.ModelIDPerchV2)
+	faulted := setGPUFaultSeam(t)
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+	t.Cleanup(o.stopOpenVINORefusalNotices)
+	oldPerch := &reloadFakeModel{id: RegistryIDPerchV2}
+	oldHealthy := &reloadFakeModel{id: gpuFaultHealthySecondaryID}
+	onnx := secondaryBackendKey{backend: "onnx"}
+	o.models[RegistryIDPerchV2] = &modelEntry{instance: oldPerch, backend: onnx}
+	o.models[gpuFaultHealthySecondaryID] = &modelEntry{instance: oldHealthy, backend: onnx}
+
+	newPerch := newGPUFaultFake(RegistryIDPerchV2, faulted)
+	newHealthy := &reloadFakeModel{id: gpuFaultHealthySecondaryID}
+	origBuilder := openvinoCapableSecondaryBuilders[RegistryIDPerchV2]
+	openvinoCapableSecondaryBuilders[RegistryIDPerchV2] = func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		return newPerch, nil
+	}
+	t.Cleanup(func() { openvinoCapableSecondaryBuilders[RegistryIDPerchV2] = origBuilder })
+	registerTestSecondaryBuilder(t, gpuFaultHealthySecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		return newHealthy, nil
+	})
+
+	require.NoError(t, o.ReloadSecondaryModels())
+
+	assert.False(t, o.IsModelLoaded(RegistryIDPerchV2), "the model on the failed GPU is unloaded")
+	assert.Equal(t, int32(1), newPerch.closes.Load(), "the faulted instance is closed")
+	assert.Equal(t, int32(1), oldPerch.closes.Load(), "the unload closes the old instance")
+	assert.Equal(t, map[string]string{RegistryIDPerchV2: string(ovReasonGPUFailed)}, o.LoadFailureReasons())
+	assert.Empty(t, refusalNotices(t, svc), "gpu_failed has no refusal notice")
+	assert.Same(t, ModelInstance(newHealthy), o.models[gpuFaultHealthySecondaryID].instance, "the other model still swaps")
 }

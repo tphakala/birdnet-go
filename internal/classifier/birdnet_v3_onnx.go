@@ -56,8 +56,10 @@ type BirdNETV3Config struct {
 	// OpenVINO opt-in, sourced from BirdNET settings. The v3.0 GPU-native model runs
 	// on OpenVINO directly (its mel front-end is a Conv1d, not the STFT op that
 	// blocks OpenVINO), so there is no model-variant gate; when the gate allows it
-	// BirdNET v3.0 runs on OpenVINO (ARM A76 f16 CPU or Intel iGPU) and any failure
-	// falls back to ORT.
+	// BirdNET v3.0 runs on OpenVINO (ARM A76 f16 CPU or Intel iGPU). Under an auto
+	// selection a decline or failure falls back to ORT; under an explicit one (see
+	// openVINOSelectionExplicit) NewBirdNETV3 returns an *OpenVINORefusalError and builds
+	// no ORT classifier.
 	Backend        string // BirdNET.Backend ("auto"/"onnx"/"openvino")
 	OpenVINOPath   string // BirdNET.OpenVINOPath (libopenvino_c location)
 	OpenVINODevice string // BirdNET.OpenVINODevice ("auto", "cpu", "gpu" or "GPU.<n>")
@@ -120,9 +122,9 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 	// OpenVINO path's predictions-port detection (DetectPredictionsOutput) reads the
 	// model metadata through ONNX Runtime, and the ORT fallback classifier needs it
 	// too; InitONNXRuntime is idempotent. Doing this here (mirroring NewBat) ensures
-	// OpenVINO is not silently skipped when v3.0 is the first ONNX model loaded: an
-	// uninitialized runtime would make DetectPredictionsOutput fail and force the ORT
-	// fallback even when the user selected the OpenVINO backend.
+	// OpenVINO is not skipped when v3.0 is the first ONNX model loaded: an
+	// uninitialized runtime would make DetectPredictionsOutput fail, which an auto
+	// selection answers with the ORT fallback and an explicit one with a refusal.
 	if err := inference.InitONNXRuntime(cfg.ONNXRuntimePath); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryModelInit).
@@ -130,18 +132,22 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 			Build()
 	}
 
-	// Prefer the OpenVINO backend when the gate allows it, falling back to ORT on
-	// any failure. OpenVINO must never make BirdNET v3.0 fail to load, so
-	// tryBirdNETV3OpenVINO logs and swallows OV errors and returns ok=false. device
-	// records the compute device actually bound to (the OpenVINO device on the OV
-	// path, else the ONNX Runtime CPU EP).
-	classifier, device, precision, ok := tryBirdNETV3OpenVINO(cfg, labels)
+	// Prefer the OpenVINO backend when the gate allows it. With an auto selection a
+	// decline or failure falls back to ORT (tryBirdNETV3OpenVINO returns a nil
+	// classifier and no error); with an explicit selection it returns an
+	// *OpenVINORefusalError and no ORT classifier is built. device records the compute
+	// device actually bound to (the OpenVINO device on the OV path, else the ONNX
+	// Runtime CPU EP).
+	classifier, device, precision, err := tryBirdNETV3OpenVINO(cfg, labels)
+	if err != nil {
+		return nil, err
+	}
 	// The OpenVINO path reports the precision it actually compiled at: FP32 for v3.0,
 	// which openVINOPrecisionFor forces on every device to avoid the f16 numeric
 	// instability (see BIRDNET-GO-2H6). The ORT fallback overrides backend, device,
 	// and precision below.
 	backend := BackendOpenVINO
-	if !ok {
+	if classifier == nil {
 		// Create the ONNX Runtime classifier (the runtime was initialized above).
 		var cerr error
 		classifier, cerr = inference.NewONNXClassifier(cfg.ModelPath, inference.ONNXClassifierOptions{
@@ -185,48 +191,46 @@ func NewBirdNETV3(cfg *BirdNETV3Config) (*BirdNETV3, error) {
 
 // tryBirdNETV3OpenVINO attempts to build an OpenVINO classifier for BirdNET v3.0
 // or BirdNET+ v3.0 (whichever cfg.RegistryID names; both are forced to f32).
-// It returns (classifier, device, precision, true) on success or
-// (nil, "", "", false) to fall back to ORT, where device is the concrete OpenVINO
-// device the classifier bound to (CPU, GPU or a concrete GPU.<n>) and precision is
-// the effective runtime precision label (FP16/FP32) for the compiled hint. Any failure
-// (gate denied, init/compile/validation error) is logged and swallowed: OpenVINO must
-// never make BirdNET v3.0 fail to load. Unlike Perch there is no model-variant filename
+// It returns (classifier, device, precision, nil) on success, where device is the
+// concrete OpenVINO device the classifier bound to (CPU, GPU or a concrete GPU.<n>)
+// and precision is the effective runtime precision label (FP16/FP32) for the
+// compiled hint. When OpenVINO is not used (gate denied, init/compile/validation
+// error) the selection decides (see openVINONotUsed): auto returns
+// (nil, "", "", nil) so the caller builds the ORT classifier, an explicit selection
+// returns an *OpenVINORefusalError. Unlike Perch there is no model-variant filename
 // gate: the v3.0 GPU-native model has no STFT op, so it compiles on OpenVINO directly.
-func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inference.Classifier, device, precision string, ok bool) {
+func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inference.Classifier, device, precision string, err error) {
 	// openVINOPlanFor gates on the build tag, backend preference, device
 	// availability and, on arm64 auto, ONNX Runtime preference without needing the output port, so run it first; only read the
 	// model metadata to resolve the predictions port once OpenVINO is actually in
 	// play. This avoids a wasted metadata read on the common non-OpenVINO build. The
 	// output index passed here is a placeholder, overwritten below once detected.
-	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, cfg.registryID(), cfg.OpenVINOPath, 0)
+	modelID := cfg.registryID()
+	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, modelID, cfg.OpenVINOPath, 0)
 	if !ok {
-		logOpenVINODeclined(cfg.registryID(), cfg.Backend, cfg.OpenVINODevice, reason)
-		return nil, "", "", false
+		return nil, "", "", openVINONotUsed(modelID, cfg.Backend, cfg.OpenVINODevice, cfg.OpenVINODevice, reason, nil)
 	}
 
 	log := GetLogger()
-	name := ModelRegistry[cfg.registryID()].Name
+	name := ModelRegistry[modelID].Name
 
 	// Resolve the predictions output port by size (the output whose dimension equals
 	// the label count). The v3.0 graph also exposes a 1280-dim embeddings output, and
 	// export tooling has emitted the two outputs in both orders, so binding OpenVINO
-	// to a fixed port would risk the wrong tensor. On any detection failure, decline
-	// OpenVINO and fall back to ORT, which derives the port internally.
+	// to a fixed port would risk the wrong tensor. A detection failure means
+	// OpenVINO cannot bind the model, which ORT does not need (it derives the port
+	// internally).
 	outIdx, err := inference.DetectPredictionsOutput(cfg.ModelPath, len(labels))
 	if err != nil {
-		log.Warn(name+" OpenVINO predictions-output detection failed; using ONNX Runtime",
-			logger.String("model_path", cfg.ModelPath),
-			logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(modelID, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonLoadFailed, err)
 	}
 	plan.outputIndex = outIdx
 
 	// InitOpenVINO is idempotent: the auto/GPU plan above may already have loaded the
 	// core to enumerate devices, but the explicit-CPU plan path does not, so init
-	// here to cover it. A load failure means no usable OpenVINO; fall back to ORT.
+	// here to cover it. A load failure means no usable OpenVINO.
 	if err := inference.InitOpenVINO(cfg.OpenVINOPath); err != nil {
-		log.Warn(name+" OpenVINO init failed; using ONNX Runtime", logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(modelID, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonInitFailed, err)
 	}
 
 	start := time.Now()
@@ -238,17 +242,14 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inf
 		PrecisionHint: plan.precision, // openVINOPrecisionFor forces f32 for v3.0 (f16 is numerically broken; see BIRDNET-GO-2H6)
 	})
 	if err != nil {
-		log.Warn(name+" OpenVINO classifier init failed; using ONNX Runtime",
-			logger.String("device", plan.device),
-			logger.Error(err))
-		return nil, "", "", false
+		return nil, "", "", openVINOStepFailed(modelID, cfg.Backend, cfg.OpenVINODevice, plan.device, ovReasonLoadFailed, err)
 	}
 
 	log.Info(name+" model using OpenVINO backend", append(openVINODeviceFields(plan),
 		logger.String("precision", openVINOPrecisionLabel(plan.precision)),
 		logger.Int("species", classifier.NumSpecies()),
 		logger.String("init_time", time.Since(start).String()))...)
-	return classifier, plan.device, openVINOEffectivePrecision(plan.precision), true
+	return classifier, plan.device, openVINOEffectivePrecision(plan.precision), nil
 }
 
 // Predict runs inference on the given audio samples. Telemetry, errors and the

@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO GPU atteicās",
         "stoppedMessage": "OpenVINO GPU pārstāja darboties, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Modeļi, kas iestatīti darbam uz GPU, līdz tam neko nenosaka. Restartējiet BirdNET-Go, lai atkal izmantotu GPU, vai iestatiet OpenVINO ierīci uz CPU sadaļā Iestatījumi > Analīze > Secinājumi."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, zero {# modeļi nav ielādēti} one {# modelis nav ielādēts} other {# modeļi nav ielādēti}}",
+        "notBuiltMessage": "Šie modeļi ir iestatīti darbam ar OpenVINO, bet šajā BirdNET-Go būvējumā nav OpenVINO atbalsta, tāpēc tie nav ielādēti: {models}. Iestatiet secināšanas aizmuguri un OpenVINO ierīci uz Automātiski sadaļā Iestatījumi > Analīze > Secinājumi.",
+        "deviceMissingMessage": "Šie modeļi ir iestatīti darbam uz OpenVINO ierīces {device}, kuru šajā sistēmā nevar izmantot, tāpēc tie nav ielādēti: {models}. Izvēlieties citu OpenVINO ierīci vai iestatiet aizmuguri un OpenVINO ierīci uz Automātiski sadaļā Iestatījumi > Analīze > Secinājumi.",
+        "noDeviceMessage": "Secināšanas aizmugure ir iestatīta uz OpenVINO, bet šajā sistēmā nav OpenVINO ierīces, kas varētu darbināt šos modeļus, tāpēc tie nav ielādēti: {models}. Iestatiet aizmuguri uz Automātiski vai ONNX Runtime sadaļā Iestatījumi > Analīze > Secinājumi.",
+        "modelUnsupportedMessage": "Šie modeļi ir iestatīti darbam ar OpenVINO, bet to modeļu faili nevar darboties ar OpenVINO, tāpēc tie nav ielādēti: {models}. Instalējiet to OpenVINO variantu no modeļu galerijas sadaļā Iestatījumi > Analīze > Modeļi vai iestatiet aizmuguri un OpenVINO ierīci uz Automātiski sadaļā Iestatījumi > Analīze > Secinājumi.",
+        "loadFailedMessage": "OpenVINO nevarēja ielādēt šos modeļus ierīcē {device}, tāpēc tie nav ielādēti: {models}. Lietotnes žurnālā ir norādīta OpenVINO kļūda. Izvēlieties citu OpenVINO ierīci vai iestatiet aizmuguri un OpenVINO ierīci uz Automātiski sadaļā Iestatījumi > Analīze > Secinājumi."
       }
     },
     "loading": "Ielādē paziņojumus..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO ierīce",
-        "helpText": "Izmanto modeļiem, kas darbojas ar OpenVINO.",
-        "helpTextMultipleGpus": "Izmanto modeļiem, kas darbojas ar OpenVINO. Šajā ierīcē ir vairāk nekā viens GPU, tāpēc izvēlieties, uz kura darbināt modeļus.",
-        "notDetectedHint": "Izvēlētais GPU nav atrasts. Modeļi darbojas ar ONNX Runtime, līdz tiek izvēlēta cita ierīce.",
+        "helpText": "Izmanto modeļiem, kas darbojas ar OpenVINO. Ja izvēlēta cita ierīce nekā Automātiski, modelis, kas uz tās nevar darboties, netiek ielādēts.",
+        "helpTextMultipleGpus": "Izmanto modeļiem, kas darbojas ar OpenVINO. Šajā ierīcē ir vairāk nekā viens GPU, tāpēc izvēlieties, uz kura darbināt modeļus. Ja izvēlēta cita ierīce nekā Automātiski, modelis, kas uz tās nevar darboties, netiek ielādēts.",
+        "notDetectedHint": "Izvēlētais GPU nav atrasts. Modeļi, kas iestatīti darbam ar OpenVINO, netiek ielādēti, līdz tiek izvēlēta cita ierīce.",
         "options": {
           "auto": "Automātiski",
           "cpu": "CPU",

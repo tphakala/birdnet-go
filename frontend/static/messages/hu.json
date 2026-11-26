@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "Az OpenVINO GPU meghibásodott",
         "stoppedMessage": "Az OpenVINO GPU leállt, ezért a BirdNET-Go a következő újraindításig nem használja. A GPU-n futásra beállított modellek addig semmit sem észlelnek. Indítsa újra a BirdNET-Go-t a GPU ismételt használatához, vagy állítsa az OpenVINO eszközt CPU-ra a Beállítások > Elemzés > Következtetés oldalon."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# modell nincs betöltve} other {# modell nincs betöltve}}",
+        "notBuiltMessage": "Ezek a modellek OpenVINO-n való futásra vannak beállítva, de a BirdNET-Go ebben a buildjében nincs OpenVINO-támogatás, ezért nincsenek betöltve: {models}. Állítsa a következtetési backendet és az OpenVINO eszközt Automatikus értékre a Beállítások > Elemzés > Következtetés oldalon.",
+        "deviceMissingMessage": "Ezek a modellek a(z) {device} OpenVINO eszközön való futásra vannak beállítva, amely ezen a rendszeren nem használható, ezért nincsenek betöltve: {models}. Válasszon másik OpenVINO eszközt, vagy állítsa a backendet és az OpenVINO eszközt Automatikus értékre a Beállítások > Elemzés > Következtetés oldalon.",
+        "noDeviceMessage": "A következtetési backend OpenVINO-ra van állítva, de ezen a rendszeren nincs olyan OpenVINO eszköz, amely futtatni tudná ezeket a modelleket, ezért nincsenek betöltve: {models}. Állítsa a backendet Automatikus vagy ONNX Runtime értékre a Beállítások > Elemzés > Következtetés oldalon.",
+        "modelUnsupportedMessage": "Ezek a modellek OpenVINO-n való futásra vannak beállítva, de a modellfájljaik nem futhatnak OpenVINO-n, ezért nincsenek betöltve: {models}. Telepítse az OpenVINO-változatukat a modellgalériából a Beállítások > Elemzés > Modellek oldalon, vagy állítsa a backendet és az OpenVINO eszközt Automatikus értékre a Beállítások > Elemzés > Következtetés oldalon.",
+        "loadFailedMessage": "Az OpenVINO nem tudta betölteni ezeket a modelleket a(z) {device} eszközön, ezért nincsenek betöltve: {models}. Az alkalmazásnapló megnevezi az OpenVINO hibáját. Válasszon másik OpenVINO eszközt, vagy állítsa a backendet és az OpenVINO eszközt Automatikus értékre a Beállítások > Elemzés > Következtetés oldalon."
       }
     },
     "loading": "Értesítések betöltése..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO eszköz",
-        "helpText": "Az OpenVINO-n futó modellekhez használatos.",
-        "helpTextMultipleGpus": "Az OpenVINO-n futó modellekhez használatos. Ebben az eszközben több GPU is van, válaszd ki, melyiken fussanak a modellek.",
-        "notDetectedHint": "A kiválasztott GPU nem észlelhető. A modellek az ONNX Runtime-on futnak, amíg másik eszközt nem választasz.",
+        "helpText": "Az OpenVINO-n futó modellekhez használatos. Az Automatikustól eltérő eszköz esetén az a modell, amely nem futhat rajta, nem töltődik be.",
+        "helpTextMultipleGpus": "Az OpenVINO-n futó modellekhez használatos. Ebben az eszközben több GPU is van, válaszd ki, melyiken fussanak a modellek. Az Automatikustól eltérő eszköz esetén az a modell, amely nem futhat rajta, nem töltődik be.",
+        "notDetectedHint": "A kiválasztott GPU nem észlelhető. Az OpenVINO-ra beállított modellek nem töltődnek be, amíg másik eszközt nem választanak.",
         "options": {
           "auto": "Automatikus",
           "cpu": "CPU",

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -78,24 +79,6 @@ func TestOpenVINOPlanReason_WrongModel(t *testing.T) {
 	assert.Equal(t, ovReasonNotBirdNETv24, reason)
 }
 
-// TestTryBatOpenVINO_FallsBackWithoutTag verifies that without the openvino build
-// tag, tryBatOpenVINO declines (returns a nil extractor and ok=false) so NewBat uses
-// the ORT embedding path. This pins the "OpenVINO must never make the bat model fail
-// to load" contract at the gate level, and the explicit nil return guards against the
-// typed-nil interface trap. It is the observable behavior in a CI (no-tag) build.
-func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
-	t.Parallel()
-	cfg := &BatModelConfig{
-		Backend:        conf.BackendPrefOpenVINO,
-		OpenVINODevice: conf.OVDeviceGPU,
-	}
-	ext, device, precision, ok := tryBatOpenVINO(cfg, 1024)
-	assert.False(t, ok, "without the openvino tag, the bat OV path must decline")
-	assert.Nil(t, ext, "a declined OV path must return a nil extractor (no typed-nil trap)")
-	assert.Empty(t, device)
-	assert.Empty(t, precision, "a declined OV path reports no precision; NewBat's ORT branch sets it")
-}
-
 // TestOpenVINOPlanForBat_NotBuilt verifies that in the default (no-tag) build the
 // planner reports the not-built reason for the bat embedding model, so tryBatOpenVINO
 // logs why OpenVINO was declined rather than falling back silently, and the
@@ -115,26 +98,26 @@ func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 	assert.Equal(t, ovReasonBackendONNX, reason)
 }
 
-// TestLogOpenVINODeclined_StandardBuild verifies the noise-control policy on a
+// TestOpenVINONotUsed_StandardBuildLogging verifies the noise-control policy on a
 // non-openvino build: the auto path (the common case) stays silent so it does not
-// add a line to every standard-build startup, while an explicit backend=openvino
-// opt-in still warns at WARN so the user learns their request could not be honored.
-// Not parallel: it swaps the process-global logger.
-func TestLogOpenVINODeclined_StandardBuild(t *testing.T) {
+// add a line to every standard-build startup, while an explicit selection warns
+// that the model is not loaded so the user learns their request could not be
+// honored. Not parallel: it swaps the process-global logger.
+func TestOpenVINONotUsed_StandardBuildLogging(t *testing.T) {
 	buf := newCaptureLogger(t)
 
-	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefAuto, conf.OVDeviceAuto, ovReasonNotBuilt)
+	require.NoError(t, openVINONotUsed(DefaultModelVersion, conf.BackendPrefAuto, conf.OVDeviceAuto, conf.OVDeviceAuto, ovReasonNotBuilt, nil))
 	assert.Empty(t, buf.String(), "auto-path decline must be silent on a non-openvino build")
 
-	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefOpenVINO, conf.OVDeviceAuto, ovReasonNotBuilt)
+	require.Error(t, openVINONotUsed(DefaultModelVersion, conf.BackendPrefOpenVINO, conf.OVDeviceAuto, conf.OVDeviceAuto, ovReasonNotBuilt, nil))
 	out := buf.String()
-	assert.Contains(t, out, "OpenVINO requested but not used", "explicit opt-in must warn even on a non-openvino build")
+	assert.Contains(t, out, "it is not loaded", "explicit selection must warn even on a non-openvino build")
 	assert.Contains(t, out, ovReasonNotBuilt.Description())
 	assert.Contains(t, out, "reason_code="+string(ovReasonNotBuilt))
 	assert.Contains(t, out, "level=WARN")
 
 	buf.Reset()
-	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefAuto, conf.OVDeviceGPU, ovReasonNotBuilt)
+	require.Error(t, openVINONotUsed(DefaultModelVersion, conf.BackendPrefAuto, conf.OVDeviceGPU, conf.OVDeviceGPU, ovReasonNotBuilt, nil))
 	assert.Contains(t, buf.String(), "level=WARN", "a concrete device is an explicit selection and warns on auto")
 }
 
@@ -169,7 +152,7 @@ func TestOpenVINOReasonDescription(t *testing.T) {
 	all := []OpenVINOReason{
 		ovReasonNotBuilt, ovReasonBackendONNX, ovReasonGPUUnavailable, ovReasonGPUDeviceMissing,
 		ovReasonCPUUnsupported, ovReasonGPUFailed, ovReasonNoDevice, ovReasonORTPreferredARM64,
-		ovReasonNotBirdNETv24, ovReasonNotPerchNoDFT, ovReasonUnverifiedWeights,
+		ovReasonNotBirdNETv24, ovReasonNotPerchNoDFT, ovReasonUnverifiedWeights, ovReasonInitFailed, ovReasonLoadFailed,
 	}
 	assert.Len(t, ovReasonDescriptions, len(all))
 	for _, code := range all {

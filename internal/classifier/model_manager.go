@@ -250,8 +250,9 @@ func (mm *ModelManager) notifyTopologyChanged() {
 // CatalogFile with Role "model") exists on disk. If found, the model is
 // recorded as installed. It never takes the operation slot, so startup is never
 // refused, and it keeps in-flight entries as described below. Once the scan is done
-// it evaluates the "no acoustic model" and "BirdNET Geomodel missing" bell notices
-// and the inference notices (a model failing every window, the OpenVINO GPU fault).
+// it evaluates the "no acoustic model" and "BirdNET Geomodel missing" bell notices,
+// the OpenVINO refusal notices and the inference notices (a model failing every
+// window, the OpenVINO GPU fault).
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
 
@@ -372,13 +373,15 @@ func (mm *ModelManager) ScanInstalled() {
 		mm.ensureGeomodelConfig(log, installedIDs)
 
 		// Startup loading is complete and the notification service is up by now, so evaluate
-		// the persistent "no acoustic model" and "BirdNET Geomodel missing" notices.
+		// the persistent "no acoustic model", "BirdNET Geomodel missing" and OpenVINO refusal
+		// notices.
 		// NewOrchestrator's earlier syncs latched nothing if the notification service was not
 		// yet initialized at construction.
 		if mm.orchestrator != nil {
 			mm.orchestrator.SyncAcousticModelsNotice()
 			mm.orchestrator.SyncGeomodelNotice()
 			mm.orchestrator.SyncInferenceNotices()
+			mm.orchestrator.SyncOpenVINORefusalNotices()
 		}
 	}
 }
@@ -1067,6 +1070,8 @@ func (mm *ModelManager) reloadRangeFilter() error {
 // It holds the operation slot for its whole body and returns an
 // *OperationInProgressError, changing nothing, while another model operation runs,
 // and any other operation requested during an uninstall is refused the same way.
+// After it returns it re-evaluates the OpenVINO refusal notices, since the model
+// leaves models.enabled and its refusal, if any, must stop being reported.
 func (mm *ModelManager) Uninstall(catalogID string) error {
 	log := GetLogger()
 
@@ -1105,6 +1110,15 @@ func (mm *ModelManager) Uninstall(catalogID string) error {
 	defer func() {
 		if topologyChanged {
 			mm.notifyTopologyChanged()
+		}
+	}()
+	// An uninstalled model leaves models.enabled, so a refusal notice that named it
+	// must go. A refused model is never loaded, so topologyChanged stays false for it
+	// and this sync cannot depend on it. Registered before the unlock defer, so it
+	// runs after mm.mu is released.
+	defer func() {
+		if mm.orchestrator != nil {
+			mm.orchestrator.SyncOpenVINORefusalNotices()
 		}
 	}()
 

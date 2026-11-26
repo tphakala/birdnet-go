@@ -557,6 +557,14 @@
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU'en fejlede",
         "stoppedMessage": "OpenVINO-GPU'en holdt op med at virke, så BirdNET-Go er holdt op med at bruge den indtil næste genstart. Modeller, der er sat til at køre på GPU'en, registrerer intet indtil da. Genstart BirdNET-Go for at bruge GPU'en igen, eller sæt OpenVINO-enheden til CPU under Indstillinger > Analyse > Inferens."
+      },
+      "openvinoRefused": {
+        "title": "{count, plural, one {# model er ikke indlæst} other {# modeller er ikke indlæst}}",
+        "notBuiltMessage": "Disse modeller er sat til at køre på OpenVINO, men denne version af BirdNET-Go har ikke understøttelse af OpenVINO, så de er ikke indlæst: {models}. Sæt inferens-backend og OpenVINO-enheden til Automatisk under Indstillinger > Analyse > Inferens.",
+        "deviceMissingMessage": "Disse modeller er sat til at køre på OpenVINO-enheden {device}, som ikke kan bruges på dette system, så de er ikke indlæst: {models}. Vælg en anden OpenVINO-enhed, eller sæt backend og OpenVINO-enheden til Automatisk, under Indstillinger > Analyse > Inferens.",
+        "noDeviceMessage": "Inferens-backend er sat til OpenVINO, men dette system har ingen OpenVINO-enhed, der kan køre disse modeller, så de er ikke indlæst: {models}. Sæt backend til Automatisk eller ONNX Runtime under Indstillinger > Analyse > Inferens.",
+        "modelUnsupportedMessage": "Disse modeller er sat til at køre på OpenVINO, men deres modelfiler kan ikke køre på OpenVINO, så de er ikke indlæst: {models}. Installer deres OpenVINO-variant fra modelgalleriet under Indstillinger > Analyse > Modeller, eller sæt backend og OpenVINO-enheden til Automatisk under Indstillinger > Analyse > Inferens.",
+        "loadFailedMessage": "OpenVINO kunne ikke indlæse disse modeller på {device}, så de er ikke indlæst: {models}. Programloggen angiver OpenVINO-fejlen. Vælg en anden OpenVINO-enhed, eller sæt backend og OpenVINO-enheden til Automatisk, under Indstillinger > Analyse > Inferens."
       }
     },
     "loading": "Indlæser notifikationer..."
@@ -6210,9 +6218,9 @@
       },
       "device": {
         "label": "OpenVINO-enhed",
-        "helpText": "Bruges til modeller, der kører på OpenVINO.",
-        "helpTextMultipleGpus": "Bruges til modeller, der kører på OpenVINO. Denne enhed har mere end én GPU, så vælg den, modellerne skal køre på.",
-        "notDetectedHint": "Den valgte GPU blev ikke fundet. Modellerne kører på ONNX Runtime, indtil en anden enhed vælges.",
+        "helpText": "Bruges til modeller, der kører på OpenVINO. Med en anden enhed end Automatisk indlæses en model, der ikke kan køre dér, ikke.",
+        "helpTextMultipleGpus": "Bruges til modeller, der kører på OpenVINO. Denne enhed har mere end én GPU, så vælg den, modellerne skal køre på. Med en anden enhed end Automatisk indlæses en model, der ikke kan køre dér, ikke.",
+        "notDetectedHint": "Den valgte GPU blev ikke fundet. Modeller, der er sat til OpenVINO, indlæses ikke, før en anden enhed vælges.",
         "options": {
           "auto": "Automatisk",
           "cpu": "CPU",

@@ -29,23 +29,6 @@ func TestIsPerchNoDFT(t *testing.T) {
 	}
 }
 
-// TestTryPerchOpenVINO_StockModelFallsBack verifies that a stock (non-no_dft)
-// Perch model never attempts OpenVINO and falls back to ORT, regardless of build
-// tag or host. The isPerchNoDFT gate short-circuits before any library load, so
-// this is deterministic everywhere (no libopenvino_c required).
-func TestTryPerchOpenVINO_StockModelFallsBack(t *testing.T) {
-	t.Parallel()
-	c, device, precisionHint, ok := tryPerchOpenVINO(&PerchConfig{
-		ModelPath:      "/models/perch_v2.onnx",
-		Backend:        conf.BackendPrefOpenVINO,
-		OpenVINODevice: conf.OVDeviceAuto,
-	}, []string{"a", "b"})
-	assert.False(t, ok, "stock perch_v2 must not use OpenVINO")
-	assert.Nil(t, c)
-	assert.Empty(t, device, "fallback path must not report an OpenVINO device")
-	assert.Empty(t, precisionHint, "fallback path must not report an OpenVINO precision hint")
-}
-
 // TestPerchOpenVINOPlanPrecedence pins the reason order for Perch: backend onnx,
 // then a binary without OpenVINO, then the stock model file. A stock file on a
 // build without OpenVINO reports not built, not the file.
