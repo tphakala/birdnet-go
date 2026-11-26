@@ -20,14 +20,18 @@ func TestGPUNotice_FailedMoveSucceedsOnRetry(t *testing.T) {
 	require.Len(t, notices, 1)
 	require.Equal(t, notification.MsgOpenVINOGPUMovedPartialMessage, notices[0].MessageKey)
 
+	// Run the retry pass itself: a recovery request would also empty the failed set,
+	// so only the pass can show that a model that moved is taken out of it.
 	a.err = nil
-	env.o.ReconcileGPUFaultAfterSettingsReload()
-	env.settle()
+	env.o.recoverModelsFromFailedGPU()
+	assert.False(t, env.o.moveFailed(testSecondaryID), "a model that moved leaves the failed set")
 
+	// The swap kicks a notice reconcile of its own; wait for it before reading.
+	env.o.syncInferenceHealth()
+	env.settle()
 	notices = gpuNoticesNow(t, env.svc)
 	require.Len(t, notices, 1)
-	assert.Equal(t, notification.MsgOpenVINOGPUMovedTitle, notices[0].TitleKey, "a model that moved leaves the failed set")
-	assert.False(t, env.o.moveFailed(testSecondaryID))
+	assert.Equal(t, notification.MsgOpenVINOGPUMovedTitle, notices[0].TitleKey, "nothing is left on the failed GPU")
 }
 
 func TestGPUNotice_PartialNamesOnlyModelsAPassTried(t *testing.T) {
