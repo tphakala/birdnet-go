@@ -217,3 +217,59 @@ func TestRetryFailedLoadsForBackendChange_RechecksCandidateMidRetry(t *testing.T
 		})
 	}
 }
+
+// TestRetryFailedLoadsForBackendChange_KeyFieldsAndOrder pins that each inference settings
+// field in the failure key makes a failed model retryable on its own, and that several
+// failed models are retried in registry ID order.
+func TestRetryFailedLoadsForBackendChange_KeyFieldsAndOrder(t *testing.T) {
+	// Not parallel: swaps modelLoaders and the global settings snapshot.
+	isolateTestConfig(t)
+
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{conf.ModelIDPerchV2, conf.ModelIDBirdNETPlusV3}
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	var perchCalls, v3Calls atomic.Int32
+	var noFail atomic.Bool
+	stubModelLoader(t, RegistryIDPerchV2, &perchCalls, &noFail)
+	stubModelLoader(t, RegistryIDBirdNETPlusV3, &v3Calls, &noFail)
+
+	changes := []struct {
+		name   string
+		mutate func(*conf.Settings)
+	}{
+		{"backend", func(s *conf.Settings) { s.BirdNET.Backend = conf.BackendPrefOpenVINO }},
+		{"OpenVINO device", func(s *conf.Settings) { s.BirdNET.OpenVINODevice = conf.OVDeviceCPU }},
+		{"OpenVINO path", func(s *conf.Settings) { s.BirdNET.OpenVINOPath = "/opt/openvino/lib" }},
+		{"threads", func(s *conf.Settings) { s.BirdNET.Threads = 7 }},
+		{"ONNX Runtime path", func(s *conf.Settings) { s.BirdNET.ONNXRuntimePath = "/opt/onnx/lib" }},
+	}
+	for _, tc := range changes {
+		t.Run(tc.name, func(t *testing.T) {
+			// A fresh orchestrator per case: the retry order comes from ranging a map whose
+			// iteration order differs per map, so one map would hide a missing sort.
+			// It is built with nothing enabled, so construction does not call the stub loaders.
+			none := conf.CloneSettings(settings)
+			none.Models.Enabled = []string{}
+			conftest.SetTestSettings(none)
+			o, err := NewOrchestrator(none)
+			require.NoError(t, err)
+			t.Cleanup(o.Delete)
+			conftest.SetTestSettings(settings)
+
+			// Both models fail under the current settings, then one field changes.
+			o.recordLoadFailure(RegistryIDPerchV2, errors.NewStd("boom"))
+			o.recordLoadFailure(RegistryIDBirdNETPlusV3, errors.NewStd("boom"))
+			assert.Empty(t, o.RetryFailedLoadsForBackendChange(), "unchanged settings retry nothing")
+
+			next := conf.CloneSettings(settings)
+			tc.mutate(next)
+			conftest.SetTestSettings(next)
+			t.Cleanup(func() { conftest.SetTestSettings(settings) })
+
+			assert.Equal(t, []string{RegistryIDBirdNETPlusV3, RegistryIDPerchV2}, o.RetryFailedLoadsForBackendChange(),
+				"a change to %s retries every failed model, in registry ID order", tc.name)
+		})
+	}
+}
