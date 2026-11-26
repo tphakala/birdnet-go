@@ -24,6 +24,9 @@ func TestV24LateLoad_PredictAfterEnableAtRuntime(t *testing.T) {
 
 	o, err := NewOrchestrator(settings)
 	require.NoError(t, err)
+	// Registered before any assertion that can end the test; Delete is safe to
+	// repeat when requireV24Loaded has already deleted o.
+	t.Cleanup(func() { o.Delete() })
 	require.False(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 is not enabled at startup")
 
 	// Enable v2.4 the way a UI save does: publish a new snapshot.
@@ -36,7 +39,6 @@ func TestV24LateLoad_PredictAfterEnableAtRuntime(t *testing.T) {
 		require.NoError(t, loadErr)
 	}
 	requireV24Loaded(t, o) // deletes o and skips under noembed
-	t.Cleanup(func() { o.Delete() })
 
 	// Without a published snapshot currentSettings() falls back to the instance
 	// and the label source cannot matter, so the check would pass vacuously.
