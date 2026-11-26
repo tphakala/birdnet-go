@@ -905,6 +905,19 @@ describe('AnalysisSettingsPage inference runtime', () => {
       expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
     });
 
+    it('keeps the saved selection text while an unsaved edit picks an explicit device', async () => {
+      mockRuntime(async () => runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+
+      // The server acts on the saved auto selection until a save, so the text must not follow
+      // the form.
+      editSection('birdnet', { backend: 'auto', openVinoDevice: 'gpu' });
+      await tick();
+      expect(screen.getByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_EXPLICIT_TEXT)).toBeNull();
+    });
+
     it('shows no alert while the GPU works', async () => {
       mockRuntime(async () => runtimeStatus(GPU_HOST));
       render(AnalysisSettingsPage);
