@@ -2708,8 +2708,12 @@ var errEntryReplaced = errors.NewStd("model entry was replaced")
 // model is unloaded only while o.models still holds that exact entry, checked under
 // the same o.mu write lock that detaches it, so a concurrent LoadModel that published
 // a replacement is never torn down; otherwise it returns errEntryReplaced. onDetach,
-// when non-nil, runs under o.mu right after the entry is detached; it must not take
-// o.mu or any lock below it.
+// when non-nil, runs under the o.mu write lock right after the entry is detached, so
+// it must not block or take any orchestrator lock: the locks ranked above o.mu
+// (reloadMu, rebuildMu, modelSpeciesMu, and the acoustic, geomodel and
+// inference-health notice latches, which take o.mu inside) would invert the lock
+// order, o.mu itself is already held, and the OpenVINO refusal latch must be taken
+// with no orchestrator lock held.
 func (o *Orchestrator) unloadModel(registryID string, expected *modelEntry, onDetach func()) error {
 	log := GetLogger()
 
