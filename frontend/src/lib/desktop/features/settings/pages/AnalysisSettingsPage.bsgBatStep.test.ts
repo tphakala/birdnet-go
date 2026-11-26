@@ -36,6 +36,7 @@ vi.mock('$lib/stores/models.svelte', () => ({
 vi.mock('$lib/stores/acousticModels.svelte', () => ({
   analysisCadence: () => null,
   invalidateAcousticModels: vi.fn().mockResolvedValue(undefined),
+  onTopologyChanged: vi.fn(() => () => {}),
   watchAcousticModels: vi.fn(() => () => {}),
 }));
 

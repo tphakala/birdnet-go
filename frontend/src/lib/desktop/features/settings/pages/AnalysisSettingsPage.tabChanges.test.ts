@@ -40,6 +40,17 @@ vi.mock('$lib/stores/models.svelte', () => ({
   watchModels: vi.fn(() => () => {}),
 }));
 
+// The topology stream: tests fire the registered listeners to announce a change, as the
+// server does when the GPU fault latch trips.
+const { topologyListeners } = vi.hoisted(() => ({ topologyListeners: new Set<() => void>() }));
+vi.mock('$lib/stores/acousticModels.svelte', async importOriginal => ({
+  ...(await importOriginal<typeof import('$lib/stores/acousticModels.svelte')>()),
+  onTopologyChanged: vi.fn((listener: () => void) => {
+    topologyListeners.add(listener);
+    return () => topologyListeners.delete(listener);
+  }),
+}));
+
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
 
 // The mocked store keeps its config as loose sections, so these tests can seed sections the real
@@ -731,17 +742,30 @@ describe('AnalysisSettingsPage inference runtime', () => {
   const DEVICE_LABEL = 'analysis.inference.device.label';
 
   /** A runtime status as GET /api/v2/system/inference reports it. */
+  /** Server time a test status was read at, unless a test sets its own. */
+  const DEFAULT_SNAPSHOT = 1_700_000_000;
+
   function runtimeStatus({
     onnx = true,
     openvino = true,
     devices = ['CPU'],
     gpus,
-  }: { onnx?: boolean; openvino?: boolean; devices?: string[]; gpus?: OpenVINOGPU[] } = {}) {
+    gpuFailed,
+    snapshotAtUnix = DEFAULT_SNAPSHOT,
+  }: {
+    onnx?: boolean;
+    openvino?: boolean;
+    devices?: string[];
+    gpus?: OpenVINOGPU[];
+    gpuFailed?: boolean;
+    snapshotAtUnix?: number;
+  } = {}) {
     return {
+      snapshotAtUnix,
       backends: {
         tflite: { available: true },
         onnx: { available: onnx },
-        openvino: { supported: openvino, active: false, devices, gpus },
+        openvino: { supported: openvino, active: false, devices, gpus, gpuFailed },
       },
     };
   }
@@ -825,6 +849,141 @@ describe('AnalysisSettingsPage inference runtime', () => {
     const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
     await waitFor(() => expect(backend).toBeEnabled());
     expect(screen.queryByText('analysis.inference.backendsUnavailable')).toBeNull();
+  });
+
+  describe('GPU fault', () => {
+    const GPU_FAILED_TEXT = 'analysis.inference.gpuFailed';
+    const GPU_HOST = { devices: ['CPU', 'GPU'], gpus: [{ id: 'GPU', name: 'Iris Xe' }] };
+
+    /** Announce a topology change to every registered listener. */
+    function announceTopologyChange() {
+      for (const listener of [...topologyListeners]) listener();
+    }
+
+    /** Lookups the page started, each to be settled by the test. */
+    function mockPendingRuntime() {
+      const pending: Array<(value: unknown) => void> = [];
+      mockRuntime(() => new Promise(resolve => pending.push(resolve)));
+      return pending;
+    }
+
+    it('shows no alert while the GPU works', async () => {
+      mockRuntime(async () => runtimeStatus(GPU_HOST));
+      render(AnalysisSettingsPage);
+      const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+      await waitFor(() => expect(backend).toBeEnabled());
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
+    });
+
+    it('shows the alert and refetches the status when the topology changes after the list loaded', async () => {
+      let failed = false;
+      mockRuntime(async () => runtimeStatus({ ...GPU_HOST, gpuFailed: failed }));
+      render(AnalysisSettingsPage);
+      const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+      await waitFor(() => expect(backend).toBeEnabled());
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
+
+      failed = true;
+      announceTopologyChange();
+
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+    });
+
+    it('does not lose a topology change that arrives during the first lookup', async () => {
+      const pending = mockPendingRuntime();
+      render(AnalysisSettingsPage);
+      await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+      const started = pending.length;
+
+      announceTopologyChange();
+      await waitFor(() => expect(pending.length).toBeGreaterThan(started));
+      // The lookups that started before the change answer with the healthy status, the
+      // one the change started answers last with the fault.
+      for (const settle of pending.slice(0, started)) settle(runtimeStatus(GPU_HOST));
+      for (const settle of pending.slice(started)) {
+        settle(runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      }
+
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+    });
+
+    it('keeps the newer status when a status read earlier answers last', async () => {
+      const pending = mockPendingRuntime();
+      render(AnalysisSettingsPage);
+      await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+      const started = pending.length;
+
+      announceTopologyChange();
+      await waitFor(() => expect(pending.length).toBeGreaterThan(started));
+      for (const settle of pending.slice(started)) {
+        settle(
+          runtimeStatus({ ...GPU_HOST, gpuFailed: true, snapshotAtUnix: DEFAULT_SNAPSHOT + 1 })
+        );
+      }
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+      for (const settle of pending.slice(0, started)) settle(runtimeStatus(GPU_HOST));
+      await tick();
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(screen.getByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+    });
+
+    it('shows a fault read later even when its lookup started first and answers last', async () => {
+      const pending = mockPendingRuntime();
+      render(AnalysisSettingsPage);
+      await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+      const started = pending.length;
+
+      announceTopologyChange();
+      await waitFor(() => expect(pending.length).toBeGreaterThan(started));
+      // The newer lookup read the status before the latch tripped and answers first; the
+      // older one read it a second later, after the trip, and answers last.
+      for (const settle of pending.slice(started)) settle(runtimeStatus(GPU_HOST));
+      await tick();
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
+      for (const settle of pending.slice(0, started)) {
+        settle(
+          runtimeStatus({ ...GPU_HOST, gpuFailed: true, snapshotAtUnix: DEFAULT_SNAPSHOT + 1 })
+        );
+      }
+
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+    });
+
+    it('keeps a shown fault when a status read in the same second without it answers last', async () => {
+      const pending = mockPendingRuntime();
+      render(AnalysisSettingsPage);
+      await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+      const started = pending.length;
+
+      announceTopologyChange();
+      await waitFor(() => expect(pending.length).toBeGreaterThan(started));
+      for (const settle of pending.slice(0, started)) {
+        settle(runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      }
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+      for (const settle of pending.slice(started)) settle(runtimeStatus(GPU_HOST));
+      await tick();
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(screen.getByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+    });
+
+    it('clears the alert when a server restart reports a healthy GPU', async () => {
+      let restarted = false;
+      mockRuntime(async () =>
+        restarted
+          ? runtimeStatus({ ...GPU_HOST, snapshotAtUnix: DEFAULT_SNAPSHOT + 60 })
+          : runtimeStatus({ ...GPU_HOST, gpuFailed: true })
+      );
+      render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+
+      restarted = true;
+      announceTopologyChange();
+
+      await waitFor(() => expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull());
+    });
   });
 
   it('offers only Auto when the host reports neither ONNX Runtime nor OpenVINO', async () => {

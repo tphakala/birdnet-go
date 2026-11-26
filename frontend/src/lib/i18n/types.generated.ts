@@ -457,6 +457,8 @@ export type TranslationKey =
   | 'notifications.content.storage.notPersistentMessage' // params: paths
   | 'notifications.content.storage.anonymousVolumeTitle'
   | 'notifications.content.storage.anonymousVolumeMessage' // params: paths
+  | 'notifications.content.openvinoGpu.stoppedTitle'
+  | 'notifications.content.openvinoGpu.stoppedMessage'
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -1605,6 +1607,8 @@ export type TranslationKey =
   | 'system.inference.modelFailingHelp' // params: reason
   | 'system.inference.modelFailingReasonNonFinite'
   | 'system.inference.modelFailingReasonError'
+  | 'system.inference.modelFailingGPUFault'
+  | 'system.inference.deviceFailed' // params: device
   | 'system.metrics.cpu'
   | 'system.metrics.memory'
   | 'system.metrics.temperature'
@@ -4573,11 +4577,13 @@ export type TranslationKey =
   | 'analysis.inference.device.options.gpuDefault' // params: name
   | 'analysis.inference.device.options.gpuNamed' // params: name, type
   | 'analysis.inference.device.options.notDetected' // params: id
+  | 'analysis.inference.device.options.failed' // params: label
   | 'analysis.inference.device.gpuTypes.integrated'
   | 'analysis.inference.device.gpuTypes.discrete'
   | 'analysis.inference.reloadNote'
   | 'analysis.inference.backendsLoading'
   | 'analysis.inference.backendsUnavailable'
+  | 'analysis.inference.gpuFailed'
   | 'analysis.inference.running.title'
   | 'analysis.inference.running.description'
   | 'analysis.inference.running.unknown'
@@ -5070,6 +5076,7 @@ export type TranslationParams = {
   'system.inference.sourcesDegraded': { count: string | number; total: string | number };
   'system.inference.coDetectedHelp': { seconds: string | number };
   'system.inference.modelFailingHelp': { reason: string | number };
+  'system.inference.deviceFailed': { device: string | number };
   'analytics.hub.card.notEnoughDataHint': { min: string | number };
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
@@ -5447,6 +5454,7 @@ export type TranslationParams = {
   'analysis.inference.device.options.gpuDefault': { name: string | number };
   'analysis.inference.device.options.gpuNamed': { name: string | number; type: string | number };
   'analysis.inference.device.options.notDetected': { id: string | number };
+  'analysis.inference.device.options.failed': { label: string | number };
   'analysis.scope.rangeFilter.appliesTo': { models: string | number };
   'analysis.scope.rangeFilter.notApplied': { models: string | number };
   'health.metricFooter.healthyOfTotal': { healthy: string | number; total: string | number };

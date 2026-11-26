@@ -277,6 +277,11 @@ const (
 	MsgInferenceFailingMessage          = "notifications.content.inferenceFailing.message"
 	MsgInferenceFailingNonFiniteMessage = "notifications.content.inferenceFailing.nonFiniteMessage"
 
+	// OpenVINO GPU notice: the GPU fault latch tripped and GPU inference is stopped
+	// until the next restart.
+	MsgOpenVINOGPUStoppedTitle   = "notifications.content.openvinoGpu.stoppedTitle"
+	MsgOpenVINOGPUStoppedMessage = "notifications.content.openvinoGpu.stoppedMessage"
+
 	// Analysis cadence notices: the first cadence plan of the process limits the
 	// analysis overlap to what the hardware sustains (capped), or even zero overlap
 	// exceeds it (overloaded).

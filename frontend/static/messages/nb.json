@@ -553,6 +553,10 @@
         "notPersistentMessage": "Disse banene ligger på lagring som slettes når containeren gjenopprettes, for eksempel ved en oppdatering av imaget: {paths}. Knytt et volum eller en vertsmappe til dem i containerkonfigurasjonen din.",
         "anonymousVolumeTitle": "Data lagres i et anonymt containervolum",
         "anonymousVolumeMessage": "Disse banene ligger i anonyme volumer som container-kjøretiden opprettet fordi ingen volum var knyttet til dem: {paths}. En container som startes på nytt, for eksempel med docker run etter en oppdatering av imaget, får nye tomme volumer, så dataene ser ut til å være tapt. Knytt et navngitt volum eller en vertsmappe til dem."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "OpenVINO-GPU-en sviktet",
+        "stoppedMessage": "OpenVINO-GPU-en sluttet å virke, så BirdNET-Go har sluttet å bruke den til neste omstart. Modeller som er satt til å kjøre på GPU-en, oppdager ingenting før da. Start BirdNET-Go på nytt for å bruke GPU-en igjen, eller sett OpenVINO-enheten til CPU under Innstillinger > Analyse > Inferens."
       }
     },
     "loading": "Laster varsler..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "Ingen siden modellen ble lastet inn",
       "modelFailingHelp": "{reason} Prøv en annen versjon av denne modellen under Innstillinger > Analyse > Modeller, eller sjekk backend og presisjon som vises over.",
       "modelFailingReasonNonFinite": "Alle de siste analysene feilet fordi modellen returnerte ugyldige poeng (NaN eller uendelige), så den oppdager ingenting.",
-      "modelFailingReasonError": "Alle de siste analysene feilet fordi inferensen returnerte en feil, så modellen oppdager ingenting."
+      "modelFailingReasonError": "Alle de siste analysene feilet fordi inferensen returnerte en feil, så modellen oppdager ingenting.",
+      "modelFailingGPUFault": "Alle de siste analysene feilet fordi OpenVINO-GPU-en sviktet. Inferens på GPU-en er stoppet til BirdNET-Go startes på nytt. Løs det ved å sette OpenVINO-enheten til CPU i inferensinnstillingene, eller start BirdNET-Go på nytt for å prøve GPU-en igjen.",
+      "deviceFailed": "{device} (sviktet)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "OpenVINO-standard: {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (ikke funnet)"
+          "notDetected": "{id} (ikke funnet)",
+          "failed": "{label} (sviktet)"
         },
         "gpuTypes": {
           "integrated": "integrert",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Endring av backend eller enhet laster inn modellene på nytt, slik at deteksjonen tar en pause i noen sekunder.",
       "backendsLoading": "Sjekker hvilke kjøretider denne enheten støtter.",
       "backendsUnavailable": "Kunne ikke lese hvilke kjøretider denne enheten støtter. Backend og enhet kan endres når den er lastet inn.",
+      "gpuFailed": "OpenVINO-GPU-en sviktet i denne kjøringen, så BirdNET-Go har sluttet å bruke den til neste omstart. Sett OpenVINO-enheten til CPU nedenfor, eller start BirdNET-Go på nytt for å prøve GPU-en igjen.",
       "running": {
         "title": "Kjører nå",
         "description": "Kjøretiden og presisjonen hver aktiverte klassifikator kjører med.",

@@ -191,6 +191,10 @@ type BackendStatus struct {
 type OpenVINOBackendStatus struct {
 	Supported bool `json:"supported"`
 	Active    bool `json:"active"`
+	// GPUFailed is true once the OpenVINO GPU fault latch has tripped in this
+	// process. Models on the GPU then fail until the process restarts. Devices
+	// and GPUs stay probe facts and still list the GPU.
+	GPUFailed bool `json:"gpuFailed,omitempty"`
 	// Devices lists the device classes the host can target ("CPU", "GPU"); a host
 	// with several GPUs still reports the single class "GPU" here. The concrete
 	// adapters are in GPUs.
@@ -267,11 +271,12 @@ type InferenceModelStatus struct {
 
 // Model health states reported in ModelHealthInfo.State.
 const (
-	// modelHealthOK: the latest analysis windows succeed (or failed fewer than
-	// classifier.InferenceFailureNoticeThreshold times in a row).
+	// modelHealthOK: the latest analysis windows succeed (or failed fewer times in
+	// a row than the model's failure threshold).
 	modelHealthOK = "ok"
-	// modelHealthFailing: the model failed its last
-	// classifier.InferenceFailureNoticeThreshold or more windows in a row.
+	// modelHealthFailing: the model failed its last failure-threshold or more windows
+	// in a row: classifier.InferenceFailureNoticeThreshold, or one window when the
+	// latest failure is the OpenVINO GPU fault.
 	modelHealthFailing = "failing"
 	// modelHealthIdle: loaded, but no analysis window has run yet.
 	modelHealthIdle = "idle"
@@ -297,17 +302,18 @@ type ModelHealthInfo struct {
 	// none has.
 	LastSuccessAtUnix int64 `json:"lastSuccessAtUnix,omitempty"`
 	// ErrorClass is the class of the latest failure ("non_finite_output",
-	// "inference_error"), empty while no failure run is in progress.
+	// "inference_error", "gpu_device_fault"), empty while no failure run is in progress.
 	ErrorClass string `json:"errorClass,omitempty"`
 }
 
 // buildModelHealth maps the classifier's per-model inference health onto the
-// API payload. It is pure.
+// API payload. It is pure. The failure threshold is the model's own: 1 when its
+// latest failure is the OpenVINO GPU fault.
 func buildModelHealth(h *classifier.ModelInferenceHealth) *ModelHealthInfo {
 	info := &ModelHealthInfo{
 		State:               modelHealthOK,
 		ConsecutiveFailures: h.ConsecutiveFailures,
-		FailureThreshold:    classifier.InferenceFailureNoticeThreshold,
+		FailureThreshold:    int(h.FailureThreshold),
 		InferenceCount:      h.InferenceCount,
 		ErrorClass:          h.ErrorClass,
 	}
@@ -552,13 +558,20 @@ func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string
 // models with per-model stats, memory and current inference health, source
 // attachment, and audio pipeline metrics. The snapshot is assembled from live
 // sources on every request so it reflects hot-reload changes without any
-// caching.
+// caching. backends.openvino.gpuFailed reports the OpenVINO GPU fault latch,
+// read right after snapshotAtUnix is stamped so the two describe one moment.
 func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 
+	// Stamp the snapshot and read the GPU fault latch right after it, before the
+	// probes below. Clients order overlapping answers by snapshotAtUnix, and the
+	// latch never clears while the process runs, so a stamp taken no later than its
+	// latch read means a status without the fault never carries a later stamp
+	// than one that reports it.
 	resp := InferenceStatusResponse{
 		SnapshotAtUnix: time.Now().Unix(),
 	}
+	gpuFailed, _ := inference.OpenVINOGPUFault()
 
 	// Backends: TFLite is always compiled in; ORT and OpenVINO are probed.
 	// Probed before hardware because the ORT result feeds capability derivation.
@@ -568,6 +581,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	ov := inference.CheckOpenVINOAvailability()
 	resp.Backends.OpenVINO = OpenVINOBackendStatus{Supported: ov.Supported, Active: ov.Active}
 	if ov.Supported {
+		resp.Backends.OpenVINO.GPUFailed = gpuFailed
 		for _, d := range []string{deviceCPU, deviceGPU} {
 			if inference.OpenVINOHasDevice(d) {
 				resp.Backends.OpenVINO.Devices = append(resp.Backends.OpenVINO.Devices, d)

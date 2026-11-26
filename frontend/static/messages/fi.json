@@ -553,6 +553,10 @@
         "notPersistentMessage": "Nämä polut ovat tallennustilassa, joka poistetaan, kun kontti luodaan uudelleen, esimerkiksi image-päivityksen yhteydessä: {paths}. Yhdistä niihin taltio tai isäntäkoneen hakemisto konttisi asetuksissa.",
         "anonymousVolumeTitle": "Tiedot tallennetaan nimettömälle konttitaltiolle",
         "anonymousVolumeMessage": "Nämä polut ovat nimettömillä taltioilla, jotka konttiympäristö loi, koska taltiota ei ollut yhdistetty: {paths}. Uudelleen käynnistetty kontti, esimerkiksi docker run -komennolla image-päivityksen jälkeen, saa uudet tyhjät taltiot, joten tiedot näyttävät kadonneen. Yhdistä niihin nimetty taltio tai isäntäkoneen hakemisto."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "OpenVINO-GPU epäonnistui",
+        "stoppedMessage": "OpenVINO-GPU lakkasi toimimasta, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. GPU:lla ajettaviksi asetetut mallit eivät tunnista mitään siihen asti. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen tai aseta OpenVINO-laitteeksi CPU kohdassa Asetukset > Analyysi > Inferenssi."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "Ei yhtään mallin latauksen jälkeen",
       "modelFailingHelp": "{reason} Kokeile tämän mallin toista versiota kohdassa Asetukset > Analyysi > Mallit tai tarkista yllä näkyvä taustajärjestelmä ja tarkkuus.",
       "modelFailingReasonNonFinite": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska malli palautti virheellisiä pisteitä (NaN tai äärettömiä), joten se ei tunnista mitään.",
-      "modelFailingReasonError": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska päättely palautti virheen, joten malli ei tunnista mitään."
+      "modelFailingReasonError": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska päättely palautti virheen, joten malli ei tunnista mitään.",
+      "modelFailingGPUFault": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska OpenVINO-GPU epäonnistui. GPU:n päättely on pysäytetty, kunnes BirdNET-Go käynnistetään uudelleen. Korjaa ongelma vaihtamalla päättelyasetuksissa OpenVINO-laitteeksi CPU tai käynnistä BirdNET-Go uudelleen kokeillaksesi GPU:ta uudestaan.",
+      "deviceFailed": "{device} (epäonnistui)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "OpenVINOn oletus: {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (ei löydy)"
+          "notDetected": "{id} (ei löydy)",
+          "failed": "{label} (epäonnistui)"
         },
         "gpuTypes": {
           "integrated": "integroitu",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Taustajärjestelmän tai laitteen vaihtaminen lataa mallit uudelleen, joten tunnistus keskeytyy muutamaksi sekunniksi.",
       "backendsLoading": "Tarkistetaan, mitä suoritusympäristöjä tämä laite tukee.",
       "backendsUnavailable": "Ei voitu lukea, mitä suoritusympäristöjä tämä laite tukee. Taustajärjestelmä ja laite voidaan vaihtaa latauksen jälkeen.",
+      "gpuFailed": "OpenVINO-GPU epäonnistui tässä ajossa, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Vaihda alla OpenVINO-laitteeksi CPU tai käynnistä BirdNET-Go uudelleen kokeillaksesi GPU:ta uudestaan.",
       "running": {
         "title": "Nyt käynnissä",
         "description": "Suoritusympäristö ja tarkkuus, joilla kukin käytössä oleva luokittelija toimii.",

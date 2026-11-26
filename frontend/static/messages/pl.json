@@ -553,6 +553,10 @@
         "notPersistentMessage": "Te ścieżki znajdują się w pamięci masowej, która jest usuwana po ponownym utworzeniu kontenera, na przykład przy aktualizacji obrazu: {paths}. Przypisz do nich wolumin lub katalog hosta w konfiguracji kontenera.",
         "anonymousVolumeTitle": "Dane są przechowywane w anonimowym woluminie kontenera",
         "anonymousVolumeMessage": "Te ścieżki znajdują się w anonimowych woluminach, które środowisko uruchomieniowe kontenera utworzyło, ponieważ nie przypisano żadnego woluminu: {paths}. Kontener uruchomiony od nowa, na przykład poleceniem docker run po aktualizacji obrazu, otrzymuje nowe puste woluminy, więc dane wyglądają na utracone. Przypisz do nich nazwany wolumin lub katalog hosta."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "GPU OpenVINO uległo awarii",
+        "stoppedMessage": "GPU OpenVINO przestało działać, więc BirdNET-Go nie używa go do następnego restartu. Modele ustawione do działania na GPU do tego czasu niczego nie wykrywają. Uruchom BirdNET-Go ponownie, aby znów używać GPU, lub ustaw urządzenie OpenVINO na CPU w Ustawienia > Analiza > Wnioskowanie."
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "Brak od załadowania modelu",
       "modelFailingHelp": "{reason} Wypróbuj inną wersję tego modelu w Ustawienia > Analiza > Modele lub sprawdź backend i precyzję widoczne powyżej.",
       "modelFailingReasonNonFinite": "Wszystkie ostatnie analizy nie powiodły się, ponieważ model zwrócił nieprawidłowe wyniki (NaN lub nieskończone), więc niczego nie wykrywa.",
-      "modelFailingReasonError": "Wszystkie ostatnie analizy nie powiodły się, ponieważ wnioskowanie zwróciło błąd, więc model niczego nie wykrywa."
+      "modelFailingReasonError": "Wszystkie ostatnie analizy nie powiodły się, ponieważ wnioskowanie zwróciło błąd, więc model niczego nie wykrywa.",
+      "modelFailingGPUFault": "Wszystkie ostatnie analizy nie powiodły się, ponieważ GPU OpenVINO uległo awarii. Wnioskowanie na GPU jest zatrzymane do restartu BirdNET-Go. Aby to naprawić, ustaw urządzenie OpenVINO na CPU w ustawieniach wnioskowania albo uruchom ponownie BirdNET-Go, aby jeszcze raz spróbować użyć GPU.",
+      "deviceFailed": "{device} (awaria)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "Domyślne w OpenVINO: {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (nie wykryto)"
+          "notDetected": "{id} (nie wykryto)",
+          "failed": "{label} (awaria)"
         },
         "gpuTypes": {
           "integrated": "zintegrowane",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Zmiana backendu lub urządzenia powoduje przeładowanie modeli, więc detekcja wstrzymuje się na kilka sekund.",
       "backendsLoading": "Sprawdzanie, jakie środowiska uruchomieniowe obsługuje to urządzenie.",
       "backendsUnavailable": "Nie udało się odczytać, jakie środowiska uruchomieniowe obsługuje to urządzenie. Backend i urządzenie można zmienić po załadowaniu.",
+      "gpuFailed": "GPU OpenVINO uległo awarii w tym uruchomieniu, więc BirdNET-Go nie używa go do następnego restartu. Ustaw poniżej urządzenie OpenVINO na CPU albo uruchom ponownie BirdNET-Go, aby jeszcze raz spróbować użyć GPU.",
       "running": {
         "title": "Aktualnie uruchomione",
         "description": "Środowisko uruchomieniowe i precyzja, z jakimi działa każdy włączony klasyfikator.",

@@ -250,7 +250,8 @@ func (mm *ModelManager) notifyTopologyChanged() {
 // CatalogFile with Role "model") exists on disk. If found, the model is
 // recorded as installed. It never takes the operation slot, so startup is never
 // refused, and it keeps in-flight entries as described below. Once the scan is done
-// it evaluates the "no acoustic model" and "BirdNET Geomodel missing" bell notices.
+// it evaluates the "no acoustic model" and "BirdNET Geomodel missing" bell notices
+// and the inference notices (a model failing every window, the OpenVINO GPU fault).
 func (mm *ModelManager) ScanInstalled() {
 	log := GetLogger()
 
@@ -377,6 +378,7 @@ func (mm *ModelManager) ScanInstalled() {
 		if mm.orchestrator != nil {
 			mm.orchestrator.SyncAcousticModelsNotice()
 			mm.orchestrator.SyncGeomodelNotice()
+			mm.orchestrator.SyncInferenceNotices()
 		}
 	}
 }

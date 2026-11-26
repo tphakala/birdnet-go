@@ -250,6 +250,10 @@ type Orchestrator struct {
 	// the observer of the failing set; see syncInferenceHealth.
 	inferenceHealth inferenceHealthState
 
+	// unregisterGPUFaultObserver removes this orchestrator's OpenVINO GPU fault
+	// observer; nil before NewOrchestrator registers it. Called once by Delete.
+	unregisterGPUFaultObserver func()
+
 	// pendingWarmups queues deferred warm-ups recorded by model loaders while
 	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
 	// released, so the warm-up inference runs via the serialized inference path
@@ -304,7 +308,8 @@ func (o *Orchestrator) updateSettings(s *conf.Settings) {
 // and loads any additional models from configuration.
 // This is the primary constructor - callers should use this instead of NewBirdNET.
 // The range filter service it builds re-evaluates the BirdNET Geomodel notice after
-// every reload, including the ones during construction.
+// every reload, including the ones during construction. It registers the
+// OpenVINO GPU fault observer before any model loads; Delete removes it.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// Build o with an empty models map; the models load below through the same
 	// modelLoaders path the secondaries use. The primary's identity is resolved
@@ -318,6 +323,10 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		probedLatency: make(map[string]time.Duration),
 	}
 	o.settingsAtomic.Store(settings)
+
+	// Watch for the OpenVINO GPU fault latch before any model loads, so a fault in
+	// a startup warm-up is seen. The observer only schedules a notice reconcile.
+	o.unregisterGPUFaultObserver = inference.RegisterOpenVINOGPUFaultObserver(o.onOpenVINOGPUFault)
 
 	// Resolve the gallery models directory up front, before the loaders run below.
 	// ModelManager also sets it (via SetModelsDir) but is constructed only after
@@ -342,6 +351,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// LoadTaxonomyData path, so a load failure aborts construction exactly as before.
 	taxonomy, err := newTaxonomyService("")
 	if err != nil {
+		o.unregisterGPUFaultObserver()
 		return nil, err
 	}
 	o.taxonomy = taxonomy
@@ -774,7 +784,9 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 
 // PredictModelTimed runs inference on a specific model identified by modelID and
 // reports how long the call waited for locks and how long the model itself ran.
-// The timing is zero when the model is not loaded.
+// The timing is zero when the model is not loaded. A failed window is recorded
+// per model; one that failed with the OpenVINO GPU fault makes the model failing
+// at once and reconciles the notices.
 // It uses a three-level locking protocol: a read lock on the models map to
 // fetch the entry (fast), then inferenceMu to serialize inference across all
 // models (only one model runs at a time), then entry.mu for instance lifecycle.
@@ -835,7 +847,7 @@ func (o *Orchestrator) PredictModelTimed(ctx context.Context, modelID string, sa
 		// after the first failure only every inferenceFailureLogEvery-th repeat is
 		// logged at ERROR; the rest go to DEBUG. The metrics counter above still
 		// records each one.
-		streak := recordInferenceFailure(modelID, err, end)
+		streak, prevClass, class := recordInferenceFailure(modelID, err, end)
 		emit := log.Debug
 		if inferenceFailureLogsAtError(streak) {
 			emit = log.Error
@@ -845,11 +857,12 @@ func (o *Orchestrator) PredictModelTimed(ctx context.Context, modelID string, sa
 			logger.Error(err),
 			logger.Int64("consecutive_failures", streak),
 			logger.Duration("duration", duration))
-		if failureStreakNeedsSync(streak) {
+		if failureStreakNeedsSync(streak, prevClass, class) {
 			o.kickInferenceHealthSync()
 		}
 	default:
-		if ended := recordInferenceSuccess(modelID, end); ended >= InferenceFailureNoticeThreshold {
+		// A success that ends a failing run (the class sets the threshold) reconciles.
+		if ended, class := recordInferenceSuccess(modelID, end); ended >= failureThresholdFor(class) {
 			o.kickInferenceHealthSync()
 		}
 		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
@@ -1865,6 +1878,8 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 // Delete releases all resources held by the Orchestrator and its models.
 // After calling Delete, the Orchestrator must not be used. It also clears the bell
 // notices that describe the loaded models (inference failures, BirdNET Geomodel missing).
+// It stops the OpenVINO GPU notice latch and removes the GPU fault observer, so
+// a late fault raises nothing; a GPU notice already raised stays in the store.
 // The geomodel latch is not stopped: with no model loaded its status has no geomodel issue,
 // so a later sync can only delete the notice, and a delete that fails here is retried on
 // the latch's bounded timer instead of leaving the notice behind. The acoustic-model latch
@@ -1874,6 +1889,13 @@ func (o *Orchestrator) Delete() {
 	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
 	// for this torn-down orchestrator.
 	o.acousticNotice.Stop()
+	// The GPU notice is stopped too, and the observer removed, so a late fault
+	// raises nothing for this torn-down orchestrator. A notice already raised stays
+	// in the in-memory store; it only matters at shutdown.
+	o.inferenceHealth.gpuNotice.Stop()
+	if o.unregisterGPUFaultObserver != nil {
+		o.unregisterGPUFaultObserver()
+	}
 
 	// Snapshot the models, stop the scheduler, and clear o.models under o.mu so the
 	// accessors (which resolve the range-filter anchor from o.models under o.mu)

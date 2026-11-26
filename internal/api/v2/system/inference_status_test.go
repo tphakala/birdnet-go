@@ -894,14 +894,14 @@ func TestBuildModelHealth(t *testing.T) {
 	}{
 		{
 			name: "idle before the first window",
-			in:   classifier.ModelInferenceHealth{},
+			in:   classifier.ModelInferenceHealth{FailureThreshold: classifier.InferenceFailureNoticeThreshold},
 			want: ModelHealthInfo{State: modelHealthIdle, FailureThreshold: classifier.InferenceFailureNoticeThreshold},
 		},
 		{
 			name: "ok with a short failure run",
 			in: classifier.ModelInferenceHealth{
 				ConsecutiveFailures: 2, InferenceCount: 50, LastInferenceAt: at, LastSuccessAt: at.Add(-time.Minute),
-				ErrorClass: classifier.InferenceErrorClassOther,
+				FailureThreshold: classifier.InferenceFailureNoticeThreshold, ErrorClass: classifier.InferenceErrorClassOther,
 			},
 			want: ModelHealthInfo{
 				State: modelHealthOK, ConsecutiveFailures: 2, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
@@ -913,11 +913,22 @@ func TestBuildModelHealth(t *testing.T) {
 			name: "failing, never succeeded",
 			in: classifier.ModelInferenceHealth{
 				ConsecutiveFailures: 20, InferenceCount: 20, LastInferenceAt: at, Failing: true,
-				ErrorClass: classifier.InferenceErrorClassNonFinite,
+				FailureThreshold: classifier.InferenceFailureNoticeThreshold, ErrorClass: classifier.InferenceErrorClassNonFinite,
 			},
 			want: ModelHealthInfo{
 				State: modelHealthFailing, ConsecutiveFailures: 20, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
 				InferenceCount: 20, LastInferenceAtUnix: at.Unix(), ErrorClass: classifier.InferenceErrorClassNonFinite,
+			},
+		},
+		{
+			name: "failing from the first GPU fault window",
+			in: classifier.ModelInferenceHealth{
+				ConsecutiveFailures: 1, InferenceCount: 1, LastInferenceAt: at, Failing: true,
+				FailureThreshold: 1, ErrorClass: classifier.InferenceErrorClassGPUFault,
+			},
+			want: ModelHealthInfo{
+				State: modelHealthFailing, ConsecutiveFailures: 1, FailureThreshold: 1,
+				InferenceCount: 1, LastInferenceAtUnix: at.Unix(), ErrorClass: classifier.InferenceErrorClassGPUFault,
 			},
 		},
 	}
@@ -983,4 +994,8 @@ func TestOpenVINOGPUStatuses(t *testing.T) {
 	raw, err = json.Marshal(OpenVINOBackendStatus{Supported: true})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"supported":true,"active":false}`, string(raw), "no gpus key without GPUs")
+
+	raw, err = json.Marshal(OpenVINOBackendStatus{Supported: true, GPUFailed: true})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"supported":true,"active":false,"gpuFailed":true}`, string(raw), "gpuFailed is the wire name the frontend reads")
 }

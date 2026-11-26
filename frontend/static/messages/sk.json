@@ -553,6 +553,10 @@
         "notPersistentMessage": "Tieto cesty sú v úložisku, ktoré sa pri opätovnom vytvorení kontajnera odstráni, napríklad pri aktualizácii obrazu: {paths}. Namapujte na ne zväzok alebo adresár hostiteľa v konfigurácii kontajnera.",
         "anonymousVolumeTitle": "Dáta sú uložené v anonymnom zväzku kontajnera",
         "anonymousVolumeMessage": "Tieto cesty sú v anonymných zväzkoch, ktoré vytvorilo prostredie kontajnera, pretože nebol namapovaný žiadny zväzok: {paths}. Kontajner spustený odznova, napríklad príkazom docker run po aktualizácii obrazu, dostane nové prázdne zväzky, takže dáta vyzerajú stratené. Namapujte na ne pomenovaný zväzok alebo adresár hostiteľa."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "GPU OpenVINO zlyhala",
+        "stoppedMessage": "GPU OpenVINO prestala fungovať, preto ju BirdNET-Go prestal používať až do ďalšieho reštartu. Modely nastavené na beh na GPU dovtedy nič nedeteguju. Reštartujte BirdNET-Go, aby ste GPU mohli znova používať, alebo nastavte zariadenie OpenVINO na CPU v Nastavenia > Analýza > Inferencia."
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "Žiadny od načítania modelu",
       "modelFailingHelp": "{reason} Skúste iné zostavenie tohto modelu v Nastavenia > Analýza > Modely alebo skontrolujte backend a presnosť uvedené vyššie.",
       "modelFailingReasonNonFinite": "Všetky nedávne analýzy zlyhali, pretože model vrátil neplatné skóre (NaN alebo nekonečné), takže nič nedeteguje.",
-      "modelFailingReasonError": "Všetky nedávne analýzy zlyhali, pretože inferencia vrátila chybu, takže model nič nedeteguje."
+      "modelFailingReasonError": "Všetky nedávne analýzy zlyhali, pretože inferencia vrátila chybu, takže model nič nedeteguje.",
+      "modelFailingGPUFault": "Všetky nedávne analýzy zlyhali, pretože GPU OpenVINO zlyhala. Inferencia na GPU je zastavená do reštartu BirdNET-Go. Ak to chcete opraviť, nastavte zariadenie OpenVINO na CPU v nastaveniach inferencie, alebo reštartujte BirdNET-Go a skúste GPU znova.",
+      "deviceFailed": "{device} (zlyhalo)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "Predvolená v OpenVINO: {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (nenájdené)"
+          "notDetected": "{id} (nenájdené)",
+          "failed": "{label} (zlyhalo)"
         },
         "gpuTypes": {
           "integrated": "integrovaná",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Zmena backendu alebo zariadenia znovu načíta modely, takže sa detekcia na niekoľko sekúnd pozastaví.",
       "backendsLoading": "Zisťuje sa, ktoré runtime prostredia toto zariadenie podporuje.",
       "backendsUnavailable": "Nepodarilo sa zistiť, ktoré runtime prostredia toto zariadenie podporuje. Backend a zariadenie možno zmeniť po načítaní.",
+      "gpuFailed": "GPU OpenVINO v tomto behu zlyhala, preto ju BirdNET-Go prestal používať až do ďalšieho reštartu. Nastavte nižšie zariadenie OpenVINO na CPU, alebo reštartujte BirdNET-Go a skúste GPU znova.",
       "running": {
         "title": "Aktuálne spustené",
         "description": "Runtime prostredie a presnosť, s ktorými beží každý povolený klasifikátor.",

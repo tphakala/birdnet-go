@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -28,9 +29,17 @@ import (
 // InferenceFailureNoticeThreshold is the number of consecutive failed analysis
 // windows after which a loaded model is reported as failing: the bell notice,
 // the status API state, the dashboard banner and the health check all use it.
+// The one exception is a window that failed with the OpenVINO GPU fault, which
+// is failing at once (ModelInferenceHealth.FailureThreshold).
 // At a few seconds per window it is well under a minute of total failure, and
 // long enough that one bad window (a transient backend hiccup) never raises it.
 const InferenceFailureNoticeThreshold = 10
+
+// inferenceGPUFaultFailureThreshold is the number of consecutive failed windows
+// after which a model whose latest failure is the OpenVINO GPU fault is failing:
+// the latch makes every later window fail too, so waiting for the generic
+// threshold would only delay the report.
+const inferenceGPUFaultFailureThreshold = 1
 
 // inferenceFailureLogEvery is the interval, in consecutive failures of one
 // model, at which PredictModel repeats its ERROR log after the first failure.
@@ -44,6 +53,10 @@ const inferenceFailureLogEvery = 100
 const (
 	InferenceErrorClassNonFinite = "non_finite_output"
 	InferenceErrorClassOther     = "inference_error"
+	// InferenceErrorClassGPUFault marks a window that failed because the OpenVINO
+	// GPU fault latch tripped. The GPU notice covers it, so it has no per-model
+	// notice and a model is failing from its first such window.
+	InferenceErrorClassGPUFault = "gpu_device_fault"
 )
 
 // inferenceErrorClass is the compact form of the error-class tokens stored in
@@ -54,6 +67,7 @@ const (
 	errorClassNone inferenceErrorClass = iota
 	errorClassNonFinite
 	errorClassOther
+	errorClassGPUFault
 )
 
 // String returns the error-class token, "" for errorClassNone.
@@ -63,6 +77,8 @@ func (c inferenceErrorClass) String() string {
 		return InferenceErrorClassNonFinite
 	case errorClassOther:
 		return InferenceErrorClassOther
+	case errorClassGPUFault:
+		return InferenceErrorClassGPUFault
 	default:
 		return ""
 	}
@@ -70,6 +86,9 @@ func (c inferenceErrorClass) String() string {
 
 // classifyInferenceError maps a PredictModel error to its class.
 func classifyInferenceError(err error) inferenceErrorClass {
+	if errors.Is(err, inference.ErrOpenVINOGPUFault) {
+		return errorClassGPUFault
+	}
 	if errors.Is(err, ErrNonFiniteScore) {
 		return errorClassNonFinite
 	}
@@ -109,24 +128,39 @@ func dropInferenceHealth(modelID string) {
 	inferenceHealthRecords.Delete(modelID)
 }
 
-// recordInferenceFailure records a failed window and returns the new streak.
-func recordInferenceFailure(modelID string, err error, now time.Time) int64 {
+// recordInferenceFailure records a failed window and returns the new streak, the
+// error class of the previous failure (errorClassNone when there was none) and the
+// class of this one.
+func recordInferenceFailure(modelID string, err error, now time.Time) (streak int64, prev, class inferenceErrorClass) {
 	h := inferenceHealthFor(modelID)
 	h.count.Add(1)
 	h.lastAtNs.Store(now.UnixNano())
-	h.lastErrClass.Store(uint32(classifyInferenceError(err)))
-	return h.streak.Add(1)
+	class = classifyInferenceError(err)
+	prev = inferenceErrorClass(h.lastErrClass.Swap(uint32(class)))
+	return h.streak.Add(1), prev, class
 }
 
 // recordInferenceSuccess records a successful window and returns the streak it
-// ended.
-func recordInferenceSuccess(modelID string, now time.Time) int64 {
+// ended and the error class of the failure run's latest failure.
+func recordInferenceSuccess(modelID string, now time.Time) (ended int64, class inferenceErrorClass) {
 	h := inferenceHealthFor(modelID)
 	h.count.Add(1)
 	ns := now.UnixNano()
 	h.lastAtNs.Store(ns)
 	h.lastSuccessNs.Store(ns)
-	return h.streak.Swap(0)
+	// The class is read after the streak is cleared: a failure stores its class
+	// before it extends the streak, so a run seen as non-empty here has its class.
+	ended = h.streak.Swap(0)
+	return ended, inferenceErrorClass(h.lastErrClass.Load())
+}
+
+// failureThresholdFor returns the consecutive failed windows after which a model
+// whose latest failure has the given class is failing.
+func failureThresholdFor(class inferenceErrorClass) int64 {
+	if class == errorClassGPUFault {
+		return inferenceGPUFaultFailureThreshold
+	}
+	return InferenceFailureNoticeThreshold
 }
 
 // isCancellation reports whether a PredictModel error came with the caller's
@@ -149,8 +183,19 @@ func inferenceFailureLogsAtError(streak int64) bool {
 
 // failureStreakNeedsSync reports whether the streak-th consecutive failure must
 // reconcile the failure notice: when the model becomes failing, then every
-// inferenceFailureLogEvery-th failure as a bounded periodic re-check.
-func failureStreakNeedsSync(streak int64) bool {
+// inferenceFailureLogEvery-th failure as a bounded periodic re-check. A GPU
+// fault failure is failing at once and carries no per-model notice, so the first
+// window whose class turns into it (prev is the class of the failure before), or
+// that starts a new run, also reconciles: it starts the model's failing state and
+// removes a generic notice raised earlier. The window that leaves the class
+// reconciles too, since the threshold moves back to the generic one.
+func failureStreakNeedsSync(streak int64, prev, class inferenceErrorClass) bool {
+	if class == errorClassGPUFault && (prev != errorClassGPUFault || streak == inferenceGPUFaultFailureThreshold) {
+		return true
+	}
+	if prev == errorClassGPUFault && class != errorClassGPUFault {
+		return true
+	}
 	return streak == InferenceFailureNoticeThreshold ||
 		(streak > InferenceFailureNoticeThreshold && streak%inferenceFailureLogEvery == 0)
 }
@@ -177,8 +222,11 @@ type ModelInferenceHealth struct {
 	// ErrorClass is the class of the latest failure (InferenceErrorClass*), ""
 	// when no failure run is in progress (ConsecutiveFailures == 0).
 	ErrorClass string
-	// Failing is true when ConsecutiveFailures reached
-	// InferenceFailureNoticeThreshold.
+	// FailureThreshold is the number of consecutive failed windows after which
+	// the model is failing: 1 when the latest failure is the OpenVINO GPU fault,
+	// else InferenceFailureNoticeThreshold.
+	FailureThreshold int64
+	// Failing is true when ConsecutiveFailures reached FailureThreshold.
 	Failing bool
 	// Backend, Device and Precision describe the live instance.
 	Backend   string
@@ -187,7 +235,8 @@ type ModelInferenceHealth struct {
 }
 
 // InferenceHealth returns the inference health of every loaded model, sorted by
-// registry ID. Each entry carries both the display name (ModelName) and the plain
+// registry ID. A model whose latest failure is the OpenVINO GPU fault is failing
+// from its first such window (FailureThreshold 1). Each entry carries both the display name (ModelName) and the plain
 // name (Name); a model without a name reports its registry ID in both. A model paused by its
 // schedule keeps the verdict of its last window, since it runs none while paused.
 func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
@@ -200,6 +249,7 @@ func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 			mh.Name = id
 			mh.ModelName = id // DisplayName of a nameless model is only a backend suffix
 		}
+		failureClass := errorClassNone
 		if v, ok := inferenceHealthRecords.Load(id); ok {
 			h := v.(*modelInferenceHealth) //nolint:errcheck // stored type is fixed
 			mh.ConsecutiveFailures = h.streak.Load()
@@ -207,10 +257,12 @@ func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 			mh.LastInferenceAt = unixNanoTime(h.lastAtNs.Load())
 			mh.LastSuccessAt = unixNanoTime(h.lastSuccessNs.Load())
 			if mh.ConsecutiveFailures > 0 {
-				mh.ErrorClass = inferenceErrorClass(h.lastErrClass.Load()).String()
+				failureClass = inferenceErrorClass(h.lastErrClass.Load())
+				mh.ErrorClass = failureClass.String()
 			}
 		}
-		mh.Failing = mh.ConsecutiveFailures >= InferenceFailureNoticeThreshold
+		mh.FailureThreshold = failureThresholdFor(failureClass)
+		mh.Failing = mh.ConsecutiveFailures >= mh.FailureThreshold
 		mh.Device, mh.Backend, mh.Precision = o.GetModelRuntimeInfo(id)
 		out = append(out, mh)
 	}
@@ -244,6 +296,11 @@ type inferenceHealthState struct {
 	mu      sync.Mutex
 	notices map[string]*notification.PersistentNotice // per model ID
 	failing map[string]bool                           // failing set at the last reconcile
+	// gpuNotice latches the one OpenVINO GPU bell notice; see gpuFaultNoticeSignature.
+	gpuNotice notification.PersistentNotice
+	// gpuSeen is set by the first pass that sees the GPU fault latch, so that
+	// pass tells the observer once (the status API now reports gpuFailed).
+	gpuSeen bool
 }
 
 // SetInferenceHealthChangedCallback registers cb, called holding no
@@ -295,8 +352,9 @@ func (o *Orchestrator) kickInferenceHealthSyncIfTracked() {
 // inference health: raise a notice for a model that became failing, replace it
 // when its backend, device, precision or error class changed, clear it when the
 // model recovers or is unloaded. With no notification service (early startup,
-// tests) nothing is latched, so a later kick retries. It then notifies the
-// observer if the failing set changed.
+// tests) nothing is latched, so a later kick retries. It also reconciles the
+// one OpenVINO GPU notice with the fault latch, then notifies the observer if
+// the failing set changed or this pass first saw the GPU fault.
 //
 // The health snapshot is read under st.mu, so overlapping passes apply in order
 // and a slower pass cannot re-raise a notice from a stale snapshot. Lock order:
@@ -357,18 +415,107 @@ func (o *Orchestrator) syncInferenceHealth() {
 		p.Stop()
 		delete(st.notices, id)
 	}
+	gpuChanged, gpuLatched := o.reconcileGPUFaultNoticeLocked(svc)
 	previous := st.failing
 	st.failing = failing
-	st.tracked.Store(int32(len(st.notices) + len(failing))) //nolint:gosec // G115: bounded by the loaded model count
+	tracked := len(st.notices) + len(failing)
+	if gpuLatched {
+		tracked++
+	}
+	st.tracked.Store(int32(tracked)) //nolint:gosec // G115: bounded by the loaded model count
 	st.mu.Unlock()
 
-	if maps.Equal(previous, failing) {
+	if maps.Equal(previous, failing) && !gpuChanged {
 		return
 	}
 	logFailingTransitions(health, previous, failing)
 	if cb := st.changed.Load(); cb != nil {
 		(*cb)()
 	}
+}
+
+// reconcileGPUFaultNoticeLocked reconciles the OpenVINO GPU notice with the fault
+// latch and reports whether this pass first saw the fault (the observer must be
+// told) and whether a notice is latched. The caller holds st.mu. A deleted
+// orchestrator (o.models == nil) and a missing notification service leave the
+// notice alone; the service case is retried by the latch's timer and by the next
+// kick (SyncInferenceNotices, a failing window).
+func (o *Orchestrator) reconcileGPUFaultNoticeLocked(svc *notification.Service) (firstSeen, latched bool) {
+	st := &o.inferenceHealth
+	o.mu.RLock()
+	deleted := o.models == nil
+	o.mu.RUnlock()
+	if deleted {
+		return false, st.gpuNotice.ID() != ""
+	}
+	if faulted, _ := ovGPUFault(); faulted && !st.gpuSeen {
+		st.gpuSeen = true
+		firstSeen = true
+	}
+	if svc == nil {
+		return firstSeen, st.gpuNotice.ID() != ""
+	}
+	st.gpuNotice.SetRetry(o.kickInferenceHealthSync)
+	if err := st.gpuNotice.Reconcile(svc, func() (string, func() *notification.Notification) {
+		sig := gpuFaultNoticeSignature()
+		if sig == "" {
+			return "", nil
+		}
+		return sig, newGPUFaultNotification
+	}); err != nil {
+		GetLogger().Warn("failed to update OpenVINO GPU notification", logger.Error(err))
+	}
+	return firstSeen, st.gpuNotice.ID() != ""
+}
+
+// gpuNoticeStopped is the signature of the "OpenVINO GPU stopped" notice.
+const gpuNoticeStopped = "openvino_gpu_stopped"
+
+// gpuFaultNoticeSignature identifies the OpenVINO GPU notice the fault latch
+// calls for: "" while the GPU works, otherwise the signature of the notice text.
+func gpuFaultNoticeSignature() string {
+	if faulted, _ := ovGPUFault(); faulted {
+		return gpuNoticeStopped
+	}
+	return ""
+}
+
+// onOpenVINOGPUFault is the OpenVINO GPU fault observer. It runs on the
+// inference goroutine whose call first returned the fault, possibly under
+// inference or orchestrator locks, so it only kicks the asynchronous reconcile.
+func (o *Orchestrator) onOpenVINOGPUFault() {
+	o.kickInferenceHealthSync()
+}
+
+// SyncInferenceNotices schedules a reconcile of the inference notices (the
+// per-model failure notices and the OpenVINO GPU notice). It takes no lock and
+// never blocks. The model manager calls it once startup scanning finishes, so a
+// fault seen before the notification service existed gets its notice.
+func (o *Orchestrator) SyncInferenceNotices() {
+	o.kickInferenceHealthSync()
+}
+
+// Fallback English texts of the GPU notice; they mirror en.json
+// (notifications.content.openvinoGpu).
+const (
+	gpuStoppedTitle   = "OpenVINO GPU failed"
+	gpuStoppedMessage = "The OpenVINO GPU stopped working, so BirdNET-Go stopped using it until the next restart. Models set to run on the GPU detect nothing until then. Restart BirdNET-Go to use the GPU again, or set the OpenVINO device to CPU in Settings > Analysis > Inference."
+)
+
+// newGPUFaultNotification builds the persistent bell notice for a tripped
+// OpenVINO GPU fault latch. It carries no metadata: scalar metadata would render
+// in the bell.
+func newGPUFaultNotification() *notification.Notification {
+	return notification.NewNotification(
+		notification.TypeError,
+		notification.PriorityHigh,
+		gpuStoppedTitle,
+		gpuStoppedMessage,
+	).
+		WithComponent(notification.ComponentClassifier).
+		WithTitleKey(notification.MsgOpenVINOGPUStoppedTitle, nil).
+		WithMessageKey(notification.MsgOpenVINOGPUStoppedMessage, nil).
+		WithDeliveryTarget(notification.DeliveryTargetBell)
 }
 
 // noNotice is the Reconcile compute for "no notice due".
@@ -395,10 +542,11 @@ func logFailingTransitions(health []ModelInferenceHealth, previous, current map[
 }
 
 // inferenceFailureSignature identifies the failure notice a model's health calls
-// for: "" when none is due, otherwise the model and the runtime and error class
-// the notice text names, so a change in any of them replaces the notice.
+// for: "" when none is due (a GPU fault failure is covered by the GPU notice),
+// otherwise the model and the runtime and error class the notice text names, so
+// a change in any of them replaces the notice.
 func inferenceFailureSignature(h *ModelInferenceHealth) string {
-	if !h.Failing {
+	if !h.Failing || h.ErrorClass == InferenceErrorClassGPUFault {
 		return ""
 	}
 	return h.ModelID + "|" + h.Backend + "|" + h.Device + "|" + h.Precision + "|" + h.ErrorClass

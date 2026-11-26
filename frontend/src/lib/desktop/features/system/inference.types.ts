@@ -110,6 +110,8 @@ export interface OpenVINOGPU {
 export interface OpenVINOBackendStatus {
   supported: boolean;
   active: boolean;
+  /** True once the OpenVINO GPU fault latch tripped in this run; GPU models fail until restart. */
+  gpuFailed?: boolean;
   /** Device classes the host can target ("CPU", "GPU"); several GPUs still give one "GPU". */
   devices?: string[];
   /** Each enumerated GPU; absent without a GPU, before the probe completes, or when it failed. */
@@ -239,7 +241,7 @@ export interface InferenceModelHealth {
   lastInferenceAtUnix?: number;
   /** Unix seconds of the last successful window; absent when none has. */
   lastSuccessAtUnix?: number;
-  /** Class of the latest failure ("non_finite_output", "inference_error"). */
+  /** Class of the latest failure ("non_finite_output", "inference_error", "gpu_device_fault"). */
   errorClass?: string;
 }
 
@@ -248,6 +250,9 @@ export const MODEL_HEALTH_FAILING = 'failing';
 
 /** errorClass of a failure run caused by NaN or infinite scores (backend InferenceErrorClassNonFinite). */
 export const ERROR_CLASS_NON_FINITE = 'non_finite_output';
+
+/** errorClass of a failure run caused by the OpenVINO GPU fault latch (backend InferenceErrorClassGPUFault). */
+export const ERROR_CLASS_GPU_FAULT = 'gpu_device_fault';
 
 /** Ring-buffer metric keys used to look up audio pipeline time series. */
 export interface InferenceAudioMetricKeys {
