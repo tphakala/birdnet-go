@@ -431,3 +431,22 @@ func TestGPURecovery_ReloadWithNothingOnGPUKeepsNotice(t *testing.T) {
 	require.Len(t, after, 1)
 	assert.Equal(t, before[0].ID, after[0].ID, "an unrelated settings reload must not delete and re-raise the notice")
 }
+
+// TestGPUNotice_ModelNotYetAttemptedIsNotReportedAsUnmovable pins that a model still
+// on the failed GPU that no recovery pass has tried yet (a settings reload mid-swap,
+// before the reconcile) raises no partial notice, which names only models a pass
+// failed to move.
+func TestGPUNotice_ModelNotYetAttemptedIsNotReportedAsUnmovable(t *testing.T) {
+	a := &recoveryBuilder{id: testSecondaryID}
+	env := newGPURecoveryEnv(t, "auto", "auto", map[string]*recoveryBuilder{testSecondaryID: a}, []string{testSecondaryID})
+	env.faulted.Store(true)
+
+	env.o.syncInferenceHealth()
+	assert.Empty(t, gpuNoticesNow(t, env.svc), "recovery has not run: neither partial nor moved")
+
+	env.o.ReconcileGPUFaultAfterSettingsReload()
+	env.settle()
+	notices := gpuNoticesNow(t, env.svc)
+	require.Len(t, notices, 1)
+	assert.Equal(t, notification.MsgOpenVINOGPUMovedTitle, notices[0].TitleKey)
+}

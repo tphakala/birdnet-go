@@ -26,6 +26,10 @@ type gpuRecoveryState struct {
 	// goroutine (or the inline post-publish pass) is live. stopped is set by Delete.
 	due, running, stopped bool
 	wg                    sync.WaitGroup
+	// failedMoves holds the IDs of models a pass tried and failed to move off the
+	// GPU, guarded by mu. The partial notice names only these: a model still on the
+	// GPU that no pass has tried yet means recovery is not done, not that it failed.
+	failedMoves map[string]bool
 
 	callbackMu sync.Mutex
 	callback   func()
@@ -150,7 +154,8 @@ func (o *Orchestrator) ReconcileGPUFaultAfterSettingsReload() {
 
 // recoverModelsFromFailedGPU is one pass: it rebuilds, in registry ID order, every
 // loaded model whose live instance still runs on the failed OpenVINO GPU, and stops
-// when Delete began or the selection became explicit. The planner
+// when Delete began or the selection became explicit. It records which models it
+// failed to move, which the partial notice names. The planner
 // skips the GPU now, so on amd64 the rebuilt models run on ONNX Runtime. A rebuild
 // that fails keeps the old instance; the next user-driven trigger retries it. It
 // holds no orchestrator lock across a rebuild.
@@ -165,6 +170,7 @@ func (o *Orchestrator) recoverModelsFromFailedGPU() {
 			break
 		}
 		swapped, err := o.rebuildFromCurrentSettings(id, true)
+		o.setMoveFailed(id, err != nil)
 		if err != nil {
 			log.Warn("model could not be moved off the failed OpenVINO GPU; it detects nothing until a settings change or restart",
 				logger.String("registry_id", id), logger.Error(err))
@@ -181,6 +187,30 @@ func (o *Orchestrator) recoverModelsFromFailedGPU() {
 	if movedAny {
 		o.notifyGPURecoveryMoved()
 	}
+}
+
+// setMoveFailed records whether the last pass attempt to move id failed; a model
+// that moved, or was no longer on the GPU, is cleared.
+func (o *Orchestrator) setMoveFailed(id string, failed bool) {
+	st := &o.gpuRecovery
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if !failed {
+		delete(st.failedMoves, id)
+		return
+	}
+	if st.failedMoves == nil {
+		st.failedMoves = make(map[string]bool)
+	}
+	st.failedMoves[id] = true
+}
+
+// moveFailed reports whether a pass tried and failed to move id.
+func (o *Orchestrator) moveFailed(id string) bool {
+	st := &o.gpuRecovery
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.failedMoves[id]
 }
 
 // loadedModelIDsSorted returns the loaded model IDs in order.

@@ -476,8 +476,9 @@ const (
 // current state. It returns no notice while the GPU works, and none while a recovery
 // pass is due or running (the outcome is not known yet, so "stopped" never precedes
 // "moved"). An explicit selection is never recovered: "stopped". Under auto the
-// models still on the failed GPU decide: none is "moved", otherwise a partial notice
-// names them.
+// models still on the failed GPU decide: none is "moved"; a partial notice names
+// those a pass failed to move; and while one has not been tried yet there is no
+// notice.
 func (o *Orchestrator) gpuFaultNotice() (sig string, build func() *notification.Notification) {
 	if faulted, _ := ovGPUFault(); !faulted {
 		return "", nil
@@ -488,7 +489,16 @@ func (o *Orchestrator) gpuFaultNotice() (sig string, build func() *notification.
 	if o.recoveryPending() {
 		return "", nil
 	}
-	left := o.modelsOnFailedGPU()
+	// A model still on the GPU that no pass has tried to move means recovery has not
+	// run yet (a settings reload swaps models before the reconcile), so wait rather
+	// than claim it could not be moved.
+	var left []string
+	for _, id := range o.modelsOnFailedGPU() {
+		if !o.moveFailed(id) {
+			return "", nil
+		}
+		left = append(left, id)
+	}
 	if len(left) == 0 {
 		return gpuNoticeMoved, newGPUMovedNotification
 	}
