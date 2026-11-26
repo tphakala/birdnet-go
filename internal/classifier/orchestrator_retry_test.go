@@ -273,3 +273,47 @@ func TestRetryFailedLoadsForBackendChange_KeyFieldsAndOrder(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadEnabledModels_FailureKeyIsTakenBeforeTheLoad pins the startup path of the same rule:
+// a settings change that lands while an enabled model is loading at construction must leave the
+// failed model retryable, not stamp it with settings it never ran under.
+func TestLoadEnabledModels_FailureKeyIsTakenBeforeTheLoad(t *testing.T) {
+	// Not parallel: swaps modelLoaders and the global settings snapshot.
+	isolateTestConfig(t)
+
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	settings.BirdNET.Backend = conf.BackendPrefAuto
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	var calls atomic.Int32
+	orig, had := modelLoaders[RegistryIDPerchV2]
+	modelLoaders[RegistryIDPerchV2] = func(orc *Orchestrator, _ int) error {
+		if calls.Add(1) == 1 {
+			// The user saves a new backend while this startup load is running, then it fails.
+			changed := conftest.GetTestSettings()
+			changed.Models.Enabled = []string{conf.ModelIDPerchV2}
+			changed.BirdNET.Backend = conf.BackendPrefONNX
+			conftest.SetTestSettings(changed)
+			return errors.NewStd("simulated load failure")
+		}
+		orc.models[RegistryIDPerchV2] = &modelEntry{instance: &mockModelInstance{id: RegistryIDPerchV2}}
+		return nil
+	}
+	t.Cleanup(func() {
+		if had {
+			modelLoaders[RegistryIDPerchV2] = orig
+		} else {
+			delete(modelLoaders, RegistryIDPerchV2)
+		}
+	})
+
+	o, err := NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(o.Delete)
+	require.EqualValues(t, 1, calls.Load(), "construction must have tried the load once")
+
+	assert.Equal(t, []string{RegistryIDPerchV2}, o.RetryFailedLoadsForBackendChange(),
+		"the startup load never ran under the new backend, so the settings change must retry it")
+}
