@@ -22,7 +22,8 @@ type OpenVINORefusalError struct {
 // Error describes the refusal without paths: the model, the description and the stable
 // code. The cause is left out because its text can carry file paths and this text is
 // stored as the model's load error and returned in variant-swap failures; it stays
-// reachable through Unwrap and is logged by openVINONotUsed.
+// reachable through Unwrap. openVINONotUsed logs it when it raises the refusal; a refusal
+// built elsewhere (the dead GPU in reloadEntry) carries a fixed sentinel text instead.
 func (r *OpenVINORefusalError) Error() string {
 	return "OpenVINO cannot run model " + r.ModelID + ": " + r.Reason.Description() + " (" + string(r.Reason) + ")"
 }
