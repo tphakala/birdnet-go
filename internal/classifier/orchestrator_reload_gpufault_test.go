@@ -88,6 +88,7 @@ func TestBuiltOnFailedOpenVINOGPU(t *testing.T) {
 	faulted.Store(true)
 	assert.True(t, builtOnFailedOpenVINOGPU(gpu), "OpenVINO GPU instance under a fault")
 	assert.False(t, builtOnFailedOpenVINOGPU(cpu), "an ONNX CPU instance is unaffected by the GPU fault")
+	assert.False(t, builtOnFailedOpenVINOGPU(nil), "a nil instance is not a faulted GPU instance")
 }
 
 // TestReloadEntry_GPUFaultDuringWarmupKeepsOldInstance pins that a reload whose

@@ -210,7 +210,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		}
 		entry.mu.Unlock()
 		o.closeDiscardedReloadInstance(registryID, next)
-		gpuErr := errors.Newf("%w: built on the OpenVINO GPU, which failed during its warm-up; the previous instance keeps serving", inference.ErrOpenVINOGPUFault).
+		gpuErr := errors.Newf("%w: the new instance runs on the OpenVINO GPU, which has failed, so it was not published", inference.ErrOpenVINOGPUFault).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
 			Context("registry_id", registryID).
@@ -270,8 +270,11 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 // while the process-wide OpenVINO GPU fault latch is tripped, so the instance is
 // dead on arrival: its native calls fail fast and it can detect nothing. It is
 // generic over any ModelInstance, so any path that holds a freshly built instance
-// can use it.
+// can use it. A nil instance reports false.
 func builtOnFailedOpenVINOGPU(inst ModelInstance) bool {
+	if inst == nil {
+		return false
+	}
 	if faulted, _ := ovGPUFault(); !faulted {
 		return false
 	}
