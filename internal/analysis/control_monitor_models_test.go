@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // TestHandleReconcileModels_NoOrchestrator pins the nil-orchestrator guard: the handler logs
@@ -116,10 +117,6 @@ func TestHandleReconcileModels_AllLoadsFailed_BroadcastsListChange(t *testing.T)
 	}
 }
 
-// retryReconfigureWait bounds the wait for the debounced audio-source reconfigure
-// (2 s debounce in api/v2) after a retry loaded a model.
-const retryReconfigureWait = 5 * time.Second
-
 // TestHandleReloadBirdnet_RetryLoadedModel_ReconfiguresAudio pins that a BirdNET reload
 // whose retry of failed loads loaded a model reconciles the per-source model registration
 // (the reconfigure_audio_sources control signal), not only the topology SSE event. Without
@@ -154,7 +151,7 @@ func TestHandleReloadBirdnet_RetryLoadedModel_ReconfiguresAudio(t *testing.T) {
 	select {
 	case signal := <-controlChan:
 		assert.Equal(t, "reconfigure_audio_sources", signal)
-	case <-time.After(retryReconfigureWait):
+	case <-time.After(testutil.LongTestTimeout):
 		t.Fatal("a retry that loaded a model must reconfigure the audio sources")
 	}
 }
