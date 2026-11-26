@@ -55,8 +55,8 @@ func (o *Orchestrator) requestGPURecovery() {
 // published and no pass is running. A true result has set running and counted the
 // pass in wg (under mu, so a Delete that set stopped before waiting never misses
 // it); the caller runs runGPURecovery and calls wg.Done. The selection is read under
-// mu, and an explicit one clears the due mark instead of setting it. Setting it also
-// forgets the moves earlier passes failed.
+// mu, and an explicit one clears the due mark instead of setting it. Either way the
+// moves earlier passes failed are forgotten.
 func (o *Orchestrator) claimGPURecovery() bool {
 	faulted, _ := ovGPUFault()
 	if !faulted {
@@ -69,6 +69,7 @@ func (o *Orchestrator) claimGPURecovery() bool {
 	// after a switch back to auto has just set.
 	if o.gpuSelectionExplicit() {
 		st.due = false
+		st.failedMoves = nil // an explicit period ends the record, as a new request does
 		return false
 	}
 	if st.stopped {

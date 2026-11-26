@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // releaseOnce unblocks a blocking test builder; safe to call twice.
@@ -76,4 +78,28 @@ func TestRebuildFromCurrentSettings_RecordsTripletAndNeedsSettings(t *testing.T)
 		_, err := bare.rebuildFromCurrentSettings(testSecondaryID, false)
 		assert.Error(t, err, "no settings, nothing to rebuild from")
 	})
+}
+
+func TestGPUNotice_FailureRecordDoesNotSurviveAnExplicitRoundTrip(t *testing.T) {
+	a := &recoveryBuilder{id: testSecondaryID, err: errors.NewStd("build failed")}
+	env := newGPURecoveryEnv(t, "auto", "auto", map[string]*recoveryBuilder{testSecondaryID: a}, []string{testSecondaryID})
+	env.faulted.Store(true)
+	env.o.onOpenVINOGPUFault()
+	env.settle()
+	require.Equal(t, notification.MsgOpenVINOGPUMovedPartialMessage, gpuNoticesNow(t, env.svc)[0].MessageKey)
+
+	setSelection := func(device string) {
+		s := conftest.GetTestSettings()
+		s.BirdNET.Backend, s.BirdNET.OpenVINODevice = "auto", device
+		conftest.SetTestSettings(s)
+	}
+	setSelection("gpu")
+	env.o.ReconcileGPUFaultAfterSettingsReload()
+	env.settle()
+	setSelection("auto")
+
+	// A sync between the settings swap and the reconcile: the model was never tried
+	// under this selection, so it must not be named as one that could not be moved.
+	env.o.syncInferenceHealth()
+	assert.Empty(t, gpuNoticesNow(t, env.svc))
 }
