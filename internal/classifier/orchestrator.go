@@ -2320,9 +2320,11 @@ func inferenceLoadKeyFor(settings *conf.Settings) inferenceLoadKey {
 // RetryFailedLoadsForBackendChange loads every enabled model that is not loaded
 // and whose last load failed under different inference settings than the current
 // ones, in registry ID order. It returns the IDs that loaded. A model that fails
-// again records the key its load started under, so it is not retried until the settings change
-// once more. Call it after a settings reload, so a corrected backend, device or
-// ONNX Runtime path takes effect without a restart. Holds no lock across the
+// again records the key its load started under, so it is not retried until the
+// settings change once more. Call it after a settings reload, so a corrected
+// backend or OpenVINO device takes effect without a restart. The ONNX Runtime
+// and OpenVINO library paths are part of the key but are restart-only settings,
+// so a change to them alone does not trigger a reload. Holds no lock across the
 // loads; each LoadModel takes the locks it needs.
 func (o *Orchestrator) RetryFailedLoadsForBackendChange() []string {
 	current := inferenceLoadKeyFor(o.currentSettings())

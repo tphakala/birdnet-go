@@ -467,8 +467,9 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	}
 
 	// Retry models whose load failed under other inference settings (a wrong
-	// backend, OpenVINO device or ONNX Runtime path), so the correction takes
-	// effect without a restart.
+	// backend or OpenVINO device, for example), so the correction takes effect
+	// without a restart. Library path edits are restart-only and never reach
+	// this handler on their own.
 	retried := cm.retryFailedLoads()
 	if len(retried) > 0 {
 		GetLogger().Info("Loaded models that failed earlier under other inference settings",
