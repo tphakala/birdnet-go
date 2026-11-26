@@ -3208,7 +3208,8 @@
           />
         </p>
       {/if}
-      {#if inferenceBackends?.openvino.gpuFailed}
+      <!-- The text follows the saved selection, so the alert waits until the settings loaded. -->
+      {#if inferenceBackends?.openvino.gpuFailed && store.dataLoaded}
         <ErrorAlert type="error" className="mb-6" data-testid="inference-gpu-failed">
           {t(
             gpuFaultMovesModels

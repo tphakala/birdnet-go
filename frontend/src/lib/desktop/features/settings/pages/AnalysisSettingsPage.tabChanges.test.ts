@@ -58,6 +58,7 @@ vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
 type SectionMap = Record<string, Record<string, unknown>>;
 interface MockSettingsState {
   isLoading: boolean;
+  dataLoaded: boolean;
   isSaving: boolean;
   error: null;
   originalData: SectionMap;
@@ -85,6 +86,7 @@ const { BASE_BIRDNET, BASE_REALTIME, mockStore, validationErrors } = await vi.ho
   };
   const mockStore = writable<MockSettingsState>({
     isLoading: false,
+    dataLoaded: true,
     isSaving: false,
     error: null,
     originalData: { birdnet: { ...BASE_BIRDNET }, realtime: { ...BASE_REALTIME } },
@@ -278,7 +280,12 @@ function resetPage(tabId = 'detection') {
   vi.mocked(settingsActions.updateSection).mockReset();
   modelsList.current = [];
   validationErrors.set([]);
-  mockStore.update(state => ({ ...state, originalData: savedConfig(), formData: savedConfig() }));
+  mockStore.update(state => ({
+    ...state,
+    dataLoaded: true,
+    originalData: savedConfig(),
+    formData: savedConfig(),
+  }));
   vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [] });
   vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
   vi.mocked(api.get).mockResolvedValue({});
@@ -881,6 +888,21 @@ describe('AnalysisSettingsPage inference runtime', () => {
       render(AnalysisSettingsPage);
       expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
       expect(screen.queryByText(GPU_FAILED_EXPLICIT_TEXT)).toBeNull();
+    });
+
+    it('waits for the saved settings before choosing the alert text', async () => {
+      // Before the load the saved copy is empty, which reads as auto.
+      mockStore.update(state => ({ ...state, dataLoaded: false }));
+      mockRuntime(async () => runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      render(AnalysisSettingsPage);
+      const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+      await waitFor(() => expect(backend).toBeEnabled());
+      expect(screen.queryByTestId('inference-gpu-failed')).toBeNull();
+
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: 'auto', openVinoDevice: 'gpu' });
+      mockStore.update(state => ({ ...state, dataLoaded: true }));
+      expect(await screen.findByText(GPU_FAILED_EXPLICIT_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
     });
 
     it('shows no alert while the GPU works', async () => {
