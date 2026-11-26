@@ -235,9 +235,7 @@ func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.C
 		Device:        plan.device,
 		OutputIndex:   plan.outputIndex,
 		PrecisionHint: plan.precision, // f32 on the GPU (f16 returns NaN on Intel Arc), else the f16 default
-		// The GPU plugin needs large allocations for Perch v2 on some Intel GPUs (an
-		// Arc Pro B50 faults without it, GitHub #5281). The backend applies it only
-		// on a GPU device; the CPU ignores it.
+		// Needed on some Intel GPUs (GitHub #5281); see ov.Options.LargeAllocations.
 		LargeAllocations: true,
 	})
 	if err != nil {

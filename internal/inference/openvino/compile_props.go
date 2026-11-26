@@ -38,7 +38,9 @@ func GPULargeAllocationsUnsupported() bool { return largeAllocationsUnsupported.
 // extraCompileProperty returns the optional device-specific compile property for
 // the resolved device name: the thread count for the CPU, the large allocations
 // key for a GPU whose model asks for it and whose library has not rejected it.
-// It returns empty strings when there is none.
+// It returns empty strings when there is none. A single pair is enough because
+// the CPU thread count and the GPU key are mutually exclusive by device; a
+// property for both would need a second pair in ovbind_compile.
 func extraCompileProperty(device string, opts Options) (key, value string) {
 	switch {
 	case device == DeviceCPU && opts.Threads > 0:
