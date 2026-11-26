@@ -798,7 +798,7 @@ func (s *testLegacyInterface) GetNoteClipReferences(_ uint, _ int) ([]diskmanage
 func (s *testLegacyInterface) CountHourlyDetections(_, _ string, _ int) (int64, error) {
 	return 0, nil
 }
-func (s *testLegacyInterface) GetSpeciesSummaryData(_ context.Context, _, _ string) ([]datastore.SpeciesSummaryData, error) {
+func (s *testLegacyInterface) GetSpeciesSummaryData(_ context.Context, _, _ string, _ float64) ([]datastore.SpeciesSummaryData, error) {
 	return nil, nil
 }
 func (s *testLegacyInterface) GetHourlyAnalyticsData(_ context.Context, _, _ string) ([]datastore.HourlyAnalyticsData, error) {

@@ -132,7 +132,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		seedTestData(t, ds)
 
 		// Test without date filters
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
 		require.NoError(t, err)
 		assert.Len(t, summaries, 3) // 3 unique species
 
@@ -170,7 +170,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		seedTestData(t, ds)
 
 		// Test with start date filter
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "2024-01-16", "")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "2024-01-16", "", 0)
 		require.NoError(t, err)
 		assert.Len(t, summaries, 2) // Only Blue Jay and Northern Cardinal
 
@@ -185,7 +185,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		seedTestData(t, ds)
 
 		// Test with end date filter
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "2024-01-16")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "2024-01-16", 0)
 		require.NoError(t, err)
 		assert.Len(t, summaries, 2) // American Robin and Blue Jay
 
@@ -200,7 +200,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		seedTestData(t, ds)
 
 		// Test with date range
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "2024-01-16", "2024-01-16")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "2024-01-16", "2024-01-16", 0)
 		require.NoError(t, err)
 		assert.Len(t, summaries, 1) // Only Blue Jay
 
@@ -209,12 +209,37 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		assert.Equal(t, 2, blueJay.Count)
 	})
 
+	t.Run("with min_confidence filter", func(t *testing.T) {
+		t.Parallel()
+		ds := setupTestDB(t)
+		seedTestData(t, ds)
+
+		// Seed has American Robin (0.85, 0.90), Blue Jay (0.75, 0.80), Northern Cardinal (0.95).
+		// Filtering at >= 0.82 excludes Blue Jay and leaves only Robin (both >= 0.85) and Cardinal (0.95).
+		// Filtering at >= 0.88 leaves Robin with Count=1 (0.90 only) and Cardinal with Count=1 (0.95).
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0.88)
+		require.NoError(t, err)
+		require.Len(t, summaries, 2)
+
+		assert.Nil(t, findSpeciesByScientificName(summaries, "Cyanocitta cristata"))
+
+		robin := findSpeciesByScientificName(summaries, "Turdus migratorius")
+		require.NotNil(t, robin)
+		assert.Equal(t, 1, robin.Count)
+		assert.InDelta(t, 0.90, robin.AvgConfidence, 0.001)
+		assert.InDelta(t, 0.90, robin.MaxConfidence, 0.001)
+
+		cardinal := findSpeciesByScientificName(summaries, "Cardinalis cardinalis") //nolint:misspell // This is the correct scientific name
+		require.NotNil(t, cardinal)
+		assert.Equal(t, 1, cardinal.Count)
+	})
+
 	t.Run("empty database", func(t *testing.T) {
 		t.Parallel()
 		ds := setupTestDB(t)
 
 		// Test with empty database
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
 		require.NoError(t, err)
 		assert.Empty(t, summaries)
 	})
@@ -258,7 +283,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 
 		// This query should not fail even with different species_code values
 		// because we're using MAX(species_code) aggregate function
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
 		require.NoError(t, err, "Query should not fail with SQL aggregate error")
 		assert.Len(t, summaries, 1)
 
@@ -296,7 +321,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		require.NoError(t, err)
 
 		// Query should not fail even with NULL species_code
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
 		require.NoError(t, err, "Query should handle NULL species_code without error")
 		require.Len(t, summaries, 2)
 
@@ -314,7 +339,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		`, "2024-01-21", "10:00:00", "Nullus commonus", "nulcom", 0.66)
 		require.NoError(t, result2.Error)
 
-		summaries2, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+		summaries2, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
 		require.NoError(t, err)
 		nsCommon := findSpeciesByScientificName(summaries2, "Nullus commonus")
 		require.NotNil(t, nsCommon)
@@ -348,7 +373,7 @@ func TestGetSpeciesSummaryData(t *testing.T) {
 		}).Error
 		require.NoError(t, err)
 
-		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+		summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
 		require.NoError(t, err, "Query should handle NULL confidence without error")
 		require.Len(t, summaries, 2)
 
@@ -383,7 +408,7 @@ func TestGetSpeciesSummaryDataTimeFormat(t *testing.T) {
 	err := ds.DB.Create(&note).Error
 	require.NoError(t, err)
 
-	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 

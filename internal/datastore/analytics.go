@@ -222,7 +222,7 @@ type SpeciesDetectionDate struct {
 // NOTE: Uses a read-only transaction with repeatable read isolation to prevent race conditions
 // when concurrent writes are occurring. This ensures consistent timestamps even when new species
 // are being inserted. See issue #1239 for details on the SQLite WAL mode race condition.
-func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error) {
+func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, minConfidence float64) ([]SpeciesSummaryData, error) {
 	// Pre-allocate with reasonable capacity for typical species count
 	summaries := make([]SpeciesSummaryData, 0, 100)
 
@@ -233,7 +233,8 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	if isDebugLoggingEnabled() {
 		GetLogger().Debug("GetSpeciesSummaryData: Starting query",
 			logger.String("start_date", startDate),
-			logger.String("end_date", endDate))
+			logger.String("end_date", endDate),
+			logger.Float64("min_confidence", minConfidence))
 	}
 
 	// Get database-specific datetime formatting
@@ -287,6 +288,11 @@ func (ds *DataStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 	case endDate != "":
 		whereClause += " AND notes.date <= ?"
 		args = append(args, endDate)
+	}
+
+	if minConfidence > 0 {
+		whereClause += " AND notes.confidence >= ?"
+		args = append(args, minConfidence)
 	}
 
 	// Complete the query

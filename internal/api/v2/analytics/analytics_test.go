@@ -97,7 +97,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 
 	// Setup mock expectations
 	// Expect call with specific empty strings for no date filters
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return(mockSummaryData, nil)
 
 	// Create a request
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
@@ -175,7 +175,7 @@ func TestGetSpeciesSummary_ZeroTimeOmitsHeardFields(t *testing.T) {
 			MaxConfidence: 0.85,
 		},
 	}
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return(mockSummaryData, nil)
 
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
@@ -207,7 +207,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 
 	// Setup mock to return a database error (like the SQL aggregate error)
 	dbError := errors.NewStd("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return([]datastore.SpeciesSummaryData{}, dbError)
 
 	// Create a request
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
@@ -269,7 +269,7 @@ func TestAnalyticsEndpointContextErrors(t *testing.T) {
 			name: "species summary",
 			path: "/api/v2/analytics/species/summary",
 			setupMock: func(m *mocks.MockInterface, queryErr error) {
-				m.On("GetSpeciesSummaryData", mock.Anything, "", "").
+				m.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).
 					Return([]datastore.SpeciesSummaryData{}, queryErr)
 			},
 			invoke: func(c *Handler, ctx echo.Context) error { return c.GetSpeciesSummary(ctx) },
@@ -355,7 +355,7 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	}
 
 	// Setup mock expectations with date filters
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "2024-01-15", "2024-01-16").Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "2024-01-15", "2024-01-16", float64(0)).Return(mockSummaryData, nil)
 
 	// Create a request with date parameters
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16")
@@ -385,7 +385,42 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetHourlyAnalytics tests the hourly analytics endpoint
+// TestGetSpeciesSummary_MinConfidence verifies that min_confidence is parsed identically
+// to GetDailySpeciesSummary and forwarded to the datastore.
+func TestGetSpeciesSummary_MinConfidence(t *testing.T) {
+	t.Parallel()
+
+	t.Run("parses percentage min_confidence", func(t *testing.T) {
+		t.Parallel()
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+		mockDS.On("GetSpeciesSummaryData", mock.Anything, "2026-11-14", "2026-11-20", 0.7).Return([]datastore.SpeciesSummaryData{
+			{ScientificName: "Turdus migratorius", CommonName: "American Robin", Count: 3, MaxConfidence: 0.91},
+		}, nil)
+
+		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?start_date=2026-11-14&end_date=2026-11-20&min_confidence=70")
+		require.NoError(t, controller.GetSpeciesSummary(c))
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var response []map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+		require.Len(t, response, 1)
+		assert.Equal(t, "Turdus migratorius", response[0]["scientific_name"])
+		mockDS.AssertExpectations(t)
+	})
+
+	t.Run("invalid min_confidence falls back to zero", func(t *testing.T) {
+		t.Parallel()
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+
+		mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return([]datastore.SpeciesSummaryData{}, nil)
+
+		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?min_confidence=not-a-number")
+		require.NoError(t, controller.GetSpeciesSummary(c))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		mockDS.AssertExpectations(t)
+	})
+}
 func TestGetHourlyAnalytics(t *testing.T) {
 	t.Parallel()
 	// Go 1.25: Add test metadata for better organization and reporting
@@ -1011,7 +1046,7 @@ func TestThumbnailsDeferToMediaProxy(t *testing.T) {
 			serve: func(t *testing.T) map[string]string {
 				t.Helper()
 				mockDS := mocks.NewMockInterface(t)
-				mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{
+				mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return([]datastore.SpeciesSummaryData{
 					{ScientificName: sciAmericanCrow, CommonName: "American Crow", Count: 5},
 				}, nil)
 

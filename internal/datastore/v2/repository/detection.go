@@ -256,7 +256,8 @@ type DetectionRepository interface {
 
 	// GetSpeciesSummary returns summary statistics for all species.
 	// modelID is optional; pass nil to include all models.
-	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error)
+	// minConfidence filters detections when > 0 (counting only confidence >= minConfidence).
+	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint, minConfidence float64) ([]SpeciesSummaryData, error)
 
 	// GetHourlyDistribution returns detection counts by hour. Rows in
 	// [seg.Start, seg.End) bucket by wall-clock hour at seg.OffsetSeconds rather than the

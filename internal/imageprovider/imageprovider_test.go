@@ -278,7 +278,7 @@ func (m *mockStore) GetDetectionTrends(ctx context.Context, period string, limit
 func (m *mockStore) GetHourlyAnalyticsData(ctx context.Context, date, species string) ([]datastore.HourlyAnalyticsData, error) {
 	return []datastore.HourlyAnalyticsData{}, nil
 }
-func (m *mockStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
+func (m *mockStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, minConfidence float64) ([]datastore.SpeciesSummaryData, error) {
 	return []datastore.SpeciesSummaryData{}, nil
 }
 func (m *mockStore) SearchDetections(filters *datastore.SearchFilters) ([]datastore.DetectionRecord, int, error) {
@@ -502,8 +502,8 @@ func (m *mockFailingStore) GetHourlyAnalyticsData(ctx context.Context, date, spe
 	return m.mockStore.GetHourlyAnalyticsData(ctx, date, species)
 }
 
-func (m *mockFailingStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
-	return m.mockStore.GetSpeciesSummaryData(ctx, startDate, endDate)
+func (m *mockFailingStore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, minConfidence float64) ([]datastore.SpeciesSummaryData, error) {
+	return m.mockStore.GetSpeciesSummaryData(ctx, startDate, endDate, minConfidence)
 }
 
 func (m *mockFailingStore) GetNewSpeciesDetections(ctx context.Context, startDate, endDate string, limit, offset int) ([]datastore.NewSpeciesData, error) {

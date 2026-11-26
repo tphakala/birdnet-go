@@ -637,11 +637,13 @@ func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.S
 func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
+	minConfidence := c.parseOptionalFloat(ctx, "min_confidence", 0.0, apicore.PercentageMultiplier)
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
 	c.LogInfoIfEnabled("Retrieving species summary",
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
+		logger.Float64("min_confidence", minConfidence),
 		logger.String("ip", ip),
 		logger.String("path", path),
 	)
@@ -651,7 +653,7 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 	}
 
 	// Retrieve species summary data from the datastore
-	summaryData, dbDuration, err := c.fetchSpeciesSummaryData(ctx, startDate, endDate)
+	summaryData, dbDuration, err := c.fetchSpeciesSummaryData(ctx, startDate, endDate, minConfidence)
 	c.LogInfoIfEnabled("Database query completed",
 		logger.Int64("duration_ms", dbDuration.Milliseconds()),
 		logger.Int("record_count", len(summaryData)),
@@ -663,6 +665,7 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 		return c.handleAnalyticsQueryError(ctx, err, "Species summary", "Failed to get species summary data",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
+			logger.Float64("min_confidence", minConfidence),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -681,6 +684,7 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Species summary retrieved",
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
+		logger.Float64("min_confidence", minConfidence),
 		logger.Int("count", len(response)),
 		logger.Int("limit", limit),
 		logger.String("ip", ip),
@@ -691,11 +695,11 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 }
 
 // fetchSpeciesSummaryData fetches species summary data with timing
-func (c *Handler) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, time.Duration, error) {
+func (c *Handler) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate string, minConfidence float64) ([]datastore.SpeciesSummaryData, time.Duration, error) {
 	dbStart := time.Now()
 	queryCtx, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
-	summaryData, err := c.DS.GetSpeciesSummaryData(queryCtx, startDate, endDate)
+	summaryData, err := c.DS.GetSpeciesSummaryData(queryCtx, startDate, endDate, minConfidence)
 	return summaryData, time.Since(dbStart), err
 }
 
