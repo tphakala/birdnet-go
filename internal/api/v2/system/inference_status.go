@@ -558,10 +558,16 @@ func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string
 // models with per-model stats, memory and current inference health, source
 // attachment, and audio pipeline metrics. The snapshot is assembled from live
 // sources on every request so it reflects hot-reload changes without any
-// caching. backends.openvino.gpuFailed reports the OpenVINO GPU fault latch.
+// caching. backends.openvino.gpuFailed reports the OpenVINO GPU fault latch,
+// read just before snapshotAtUnix is stamped so the two describe one moment.
 func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 
+	// Read the GPU fault latch first and stamp the snapshot right after it, before
+	// the probes below: clients order overlapping answers by snapshotAtUnix, so a
+	// later stamp must mean a later latch read. The latch never clears while the
+	// process runs, so a later read never reports less than an earlier one.
+	gpuFailed, _ := inference.OpenVINOGPUFault()
 	resp := InferenceStatusResponse{
 		SnapshotAtUnix: time.Now().Unix(),
 	}
@@ -574,7 +580,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	ov := inference.CheckOpenVINOAvailability()
 	resp.Backends.OpenVINO = OpenVINOBackendStatus{Supported: ov.Supported, Active: ov.Active}
 	if ov.Supported {
-		resp.Backends.OpenVINO.GPUFailed, _ = inference.OpenVINOGPUFault()
+		resp.Backends.OpenVINO.GPUFailed = gpuFailed
 		for _, d := range []string{deviceCPU, deviceGPU} {
 			if inference.OpenVINOHasDevice(d) {
 				resp.Backends.OpenVINO.Devices = append(resp.Backends.OpenVINO.Devices, d)
