@@ -227,6 +227,84 @@ func TestListModels_ReportsLoadState(t *testing.T) {
 	}
 }
 
+// TestListModels_ReportsFailureReason verifies that a not-loaded model with a
+// recorded OpenVINO reason code carries it as failureReason, and that the field
+// is withheld from an anonymous caller on an auth-enabled instance (it describes
+// the host) and from a model that is loaded or has no recorded reason.
+func TestListModels_ReportsFailureReason(t *testing.T) {
+	// Mutates the process-global settings snapshot: not parallel.
+	runtime := map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX"}}
+	loadErrors := map[string]string{
+		classifier.RegistryIDBirdNETV24: "stale",
+		classifier.RegistryIDPerchV2:    "load failed",
+	}
+	reasons := map[string]string{
+		classifier.RegistryIDBirdNETV24: "openvino.gpu_failed",
+		classifier.RegistryIDPerchV2:    "openvino.gpu_unavailable",
+	}
+	tests := []struct {
+		name     string
+		withAuth bool
+		want     map[string]string // failureReason by config alias
+	}{
+		{
+			name: "only the not-loaded model with a reason carries it",
+			want: map[string]string{
+				conf.ModelIDBirdNET: "",
+				conf.ModelIDPerchV2: "openvino.gpu_unavailable",
+				conf.ModelIDBat:     "",
+			},
+		},
+		{
+			name:     "an anonymous caller on an auth-enabled instance gets none",
+			withAuth: true,
+			want: map[string]string{
+				conf.ModelIDBirdNET: "",
+				conf.ModelIDPerchV2: "",
+				conf.ModelIDBat:     "",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core := apitest.NewCore(t)
+			var authSvc auth.Service
+			if tt.withAuth {
+				authSvc = &stubAuth{}
+			}
+			h := New(core, authSvc)
+			h.modelRuntime = func() map[string]listedModelRuntime { return runtime }
+			h.loadErrors = func() map[string]string { return loadErrors }
+			h.loadFailureReasons = func() map[string]string { return reasons }
+
+			settings := &conf.Settings{}
+			settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}
+			apitest.PublishTestSettings(t, settings)
+
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/models", http.NoBody)
+			require.NoError(t, h.ListModels(e.NewContext(req, rec)))
+
+			var items []ModelListItem
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
+			got := make(map[string]string, len(items))
+			for i := range items {
+				got[items[i].ID] = items[i].FailureReason
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestLiveLoadFailureReasons_NoProcessor verifies that without a processor there
+// are no failure reasons.
+func TestLiveLoadFailureReasons_NoProcessor(t *testing.T) {
+	core := apitest.NewCore(t)
+	core.Processor = nil
+	assert.Empty(t, New(core, nil).liveLoadFailureReasons())
+}
+
 // TestAnnounceModelListChange verifies that, without an injected seam, the
 // announcement is a topology broadcast on the metrics store that subscribers
 // receive, and that a missing metrics store is not an error.
