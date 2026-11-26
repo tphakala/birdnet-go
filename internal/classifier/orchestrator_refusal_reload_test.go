@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,10 +88,62 @@ func TestUnloadRefusedModel_SkipsReplacedInstance(t *testing.T) {
 	})
 }
 
-// TestUnloadModel_ExpectedEntryGuard checks the guard unloadRefusedModel relies on:
-// the expected entry is compared under the same o.mu write lock that detaches it, so
-// an entry a concurrent LoadModel published after the caller's check is never torn
-// down and the detach callback (the failure record) runs only on a real detach.
+// TestUnloadRefusedModel_KeepsEntryPublishedAfterItsCheck checks that a replacement
+// LoadModel publishes while unloadRefusedModel is already running, before it reaches
+// unloadModel, keeps serving: the map entry must be compared at the detach, not in an
+// earlier check of unloadRefusedModel's own. The test holds the refused entry's
+// entry.mu so the call blocks inside unloadRefusedModel, publishes the replacement,
+// then lets the call finish. It does not cover a replacement published inside
+// unloadModel itself; that the comparison and the delete share one write lock is
+// not pinned by a test. Taking o.mu while
+// holding entry.mu inverts the documented order; it is safe here because the test
+// orchestrator runs no background goroutine and the blocked call holds no o.mu.
+func TestUnloadRefusedModel_KeepsEntryPublishedAfterItsCheck(t *testing.T) {
+	publishRefusalSettings(t, conf.BackendPrefOpenVINO, conf.OVDeviceAuto, conf.ModelIDPerchV2)
+	refusal := wrappedRefusal(RegistryIDPerchV2, ovReasonNotPerchNoDFT, "auto")
+	key := inferenceLoadKeyFor(conftestSettings(t))
+
+	o := newTestOrchestrator(t)
+	t.Cleanup(o.acousticNotice.Stop)
+	refused := &modelEntry{instance: &reloadFakeModel{id: RegistryIDPerchV2}}
+	o.models[RegistryIDPerchV2] = refused
+	rev := o.entryRevisionOf(RegistryIDPerchV2)
+
+	refused.mu.Lock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		o.unloadRefusedModel(rev, refusal, key)
+	}()
+	// The call holds reloadMu from its first statement, so a failing TryLock means it
+	// is inside the call; it then blocks on entry.mu.
+	require.Eventually(t, func() bool {
+		if o.reloadMu.TryLock() {
+			o.reloadMu.Unlock()
+			return false
+		}
+		return true
+	}, 5*time.Second, time.Millisecond, "unloadRefusedModel never started")
+
+	replacement := &modelEntry{instance: &reloadFakeModel{id: RegistryIDPerchV2}}
+	o.mu.Lock()
+	o.models[RegistryIDPerchV2] = replacement // uninstall plus reinstall
+	o.mu.Unlock()
+	refused.mu.Unlock()
+	<-done
+
+	o.mu.RLock()
+	current := o.models[RegistryIDPerchV2]
+	o.mu.RUnlock()
+	assert.Same(t, replacement, current, "the replacement must stay published")
+	assert.NotNil(t, replacement.instance, "the replacement must not be closed")
+	_, recorded := o.modelLoadErrors.Load(RegistryIDPerchV2)
+	assert.False(t, recorded, "nothing is recorded against the replacement")
+}
+
+// TestUnloadModel_ExpectedEntryGuard checks the guard unloadRefusedModel relies on: a
+// replaced entry is kept and its detach callback (the failure record) never runs, and
+// on a real detach the callback runs with o.mu write-held.
 func TestUnloadModel_ExpectedEntryGuard(t *testing.T) {
 	t.Run("replaced entry is kept", func(t *testing.T) {
 		o := newTestOrchestrator(t)
@@ -112,7 +165,14 @@ func TestUnloadModel_ExpectedEntryGuard(t *testing.T) {
 		o.models[RegistryIDPerchV2] = entry
 		detached := false
 
-		err := o.unloadModel(RegistryIDPerchV2, entry, func() { detached = true })
+		err := o.unloadModel(RegistryIDPerchV2, entry, func() {
+			// The record must land under the write lock that detaches the entry.
+			if o.mu.TryRLock() {
+				o.mu.RUnlock()
+				t.Error("onDetach ran without o.mu write-held")
+			}
+			detached = true
+		})
 
 		require.NoError(t, err)
 		assert.False(t, o.IsModelLoaded(RegistryIDPerchV2))
