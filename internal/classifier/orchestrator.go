@@ -2998,10 +2998,13 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) {
 		}
 		registryID := m.registryID
 
-		// The inference settings this load starts under, for the failure record: the
-		// snapshot the loop iterates, so the key matches the startup settings the
-		// thread budget in threadAlloc was computed from.
-		loadKey := inferenceLoadKeyFor(settings)
+		// The inference settings this load starts under, for the failure record. The
+		// loaders read the backend, OpenVINO device and library paths from the live
+		// settings when they run, so those come from a read taken now; the thread
+		// budget in threadAlloc was computed from the loop's snapshot, so the thread
+		// count comes from there.
+		loadKey := inferenceLoadKeyFor(o.currentSettings())
+		loadKey.backend.threads = settings.BirdNET.Threads
 
 		// Closure with defer ensures the mutex is released even if a
 		// loader panics during model initialization.

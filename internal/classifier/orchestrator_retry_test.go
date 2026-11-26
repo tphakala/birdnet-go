@@ -1,6 +1,7 @@
 package classifier
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -174,6 +175,7 @@ func TestRetryFailedLoadsForBackendChange_RechecksCandidateMidRetry(t *testing.T
 		{"disabled", func(*Orchestrator) {
 			changed := conftest.GetTestSettings()
 			changed.Models.Enabled = []string{conf.ModelIDBirdNETPlusV3}
+			changed.BirdNET.Backend = conf.BackendPrefOpenVINO
 			conftest.SetTestSettings(changed)
 		}, false},
 		{"loaded by another path", func(orc *Orchestrator) {
@@ -329,4 +331,68 @@ func TestLoadEnabledModels_FailureKeyIsTakenBeforeTheLoad(t *testing.T) {
 
 	assert.Equal(t, []string{RegistryIDPerchV2}, o.RetryFailedLoadsForBackendChange(),
 		"the startup load never ran under the new backend, so the settings change must retry it")
+}
+
+// TestLoadEnabledModels_FailureKeyFollowsSettingsTheLoaderSaw pins that a startup load
+// failure is stamped with the backend the loader ran under, not the snapshot the startup
+// loop began with: a save that lands during an earlier model's load changes the backend
+// the later loader sees, so going back to the original backend must retry that model.
+func TestLoadEnabledModels_FailureKeyFollowsSettingsTheLoaderSaw(t *testing.T) {
+	// Not parallel: swaps modelLoaders and the global settings snapshot.
+	isolateTestConfig(t)
+
+	enabled := []string{conf.ModelIDPerchV2, conf.ModelIDBirdNETPlusV3}
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = enabled
+	settings.BirdNET.Backend = conf.BackendPrefAuto
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	var mu sync.Mutex
+	var order []string
+	stub := func(id string) func(*Orchestrator, int) error {
+		return func(orc *Orchestrator, _ int) error {
+			mu.Lock()
+			order = append(order, id)
+			n := len(order)
+			mu.Unlock()
+			switch n {
+			case 1:
+				// The first startup load succeeds while the user saves another backend.
+				changed := conftest.GetTestSettings()
+				changed.Models.Enabled = enabled
+				changed.BirdNET.Backend = conf.BackendPrefOpenVINO
+				conftest.SetTestSettings(changed)
+			case 2:
+				return errors.NewStd("fails under the saved backend")
+			}
+			orc.models[id] = &modelEntry{instance: &mockModelInstance{id: id}}
+			return nil
+		}
+	}
+	for _, id := range []string{RegistryIDPerchV2, RegistryIDBirdNETPlusV3} {
+		orig, had := modelLoaders[id]
+		modelLoaders[id] = stub(id)
+		t.Cleanup(func() {
+			if had {
+				modelLoaders[id] = orig
+			} else {
+				delete(modelLoaders, id)
+			}
+		})
+	}
+
+	o, err := NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(o.Delete)
+	require.Len(t, order, 2, "construction must have tried both loads")
+	failed := order[1]
+
+	reverted := conftest.GetTestSettings()
+	reverted.Models.Enabled = enabled
+	reverted.BirdNET.Backend = conf.BackendPrefAuto
+	conftest.SetTestSettings(reverted)
+
+	assert.Equal(t, []string{failed}, o.RetryFailedLoadsForBackendChange(),
+		"the model never loaded under the original backend, so going back to it must retry it")
 }
