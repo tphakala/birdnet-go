@@ -80,6 +80,10 @@ type Handler struct {
 	// models that failed to load. Injectable like modelRuntime: nil means the live
 	// orchestrator's LoadErrors, and tests inject a fixed map.
 	loadErrors func() map[string]string
+	// loadFailureReasons reports the stable OpenVINO reason code per registry ID
+	// for enabled models whose last load was an OpenVINO refusal. Injectable like
+	// loadErrors: nil means the live orchestrator's LoadFailureReasons.
+	loadFailureReasons func() map[string]string
 	// speciesKnowledge reports which species each loaded model can classify (see
 	// speciesKnowledge in species_coverage.go). It is an injectable seam: nil means
 	// the live orchestrator's ModelSpecies snapshot, and tests inject a fixed one.
@@ -166,6 +170,11 @@ type ModelListItem struct {
 	// ModelStatePending. Unlike Backend and Precision it is not host-derived, so it
 	// is reported to every caller.
 	State string `json:"state"`
+	// FailureReason is the stable OpenVINO reason code of the model's last load
+	// failure (for example "openvino.gpu_failed"); it never carries paths or raw
+	// error text. Omitted when the model is loaded, when its last load failed for
+	// another reason, and under the same conditions as Backend.
+	FailureReason string `json:"failureReason,omitempty"`
 }
 
 // CatalogDocumentResponse is one licence or policy document of a catalog entry's
@@ -417,6 +426,19 @@ func (c *Handler) liveLoadErrors() map[string]string {
 	return orch.LoadErrors()
 }
 
+// liveLoadFailureReasons reads the orchestrator's OpenVINO load failure reason
+// codes, keyed by registry ID. Without a processor or orchestrator there are none.
+func (c *Handler) liveLoadFailureReasons() map[string]string {
+	if c.Processor == nil {
+		return nil
+	}
+	orch := c.Processor.GetBirdNET()
+	if orch == nil {
+		return nil
+	}
+	return orch.LoadFailureReasons()
+}
+
 // modelState classifies an enabled model: loaded when the runtime reported it,
 // failed when its load error is on record, else pending.
 func modelState(loaded bool, loadErrors map[string]string, registryID string) string {
@@ -427,6 +449,16 @@ func modelState(loaded bool, loadErrors map[string]string, registryID string) st
 		return ModelStateFailed
 	}
 	return ModelStatePending
+}
+
+// modelFailureReason returns the recorded OpenVINO reason code of a model in the
+// failed state, else "". Requiring the state keeps a reason from appearing beside
+// pending or loaded when a load completes between the handler's reads.
+func modelFailureReason(state string, failureReasons map[string]string, registryID string) string {
+	if state != ModelStateFailed {
+		return ""
+	}
+	return failureReasons[registryID]
 }
 
 // announceModelListChange tells connected clients that the model list changed.
@@ -460,7 +492,8 @@ func catalogCategory(catalog []classifier.CatalogEntry, registryID string) strin
 // ListModels returns classifier models that are enabled in the configuration,
 // each with its load state (loaded, failed or pending). Loaded models also carry
 // their live backend and precision, for requests that may receive host-derived
-// data (see recommendationsAllowed).
+// data (see recommendationsAllowed). A model in the failed state also carries
+// the OpenVINO reason code of its last load failure, under the same condition.
 func (c *Handler) ListModels(ctx echo.Context) error {
 	// Read from the live settings (atomic pointer) so that models added
 	// at runtime (via gallery install) are immediately visible.
@@ -488,6 +521,14 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 	}
 	loadErrors := readErrors()
 	withRuntime := c.recommendationsAllowed(ctx)
+	var failureReasons map[string]string
+	if withRuntime {
+		readReasons := c.loadFailureReasons
+		if readReasons == nil {
+			readReasons = c.liveLoadFailureReasons
+		}
+		failureReasons = readReasons()
+	}
 
 	// Snapshot the active catalog once (honors a user-edited model-catalog.json).
 	catalog := classifier.ActiveCatalog()
@@ -509,6 +550,7 @@ func (c *Handler) ListModels(ctx echo.Context) error {
 					Backend:               live.backend,
 					Precision:             live.precision,
 					State:                 modelState(loaded, loadErrors, id),
+					FailureReason:         modelFailureReason(modelState(loaded, loadErrors, id), failureReasons, id),
 				})
 				break // one entry per model
 			}

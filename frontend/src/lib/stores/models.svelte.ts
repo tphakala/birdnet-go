@@ -37,6 +37,12 @@ export interface BackendModel {
    * on a server that predates the field, which counts as loaded.
    */
   state?: ModelLoadState;
+  /**
+   * Stable OpenVINO reason code of the model's last load failure (for example
+   * "openvino.gpu_failed"). Absent when the model is loaded, failed for another
+   * reason, or the server withheld host data.
+   */
+  failureReason?: string;
 }
 
 export const DEFAULT_MODEL_ID = 'birdnet';

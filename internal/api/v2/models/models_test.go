@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -225,6 +226,110 @@ func TestListModels_ReportsLoadState(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestListModels_ReportsFailureReason verifies that a model in the failed state
+// with a recorded OpenVINO reason code carries it as failureReason, and that the
+// field is withheld from an anonymous caller on an auth-enabled instance (it
+// describes the host) and from a model that is loaded, pending or has no
+// recorded reason.
+func TestListModels_ReportsFailureReason(t *testing.T) {
+	// Mutates the process-global settings snapshot: not parallel.
+	runtime := map[string]listedModelRuntime{classifier.RegistryIDBirdNETV24: {backend: "ONNX"}}
+	loadErrors := map[string]string{
+		classifier.RegistryIDBirdNETV24: "stale",
+		classifier.RegistryIDPerchV2:    "load failed",
+	}
+	reasons := map[string]string{
+		classifier.RegistryIDBirdNETV24: "openvino.gpu_failed",
+		classifier.RegistryIDPerchV2:    "openvino.gpu_unavailable",
+		// A reason without a load error is the pending state caught between the
+		// handler's two reads of the orchestrator; it must not be reported.
+		classifier.RegistryIDBat: "openvino.gpu_failed",
+	}
+	tests := []struct {
+		name          string
+		withAuth      bool
+		authenticated bool
+		want          map[string]string // failureReason by config alias
+	}{
+		{
+			name: "only the failed model with a reason carries it",
+			want: map[string]string{
+				conf.ModelIDBirdNET: "",
+				conf.ModelIDPerchV2: "openvino.gpu_unavailable",
+				conf.ModelIDBat:     "",
+			},
+		},
+		{
+			name:     "an anonymous caller on an auth-enabled instance gets none",
+			withAuth: true,
+			want: map[string]string{
+				conf.ModelIDBirdNET: "",
+				conf.ModelIDPerchV2: "",
+				conf.ModelIDBat:     "",
+			},
+		},
+		{
+			name:          "an authenticated caller on an auth-enabled instance gets the reason",
+			withAuth:      true,
+			authenticated: true,
+			want: map[string]string{
+				conf.ModelIDBirdNET: "",
+				conf.ModelIDPerchV2: "openvino.gpu_unavailable",
+				conf.ModelIDBat:     "",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core := apitest.NewCore(t)
+			var authSvc auth.Service
+			if tt.withAuth {
+				authSvc = &stubAuth{authenticated: tt.authenticated}
+			}
+			h := New(core, authSvc)
+			h.modelRuntime = func() map[string]listedModelRuntime { return runtime }
+			h.loadErrors = func() map[string]string { return loadErrors }
+			h.loadFailureReasons = func() map[string]string { return reasons }
+
+			settings := &conf.Settings{}
+			settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2, conf.ModelIDBat}
+			apitest.PublishTestSettings(t, settings)
+
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/models", http.NoBody)
+			require.NoError(t, h.ListModels(e.NewContext(req, rec)))
+
+			var items []ModelListItem
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &items))
+			got := make(map[string]string, len(items))
+			for i := range items {
+				got[items[i].ID] = items[i].FailureReason
+			}
+			assert.Equal(t, tt.want, got)
+
+			// The decoded items cannot pin the wire key, so check the raw body: the
+			// key is present once per reported reason and absent otherwise.
+			reported := 0
+			for _, reason := range tt.want {
+				if reason != "" {
+					reported++
+					assert.Contains(t, rec.Body.String(), `"failureReason":"`+reason+`"`)
+				}
+			}
+			assert.Equal(t, reported, strings.Count(rec.Body.String(), `"failureReason"`))
+		})
+	}
+}
+
+// TestLiveLoadFailureReasons_NoProcessor verifies that without a processor there
+// are no failure reasons.
+func TestLiveLoadFailureReasons_NoProcessor(t *testing.T) {
+	core := apitest.NewCore(t)
+	core.Processor = nil
+	assert.Empty(t, New(core, nil).liveLoadFailureReasons())
 }
 
 // TestAnnounceModelListChange verifies that, without an injected seam, the
