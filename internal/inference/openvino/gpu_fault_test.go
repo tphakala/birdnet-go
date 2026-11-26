@@ -116,3 +116,11 @@ func TestGPUGuard_KeepsFirstCause(t *testing.T) {
 	require.True(t, faulted)
 	assert.Same(t, first, cause)
 }
+
+// resetGPUFaultForTest clears the process-wide latch. Production code has no
+// reset path (only a restart clears it); this exists for tests that trip it.
+func resetGPUFaultForTest() {
+	gpuFault.tripped.Store(false)
+	gpuFault.cause.Store(nil)
+	gpuFault.streak.Store(0)
+}
