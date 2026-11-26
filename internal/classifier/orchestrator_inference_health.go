@@ -35,6 +35,12 @@ import (
 // long enough that one bad window (a transient backend hiccup) never raises it.
 const InferenceFailureNoticeThreshold = 10
 
+// inferenceGPUFaultFailureThreshold is the number of consecutive failed windows
+// after which a model whose latest failure is the OpenVINO GPU fault is failing:
+// the latch makes every later window fail too, so waiting for the generic
+// threshold would only delay the report.
+const inferenceGPUFaultFailureThreshold = 1
+
 // inferenceFailureLogEvery is the interval, in consecutive failures of one
 // model, at which PredictModel repeats its ERROR log after the first failure.
 // While a model is failing, the same interval re-kicks the failure notice
@@ -135,14 +141,33 @@ func recordInferenceFailure(modelID string, err error, now time.Time) (streak in
 }
 
 // recordInferenceSuccess records a successful window and returns the streak it
-// ended.
-func recordInferenceSuccess(modelID string, now time.Time) int64 {
+// ended and the error class of the failure run's latest failure.
+func recordInferenceSuccess(modelID string, now time.Time) (ended int64, class inferenceErrorClass) {
 	h := inferenceHealthFor(modelID)
 	h.count.Add(1)
 	ns := now.UnixNano()
 	h.lastAtNs.Store(ns)
 	h.lastSuccessNs.Store(ns)
-	return h.streak.Swap(0)
+	// The class is read after the streak is cleared: a failure stores its class
+	// before it extends the streak, so a run seen as non-empty here has its class.
+	ended = h.streak.Swap(0)
+	return ended, inferenceErrorClass(h.lastErrClass.Load())
+}
+
+// successNeedsSync reports whether a success that ended a run of the given
+// length and class must reconcile the failure notice: the run was failing, which
+// takes the generic threshold or, for the OpenVINO GPU fault, a single window.
+func successNeedsSync(ended int64, class inferenceErrorClass) bool {
+	return ended >= failureThresholdFor(class)
+}
+
+// failureThresholdFor returns the consecutive failed windows after which a model
+// whose latest failure has the given class is failing.
+func failureThresholdFor(class inferenceErrorClass) int64 {
+	if class == errorClassGPUFault {
+		return inferenceGPUFaultFailureThreshold
+	}
+	return InferenceFailureNoticeThreshold
 }
 
 // isCancellation reports whether a PredictModel error came with the caller's
@@ -167,11 +192,15 @@ func inferenceFailureLogsAtError(streak int64) bool {
 // reconcile the failure notice: when the model becomes failing, then every
 // inferenceFailureLogEvery-th failure as a bounded periodic re-check. A GPU
 // fault failure is failing at once and carries no per-model notice, so the first
-// window whose class turns into it (prev is the class of the failure before)
-// also reconciles: it starts the model's failing state and removes a generic
-// notice raised earlier.
+// window whose class turns into it (prev is the class of the failure before), or
+// that starts a new run, also reconciles: it starts the model's failing state and
+// removes a generic notice raised earlier. The window that leaves the class
+// reconciles too, since the threshold moves back to the generic one.
 func failureStreakNeedsSync(streak int64, prev, class inferenceErrorClass) bool {
-	if class == errorClassGPUFault && (prev != errorClassGPUFault || streak == 1) {
+	if class == errorClassGPUFault && (prev != errorClassGPUFault || streak == inferenceGPUFaultFailureThreshold) {
+		return true
+	}
+	if prev == errorClassGPUFault && class != errorClassGPUFault {
 		return true
 	}
 	return streak == InferenceFailureNoticeThreshold ||
@@ -227,6 +256,7 @@ func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 			mh.Name = id
 			mh.ModelName = id // DisplayName of a nameless model is only a backend suffix
 		}
+		failureClass := errorClassNone
 		if v, ok := inferenceHealthRecords.Load(id); ok {
 			h := v.(*modelInferenceHealth) //nolint:errcheck // stored type is fixed
 			mh.ConsecutiveFailures = h.streak.Load()
@@ -234,13 +264,11 @@ func (o *Orchestrator) InferenceHealth() []ModelInferenceHealth {
 			mh.LastInferenceAt = unixNanoTime(h.lastAtNs.Load())
 			mh.LastSuccessAt = unixNanoTime(h.lastSuccessNs.Load())
 			if mh.ConsecutiveFailures > 0 {
-				mh.ErrorClass = inferenceErrorClass(h.lastErrClass.Load()).String()
+				failureClass = inferenceErrorClass(h.lastErrClass.Load())
+				mh.ErrorClass = failureClass.String()
 			}
 		}
-		mh.FailureThreshold = InferenceFailureNoticeThreshold
-		if mh.ErrorClass == InferenceErrorClassGPUFault {
-			mh.FailureThreshold = 1
-		}
+		mh.FailureThreshold = failureThresholdFor(failureClass)
 		mh.Failing = mh.ConsecutiveFailures >= mh.FailureThreshold
 		mh.Device, mh.Backend, mh.Precision = o.GetModelRuntimeInfo(id)
 		out = append(out, mh)

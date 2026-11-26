@@ -229,19 +229,29 @@ func TestClassifyInferenceError(t *testing.T) {
 func TestFailureStreakNeedsSync(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		streak int64
-		want   bool
+		name        string
+		streak      int64
+		prev, class inferenceErrorClass
+		want        bool
 	}{
-		{1, false},
-		{InferenceFailureNoticeThreshold - 1, false},
-		{InferenceFailureNoticeThreshold, true},
-		{InferenceFailureNoticeThreshold + 1, false},
-		{inferenceFailureLogEvery, true},
-		{2 * inferenceFailureLogEvery, true},
-		{2*inferenceFailureLogEvery + 1, false},
+		{"generic first failure", 1, errorClassNone, errorClassOther, false},
+		{"generic below the threshold", InferenceFailureNoticeThreshold - 1, errorClassOther, errorClassOther, false},
+		{"generic at the threshold", InferenceFailureNoticeThreshold, errorClassOther, errorClassOther, true},
+		{"generic past the threshold", InferenceFailureNoticeThreshold + 1, errorClassOther, errorClassOther, false},
+		{"generic at the log interval", inferenceFailureLogEvery, errorClassOther, errorClassOther, true},
+		{"generic at twice the log interval", 2 * inferenceFailureLogEvery, errorClassOther, errorClassOther, true},
+		{"generic just past twice the log interval", 2*inferenceFailureLogEvery + 1, errorClassOther, errorClassOther, false},
+		{"GPU fault, first failure ever", 1, errorClassNone, errorClassGPUFault, true},
+		{"GPU fault after a generic run", 4, errorClassOther, errorClassGPUFault, true},
+		{"GPU fault again after a success ended the run", 1, errorClassGPUFault, errorClassGPUFault, true},
+		{"GPU fault repeating inside one run", 2, errorClassGPUFault, errorClassGPUFault, false},
+		{"generic failure after a GPU fault", 3, errorClassGPUFault, errorClassOther, true},
 	}
 	for _, tt := range tests {
-		assert.Equal(t, tt.want, failureStreakNeedsSync(tt.streak, errorClassNone, errorClassOther), "streak %d", tt.streak)
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, failureStreakNeedsSync(tt.streak, tt.prev, tt.class))
+		})
 	}
 }
 
@@ -464,7 +474,7 @@ func TestGPUFaultNotice_Sequence(t *testing.T) {
 				return h
 			}
 		}
-		t.Fatalf("model %s not found", id)
+		require.FailNow(t, "model not found", id)
 		return ModelInferenceHealth{}
 	}
 
@@ -547,4 +557,52 @@ func TestGPUFaultNotice_NoServiceThenSync(t *testing.T) {
 	o.SyncInferenceNotices()
 	o.inferenceHealth.inFlight.Wait()
 	assert.Len(t, gpuFaultNotices(t, svc), 1)
+}
+
+// TestGPUFaultHealth_LeavingTheFaultReconciles pins that a model's failing state
+// follows its GPU fault class both ways: a success that ends a short GPU fault
+// run, and a generic failure that follows a GPU fault window, each tell the
+// observer, because the failure threshold moves between 1 and
+// InferenceFailureNoticeThreshold. Not parallel: process-global notification
+// service and health records.
+func TestGPUFaultHealth_LeavingTheFaultReconciles(t *testing.T) {
+	setupTestNotification(t)
+	const modelID = "gpu-leave-model"
+	dropInferenceHealth(modelID)
+	t.Cleanup(func() { dropInferenceHealth(modelID) })
+
+	m := newScriptedModel(modelID)
+	o := newTestOrchestrator(t, m.mock)
+	var changes atomic.Int32
+	o.SetInferenceHealthChangedCallback(func() { changes.Add(1) })
+	settle := o.inferenceHealth.inFlight.Wait
+	failing := func() bool {
+		health := o.InferenceHealth()
+		require.Len(t, health, 1)
+		return health[0].Failing
+	}
+
+	m.failWith(errors.Newf("predict: %w", inference.ErrOpenVINOGPUFault).Build())
+	predictN(t, o, modelID, 1)
+	settle()
+	require.True(t, failing())
+	require.Equal(t, int32(1), changes.Load())
+
+	m.failWith(errors.NewStd("backend exploded"))
+	predictN(t, o, modelID, 1)
+	settle()
+	assert.False(t, failing(), "a generic failure at streak 2 is below its threshold")
+	assert.Equal(t, int32(2), changes.Load(), "leaving the GPU fault class reconciles")
+
+	m.failWith(errors.Newf("predict: %w", inference.ErrOpenVINOGPUFault).Build())
+	predictN(t, o, modelID, 1)
+	settle()
+	require.True(t, failing())
+	require.Equal(t, int32(3), changes.Load())
+
+	m.err.Store(nil)
+	predictN(t, o, modelID, 1)
+	settle()
+	assert.False(t, failing())
+	assert.Equal(t, int32(4), changes.Load(), "a success after a short GPU fault run reconciles")
 }
