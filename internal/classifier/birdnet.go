@@ -391,7 +391,7 @@ func (bn *BirdNET) initializeModel() error {
 		}
 		GetLogger().Warn("OpenVINO backend unavailable, falling back to ONNX Runtime", logger.Error(err))
 	} else {
-		logOpenVINODeclined(bn.ModelInfo.ID, bn.Settings.BirdNET.Backend, reason)
+		logOpenVINODeclined(bn.ModelInfo.ID, bn.Settings.BirdNET.Backend, bn.Settings.BirdNET.OpenVINODevice, reason)
 	}
 	return bn.initializeONNXModel()
 }

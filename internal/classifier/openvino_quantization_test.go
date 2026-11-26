@@ -30,12 +30,12 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 		name        string
 		plan        openVINOPlan
 		ok          bool
-		reason      string
+		reason      OpenVINOReason
 		backendPref string
 		quant       Quantization
 		wantPlan    openVINOPlan
 		wantOK      bool
-		wantReason  string
+		wantReason  OpenVINOReason
 	}{
 		{
 			name: "INT8 on auto backend declines to ONNX Runtime", plan: cpuF16, ok: true,
@@ -83,6 +83,21 @@ func TestApplyOpenVINOQuantizationPolicy(t *testing.T) {
 			name: "a declined plan stays declined for INT8 on explicit openvino", plan: openVINOPlan{}, ok: false, reason: ovReasonNoDevice,
 			backendPref: conf.BackendPrefOpenVINO, quant: QuantizationINT8,
 			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonNoDevice,
+		},
+		{
+			name: "INT8 on auto with the base declined for the GPU fault reports the file", plan: openVINOPlan{}, ok: false, reason: ovReasonGPUFailed,
+			backendPref: conf.BackendPrefAuto, quant: QuantizationINT8,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonUnverifiedWeights,
+		},
+		{
+			name: "FP32 on auto with the base declined for the GPU fault keeps the device reason", plan: openVINOPlan{}, ok: false, reason: ovReasonGPUFailed,
+			backendPref: conf.BackendPrefAuto, quant: QuantizationFP32,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonGPUFailed,
+		},
+		{
+			name: "INT8 on a binary without OpenVINO keeps not built", plan: openVINOPlan{}, ok: false, reason: ovReasonNotBuilt,
+			backendPref: conf.BackendPrefAuto, quant: QuantizationINT8,
+			wantPlan: openVINOPlan{}, wantOK: false, wantReason: ovReasonNotBuilt,
 		},
 		{
 			name: "a declined plan keeps its original reason for INT8", plan: openVINOPlan{}, ok: false, reason: ovReasonBackendONNX,
@@ -135,7 +150,7 @@ func TestBirdNETV24CatalogModelFilesDetectQuantization(t *testing.T) {
 func stubBirdNETV24BasePlan(t *testing.T, plan openVINOPlan) {
 	t.Helper()
 	orig := birdnetV24BasePlan
-	birdnetV24BasePlan = func(*conf.BirdNETConfig, func(string) bool) (openVINOPlan, bool, string) {
+	birdnetV24BasePlan = func(*conf.BirdNETConfig, func(string) bool) (openVINOPlan, bool, OpenVINOReason) {
 		return plan, true, ""
 	}
 	t.Cleanup(func() { birdnetV24BasePlan = orig })
@@ -165,7 +180,7 @@ func TestBirdNETOpenVINOPlan_QuantizationPolicyWired(t *testing.T) {
 		infoQuant   Quantization
 		backendPref string
 		wantOK      bool
-		wantReason  string
+		wantReason  OpenVINOReason
 		wantPlan    openVINOPlan
 	}{
 		{name: "stock INT8 file on auto declines", path: stockFile, infoQuant: QuantizationINT8,

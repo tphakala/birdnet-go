@@ -45,3 +45,33 @@ func TestTryPerchOpenVINO_StockModelFallsBack(t *testing.T) {
 	assert.Empty(t, device, "fallback path must not report an OpenVINO device")
 	assert.Empty(t, precisionHint, "fallback path must not report an OpenVINO precision hint")
 }
+
+// TestPerchOpenVINOPlanPrecedence pins the reason order for Perch: backend onnx,
+// then a binary without OpenVINO, then the stock model file. A stock file on a
+// build without OpenVINO reports not built, not the file.
+func TestPerchOpenVINOPlanPrecedence(t *testing.T) {
+	t.Parallel()
+	const stock, noDFT = "/models/perch_v2.onnx", "/models/perch_v2_no_dft.onnx"
+	tests := []struct {
+		name      string
+		path      string
+		backend   string
+		available bool
+		want      OpenVINOReason
+	}{
+		{"stock, unavailable, openvino", stock, conf.BackendPrefOpenVINO, false, ovReasonNotBuilt},
+		{"stock, unavailable, auto", stock, conf.BackendPrefAuto, false, ovReasonNotBuilt},
+		{"stock, onnx, available", stock, conf.BackendPrefONNX, true, ovReasonBackendONNX},
+		{"stock, onnx, unavailable", stock, conf.BackendPrefONNX, false, ovReasonBackendONNX},
+		{"stock, available, openvino", stock, conf.BackendPrefOpenVINO, true, ovReasonNotPerchNoDFT},
+		{"no_dft, unavailable", noDFT, conf.BackendPrefOpenVINO, false, ovReasonNotBuilt},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok, reason := perchOpenVINOPlan(&PerchConfig{ModelPath: tt.path, Backend: tt.backend}, tt.available)
+			assert.False(t, ok)
+			assert.Equal(t, tt.want, reason)
+		})
+	}
+}
