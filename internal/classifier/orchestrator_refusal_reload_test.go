@@ -87,6 +87,39 @@ func TestUnloadRefusedModel_SkipsReplacedInstance(t *testing.T) {
 	})
 }
 
+// TestUnloadModel_ExpectedEntryGuard checks the guard unloadRefusedModel relies on:
+// the expected entry is compared under the same o.mu write lock that detaches it, so
+// an entry a concurrent LoadModel published after the caller's check is never torn
+// down and the detach callback (the failure record) runs only on a real detach.
+func TestUnloadModel_ExpectedEntryGuard(t *testing.T) {
+	t.Run("replaced entry is kept", func(t *testing.T) {
+		o := newTestOrchestrator(t)
+		t.Cleanup(o.acousticNotice.Stop)
+		stale := &modelEntry{instance: &reloadFakeModel{id: RegistryIDPerchV2}}
+		o.models[RegistryIDPerchV2] = &modelEntry{instance: &reloadFakeModel{id: RegistryIDPerchV2}}
+		detached := false
+
+		err := o.unloadModel(RegistryIDPerchV2, stale, func() { detached = true })
+
+		require.ErrorIs(t, err, errEntryReplaced)
+		assert.True(t, o.IsModelLoaded(RegistryIDPerchV2), "the replacement must keep serving")
+		assert.False(t, detached, "nothing is recorded for a replaced entry")
+	})
+	t.Run("expected entry is detached", func(t *testing.T) {
+		o := newTestOrchestrator(t)
+		t.Cleanup(o.acousticNotice.Stop)
+		entry := &modelEntry{instance: &reloadFakeModel{id: RegistryIDPerchV2}}
+		o.models[RegistryIDPerchV2] = entry
+		detached := false
+
+		err := o.unloadModel(RegistryIDPerchV2, entry, func() { detached = true })
+
+		require.NoError(t, err)
+		assert.False(t, o.IsModelLoaded(RegistryIDPerchV2))
+		assert.True(t, detached)
+	})
+}
+
 // conftestSettings returns the settings snapshot the orchestrator under test reads.
 func conftestSettings(t *testing.T) *conf.Settings {
 	t.Helper()

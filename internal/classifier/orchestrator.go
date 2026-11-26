@@ -99,8 +99,8 @@ type secondaryBackendKey struct {
 // diagnostic runtime snapshots, with nothing acquired while it is held.
 //
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu or reloadMu.
-// unloadRefusedModel takes reloadMu itself, then calls UnloadModel, so a refusal
-// unloads only an instance no reload has replaced.
+// unloadRefusedModel takes reloadMu itself, then unloads through unloadModel with the
+// expected entry, so a refusal unloads only an instance no reload or load has replaced.
 type Orchestrator struct {
 	// Public fields, same layout as BirdNET for drop-in caller migration.
 	Settings       *conf.Settings // Deprecated: use CurrentSettings() instead.
@@ -1745,9 +1745,11 @@ func newEntryRevision(registryID string, entry *modelEntry) entryRevision {
 // unloadRefusedModel records an OpenVINO refusal as the model's last load failure and
 // then unloads the model, provided the entry still holds the instance the refused reload
 // started from (rev). It runs under reloadMu, like every other swap, so no reload can
-// publish a new instance between that check and the unload; when one already did, the
-// model keeps serving and nothing is recorded. Recording comes first so the
-// acoustic-model notice that UnloadModel re-evaluates already sees the failure (a
+// bump the generation after it is checked; a LoadModel that replaced the entry is
+// caught by unloadModel, which compares the entry under the o.mu write lock that
+// detaches it. When either replaced the instance, the model keeps serving and nothing
+// is recorded. The failure is recorded during the detach, before the
+// acoustic-model notice is re-evaluated, so that notice already sees it (a
 // load_failed state, one notice). It does not sync the refusal notices: callers do
 // that once after a batch. It relies only on the refusal, never on the entry's
 // recorded backend triplet.
@@ -1758,21 +1760,23 @@ func (o *Orchestrator) unloadRefusedModel(rev entryRevision, refusal error, key 
 	if rev.entry == nil {
 		return
 	}
-	o.mu.RLock()
-	current := o.models[registryID]
-	o.mu.RUnlock()
+	// The generation changes only in reloadEntry, which holds reloadMu, so it is
+	// stable for the rest of this call. The map entry is not (LoadModel and
+	// UnloadModel do not take reloadMu), so unloadModel rechecks it under the o.mu
+	// write lock that detaches it, and the failure is recorded only on that detach.
 	rev.entry.mu.Lock()
 	generation := rev.entry.generation
 	rev.entry.mu.Unlock()
-	if current != rev.entry || generation != rev.generation {
+	if generation != rev.generation {
 		GetLogger().Debug("refused model was replaced since the reload started; keeping it",
 			logger.String("registry_id", registryID))
 		return
 	}
-	o.recordLoadFailureUnder(registryID, refusal, key)
-	if err := o.UnloadModel(registryID); err != nil {
-		// Already unloaded by a concurrent uninstall or delete: nothing left to stop.
-		GetLogger().Debug("refused model was already unloaded",
+	record := func() { o.recordLoadFailureUnder(registryID, refusal, key) }
+	if err := o.unloadModel(registryID, rev.entry, record); err != nil {
+		// Replaced by a concurrent load, or already unloaded by a concurrent
+		// uninstall or delete: nothing of this instance is left to stop.
+		GetLogger().Debug("refused model was replaced or already unloaded; keeping the current state",
 			logger.String("registry_id", registryID), logger.Error(err))
 		return
 	}
@@ -2693,11 +2697,26 @@ func (o *Orchestrator) modelIDEnabled(registryID string) bool {
 	return false
 }
 
-// UnloadModel removes a model from the Orchestrator and releases its resources.
-// Called by ModelManager during uninstall. The built-in v2.4 model is protected
+// UnloadModel removes a model from the Orchestrator and releases its resources,
+// whatever entry it holds (unloadModel with no expected entry). Called by
+// ModelManager during uninstall. The built-in v2.4 model is protected
 // from uninstall by ModelManager (Uninstall refuses the permanent model), not here.
 // Thread-safe.
 func (o *Orchestrator) UnloadModel(registryID string) error {
+	return o.unloadModel(registryID, nil, nil)
+}
+
+// errEntryReplaced reports that unloadModel found a different entry under the
+// registry ID than the one the caller expected, so it left the model loaded.
+var errEntryReplaced = errors.NewStd("model entry was replaced")
+
+// unloadModel is UnloadModel with an optional guard. When expected is non-nil the
+// model is unloaded only while o.models still holds that exact entry, checked under
+// the same o.mu write lock that detaches it, so a concurrent LoadModel that published
+// a replacement is never torn down; otherwise it returns errEntryReplaced. onDetach,
+// when non-nil, runs under o.mu right after the entry is detached; it must not take
+// o.mu or any lock below it.
+func (o *Orchestrator) unloadModel(registryID string, expected *modelEntry, onDetach func()) error {
 	log := GetLogger()
 
 	o.mu.Lock()
@@ -2720,9 +2739,17 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 			Build()
 	}
 
+	if expected != nil && entry != expected {
+		o.mu.Unlock()
+		return errEntryReplaced
+	}
+
 	// Remove from map while holding the write lock so no new PredictModel
 	// calls can obtain this entry.
 	delete(o.models, registryID)
+	if onDetach != nil {
+		onDetach()
+	}
 	// Tombstone the model so a predict that races the asynchronous monitor
 	// teardown (the topology-reconfigure debounce window) is diagnosed as
 	// "unloaded" rather than a bare unknown model. Cleared on the next load.

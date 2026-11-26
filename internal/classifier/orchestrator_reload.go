@@ -240,8 +240,8 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		// (the settings callers unload the model; a variant swap keeps the old
 		// instance and its files). An auto selection keeps the plain error.
 		if openVINOSelectionExplicit(settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice) {
-			nextDevice, _, _ := next.RuntimeInfo()
-			return false, &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: nextDevice, Cause: gpuErr}
+			// snap.Device was read from next before it was closed above.
+			return false, &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: snap.Device, Cause: gpuErr}
 		}
 		o.logReloadFailure(registryID, gpuErr)
 		return false, gpuErr
