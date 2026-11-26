@@ -59,7 +59,8 @@ type reloadOpts struct {
 // transactionally. It returns swapped=true only when the entry's instance was actually
 // replaced. Serialized by o.reloadMu for the whole operation. A new instance whose
 // OpenVINO GPU faulted during its warm-up or probe is never published: it is closed,
-// the previous instance keeps serving, and the error wraps inference.ErrOpenVINOGPUFault.
+// the previous instance stays published and open, and the error wraps
+// inference.ErrOpenVINOGPUFault.
 //
 // Lock order: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
 // reloadEntry holds o.reloadMu across build, swap and notify; it takes o.mu only to
@@ -200,7 +201,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	}
 	// Refuse an instance whose OpenVINO GPU faulted during its warm-up or probe, which
 	// both swallow errors: publishing it would replace the working instance with a dead
-	// one and close the old. The previous instance keeps serving.
+	// one and close the old. The previous instance stays published and open.
 	if builtOnFailedOpenVINOGPU(next) {
 		if recordRSS {
 			// Put back the serving model's figure that step 5 overwrote, before entry.mu
