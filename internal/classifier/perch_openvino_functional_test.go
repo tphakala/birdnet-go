@@ -72,16 +72,22 @@ func TestPerchOpenVINO_Functional(t *testing.T) {
 }
 
 // requireNotRefused is the functional-test rule for an explicit OpenVINO selection,
-// which never falls back to ONNX Runtime: an OpenVINO refusal is a skip when no
-// device was requested (the host may simply have none) and a failure when one was,
-// since OpenVINO was then expected to run. Any other error fails.
+// which never falls back to ONNX Runtime. A refusal that only says this host cannot
+// run OpenVINO (no library in the build, no device, an unsupported CPU) is a skip when
+// no device was requested and a failure when one was, since OpenVINO was then expected
+// to run. Every other refusal (a failed init or load, a model OpenVINO cannot run) and
+// any other error fails: it is a defect of the model, the library or the OpenVINO path.
 func requireNotRefused(t *testing.T, err error, requestedDevice string) {
 	t.Helper()
 	if refusal, ok := errors.AsType[*OpenVINORefusalError](err); ok {
-		if requestedDevice == "" {
-			t.Skipf("OpenVINO is not usable on this host (%s); set a device to require it", refusal.Reason)
+		switch refusal.Reason {
+		case ovReasonNotBuilt, ovReasonGPUUnavailable, ovReasonGPUDeviceMissing, ovReasonCPUUnsupported, ovReasonNoDevice:
+			if requestedDevice == "" {
+				t.Skipf("this host cannot run OpenVINO (%s); set a device to require it", refusal.Reason)
+			}
+		default:
 		}
-		t.Fatalf("device %q was requested but OpenVINO refused the model: %v", requestedDevice, err)
+		t.Fatalf("OpenVINO refused the model (device %q requested): %v", requestedDevice, err)
 	}
 	require.NoError(t, err)
 }
