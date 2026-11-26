@@ -193,9 +193,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		o.closeDiscardedReloadInstance(registryID, next)
 		if recordRSS {
 			// Drop the RSS entry recorded in step 5 for the instance we will not publish.
-			o.rssMu.Lock()
-			delete(o.modelRSS, registryID)
-			o.rssMu.Unlock()
+			o.restoreModelRSS(registryID, 0, false)
 		}
 		return false, o.orphanReloadResult()
 	}
@@ -207,13 +205,7 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		o.closeDiscardedReloadInstance(registryID, next)
 		if recordRSS {
 			// Put back the serving model's figure that step 5 overwrote.
-			o.rssMu.Lock()
-			if hadPrevRSS {
-				o.modelRSS[registryID] = prevRSS
-			} else {
-				delete(o.modelRSS, registryID)
-			}
-			o.rssMu.Unlock()
+			o.restoreModelRSS(registryID, prevRSS, hadPrevRSS)
 		}
 		gpuErr := errors.Newf("%w: built on the OpenVINO GPU, which failed during its warm-up; the previous instance keeps serving", inference.ErrOpenVINOGPUFault).
 			Component("classifier.orchestrator").
@@ -274,14 +266,26 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 // builtOnFailedOpenVINOGPU reports whether inst runs on an OpenVINO GPU device
 // while the process-wide OpenVINO GPU fault latch is tripped, so the instance is
 // dead on arrival: its native calls fail fast and it can detect nothing. It is
-// generic over any ModelInstance, so reload, variant-swap and recovery paths can
-// all use it.
+// generic over any ModelInstance, so any path that holds a freshly built instance
+// can use it.
 func builtOnFailedOpenVINOGPU(inst ModelInstance) bool {
 	if faulted, _ := ovGPUFault(); !faulted {
 		return false
 	}
 	device, backend, _ := inst.RuntimeInfo()
 	return backend == BackendOpenVINO && inference.OpenVINOIsGPUDevice(device)
+}
+
+// restoreModelRSS puts back a model's recorded RSS figure, or removes it when had
+// is false (the model had none before the reload's warm-up recorded one).
+func (o *Orchestrator) restoreModelRSS(registryID string, prev int64, had bool) {
+	o.rssMu.Lock()
+	defer o.rssMu.Unlock()
+	if had {
+		o.modelRSS[registryID] = prev
+		return
+	}
+	delete(o.modelRSS, registryID)
 }
 
 // closeDiscardedReloadInstance closes a freshly built instance that will not be
