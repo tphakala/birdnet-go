@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { OpenVINOBackendStatus } from '$lib/desktop/features/system/inference.types';
-import { openVinoDeviceField } from './openVinoDeviceOptions';
+import { isExplicitOpenVinoSelection, openVinoDeviceField } from './openVinoDeviceOptions';
 
 /** Renders a key with its parameters, so a test sees which key and which values a label used. */
 function translate(key: string, params?: Record<string, unknown>): string {
@@ -210,5 +210,22 @@ describe('openVinoDeviceField', () => {
     expect(label('GPU.5')).toBe(`${KEY}.options.notDetected{"id":"GPU.5"}`);
     expect(label('auto')).toBe(`${KEY}.options.auto`);
     expect(label('cpu')).toBe(`${KEY}.options.cpu`);
+  });
+});
+
+describe('isExplicitOpenVinoSelection', () => {
+  it.each([
+    ['auto', 'auto', false],
+    ['', '', false],
+    ['onnx', 'gpu', false],
+    ['onnx', 'cpu', false],
+    ['auto', 'unknown', false],
+    ['openvino', 'auto', true],
+    ['auto', 'cpu', true],
+    ['auto', 'gpu', true],
+    ['auto', 'GPU.1', true],
+    ['', 'GPU.0', true],
+  ])('backend %j with device %j is explicit: %j', (backend, device, explicit) => {
+    expect(isExplicitOpenVinoSelection(backend, device)).toBe(explicit);
   });
 });

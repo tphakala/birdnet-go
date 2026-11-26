@@ -73,7 +73,7 @@
     type ThresholdRow,
     type ThresholdSectionValues,
   } from './analysisThresholds';
-  import { openVinoDeviceField } from './openVinoDeviceOptions';
+  import { isExplicitOpenVinoSelection, openVinoDeviceField } from './openVinoDeviceOptions';
   import { wizardState } from '$lib/desktop/features/wizard/wizardState.svelte';
   import type { InstalledModelContext } from '$lib/desktop/features/wizard/types';
   import {
@@ -642,12 +642,9 @@
   const selectedDevice = $derived(birdnet?.openVinoDevice || INFERENCE_AUTO);
   const savedBackend = $derived(store.originalData.birdnet?.backend || INFERENCE_AUTO);
   const savedDevice = $derived(store.originalData.birdnet?.openVinoDevice || INFERENCE_AUTO);
-  // Under an auto selection (backend and OpenVINO device both auto) the server moves the
-  // models that ran on a failed GPU to the CPU; any other saved selection is explicit and
-  // its GPU models stay stopped.
-  const gpuFaultMovesModels = $derived(
-    savedBackend === INFERENCE_AUTO && savedDevice === INFERENCE_AUTO
-  );
+  // Unless the saved selection is explicit, the server moves the models that ran on a failed
+  // GPU to the CPU; under an explicit selection its GPU models stay stopped.
+  const gpuFaultMovesModels = $derived(!isExplicitOpenVinoSelection(savedBackend, savedDevice));
   const inferenceChange: ChangePair = $derived({
     original: {
       backend: savedBackend,
