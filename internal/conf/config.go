@@ -1399,7 +1399,8 @@ const (
 // ARMv8.2+ CPU with native f16 (the precision is per model; see
 // classifier.openVINOPrecisionFor); "cpu", "gpu" and "GPU.<n>" force a device, and "cpu" is
 // also an opt-in to the OpenVINO CPU on arm64 under the auto backend. "cpu", "gpu" and
-// "GPU.<n>" are an explicit selection: a model OpenVINO cannot run is not loaded
+// "GPU.<n>" are an explicit selection unless birdnet.backend is "onnx", which disables
+// OpenVINO: a model OpenVINO cannot run is not loaded
 // instead of falling back to ONNX Runtime, and INT8 or unrecognized BirdNET v2.4
 // weights run on OpenVINO at f32. An empty string is treated as "auto".
 const (
