@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -197,6 +198,22 @@ func logPerchCalibration(log logger.Logger, c perchCalibrationLookup, labelCount
 	}
 }
 
+// perchOpenVINOPlan decides whether Perch v2 may run on OpenVINO. The reasons
+// follow the fixed order (see OpenVINOReason): backend onnx, a binary without
+// OpenVINO (available is false), the stock model file, then the device plan. The
+// file check reads only the path, so it loads no library and runs no probe.
+func perchOpenVINOPlan(cfg *PerchConfig, available bool) (plan openVINOPlan, ok bool, reason OpenVINOReason) {
+	switch {
+	case cfg.Backend == conf.BackendPrefONNX:
+		return openVINOPlan{}, false, ovReasonBackendONNX
+	case !available:
+		return openVINOPlan{}, false, ovReasonNotBuilt
+	case !isPerchNoDFT(cfg.ModelPath):
+		return openVINOPlan{}, false, ovReasonNotPerchNoDFT
+	}
+	return openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDPerchV2, cfg.OpenVINOPath, perchLogitsOutputIndex)
+}
+
 // tryPerchOpenVINO attempts to build an OpenVINO classifier for Perch v2. It
 // returns (classifier, device, precisionHint, true) on success or
 // (nil, "", "", false) to fall back to ORT, where device is the concrete OpenVINO
@@ -206,16 +223,13 @@ func logPerchCalibration(log logger.Logger, c perchCalibrationLookup, labelCount
 // denied, init/compile/validation error) is logged and swallowed: OpenVINO must
 // never make Perch fail to load. OV is only attempted for the no_dft model
 // variant, since the stock perch_v2.onnx cannot compile on OpenVINO (a
-// dynamic-rank DFT op). The compile requests GPU large allocations, which the
+// dynamic-rank DFT op); perchOpenVINOPlan makes that decision and names the
+// reason. The compile requests GPU large allocations, which the
 // backend applies only on a GPU device.
 func tryPerchOpenVINO(cfg *PerchConfig, labels []string) (classifier inference.Classifier, device, precisionHint string, ok bool) {
-	if !isPerchNoDFT(cfg.ModelPath) {
-		logOpenVINODeclined(RegistryIDPerchV2, cfg.Backend, ovReasonNotPerchNoDFT)
-		return nil, "", "", false
-	}
-	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDPerchV2, cfg.OpenVINOPath, perchLogitsOutputIndex)
+	plan, ok, reason := perchOpenVINOPlan(cfg, openvinoBackendAvailable)
 	if !ok {
-		logOpenVINODeclined(RegistryIDPerchV2, cfg.Backend, reason)
+		logOpenVINODeclined(RegistryIDPerchV2, cfg.Backend, cfg.OpenVINODevice, reason)
 		return nil, "", "", false
 	}
 

@@ -176,7 +176,7 @@ func tryBatOpenVINO(cfg *BatModelConfig, expectedDim int) (extractor inference.E
 	// below once detected.
 	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, RegistryIDBat, cfg.OpenVINOPath, 0)
 	if !ok {
-		logOpenVINODeclined(RegistryIDBat, cfg.Backend, reason)
+		logOpenVINODeclined(RegistryIDBat, cfg.Backend, cfg.OpenVINODevice, reason)
 		return nil, "", "", false
 	}
 

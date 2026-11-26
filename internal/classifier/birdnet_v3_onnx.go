@@ -200,7 +200,7 @@ func tryBirdNETV3OpenVINO(cfg *BirdNETV3Config, labels []string) (classifier inf
 	// output index passed here is a placeholder, overwritten below once detected.
 	plan, ok, reason := openVINOPlanFor(cfg.Backend, cfg.OpenVINODevice, cfg.registryID(), cfg.OpenVINOPath, 0)
 	if !ok {
-		logOpenVINODeclined(cfg.registryID(), cfg.Backend, reason)
+		logOpenVINODeclined(cfg.registryID(), cfg.Backend, cfg.OpenVINODevice, reason)
 		return nil, "", "", false
 	}
 

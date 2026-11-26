@@ -3,6 +3,7 @@
 package classifier
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -58,6 +59,12 @@ func TestOpenVINOPlanReason_NotBuilt(t *testing.T) {
 	_, ok, reason := bn.openVINOPlan()
 	assert.False(t, ok)
 	assert.Equal(t, ovReasonNotBuilt, reason)
+
+	// Backend onnx is reported before a binary without OpenVINO.
+	bn.Settings.BirdNET.Backend = conf.BackendPrefONNX
+	_, ok, reason = bn.openVINOPlan()
+	assert.False(t, ok)
+	assert.Equal(t, ovReasonBackendONNX, reason)
 }
 
 // TestOpenVINOPlanReason_WrongModel verifies the wrong-model reason short-circuits
@@ -91,7 +98,8 @@ func TestTryBatOpenVINO_FallsBackWithoutTag(t *testing.T) {
 
 // TestOpenVINOPlanForBat_NotBuilt verifies that in the default (no-tag) build the
 // planner reports the not-built reason for the bat embedding model, so tryBatOpenVINO
-// logs why OpenVINO was declined rather than falling back silently.
+// logs why OpenVINO was declined rather than falling back silently, and the
+// backend-onnx reason when the backend is onnx.
 func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 	t.Parallel()
 	// Output index 1 is the 2-output backbone's embedding port; its exact value is
@@ -99,6 +107,12 @@ func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 	_, ok, reason := openVINOPlanFor(conf.BackendPrefOpenVINO, conf.OVDeviceGPU, RegistryIDBat, "", 1)
 	assert.False(t, ok)
 	assert.Equal(t, ovReasonNotBuilt, reason)
+
+	// Backend onnx is reported before a binary without OpenVINO, for every model
+	// that plans through openVINOPlanFor (bat, BirdNET v3, Perch).
+	_, ok, reason = openVINOPlanFor(conf.BackendPrefONNX, conf.OVDeviceGPU, RegistryIDBat, "", 1)
+	assert.False(t, ok)
+	assert.Equal(t, ovReasonBackendONNX, reason)
 }
 
 // TestLogOpenVINODeclined_StandardBuild verifies the noise-control policy on a
@@ -109,12 +123,58 @@ func TestOpenVINOPlanForBat_NotBuilt(t *testing.T) {
 func TestLogOpenVINODeclined_StandardBuild(t *testing.T) {
 	buf := newCaptureLogger(t)
 
-	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefAuto, ovReasonNotBuilt)
+	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefAuto, conf.OVDeviceAuto, ovReasonNotBuilt)
 	assert.Empty(t, buf.String(), "auto-path decline must be silent on a non-openvino build")
 
-	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefOpenVINO, ovReasonNotBuilt)
+	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefOpenVINO, conf.OVDeviceAuto, ovReasonNotBuilt)
 	out := buf.String()
 	assert.Contains(t, out, "OpenVINO requested but not used", "explicit opt-in must warn even on a non-openvino build")
-	assert.Contains(t, out, ovReasonNotBuilt)
+	assert.Contains(t, out, ovReasonNotBuilt.Description())
+	assert.Contains(t, out, "reason_code="+string(ovReasonNotBuilt))
 	assert.Contains(t, out, "level=WARN")
+
+	buf.Reset()
+	logOpenVINODeclined(DefaultModelVersion, conf.BackendPrefAuto, conf.OVDeviceGPU, ovReasonNotBuilt)
+	assert.Contains(t, buf.String(), "level=WARN", "a concrete device is an explicit selection and warns on auto")
+}
+
+// TestOpenVINOSelectionExplicit pins which settings count as an explicit OpenVINO
+// selection. An unrecognized device plans as auto, so it is not explicit.
+func TestOpenVINOSelectionExplicit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		backend, device string
+		want            bool
+	}{
+		{conf.BackendPrefAuto, conf.OVDeviceAuto, false},
+		{conf.BackendPrefAuto, "", false},
+		{"", conf.OVDeviceAuto, false},
+		{conf.BackendPrefAuto, "GPU", false},
+		{conf.BackendPrefONNX, conf.OVDeviceGPU, false},
+		{conf.BackendPrefONNX, conf.OVDeviceCPU, false},
+		{conf.BackendPrefOpenVINO, conf.OVDeviceAuto, true},
+		{conf.BackendPrefAuto, conf.OVDeviceCPU, true},
+		{conf.BackendPrefAuto, conf.OVDeviceGPU, true},
+		{conf.BackendPrefAuto, "GPU.1", true},
+	}
+	for _, tt := range tests {
+		assert.Equalf(t, tt.want, openVINOSelectionExplicit(tt.backend, tt.device), "backend %q device %q", tt.backend, tt.device)
+	}
+}
+
+// TestOpenVINOReasonDescription verifies every reason code has a description and
+// that the codes keep the stable openvino. prefix.
+func TestOpenVINOReasonDescription(t *testing.T) {
+	t.Parallel()
+	all := []OpenVINOReason{
+		ovReasonNotBuilt, ovReasonBackendONNX, ovReasonGPUUnavailable, ovReasonGPUDeviceMissing,
+		ovReasonCPUUnsupported, ovReasonGPUFailed, ovReasonNoDevice, ovReasonORTPreferredARM64,
+		ovReasonNotBirdNETv24, ovReasonNotPerchNoDFT, ovReasonUnverifiedWeights,
+	}
+	assert.Len(t, ovReasonDescriptions, len(all))
+	for _, code := range all {
+		assert.Truef(t, strings.HasPrefix(string(code), "openvino."), "code %q", code)
+		assert.NotEqualf(t, string(code), code.Description(), "code %q has no description", code)
+	}
+	assert.Equal(t, "openvino.unknown", OpenVINOReason("openvino.unknown").Description())
 }

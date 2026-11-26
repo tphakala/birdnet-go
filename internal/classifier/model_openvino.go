@@ -19,22 +19,54 @@ import (
 // (a single-output graph). Perch v2 uses a different index (see perchLogitsOutputIndex).
 const birdnetLogitsOutputIndex = 0
 
-// OpenVINO decline reasons. openVINOPlanFor / openVINOPlan return one of these as
-// the third value when OpenVINO is not used, so the init path can log exactly why
-// the backend was declined instead of falling back silently (see logOpenVINODeclined).
+// OpenVINOReason is the stable code for why the OpenVINO backend was not used for a
+// model. The values (openvino.<code>) are API-visible and never carry paths or raw
+// error text, so a consumer can key on them; do not rename one. Description gives
+// the human-readable text for logs.
+type OpenVINOReason string
+
+// OpenVINO decline reasons. The planners return one of these as the last value when
+// OpenVINO is not used, so the init path can log exactly why the backend was
+// declined instead of falling back silently (see logOpenVINODeclined). When several
+// apply, the reported one follows a fixed order: backend onnx, then binary not
+// built, then model-specific reasons, then device reasons.
 const (
-	ovReasonNotBuilt          = "binary not built with OpenVINO support"
-	ovReasonBackendONNX       = "backend is set to onnx"
-	ovReasonGPUUnavailable    = "gpu device requested but not available"
-	ovReasonGPUDeviceMissing  = "configured gpu device is not present"
-	ovReasonCPUUnsupported    = "cpu device not supported on this host (needs an ARMv8.2+/A76 CPU with native f16)"
-	ovReasonGPUFailed         = "the OpenVINO GPU failed earlier in this run; restart BirdNET-Go to use it again"
-	ovReasonNoDevice          = "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)"
-	ovReasonORTPreferredARM64 = "ONNX Runtime is preferred on arm64 CPUs; set birdnet.backend to openvino to use the OpenVINO CPU"
-	ovReasonNotBirdNETv24     = "model is not the stock BirdNET v2.4 classifier"
-	ovReasonNotPerchNoDFT     = "model is not the Perch no_dft variant"
-	ovReasonUnverifiedWeights = "model weights are INT8 or of unrecognized precision, which are not validated on OpenVINO (set birdnet.backend to openvino to force OpenVINO at f32)"
+	ovReasonNotBuilt          OpenVINOReason = "openvino.not_built"
+	ovReasonBackendONNX       OpenVINOReason = "openvino.backend_onnx"
+	ovReasonGPUUnavailable    OpenVINOReason = "openvino.gpu_unavailable"
+	ovReasonGPUDeviceMissing  OpenVINOReason = "openvino.gpu_device_missing"
+	ovReasonCPUUnsupported    OpenVINOReason = "openvino.cpu_unsupported"
+	ovReasonGPUFailed         OpenVINOReason = "openvino.gpu_failed"
+	ovReasonNoDevice          OpenVINOReason = "openvino.no_device"
+	ovReasonORTPreferredARM64 OpenVINOReason = "openvino.ort_preferred_arm64"
+	ovReasonNotBirdNETv24     OpenVINOReason = "openvino.not_birdnet_v24"
+	ovReasonNotPerchNoDFT     OpenVINOReason = "openvino.not_perch_no_dft"
+	ovReasonUnverifiedWeights OpenVINOReason = "openvino.unverified_weights"
 )
+
+// ovReasonDescriptions maps each reason code to its human-readable text.
+var ovReasonDescriptions = map[OpenVINOReason]string{
+	ovReasonNotBuilt:          "binary not built with OpenVINO support",
+	ovReasonBackendONNX:       "backend is set to onnx",
+	ovReasonGPUUnavailable:    "gpu device requested but not available",
+	ovReasonGPUDeviceMissing:  "configured gpu device is not present",
+	ovReasonCPUUnsupported:    "cpu device not supported on this host (needs an ARMv8.2+/A76 CPU with native f16)",
+	ovReasonGPUFailed:         "the OpenVINO GPU failed earlier in this run; restart BirdNET-Go to use it again",
+	ovReasonNoDevice:          "no supported OpenVINO device (needs an ARMv8.2+/A76 CPU with native f16, or an Intel OpenVINO GPU)",
+	ovReasonORTPreferredARM64: "ONNX Runtime is preferred on arm64 CPUs; set birdnet.backend to openvino to use the OpenVINO CPU",
+	ovReasonNotBirdNETv24:     "model is not the stock BirdNET v2.4 classifier",
+	ovReasonNotPerchNoDFT:     "model is not the Perch no_dft variant",
+	ovReasonUnverifiedWeights: "model weights are INT8 or of unrecognized precision, which are not validated on OpenVINO (set birdnet.backend to openvino to force OpenVINO at f32)",
+}
+
+// Description returns the human-readable text for the reason, or the code itself
+// for a value without a description.
+func (r OpenVINOReason) Description() string {
+	if d, ok := ovReasonDescriptions[r]; ok {
+		return d
+	}
+	return string(r)
+}
 
 // Go architecture names (runtime.GOARCH values) the OpenVINO device policy keys on.
 const (
@@ -52,8 +84,8 @@ type openVINOPlan struct {
 
 // openVINOPlanFor decides whether and how to run a model on the OpenVINO backend,
 // returning the plan and true when OV should be attempted, or false to use ORT.
-// The third return value is a human-readable reason when OV is declined (empty
-// when accepted), so callers can log why instead of falling back silently.
+// The third return value is the stable OpenVINOReason code when OV is declined
+// (empty when accepted), so callers can log why instead of falling back silently.
 //
 //   - backendPref:  settings.BirdNET.Backend ("auto"/"onnx"/"openvino").
 //   - devicePref:   settings.BirdNET.OpenVINODevice ("auto"/"cpu"/"gpu", or a concrete "GPU.<n>").
@@ -74,13 +106,18 @@ type openVINOPlan struct {
 // for them; BirdNET v2.4 plans through birdnetV24BasePlan, which passes the live
 // answer. The plan helper loads the OpenVINO core (idempotent) only when it must
 // enumerate devices for a GPU decision, so it is independent of caller ordering.
-func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outputIndex int) (plan openVINOPlan, ok bool, reason string) {
+func openVINOPlanFor(backendPref, devicePref, modelID, libraryPath string, outputIndex int) (plan openVINOPlan, ok bool, reason OpenVINOReason) {
 	return openVINOPlanWithHost(backendPref, devicePref, modelID, outputIndex, liveOVHostFacts(libraryPath, true))
 }
 
 // openVINOPlanWithHost is openVINOPlanFor with the host facts supplied by the
-// caller, so BirdNET v2.4 can pass its own ONNX Runtime answer.
-func openVINOPlanWithHost(backendPref, devicePref, modelID string, outputIndex int, host *ovHostFacts) (plan openVINOPlan, ok bool, reason string) {
+// caller, so BirdNET v2.4 can pass its own ONNX Runtime answer. Backend onnx is
+// reported before a binary without OpenVINO, so the reason follows the fixed order
+// documented at OpenVINOReason.
+func openVINOPlanWithHost(backendPref, devicePref, modelID string, outputIndex int, host *ovHostFacts) (plan openVINOPlan, ok bool, reason OpenVINOReason) {
+	if backendPref == conf.BackendPrefONNX {
+		return openVINOPlan{}, false, ovReasonBackendONNX
+	}
 	if !openvinoBackendAvailable {
 		return openVINOPlan{}, false, ovReasonNotBuilt
 	}
@@ -135,7 +172,7 @@ func liveOVHostFacts(libraryPath string, ortAvailable bool) *ovHostFacts {
 // probing, and "auto" skips the GPU and keeps the CPU, declining with
 // ovReasonGPUFailed when the CPU is not usable either. An explicit "cpu" is
 // unaffected.
-func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (device, deviceName string, ok bool, reason string) {
+func planOpenVINODevice(backendPref, devicePref string, host *ovHostFacts) (device, deviceName string, ok bool, reason OpenVINOReason) {
 	if backendPref == conf.BackendPrefONNX {
 		return "", "", false, ovReasonBackendONNX
 	}
@@ -224,7 +261,7 @@ const ovFirstGPUName = inference.OVDeviceGPU + ".0"
 // adapter now holds another index, or guessing that "GPU.0" means the lone "GPU",
 // would put the work somewhere the user did not choose. A missing device declines
 // like an unavailable "gpu" (ONNX Runtime takes over) and is logged once.
-func planConcreteGPU(devicePref string, gpus []inference.OpenVINODevice) (device, deviceName string, ok bool, reason string) {
+func planConcreteGPU(devicePref string, gpus []inference.OpenVINODevice) (device, deviceName string, ok bool, reason OpenVINOReason) {
 	for _, g := range gpus {
 		if g.Name == devicePref {
 			return devicePref, g.FullName, true, ""
@@ -476,7 +513,14 @@ func isLibraryAbsent(err error) bool {
 // openvino backend, see applyOpenVINOQuantizationPolicy). The weight precision is
 // read from the model file name, exactly as the installed-variant load gate reads
 // it, so the two cannot disagree.
-func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
+//
+// Backend onnx is reported before the identity check. The one exception to the
+// reason order documented at OpenVINOReason is a non-v2.4 identity on a binary
+// without OpenVINO: identity is reported before not built there.
+func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason OpenVINOReason) {
+	if bn.Settings.BirdNET.Backend == conf.BackendPrefONNX {
+		return openVINOPlan{}, false, ovReasonBackendONNX
+	}
 	if bn.ModelInfo.ID != DefaultModelVersion {
 		return openVINOPlan{}, false, ovReasonNotBirdNETv24
 	}
@@ -493,7 +537,7 @@ func (bn *BirdNET) openVINOPlan() (plan openVINOPlan, ok bool, reason string) {
 // ortAvailable answers whether ONNX Runtime is available at a configured library
 // path; both callers pass the function their own ONNX Runtime check uses, so the
 // plan and that check cannot disagree.
-func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization, ortAvailable func(configuredPath string) bool) (plan openVINOPlan, ok bool, reason string) {
+func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization, ortAvailable func(configuredPath string) bool) (plan openVINOPlan, ok bool, reason OpenVINOReason) {
 	plan, ok, reason = birdnetV24BasePlan(cfg, ortAvailable)
 	return applyOpenVINOQuantizationPolicy(plan, ok, reason, cfg.Backend, quant)
 }
@@ -505,7 +549,7 @@ func birdnetV24OpenVINOPlan(cfg *conf.BirdNETConfig, quant Quantization, ortAvai
 // caller. It is a variable only so tests can replace it: in the default (untagged)
 // build openVINOPlanWithHost always declines with ovReasonNotBuilt, which would
 // leave the policy unreachable through the production entry points.
-var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig, ortAvailable func(configuredPath string) bool) (plan openVINOPlan, ok bool, reason string) {
+var birdnetV24BasePlan = func(cfg *conf.BirdNETConfig, ortAvailable func(configuredPath string) bool) (plan openVINOPlan, ok bool, reason OpenVINOReason) {
 	return openVINOPlanWithHost(
 		cfg.Backend,
 		cfg.OpenVINODevice,
@@ -523,8 +567,11 @@ func defaultORTAvailable(configuredPath string) bool {
 
 // applyOpenVINOQuantizationPolicy adjusts an OpenVINO plan for the weight
 // precision of the model file, which openVINOPrecisionFor cannot see (it keys on
-// the registry ID only). A declined plan passes through unchanged, and so does a
-// plan for FP32 or FP16 weights. Every other precision (INT8, or unrecognized
+// the registry ID only). A plan for FP32 or FP16 weights passes through
+// unchanged, and so does a decline for backend onnx or a binary without
+// OpenVINO. An unverified file on a backend other than openvino declines with
+// ovReasonUnverifiedWeights even when the base plan declined for a device
+// reason. Every other precision (INT8, or unrecognized
 // because the file name carries no precision token) is unverified.
 //
 // INT8 BirdNET v2.4 weights overflow under OpenVINO's default f16 execution on
@@ -549,12 +596,19 @@ func defaultORTAvailable(configuredPath string) bool {
 // setting birdnet.backend to openvino runs it on OpenVINO at f32 instead. On arm64
 // with the auto backend and device, an FP32 or FP16 file reaches OpenVINO only when
 // ONNX Runtime is unavailable.
-func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason, backendPref string, quant Quantization) (outPlan openVINOPlan, outOK bool, outReason string) {
-	if !ok || quant == QuantizationFP32 || quant == QuantizationFP16 {
+func applyOpenVINOQuantizationPolicy(plan openVINOPlan, ok bool, reason OpenVINOReason, backendPref string, quant Quantization) (outPlan openVINOPlan, outOK bool, outReason OpenVINOReason) {
+	// Backend onnx and a binary without OpenVINO come first in the reason order, so
+	// they pass through; any other decline of an unverified file on a backend other
+	// than openvino reports the file, which is the model-specific reason.
+	if quant == QuantizationFP32 || quant == QuantizationFP16 ||
+		(!ok && (reason == ovReasonBackendONNX || reason == ovReasonNotBuilt)) {
 		return plan, ok, reason
 	}
 	if backendPref != conf.BackendPrefOpenVINO {
 		return openVINOPlan{}, false, ovReasonUnverifiedWeights
+	}
+	if !ok {
+		return plan, ok, reason
 	}
 	plan.precision = inference.OVPrecisionF32
 	return plan, true, ""
@@ -598,20 +652,34 @@ func openVINOEffectivePrecision(precisionHint string) string {
 	return string(QuantizationFP16)
 }
 
+// openVINOSelectionExplicit reports whether the settings name OpenVINO explicitly:
+// backend openvino, or a backend other than onnx with a concrete OpenVINO device
+// (cpu, gpu or GPU.<n>). Backend auto with device auto, empty or an unrecognized
+// value is not explicit, and backend onnx never is.
+func openVINOSelectionExplicit(backendPref, devicePref string) bool {
+	if backendPref == conf.BackendPrefOpenVINO {
+		return true
+	}
+	return backendPref != conf.BackendPrefONNX &&
+		(devicePref == conf.OVDeviceCPU || devicePref == conf.OVDeviceGPU || conf.IsOVGPUDeviceName(devicePref))
+}
+
 // logOpenVINODeclined logs, once at model init, that the OpenVINO backend was not
-// used and why. It logs at WARN when the user explicitly set backend=openvino
-// (they asked for it and did not get it) and at INFO on the auto path (a normal,
-// expected outcome). In a standard build that cannot use OpenVINO at all, the auto
-// path is suppressed entirely so it does not add a line to every startup; an
-// explicit opt-in on such a build still warns.
-func logOpenVINODeclined(model, backendPref, reason string) {
-	explicit := backendPref == conf.BackendPrefOpenVINO
+// used and why. It logs at WARN when the selection is explicit (see
+// openVINOSelectionExplicit: the user asked for OpenVINO and did not get it) and
+// at INFO on the auto path (a normal, expected outcome). In a standard build that
+// cannot use OpenVINO at all, the auto path is suppressed entirely so it does not
+// add a line to every startup; an explicit selection on such a build still warns.
+// The reason field carries the description and reason_code the stable code.
+func logOpenVINODeclined(model, backendPref, devicePref string, reason OpenVINOReason) {
+	explicit := openVINOSelectionExplicit(backendPref, devicePref)
 	if !openvinoBackendAvailable && !explicit {
 		return
 	}
 	fields := []logger.Field{
 		logger.String("model", model),
-		logger.String("reason", reason),
+		logger.String("reason", reason.Description()),
+		logger.String("reason_code", string(reason)),
 	}
 	log := GetLogger()
 	if explicit {
@@ -635,7 +703,7 @@ func (bn *BirdNET) initializeOpenVINOModel() error {
 		return errors.Newf("OpenVINO is not eligible for this model or host").
 			Category(errors.CategoryModelInit).
 			Context("model_id", bn.ModelInfo.ID).
-			Context("reason", reason).Build()
+			Context("reason", reason.Description()).Context("reason_code", string(reason)).Build()
 	}
 
 	modelPath := bn.onnxModelPath()

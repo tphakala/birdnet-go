@@ -47,7 +47,7 @@ func TestPlanOpenVINODevice(t *testing.T) {
 		devicePref   string
 		wantDevice   string
 		wantOK       bool
-		wantReason   string
+		wantReason   OpenVINOReason
 		wantProbed   bool
 	}{
 		{"arm64 A76 auto/auto ORT ok declines before the GPU probe", goarchARM64, true, true, false, conf.BackendPrefAuto, conf.OVDeviceAuto, "", false, ovReasonORTPreferredARM64, false},
@@ -110,7 +110,7 @@ func TestPlanOpenVINODeviceGPUList(t *testing.T) {
 		wantDevice  string
 		wantName    string
 		wantOK      bool
-		wantReason  string
+		wantReason  OpenVINOReason
 		wantProbed  bool
 	}{
 		{"gpu on two GPUs uses the alias and names GPU.0", both, conf.BackendPrefAuto, conf.OVDeviceGPU, inference.OVDeviceGPU, "Test iGPU", true, "", true},
@@ -222,7 +222,7 @@ func TestPlanOpenVINODevice_GPUFailed(t *testing.T) {
 		devicePref   string
 		wantDevice   string
 		wantOK       bool
-		wantReason   string
+		wantReason   OpenVINOReason
 	}{
 		{"amd64 auto/auto with a GPU present declines", goarchAMD64, false, true, conf.BackendPrefAuto, conf.OVDeviceAuto, "", false, ovReasonGPUFailed},
 		{"amd64 explicit gpu declines", goarchAMD64, false, true, conf.BackendPrefAuto, conf.OVDeviceGPU, "", false, ovReasonGPUFailed},
