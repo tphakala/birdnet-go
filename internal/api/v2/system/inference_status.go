@@ -559,18 +559,19 @@ func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string
 // attachment, and audio pipeline metrics. The snapshot is assembled from live
 // sources on every request so it reflects hot-reload changes without any
 // caching. backends.openvino.gpuFailed reports the OpenVINO GPU fault latch,
-// read just before snapshotAtUnix is stamped so the two describe one moment.
+// read right after snapshotAtUnix is stamped so the two describe one moment.
 func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 
-	// Read the GPU fault latch first and stamp the snapshot right after it, before
-	// the probes below: clients order overlapping answers by snapshotAtUnix, so a
-	// later stamp must mean a later latch read. The latch never clears while the
-	// process runs, so a later read never reports less than an earlier one.
-	gpuFailed, _ := inference.OpenVINOGPUFault()
+	// Stamp the snapshot and read the GPU fault latch right after it, before the
+	// probes below. Clients order overlapping answers by snapshotAtUnix, and the
+	// latch never clears while the process runs, so a stamp taken no later than its
+	// latch read means a status without the fault never carries a later stamp
+	// than one that reports it.
 	resp := InferenceStatusResponse{
 		SnapshotAtUnix: time.Now().Unix(),
 	}
+	gpuFailed, _ := inference.OpenVINOGPUFault()
 
 	// Backends: TFLite is always compiled in; ORT and OpenVINO are probed.
 	// Probed before hardware because the ORT result feeds capability derivation.
