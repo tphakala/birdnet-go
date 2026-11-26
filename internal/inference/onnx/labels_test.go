@@ -1,6 +1,8 @@
 package onnx
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -54,4 +56,59 @@ func TestLoadLabelsText_SkipsBlankLines(t *testing.T) {
 	labels, err := loadLabelsText([]byte("Turdus migratorius_American Robin\n\nCyanocitta cristata_Blue Jay\n"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Turdus migratorius_American Robin", "Cyanocitta cristata_Blue Jay"}, labels)
+}
+
+func TestResolveLabels(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty labels rejected without skipLabelValidation", func(t *testing.T) {
+		t.Parallel()
+		labels, err := resolveLabels(&classifierConfig{skipLabelValidation: false})
+		require.ErrorIs(t, err, ErrLabelsRequired)
+		assert.Nil(t, labels)
+	})
+
+	t.Run("empty labels allowed with skipLabelValidation", func(t *testing.T) {
+		t.Parallel()
+		labels, err := resolveLabels(&classifierConfig{skipLabelValidation: true})
+		require.NoError(t, err)
+		assert.Nil(t, labels)
+	})
+
+	t.Run("explicit labels preserved with skipLabelValidation", func(t *testing.T) {
+		t.Parallel()
+		want := []string{"Turdus migratorius_American Robin"}
+		labels, err := resolveLabels(&classifierConfig{
+			labels:              want,
+			skipLabelValidation: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, want, labels)
+	})
+
+	t.Run("explicit labelsPath still loaded with skipLabelValidation", func(t *testing.T) {
+		t.Parallel()
+		labelFile := filepath.Join(t.TempDir(), "labels.txt")
+		require.NoError(t, os.WriteFile(labelFile, []byte("Turdus migratorius_American Robin\n"), 0o600))
+
+		labels, err := resolveLabels(&classifierConfig{
+			labelsPath:          labelFile,
+			skipLabelValidation: true,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"Turdus migratorius_American Robin"}, labels)
+	})
+
+	t.Run("missing labelsPath still errors with skipLabelValidation", func(t *testing.T) {
+		t.Parallel()
+		missing := filepath.Join(t.TempDir(), "missing.txt")
+		labels, err := resolveLabels(&classifierConfig{
+			labelsPath:          missing,
+			skipLabelValidation: true,
+		})
+		var loadErr *LabelLoadError
+		require.ErrorAs(t, err, &loadErr)
+		require.NotErrorIs(t, err, ErrLabelsRequired)
+		assert.Nil(t, labels)
+	})
 }

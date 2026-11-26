@@ -111,3 +111,23 @@ func TestLogORTInitialized_ReportsVersionAndTelemetry(t *testing.T) {
 	assert.Contains(t, out, "telemetry_disabled=true")
 	assert.Contains(t, out, "telemetry_api_disabled=true")
 }
+
+func TestNewONNXClassifier_EmptyLabels(t *testing.T) {
+	t.Parallel()
+
+	t.Run("requires labels when SkipLabelValidation is false", func(t *testing.T) {
+		t.Parallel()
+		c, err := NewONNXClassifier("", ONNXClassifierOptions{SkipLabelValidation: false})
+		require.Error(t, err)
+		assert.Nil(t, c)
+		assert.Contains(t, err.Error(), "ONNX classifier requires labels")
+		assert.NotErrorIs(t, err, ort.ErrModelPathRequired)
+	})
+
+	t.Run("allows empty labels when SkipLabelValidation is true", func(t *testing.T) {
+		t.Parallel()
+		c, err := NewONNXClassifier("", ONNXClassifierOptions{SkipLabelValidation: true})
+		require.ErrorIs(t, err, ort.ErrModelPathRequired)
+		assert.Nil(t, c)
+	})
+}

@@ -46,7 +46,6 @@ func (o *Orchestrator) buildBat(settings *conf.Settings, threads int) (*Bat, pat
 
 	cfg := BatModelConfig{
 		EmbeddingModelPath:  embeddingModel,
-		EmbeddingLabels:     settings.BirdNET.Labels,
 		ClassifierModelPath: classifierModel,
 		ClassifierLabelPath: labelPath,
 		ONNXRuntimePath:     settings.BirdNET.ONNXRuntimePath,
