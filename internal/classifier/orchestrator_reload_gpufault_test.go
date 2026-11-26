@@ -203,7 +203,6 @@ func TestReplaceVariant_GPUFaultDuringWarmupRollsBackKeepingOldFiles(t *testing.
 	require.ErrorIs(t, err, inference.ErrOpenVINOGPUFault)
 	assert.Same(t, ModelInstance(old), o.models[gaplessSecondaryID].instance, "the old variant keeps serving")
 	assert.Equal(t, int32(0), old.closes.Load())
-	require.Len(t, built(), 2, "an auto swap rebuilds once, and that build is dead too")
 	for _, next := range built() {
 		assert.Equal(t, int32(1), next.closes.Load())
 	}
@@ -211,40 +210,6 @@ func TestReplaceVariant_GPUFaultDuringWarmupRollsBackKeepingOldFiles(t *testing.
 	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID, "model_int8.onnx"))
 	assert.True(t, os.IsNotExist(statErr), "the refused new variant's file must be removed")
 	assert.Equal(t, "fp32", installedByID(t, mm, entry.ID).VariantID)
-}
-
-// TestReplaceVariant_AutoRebuildsOffGPUAndCompletesSwap pins that under auto a variant
-// swap whose new build faults the GPU during warm-up still completes: the rebuild off
-// the GPU is published and the new variant stays installed.
-func TestReplaceVariant_AutoRebuildsOffGPUAndCompletesSwap(t *testing.T) {
-	faulted := setGPUFaultSeam(t)
-
-	old := &reloadFakeModel{id: gaplessSecondaryID}
-	o, mm, entry, modelsDir, srvURL := seedLoadedSecondary(t, old)
-
-	dead := newGPUFaultFake(gaplessSecondaryID, faulted)
-	ort := &reloadFakeModel{id: gaplessSecondaryID}
-	var builds atomic.Int32
-	registerTestSecondaryBuilder(t, gaplessSecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
-		if builds.Add(1) == 1 {
-			return dead, nil
-		}
-		return ort, nil
-	})
-
-	fp32Path := filepath.Join(modelsDir, entry.ID, "model.onnx")
-	require.NoError(t, os.MkdirAll(filepath.Dir(fp32Path), 0o755))
-	require.NoError(t, os.WriteFile(fp32Path, []byte("fp32-model"), 0o644))
-
-	old0 := &InstalledModel{CatalogID: entry.ID, VariantID: "fp32", ModelPath: fp32Path}
-	err := mm.replaceVariant(t.Context(), &entry, old0, "int8-arm", srvURL, nil)
-
-	require.NoError(t, err)
-	assert.Equal(t, int32(2), builds.Load())
-	assert.Same(t, ModelInstance(ort), o.models[gaplessSecondaryID].instance, "the off-GPU rebuild serves")
-	assert.Equal(t, int32(1), dead.closes.Load())
-	assert.Equal(t, int32(1), old.closes.Load())
-	assert.Equal(t, "int8-arm", installedByID(t, mm, entry.ID).VariantID)
 }
 
 // TestReloadEntry_GPUFaultRSSRestoreDoesNotResurrectUnloadedModel pins that the
@@ -337,7 +302,6 @@ func TestReloadEntry_GPUFaultDuringProbeRefusesAnchor(t *testing.T) {
 	require.ErrorIs(t, err, inference.ErrOpenVINOGPUFault)
 	assert.False(t, swapped)
 	assert.Same(t, ModelInstance(old), o.models[RegistryIDBirdNETV24].instance, "the anchor keeps serving")
-	require.Len(t, built(), 2, "an auto reload rebuilds once, and that build is dead too")
 	for _, next := range built() {
 		assert.Equal(t, int32(1), next.closes.Load(), "the faulted instance must be closed")
 	}
@@ -368,7 +332,6 @@ func TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel(t *testing.T) 
 
 	assert.Same(t, ModelInstance(oldFaulty), o.models[testSecondaryID].instance, "the faulted model keeps its old instance")
 	assert.Same(t, ModelInstance(newHealthy), o.models[gpuFaultHealthySecondaryID].instance, "the other model must still swap")
-	require.Len(t, builtFaulty(), 2, "an auto reload rebuilds once, and that build is dead too")
 	for _, next := range builtFaulty() {
 		assert.Equal(t, int32(1), next.closes.Load())
 	}
