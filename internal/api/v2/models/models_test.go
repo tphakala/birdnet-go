@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -246,9 +247,10 @@ func TestListModels_ReportsFailureReason(t *testing.T) {
 		classifier.RegistryIDBat: "openvino.gpu_failed",
 	}
 	tests := []struct {
-		name     string
-		withAuth bool
-		want     map[string]string // failureReason by config alias
+		name          string
+		withAuth      bool
+		authenticated bool
+		want          map[string]string // failureReason by config alias
 	}{
 		{
 			name: "only the not-loaded model with a reason carries it",
@@ -267,13 +269,23 @@ func TestListModels_ReportsFailureReason(t *testing.T) {
 				conf.ModelIDBat:     "",
 			},
 		},
+		{
+			name:          "an authenticated caller on an auth-enabled instance gets the reason",
+			withAuth:      true,
+			authenticated: true,
+			want: map[string]string{
+				conf.ModelIDBirdNET: "",
+				conf.ModelIDPerchV2: "openvino.gpu_unavailable",
+				conf.ModelIDBat:     "",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			core := apitest.NewCore(t)
 			var authSvc auth.Service
 			if tt.withAuth {
-				authSvc = &stubAuth{}
+				authSvc = &stubAuth{authenticated: tt.authenticated}
 			}
 			h := New(core, authSvc)
 			h.modelRuntime = func() map[string]listedModelRuntime { return runtime }
@@ -296,6 +308,17 @@ func TestListModels_ReportsFailureReason(t *testing.T) {
 				got[items[i].ID] = items[i].FailureReason
 			}
 			assert.Equal(t, tt.want, got)
+
+			// The decoded items cannot pin the wire key, so check the raw body: the
+			// key is present once per reported reason and absent otherwise.
+			reported := 0
+			for _, reason := range tt.want {
+				if reason != "" {
+					reported++
+					assert.Contains(t, rec.Body.String(), `"failureReason":"`+reason+`"`)
+				}
+			}
+			assert.Equal(t, reported, strings.Count(rec.Body.String(), `"failureReason"`))
 		})
 	}
 }
