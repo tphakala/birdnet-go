@@ -99,6 +99,8 @@ type secondaryBackendKey struct {
 // diagnostic runtime snapshots, with nothing acquired while it is held.
 //
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu or reloadMu.
+// unloadRefusedModel takes reloadMu itself, then calls UnloadModel, so a refusal
+// unloads only an instance no reload has replaced.
 type Orchestrator struct {
 	// Public fields, same layout as BirdNET for drop-in caller migration.
 	Settings       *conf.Settings // Deprecated: use CurrentSettings() instead.
