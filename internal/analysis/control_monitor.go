@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -72,6 +73,11 @@ type ControlMonitor struct {
 	// replanCadenceFn re-plans the analysis cadence without probing or diffing
 	// sources. Set by AudioPipelineService after construction; nil skips it.
 	replanCadenceFn func()
+
+	// retryFailedLoadsFn overrides the retry of failed model loads after a
+	// BirdNET settings reload (default: Orchestrator.RetryFailedLoadsForBackendChange).
+	// It returns the registry IDs that loaded. Tests only.
+	retryFailedLoadsFn func() []string
 
 	// reconfigureSoundLevelFn reconciles the sound level DSP pipeline (router
 	// routes, per-source Processor, bridge goroutines) with the current
@@ -422,6 +428,9 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		GetLogger().Warn("Cannot reload BirdNET model: orchestrator not initialized")
 		return
 	}
+	// The loaded set before any reload, to tell afterwards whether it changed.
+	loadedBefore := cm.loadedModelIDs()
+
 	// Since Phase 4, BirdNET v2.4 may not be loaded (a Perch-only or N=0 runtime). ReloadModel
 	// reloads the v2.4 primary and errors when it is absent, so only reload it when it is
 	// actually loaded. The range-filter rebuild and secondary reload below still run, so a
@@ -429,37 +438,51 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	// instance instead of failing with a "model not loaded" toast.
 	if cm.bn.IsModelLoaded(classifier.RegistryIDBirdNETV24) {
 		if err := cm.bn.ReloadModel(); err != nil {
+			// Do not stop here: the other models and the retry of failed loads below
+			// do not depend on the v2.4 reload, and a settings change that broke v2.4
+			// may be exactly the one that lets another model load.
 			GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
 			cm.notifyError("Failed to reload BirdNET model", err)
-			return
+		} else {
+			GetLogger().Info("BirdNET model reloaded successfully")
+			cm.notifySuccess("BirdNET model reloaded successfully")
 		}
-		GetLogger().Info("BirdNET model reloaded successfully")
-		cm.notifySuccess("BirdNET model reloaded successfully")
 	} else {
 		GetLogger().Info("BirdNET v2.4 not loaded; skipping primary model reload")
 	}
 
-	// Rebuild range filter after model reload
+	// The species-name index is orchestrator-owned since Phase 2a: ReloadModel above
+	// already republished it, and BuildRangeFilter (below) re-localizes the OpenFauna
+	// resolver for the new locale and republishes it again. The datastore and the
+	// api/v2 facade read that same shared snapshot, so there is nothing to
+	// re-localize here.
+
+	// Reload OV-capable secondary models (e.g. Perch) so a backend/OpenVINO-device
+	// change moves them onto the new device without a restart. No-ops when the
+	// backend/device is unchanged. A secondary failure is surfaced but does not fail
+	// the overall reload.
+	if err := cm.bn.ReloadSecondaryModels(); err != nil {
+		GetLogger().Error("Failed to reload secondary models", logger.Error(err))
+		cm.notifyError("Failed to reload secondary models", err)
+	}
+
+	// Retry models whose load failed under other inference settings (a wrong
+	// backend, OpenVINO device or ONNX Runtime path), so the correction takes
+	// effect without a restart.
+	retried := cm.retryFailedLoads()
+	if len(retried) > 0 {
+		GetLogger().Info("Loaded models that failed earlier under other inference settings",
+			logger.Any("models", retried))
+	}
+
+	// Rebuild range filter after the model reloads and retries, so a model loaded by
+	// the retry is covered.
 	if err := classifier.BuildRangeFilter(cm.bn); err != nil {
 		GetLogger().Error("Failed to rebuild range filter after model reload", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {
 		GetLogger().Info("Range filter rebuilt successfully")
 		cm.notifySuccess("Range filter rebuilt successfully")
-	}
-
-	// The species-name index is orchestrator-owned since Phase 2a: ReloadModel above
-	// already republished it, and BuildRangeFilter re-localized the OpenFauna resolver
-	// for the new locale and republished it again. The datastore and the api/v2 facade
-	// read that same shared snapshot, so there is nothing to re-localize here.
-
-	// Reload OV-capable secondary models (e.g. Perch) so a backend/OpenVINO-device
-	// change moves them onto the new device without a restart. No-ops when the
-	// backend/device is unchanged. The primary already reloaded above, so a
-	// secondary failure is surfaced but does not fail the overall reload.
-	if err := cm.bn.ReloadSecondaryModels(); err != nil {
-		GetLogger().Error("Failed to reload secondary models", logger.Error(err))
-		cm.notifyError("Failed to reload secondary models", err)
 	}
 
 	// A thread or backend change reloads the models and re-probes their latency,
@@ -470,11 +493,38 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	}
 
 	emitHotReload("birdnet_model")
+	if cm.apiController == nil {
+		return
+	}
+	if len(retried) > 0 || !slices.Equal(loadedBefore, cm.loadedModelIDs()) {
+		// The loaded set changed: refresh the AI Models page and reconcile per-source
+		// model registration so a newly loaded model starts receiving audio.
+		cm.apiController.OnModelTopologyChanged()
+		return
+	}
 	// Signal the metrics SSE stream that the inference topology changed so the
 	// AI Models page re-fetches its snapshot.
-	if cm.apiController != nil {
-		cm.apiController.BroadcastInferenceTopologyChanged()
+	cm.apiController.BroadcastInferenceTopologyChanged()
+}
+
+// retryFailedLoads retries failed model loads through the orchestrator, or the
+// retryFailedLoadsFn override when set (tests).
+func (cm *ControlMonitor) retryFailedLoads() []string {
+	if cm.retryFailedLoadsFn != nil {
+		return cm.retryFailedLoadsFn()
 	}
+	return cm.bn.RetryFailedLoadsForBackendChange()
+}
+
+// loadedModelIDs returns the sorted registry IDs of the loaded models.
+func (cm *ControlMonitor) loadedModelIDs() []string {
+	infos := cm.bn.ModelInfos()
+	ids := make([]string, 0, len(infos))
+	for i := range infos {
+		ids = append(ids, infos[i].ID)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // handleReconcileModels loads or unloads acoustic models to match models.enabled after a

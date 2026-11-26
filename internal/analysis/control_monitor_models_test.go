@@ -2,14 +2,18 @@ package analysis
 
 import (
 	"testing"
+	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -109,5 +113,48 @@ func TestHandleReconcileModels_AllLoadsFailed_BroadcastsListChange(t *testing.T)
 	case <-topoCh:
 	default:
 		t.Fatal("a reconcile whose loads all failed must broadcast the topology change")
+	}
+}
+
+// retryReconfigureWait bounds the wait for the debounced audio-source reconfigure
+// (2 s debounce in api/v2) after a retry loaded a model.
+const retryReconfigureWait = 5 * time.Second
+
+// TestHandleReloadBirdnet_RetryLoadedModel_ReconfiguresAudio pins that a BirdNET reload
+// whose retry of failed loads loaded a model reconciles the per-source model registration
+// (the reconfigure_audio_sources control signal), not only the topology SSE event. Without
+// it the model would load and receive no audio until the next unrelated reconfigure.
+func TestHandleReloadBirdnet_RetryLoadedModel_ReconfiguresAudio(t *testing.T) {
+	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{} // N=0: the retry is the only thing that loads
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	orch, err := classifier.NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(orch.Delete)
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+	controlChan := make(chan string, 1)
+	controller, err := apiv2.NewWithOptions(echo.New(), mockDS, settings, nil, nil, controlChan, metrics, false)
+	require.NoError(t, err)
+	t.Cleanup(controller.Shutdown)
+
+	cm := &ControlMonitor{
+		bn:                 orch,
+		apiController:      controller,
+		retryFailedLoadsFn: func() []string { return []string{classifier.RegistryIDPerchV2} },
+	}
+	cm.handleReloadBirdnet()
+
+	select {
+	case signal := <-controlChan:
+		assert.Equal(t, "reconfigure_audio_sources", signal)
+	case <-time.After(retryReconfigureWait):
+		t.Fatal("a retry that loaded a model must reconfigure the audio sources")
 	}
 }

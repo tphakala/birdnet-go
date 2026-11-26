@@ -225,9 +225,11 @@ type Orchestrator struct {
 	// Values are *atomic.Int64.
 	modelLoadFailures sync.Map
 
-	// modelLoadErrors records the last load error string per registry ID
-	// (registryID -> string), set alongside modelLoadFailures by recordLoadFailure
-	// so modelNotLoadedReason can explain why a model is missing. Lock-free.
+	// modelLoadErrors records the last load failure per registry ID
+	// (registryID -> loadFailure), set alongside modelLoadFailures by
+	// recordLoadFailure so modelNotLoadedReason can explain why a model is missing
+	// and RetryFailedLoadsForBackendChange can tell whether the inference settings
+	// changed since the failure. Lock-free.
 	modelLoadErrors sync.Map
 
 	// modelUnloaded is a tombstone set (registryID -> struct{}{}) marking models
@@ -2265,15 +2267,79 @@ func (o *Orchestrator) ReconcileEnabledModels() (loaded, unloaded []string, err 
 }
 
 // recordLoadFailure atomically increments the load-failure counter for registryID
-// and records the last error text, so a later "model not loaded" diagnosis
+// and records the last error text together with the inference settings key the
+// load ran under (see RetryFailedLoadsForBackendChange), so a later "model not loaded" diagnosis
 // (modelNotLoadedReason) can explain why the model is missing. Safe to call
 // concurrently; does not require o.mu.
 func (o *Orchestrator) recordLoadFailure(registryID string, err error) {
 	v, _ := o.modelLoadFailures.LoadOrStore(registryID, new(atomic.Int64))
 	v.(*atomic.Int64).Add(1)
 	if err != nil {
-		o.modelLoadErrors.Store(registryID, err.Error())
+		o.modelLoadErrors.Store(registryID, loadFailure{
+			msg: err.Error(),
+			key: inferenceLoadKeyFor(o.currentSettings()),
+		})
 	}
+}
+
+// loadFailure is the stored record of a failed model load: the error text and
+// the inference settings the load ran under.
+type loadFailure struct {
+	msg string
+	key inferenceLoadKey
+}
+
+// inferenceLoadKey identifies the inference settings that decide how a model is
+// built: the backend, OpenVINO device and CPU thread triplet shared with
+// ReloadSecondaryModels, plus the ONNX Runtime library path. A failed model is
+// worth retrying only when this key changed since the failure.
+type inferenceLoadKey struct {
+	backend secondaryBackendKey
+	ortPath string
+}
+
+// inferenceLoadKeyFor derives the inference load key from settings. A nil
+// settings value yields the zero key.
+func inferenceLoadKeyFor(settings *conf.Settings) inferenceLoadKey {
+	if settings == nil {
+		return inferenceLoadKey{}
+	}
+	return inferenceLoadKey{
+		backend: secondaryTripletFor(settings),
+		ortPath: settings.BirdNET.ONNXRuntimePath,
+	}
+}
+
+// RetryFailedLoadsForBackendChange loads every enabled model that is not loaded
+// and whose last load failed under different inference settings than the current
+// ones, in registry ID order. It returns the IDs that loaded. A model that fails
+// again records the current key, so it is not retried until the settings change
+// once more. Call it after a settings reload, so a corrected backend, device or
+// ONNX Runtime path takes effect without a restart. Holds no lock across the
+// loads; each LoadModel takes the locks it needs.
+func (o *Orchestrator) RetryFailedLoadsForBackendChange() []string {
+	current := inferenceLoadKeyFor(o.currentSettings())
+	var candidates []string
+	o.modelLoadErrors.Range(func(key, value any) bool {
+		id, idOK := key.(string)
+		failure, failureOK := value.(loadFailure)
+		if idOK && failureOK && failure.key != current && o.modelIDEnabled(id) && !o.IsModelLoaded(id) {
+			candidates = append(candidates, id)
+		}
+		return true
+	})
+	slices.Sort(candidates)
+
+	var loaded []string
+	for _, id := range candidates {
+		if err := o.LoadModel(id); err != nil {
+			continue // LoadModel recorded the failure under the current key
+		}
+		if o.IsModelLoaded(id) {
+			loaded = append(loaded, id)
+		}
+	}
+	return loaded
 }
 
 // LoadFailures returns a snapshot of the per-model load-failure counts accumulated
@@ -2299,9 +2365,9 @@ func (o *Orchestrator) LoadErrors() map[string]string {
 	result := make(map[string]string)
 	o.modelLoadErrors.Range(func(key, value any) bool {
 		k, kok := key.(string)
-		v, vok := value.(string)
+		v, vok := value.(loadFailure)
 		if kok && vok && o.modelIDEnabled(k) {
-			result[k] = v
+			result[k] = v.msg
 		}
 		return true
 	})
@@ -2402,7 +2468,8 @@ func (o *Orchestrator) modelNotLoadedReason(modelID string) string {
 	// that failed once, recovered, then was cleanly unloaded would be misreported as
 	// "failed to load" with a stale error instead of "unloaded".
 	if e, ok := o.modelLoadErrors.Load(modelID); ok {
-		lastErr, _ := e.(string)
+		failure, _ := e.(loadFailure)
+		lastErr := failure.msg
 		count := int64(0)
 		if v, ok := o.modelLoadFailures.Load(modelID); ok {
 			count = v.(*atomic.Int64).Load()
