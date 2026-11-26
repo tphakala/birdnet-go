@@ -20,6 +20,7 @@ const { cadenceState, stores } = await vi.hoisted(async () => {
 vi.mock('$lib/stores/acousticModels.svelte', () => ({
   analysisCadence: () => cadenceState.value,
   invalidateAcousticModels: vi.fn().mockResolvedValue(undefined),
+  onTopologyChanged: vi.fn(() => () => {}),
   watchAcousticModels: vi.fn(() => () => {}),
 }));
 

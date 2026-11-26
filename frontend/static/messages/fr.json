@@ -553,6 +553,10 @@
         "notPersistentMessage": "Ces chemins se trouvent sur un stockage supprimé lorsque le conteneur est recréé, par exemple lors d'une mise à jour de l'image : {paths}. Associez-leur un volume ou un répertoire de l'hôte dans la configuration de votre conteneur.",
         "anonymousVolumeTitle": "Les données sont stockées dans un volume anonyme du conteneur",
         "anonymousVolumeMessage": "Ces chemins se trouvent dans des volumes anonymes que l'environnement d'exécution du conteneur a créés parce qu'aucun volume n'était associé : {paths}. Un conteneur démarré à neuf, par exemple avec docker run après une mise à jour de l'image, reçoit de nouveaux volumes vides, si bien que les données semblent perdues. Associez-leur un volume nommé ou un répertoire de l'hôte."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "Le GPU OpenVINO a échoué",
+        "stoppedMessage": "Le GPU OpenVINO a cessé de fonctionner, donc BirdNET-Go a arrêté de l'utiliser jusqu'au prochain redémarrage. Les modèles configurés pour tourner sur le GPU ne détectent rien d'ici là. Redémarrez BirdNET-Go pour réutiliser le GPU, ou réglez le périphérique OpenVINO sur CPU dans Paramètres > Analyse > Inférence."
       }
     },
     "loading": "Chargement des notifications..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "Aucun depuis le chargement du modèle",
       "modelFailingHelp": "{reason} Essayez une autre version de ce modèle dans Paramètres > Analyse > Modèles, ou vérifiez le backend et la précision affichés ci-dessus.",
       "modelFailingReasonNonFinite": "Toutes les analyses récentes ont échoué car le modèle a renvoyé des scores invalides (NaN ou infinis), il ne détecte donc rien.",
-      "modelFailingReasonError": "Toutes les analyses récentes ont échoué car l'inférence a renvoyé une erreur, le modèle ne détecte donc rien."
+      "modelFailingReasonError": "Toutes les analyses récentes ont échoué car l'inférence a renvoyé une erreur, le modèle ne détecte donc rien.",
+      "modelFailingGPUFault": "Toutes les analyses récentes ont échoué car le GPU OpenVINO a échoué. L'inférence sur le GPU est arrêtée jusqu'au redémarrage de BirdNET-Go.",
+      "deviceFailed": "{device} (échec)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "Par défaut d'OpenVINO : {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (non détecté)"
+          "notDetected": "{id} (non détecté)",
+          "failed": "{label} (échec)"
         },
         "gpuTypes": {
           "integrated": "intégré",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Changer le backend ou l'appareil recharge les modèles, ce qui met la détection en pause pendant quelques secondes.",
       "backendsLoading": "Vérification des moteurs d'exécution pris en charge par cet appareil.",
       "backendsUnavailable": "Impossible de lire les moteurs d'exécution pris en charge par cet appareil. Le backend et l'appareil peuvent être modifiés après le chargement.",
+      "gpuFailed": "Le GPU OpenVINO a échoué pendant cette exécution, donc BirdNET-Go a arrêté de l'utiliser jusqu'au prochain redémarrage.",
       "running": {
         "title": "En cours d'exécution",
         "description": "Le moteur d'exécution et la précision utilisés par chaque classificateur activé.",

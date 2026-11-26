@@ -553,6 +553,10 @@
         "notPersistentMessage": "Deze paden staan op opslag die wordt verwijderd wanneer de container opnieuw wordt aangemaakt, bijvoorbeeld bij een image-update: {paths}. Koppel er een volume of een hostmap aan in je containerconfiguratie.",
         "anonymousVolumeTitle": "Gegevens staan in een anoniem containervolume",
         "anonymousVolumeMessage": "Deze paden staan in anonieme volumes die de containerruntime heeft aangemaakt omdat er geen volume was gekoppeld: {paths}. Een opnieuw gestarte container, bijvoorbeeld met docker run na een image-update, krijgt nieuwe lege volumes, waardoor de gegevens verloren lijken. Koppel er een benoemd volume of een hostmap aan."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "OpenVINO-GPU is uitgevallen",
+        "stoppedMessage": "De OpenVINO-GPU werkt niet meer, dus BirdNET-Go gebruikt hem tot de volgende herstart niet meer. Modellen die op de GPU draaien, detecteren tot die tijd niets. Start BirdNET-Go opnieuw op om de GPU weer te gebruiken, of zet het OpenVINO-apparaat op CPU via Instellingen > Analyse > Inferentie."
       }
     },
     "loading": "Meldingen laden..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "Geen sinds het model is geladen",
       "modelFailingHelp": "{reason} Probeer een andere versie van dit model via Instellingen > Analyse > Modellen, of controleer de backend en precisie hierboven.",
       "modelFailingReasonNonFinite": "Alle recente analyses zijn mislukt omdat het model ongeldige scores gaf (NaN of oneindig), dus het detecteert niets.",
-      "modelFailingReasonError": "Alle recente analyses zijn mislukt omdat de inferentie een fout gaf, dus het model detecteert niets."
+      "modelFailingReasonError": "Alle recente analyses zijn mislukt omdat de inferentie een fout gaf, dus het model detecteert niets.",
+      "modelFailingGPUFault": "Alle recente analyses zijn mislukt omdat de OpenVINO-GPU is uitgevallen. Inferentie op de GPU is gestopt tot BirdNET-Go opnieuw wordt gestart.",
+      "deviceFailed": "{device} (uitgevallen)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "OpenVINO-standaard: {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (niet gevonden)"
+          "notDetected": "{id} (niet gevonden)",
+          "failed": "{label} (uitgevallen)"
         },
         "gpuTypes": {
           "integrated": "geïntegreerd",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Het wijzigen van de backend of het apparaat laadt de modellen opnieuw, waardoor de detectie enkele seconden pauzeert.",
       "backendsLoading": "Controleren welke runtimes dit apparaat ondersteunt.",
       "backendsUnavailable": "Kon niet lezen welke runtimes dit apparaat ondersteunt. De backend en het apparaat kunnen worden gewijzigd zodra dit is geladen.",
+      "gpuFailed": "De OpenVINO-GPU is in deze run uitgevallen, dus BirdNET-Go gebruikt hem tot de volgende herstart niet meer.",
       "running": {
         "title": "Nu actief",
         "description": "De runtime en precisie waarmee elke ingeschakelde classificator draait.",

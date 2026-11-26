@@ -57,11 +57,35 @@ func OpenVINOIsGPUDevice(name string) bool { return ov.IsGPUDevice(name) }
 // false.
 func OpenVINOGPUFault() (faulted bool, cause error) { return ov.GPUFault() }
 
+// ErrOpenVINOGPUFault is the sentinel every error returned for a failed OpenVINO
+// GPU wraps: the fatal error that tripped the fault latch and every later call
+// that failed fast because of it. Match it with errors.Is.
+var ErrOpenVINOGPUFault = ov.ErrGPUDeviceFault
+
 // ovGPUFaultLogged makes the GPU fault ERROR log fire once per process.
 var ovGPUFaultLogged atomic.Bool
 
+// ovGPUFaultObserver is the registered fault observer, or nil.
+var ovGPUFaultObserver atomic.Pointer[func()]
+
+// RegisterOpenVINOGPUFaultObserver registers fn to be told that the OpenVINO GPU
+// fault latch tripped, and returns a function that unregisters it. The newest
+// registration wins; the returned function clears only its own registration, so
+// a stale unregister leaves a newer observer in place.
+//
+// fn is called at most once per process, from the goroutine whose call first
+// returned the fault, possibly while that goroutine holds inference or
+// orchestrator locks. It must not block: a leaf mutex held only for flag
+// updates is fine.
+func RegisterOpenVINOGPUFaultObserver(fn func()) (unregister func()) {
+	p := &fn
+	ovGPUFaultObserver.Store(p)
+	return func() { ovGPUFaultObserver.CompareAndSwap(p, nil) }
+}
+
 // logOVGPUFaultOnce logs one ERROR the first time an OpenVINO classifier call
-// returns an error wrapping ov.ErrGPUDeviceFault, and returns err unchanged.
+// returns an error wrapping ov.ErrGPUDeviceFault, tells the registered fault
+// observer (if any) once, and returns err unchanged.
 // Later failures of the models still on the GPU are reported by the existing
 // inference failure accounting, not logged again here.
 func logOVGPUFaultOnce(err error) error {
@@ -75,6 +99,9 @@ func logOVGPUFaultOnce(err error) error {
 	logger.Global().Module("inference").Error(
 		"OpenVINO GPU failed; GPU inference is stopped until restart, and models on the OpenVINO GPU fail until BirdNET-Go restarts or the OpenVINO device is set to CPU",
 		logger.Error(cause))
+	if obs := ovGPUFaultObserver.Load(); obs != nil && *obs != nil {
+		(*obs)()
+	}
 	return err
 }
 

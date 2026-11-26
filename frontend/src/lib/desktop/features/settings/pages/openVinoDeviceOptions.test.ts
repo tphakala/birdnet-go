@@ -187,4 +187,28 @@ describe('openVinoDeviceField', () => {
       'GPU.10',
     ]);
   });
+
+  it('marks every detected GPU as failed once the GPU fault latch tripped, and nothing else', () => {
+    const lone = field(
+      status({ devices: ['CPU', 'GPU'], gpus: [{ id: 'GPU', name: 'Iris' }], gpuFailed: true })
+    );
+    expect(lone.options.map(o => o.label)).toEqual([
+      `${KEY}.options.auto`,
+      `${KEY}.options.cpu`,
+      `${KEY}.options.failed{"label":"${KEY}.options.gpu"}`,
+    ]);
+
+    const multi = field(
+      status({ devices: ['CPU', 'GPU'], gpus: [IGPU, ARC], gpuFailed: true }),
+      'auto',
+      'GPU.5'
+    );
+    const label = (value: string) => multi.options.find(o => o.value === value)?.label;
+    expect(label('gpu')).toBe(`${KEY}.options.failed{"label":"${KEY}.options.gpu"}`);
+    expect(label('GPU.0')).toContain(`${KEY}.options.failed{"label":"${KEY}.options.gpuNamed`);
+    expect(label('GPU.1')).toContain(`${KEY}.options.failed`);
+    expect(label('GPU.5')).toBe(`${KEY}.options.notDetected{"id":"GPU.5"}`);
+    expect(label('auto')).toBe(`${KEY}.options.auto`);
+    expect(label('cpu')).toBe(`${KEY}.options.cpu`);
+  });
 });

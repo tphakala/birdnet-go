@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -220,6 +221,9 @@ func TestClassifyInferenceError(t *testing.T) {
 	assert.Equal(t, errorClassNonFinite, classifyInferenceError(nonFinite))
 	assert.Equal(t, errorClassNonFinite, classifyInferenceError(fmt.Errorf("wrapped: %w", nonFinite)))
 	assert.Equal(t, errorClassOther, classifyInferenceError(errors.NewStd("backend exploded")))
+	gpuFault := errors.Newf("predict: %w", inference.ErrOpenVINOGPUFault).Build()
+	assert.Equal(t, errorClassGPUFault, classifyInferenceError(gpuFault))
+	assert.Equal(t, errorClassGPUFault, classifyInferenceError(fmt.Errorf("wrapped: %w", gpuFault)))
 }
 
 func TestFailureStreakNeedsSync(t *testing.T) {
@@ -237,7 +241,7 @@ func TestFailureStreakNeedsSync(t *testing.T) {
 		{2*inferenceFailureLogEvery + 1, false},
 	}
 	for _, tt := range tests {
-		assert.Equal(t, tt.want, failureStreakNeedsSync(tt.streak), "streak %d", tt.streak)
+		assert.Equal(t, tt.want, failureStreakNeedsSync(tt.streak, errorClassNone, errorClassOther), "streak %d", tt.streak)
 	}
 }
 
@@ -382,4 +386,165 @@ func TestKickInferenceHealthSyncIfTracked_UntrackedStartsNothing(t *testing.T) {
 	o.inferenceHealth.mu.Lock()
 	defer o.inferenceHealth.mu.Unlock()
 	assert.Nil(t, o.inferenceHealth.failing, "no reconcile ran for an untracked unload")
+}
+
+// scriptedModel is a mock model whose Predict returns err while it is set.
+type scriptedModel struct {
+	mock *mockModelInstance
+	err  atomic.Pointer[error]
+}
+
+func newScriptedModel(id string) *scriptedModel {
+	f := &scriptedModel{}
+	f.mock = &mockModelInstance{
+		id: id, spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		backend: "OpenVINO", device: "GPU", precision: "f16",
+	}
+	f.mock.predict = func(context.Context, [][]float32) ([]datastore.Results, error) {
+		if e := f.err.Load(); e != nil {
+			return nil, *e
+		}
+		return []datastore.Results{{Species: "Turdus merula", Confidence: 0.95}}, nil
+	}
+	return f
+}
+
+func (f *scriptedModel) failWith(err error) { f.err.Store(&err) }
+
+// gpuFaultNotices lists the OpenVINO GPU notices in svc.
+func gpuFaultNotices(t *testing.T, svc *notification.Service) []*notification.Notification {
+	t.Helper()
+	all, err := svc.List(nil)
+	require.NoError(t, err)
+	var out []*notification.Notification
+	for _, n := range all {
+		if n.TitleKey == notification.MsgOpenVINOGPUStoppedTitle {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// setOVGPUFault replaces the GPU fault seam for the test.
+func setOVGPUFault(t *testing.T, faulted bool) {
+	t.Helper()
+	orig := ovGPUFault
+	t.Cleanup(func() { ovGPUFault = orig })
+	ovGPUFault = func() (bool, error) { return faulted, nil }
+}
+
+// TestGPUFaultNotice_Sequence walks the GPU fault reporting: a window that
+// failed with the fault sentinel is failing at once without its own notice,
+// generic failures keep today's threshold and notice, the latch raises exactly
+// one bell notice and notifies the observer once, a model that turns from a
+// generic failure into a GPU fault loses its generic notice, a missing service
+// is caught up by SyncInferenceNotices, and a deleted orchestrator raises
+// nothing. Not parallel: process-global notification service, health records
+// and the ovGPUFault seam.
+func TestGPUFaultNotice_Sequence(t *testing.T) {
+	svc := setupTestNotification(t)
+	faulted := false
+	orig := ovGPUFault
+	t.Cleanup(func() { ovGPUFault = orig })
+	ovGPUFault = func() (bool, error) { return faulted, nil }
+
+	ids := []string{"gpu-seq-a", "gpu-seq-b", "gpu-seq-c"}
+	for _, id := range ids {
+		dropInferenceHealth(id)
+		t.Cleanup(func() { dropInferenceHealth(id) })
+	}
+	a, b, c := newScriptedModel(ids[0]), newScriptedModel(ids[1]), newScriptedModel(ids[2])
+	o := newTestOrchestrator(t, a.mock, b.mock, c.mock)
+	var changes atomic.Int32
+	o.SetInferenceHealthChangedCallback(func() { changes.Add(1) })
+	settle := o.inferenceHealth.inFlight.Wait
+	healthOf := func(id string) ModelInferenceHealth {
+		for _, h := range o.InferenceHealth() {
+			if h.ModelID == id {
+				return h
+			}
+		}
+		t.Fatalf("model %s not found", id)
+		return ModelInferenceHealth{}
+	}
+
+	o.SyncInferenceNotices()
+	settle()
+	assert.Empty(t, gpuFaultNotices(t, svc), "no fault, no notice")
+
+	gpuErr := errors.Newf("predict: %w", inference.ErrOpenVINOGPUFault).Build()
+	a.failWith(gpuErr)
+	predictN(t, o, ids[0], 1)
+	settle()
+	ha := healthOf(ids[0])
+	assert.True(t, ha.Failing, "one GPU fault window is failing")
+	assert.Equal(t, int64(1), ha.FailureThreshold)
+	assert.Equal(t, InferenceErrorClassGPUFault, ha.ErrorClass)
+	assert.Empty(t, failureNotices(t, svc), "a GPU fault window raises no per-model notice")
+	assert.Equal(t, int32(1), changes.Load(), "the transition into the GPU class notifies")
+
+	b.failWith(errors.NewStd("backend exploded"))
+	predictN(t, o, ids[1], InferenceFailureNoticeThreshold)
+	settle()
+	require.Len(t, failureNotices(t, svc), 1, "a generic failure keeps its notice at the threshold")
+	assert.Equal(t, int64(InferenceFailureNoticeThreshold), healthOf(ids[1]).FailureThreshold)
+	assert.Equal(t, int32(2), changes.Load())
+
+	faulted = true
+	o.SyncInferenceNotices()
+	settle()
+	require.Len(t, gpuFaultNotices(t, svc), 1, "the tripped latch raises one notice")
+	n := gpuFaultNotices(t, svc)[0]
+	assert.Equal(t, notification.TypeError, n.Type)
+	assert.Equal(t, notification.PriorityHigh, n.Priority)
+	assert.Equal(t, notification.ComponentClassifier, n.Component)
+	assert.Equal(t, notification.MsgOpenVINOGPUStoppedMessage, n.MessageKey)
+	assert.Empty(t, n.Metadata, "the notice carries no metadata")
+	assert.Equal(t, int32(3), changes.Load(), "the first pass that sees the fault notifies once")
+
+	o.SyncInferenceNotices()
+	settle()
+	assert.Len(t, gpuFaultNotices(t, svc), 1, "another pass keeps the one notice")
+	assert.Equal(t, int32(3), changes.Load())
+
+	c.failWith(errors.NewStd("backend exploded"))
+	predictN(t, o, ids[2], InferenceFailureNoticeThreshold+1)
+	settle()
+	require.Len(t, failureNotices(t, svc), 2, "C raised its generic notice")
+	c.failWith(gpuErr)
+	predictN(t, o, ids[2], 1)
+	settle()
+	require.Len(t, failureNotices(t, svc), 1, "C's generic notice is deleted when its failure becomes the GPU fault")
+	assert.Equal(t, InferenceErrorClassGPUFault, healthOf(ids[2]).ErrorClass)
+
+	o.Delete()
+	settle()
+	for _, n := range gpuFaultNotices(t, svc) {
+		require.NoError(t, svc.Delete(n.ID))
+	}
+	o.SyncInferenceNotices()
+	settle()
+	assert.Empty(t, gpuFaultNotices(t, svc), "a deleted orchestrator raises nothing")
+}
+
+// TestGPUFaultNotice_NoServiceThenSync pins that a fault seen while the
+// notification service is not up latches nothing, and SyncInferenceNotices
+// raises the notice once the service exists.
+func TestGPUFaultNotice_NoServiceThenSync(t *testing.T) {
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+	setOVGPUFault(t, true)
+	o := newTestOrchestrator(t)
+
+	o.SyncInferenceNotices()
+	o.inferenceHealth.inFlight.Wait()
+	assert.Empty(t, o.inferenceHealth.gpuNotice.ID())
+
+	notification.Initialize(notification.DefaultServiceConfig())
+	svc := notification.GetService()
+	require.NotNil(t, svc)
+	t.Cleanup(svc.Stop)
+	o.SyncInferenceNotices()
+	o.inferenceHealth.inFlight.Wait()
+	assert.Len(t, gpuFaultNotices(t, svc), 1)
 }

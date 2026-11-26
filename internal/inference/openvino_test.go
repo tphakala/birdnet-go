@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -83,4 +84,39 @@ func TestOpenVINOWrappers_LogGPUFault(t *testing.T) {
 			assert.Equal(t, 1, ovGPUFaultLogCount(buf))
 		})
 	}
+}
+
+// TestRegisterOpenVINOGPUFaultObserver pins that the observer runs once across
+// repeated fault errors, never for a plain error, and that a stale unregister
+// leaves a newer registration in place. Not parallel: touches process-wide state.
+func TestRegisterOpenVINOGPUFaultObserver(t *testing.T) {
+	prevLogged := ovGPUFaultLogged.Swap(false)
+	t.Cleanup(func() { ovGPUFaultLogged.Store(prevLogged) })
+	logtest.CaptureBufferAt(t, slog.LevelError)
+
+	var calls atomic.Int32
+	unregister := RegisterOpenVINOGPUFaultObserver(func() { calls.Add(1) })
+	t.Cleanup(unregister)
+
+	_ = logOVGPUFaultOnce(errors.NewStd("some other failure"))
+	assert.Zero(t, calls.Load(), "a plain error does not notify")
+
+	fault := errors.Newf("%w: stopped", ErrOpenVINOGPUFault).Build()
+	_ = logOVGPUFaultOnce(fault)
+	_ = logOVGPUFaultOnce(fault)
+	assert.Equal(t, int32(1), calls.Load(), "the observer runs once per process")
+
+	var newer atomic.Int32
+	unregisterNewer := RegisterOpenVINOGPUFaultObserver(func() { newer.Add(1) })
+	t.Cleanup(unregisterNewer)
+	unregister() // stale: must not clear the newer registration
+	ovGPUFaultLogged.Store(false)
+	_ = logOVGPUFaultOnce(fault)
+	assert.Equal(t, int32(1), newer.Load(), "a stale unregister keeps the newer observer")
+	assert.Equal(t, int32(1), calls.Load())
+
+	unregisterNewer()
+	ovGPUFaultLogged.Store(false)
+	_ = logOVGPUFaultOnce(fault)
+	assert.Equal(t, int32(1), newer.Load(), "an unregistered observer is not called")
 }

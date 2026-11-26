@@ -73,7 +73,7 @@ func TestRuntimeInfoArchive_ShapeAndNoRawPaths(t *testing.T) {
 			LibraryPath: filepath.Join(home, "lib", "libonnxruntime.so.1.25.1"), LibraryConfigured: true,
 		},
 		OpenVINO: &OpenVINOInfo{
-			CompiledIn: true, Initialized: true, LibraryPath: "libopenvino_c.so",
+			CompiledIn: true, Initialized: true, GPUFailed: true, LibraryPath: "libopenvino_c.so",
 			Probe: OpenVINOProbeInfo{Status: "cached", Devices: []string{"CPU"}},
 		},
 		OrchestratorAvailable: true,
@@ -110,8 +110,9 @@ func TestRuntimeInfoArchive_ShapeAndNoRawPaths(t *testing.T) {
 
 	ov, ok := got["openvino"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, []string{"active", "compiled_in", "initialized", "library_file", "library_source", "probe"}, sortedKeys(ov))
+	assert.Equal(t, []string{"active", "compiled_in", "gpu_failed", "initialized", "library_file", "library_source", "probe"}, sortedKeys(ov))
 	assert.Equal(t, true, ov["compiled_in"])
+	assert.Equal(t, true, ov["gpu_failed"])
 	assert.Equal(t, "libopenvino_c.so", ov["library_file"])
 	assert.Equal(t, LibrarySourceLoaderSearch, ov["library_source"])
 

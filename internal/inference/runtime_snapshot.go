@@ -57,6 +57,9 @@ type OpenVINORuntime struct {
 	// ProbeFailed is true when the cached probe result is a failure. The error
 	// text is deliberately not copied: it can embed child process output.
 	ProbeFailed bool
+	// GPUFailed is true once the process-wide OpenVINO GPU fault latch has
+	// tripped. It stays true until the process restarts.
+	GPUFailed bool
 }
 
 var (
@@ -93,11 +96,13 @@ func ORTRuntimeSnapshot() ORTRuntime {
 }
 
 // OpenVINORuntimeSnapshot returns the OpenVINO state without taking ovInitMu or
-// the backend's compile lock. The probe fields come from the probe cache, whose
+// the backend's compile lock. GPUFailed reads the fault latch, which is
+// lock-free too. The probe fields come from the probe cache, whose
 // mutex is never held while a probe child runs.
 func OpenVINORuntimeSnapshot() OpenVINORuntime {
 	path, loaded := ov.LoadedLibraryPath()
 	devices, status, err := cachedOVProbeDevices()
+	gpuFailed, _ := ov.GPUFault()
 	return OpenVINORuntime{
 		CompiledIn:        ov.Supported,
 		Initialized:       ovInitializedSnap.Load(),
@@ -108,6 +113,7 @@ func OpenVINORuntimeSnapshot() OpenVINORuntime {
 		ProbeStatus:       probeStatusName(status),
 		ProbeDevices:      devices,
 		ProbeFailed:       err != nil,
+		GPUFailed:         gpuFailed,
 	}
 }
 

@@ -31,7 +31,7 @@ const GPU_TYPE_DISCRETE = 'discrete';
 
 /** What the device select is built from. */
 export interface OpenVinoDeviceFieldInput {
-  /** backends.openvino of the inference status; undefined until it loads. */
+  /** backends.openvino of the inference status; undefined until it loads. gpuFailed marks every detected GPU as failed. */
   status: OpenVINOBackendStatus | undefined;
   /** The device in the form. */
   selected: string;
@@ -83,6 +83,12 @@ export function openVinoDeviceField(
   const kept = new Set([selected, saved]);
   const hostHasGpu = status?.devices?.some(d => d.toLowerCase().startsWith(DEVICE_GPU)) ?? false;
 
+  // After the GPU fault latch tripped, a detected GPU is shown as failed; an undetected one keeps
+  // its own label.
+  const gpuFailed = status?.gpuFailed === true;
+  const failedLabel = (label: string) =>
+    gpuFailed ? t('analysis.inference.device.options.failed', { label }) : label;
+
   const options: SelectOption[] = [
     { value: DEVICE_AUTO, label: t('analysis.inference.device.options.auto') },
     { value: DEVICE_CPU, label: t('analysis.inference.device.options.cpu') },
@@ -112,7 +118,7 @@ export function openVinoDeviceField(
       value: DEVICE_GPU,
       label: notDetected(DEVICE_GPU)
         ? t('analysis.inference.device.options.notDetected', { id: GPU_CLASS_ID })
-        : t('analysis.inference.device.options.gpu'),
+        : failedLabel(t('analysis.inference.device.options.gpu')),
       description: defaultName
         ? t('analysis.inference.device.options.gpuDefault', { name: defaultName })
         : undefined,
@@ -120,7 +126,11 @@ export function openVinoDeviceField(
   }
 
   const gpuOptions: SelectOption[] = [
-    ...concrete.map(g => ({ value: g.id, label: gpuLabel(g, t), description: g.id })),
+    ...concrete.map(g => ({
+      value: g.id,
+      label: failedLabel(gpuLabel(g, t)),
+      description: g.id,
+    })),
     ...unreported.map(id => ({
       value: id,
       label: notDetected(id) ? t('analysis.inference.device.options.notDetected', { id }) : id,

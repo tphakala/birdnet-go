@@ -553,6 +553,10 @@
         "notPersistentMessage": "Diese Pfade liegen auf Speicher, der gelöscht wird, wenn der Container neu erstellt wird, zum Beispiel bei einem Image-Update: {paths}. Ordnen Sie ihnen in Ihrer Container-Konfiguration ein Volume oder ein Host-Verzeichnis zu.",
         "anonymousVolumeTitle": "Daten liegen in einem anonymen Container-Volume",
         "anonymousVolumeMessage": "Diese Pfade liegen in anonymen Volumes, die die Container-Laufzeit angelegt hat, weil kein Volume zugeordnet war: {paths}. Ein frisch gestarteter Container, zum Beispiel mit docker run nach einem Image-Update, erhält neue leere Volumes, sodass die Daten verloren scheinen. Ordnen Sie ihnen ein benanntes Volume oder ein Host-Verzeichnis zu."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "OpenVINO-GPU ausgefallen",
+        "stoppedMessage": "Die OpenVINO-GPU funktioniert nicht mehr, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Modelle, die auf der GPU laufen sollen, erkennen bis dahin nichts. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden, oder stellen Sie das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf CPU."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "Keiner seit dem Laden des Modells",
       "modelFailingHelp": "{reason} Versuchen Sie eine andere Version dieses Modells unter Einstellungen > Analyse > Modelle oder prüfen Sie das oben angezeigte Backend und die Präzision.",
       "modelFailingReasonNonFinite": "Alle letzten Analysen sind fehlgeschlagen, weil das Modell ungültige Werte (NaN oder unendlich) geliefert hat, daher erkennt es nichts.",
-      "modelFailingReasonError": "Alle letzten Analysen sind fehlgeschlagen, weil die Inferenz einen Fehler zurückgegeben hat, daher erkennt das Modell nichts."
+      "modelFailingReasonError": "Alle letzten Analysen sind fehlgeschlagen, weil die Inferenz einen Fehler zurückgegeben hat, daher erkennt das Modell nichts.",
+      "modelFailingGPUFault": "Alle letzten Analysen sind fehlgeschlagen, weil die OpenVINO-GPU ausgefallen ist. Die Inferenz auf der GPU ist bis zum Neustart von BirdNET-Go gestoppt.",
+      "deviceFailed": "{device} (ausgefallen)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "OpenVINO-Standard: {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (nicht erkannt)"
+          "notDetected": "{id} (nicht erkannt)",
+          "failed": "{label} (ausgefallen)"
         },
         "gpuTypes": {
           "integrated": "integriert",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Beim Ändern des Backends oder Geräts werden die Modelle neu geladen, sodass die Erkennung für einige Sekunden pausiert.",
       "backendsLoading": "Es wird geprüft, welche Laufzeitumgebungen dieses Gerät unterstützt.",
       "backendsUnavailable": "Es konnte nicht gelesen werden, welche Laufzeitumgebungen dieses Gerät unterstützt. Backend und Gerät können nach dem Laden geändert werden.",
+      "gpuFailed": "Die OpenVINO-GPU ist in diesem Lauf ausgefallen, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr.",
       "running": {
         "title": "Aktuell aktiv",
         "description": "Laufzeitumgebung und Präzision, mit der jeder aktivierte Klassifikator läuft.",

@@ -79,6 +79,7 @@
   import {
     analysisCadence,
     invalidateAcousticModels,
+    onTopologyChanged,
     watchAcousticModels,
   } from '$lib/stores/acousticModels.svelte';
   import {
@@ -701,6 +702,14 @@
   $effect(() => {
     if (pageTab === 'inference' && !inferenceBackends) untrack(() => void loadInferenceBackends());
   });
+
+  // The GPU fault latch trips while the page is open: the topology stream announces it, so
+  // refetch the status and the failed alert and labels appear without a reload.
+  $effect(() =>
+    onTopologyChanged(() => {
+      if (inferenceBackends) void loadInferenceBackends();
+    })
+  );
 
   // A choice the host lacks stays offered while it is selected or saved, so picking another
   // one keeps the way back to the saved choice.
@@ -3179,6 +3188,11 @@
             label={t('analysis.inference.backendsLoading')}
           />
         </p>
+      {/if}
+      {#if inferenceBackends?.openvino.gpuFailed}
+        <ErrorAlert type="error" className="mb-6" data-testid="inference-gpu-failed">
+          {t('analysis.inference.gpuFailed')}
+        </ErrorAlert>
       {/if}
       <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
         <SelectDropdown

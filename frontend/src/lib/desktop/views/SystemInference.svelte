@@ -52,6 +52,7 @@
   } from '@lucide/svelte';
   import { isContainerEnvironment } from '$lib/desktop/features/system/environment';
   import {
+    ERROR_CLASS_GPU_FAULT,
     ERROR_CLASS_NON_FINITE,
     MODEL_HEALTH_FAILING,
   } from '$lib/desktop/features/system/inference.types';
@@ -69,6 +70,9 @@
 
   // Maximum number of sparkline data points to retain per series.
   const MAX_HISTORY_POINTS = 60;
+
+  /** The OpenVINO GPU device class as the status API lists it in backends.openvino.devices. */
+  const OPENVINO_GPU_DEVICE = 'GPU';
 
   // Polling fallback interval in milliseconds (used when SSE is unavailable).
   const POLLING_INTERVAL_MS = 5000;
@@ -447,6 +451,10 @@
    * backend error class) and what to try next.
    */
   function modelFailingHelp(model: InferenceModel): string {
+    // The GPU fault has its own full text: the generic help would send the user to the model.
+    if (model.health?.errorClass === ERROR_CLASS_GPU_FAULT) {
+      return t('system.inference.modelFailingGPUFault');
+    }
     const reason =
       model.health?.errorClass === ERROR_CLASS_NON_FINITE
         ? t('system.inference.modelFailingReasonNonFinite')
@@ -793,7 +801,15 @@
               {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
                 <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
                 {#each openvino.devices as device}
-                  <Badge variant="neutral" size="sm" text={device} />
+                  {#if openvino.gpuFailed && device === OPENVINO_GPU_DEVICE}
+                    <Badge
+                      variant="error"
+                      size="sm"
+                      text={t('system.inference.deviceFailed', { device })}
+                    />
+                  {:else}
+                    <Badge variant="neutral" size="sm" text={device} />
+                  {/if}
                 {/each}
               {/if}
             </div>

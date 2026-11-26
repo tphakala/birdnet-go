@@ -191,6 +191,10 @@ type BackendStatus struct {
 type OpenVINOBackendStatus struct {
 	Supported bool `json:"supported"`
 	Active    bool `json:"active"`
+	// GPUFailed is true once the OpenVINO GPU fault latch has tripped in this
+	// process. Models on the GPU then fail until the process restarts. Devices
+	// and GPUs stay probe facts and still list the GPU.
+	GPUFailed bool `json:"gpuFailed,omitempty"`
 	// Devices lists the device classes the host can target ("CPU", "GPU"); a host
 	// with several GPUs still reports the single class "GPU" here. The concrete
 	// adapters are in GPUs.
@@ -297,17 +301,18 @@ type ModelHealthInfo struct {
 	// none has.
 	LastSuccessAtUnix int64 `json:"lastSuccessAtUnix,omitempty"`
 	// ErrorClass is the class of the latest failure ("non_finite_output",
-	// "inference_error"), empty while no failure run is in progress.
+	// "inference_error", "gpu_device_fault"), empty while no failure run is in progress.
 	ErrorClass string `json:"errorClass,omitempty"`
 }
 
 // buildModelHealth maps the classifier's per-model inference health onto the
-// API payload. It is pure.
+// API payload. It is pure. The failure threshold is the model's own: 1 when its
+// latest failure is the OpenVINO GPU fault.
 func buildModelHealth(h *classifier.ModelInferenceHealth) *ModelHealthInfo {
 	info := &ModelHealthInfo{
 		State:               modelHealthOK,
 		ConsecutiveFailures: h.ConsecutiveFailures,
-		FailureThreshold:    classifier.InferenceFailureNoticeThreshold,
+		FailureThreshold:    int(h.FailureThreshold),
 		InferenceCount:      h.InferenceCount,
 		ErrorClass:          h.ErrorClass,
 	}
@@ -552,7 +557,7 @@ func applyRuntimeBackend(status *InferenceModelStatus, backend, precision string
 // models with per-model stats, memory and current inference health, source
 // attachment, and audio pipeline metrics. The snapshot is assembled from live
 // sources on every request so it reflects hot-reload changes without any
-// caching.
+// caching. backends.openvino.gpuFailed reports the OpenVINO GPU fault latch.
 func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	settings := c.CurrentSettings()
 
@@ -568,6 +573,7 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 	ov := inference.CheckOpenVINOAvailability()
 	resp.Backends.OpenVINO = OpenVINOBackendStatus{Supported: ov.Supported, Active: ov.Active}
 	if ov.Supported {
+		resp.Backends.OpenVINO.GPUFailed, _ = inference.OpenVINOGPUFault()
 		for _, d := range []string{deviceCPU, deviceGPU} {
 			if inference.OpenVINOHasDevice(d) {
 				resp.Backends.OpenVINO.Devices = append(resp.Backends.OpenVINO.Devices, d)

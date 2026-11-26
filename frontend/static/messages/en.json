@@ -553,6 +553,10 @@
         "notPersistentMessage": "These paths are on storage that is deleted when the container is recreated, for example on an image update: {paths}. Map a volume or a host directory to them in your container configuration.",
         "anonymousVolumeTitle": "Data is stored in an anonymous container volume",
         "anonymousVolumeMessage": "These paths are in anonymous volumes that the container runtime created because no volume was mapped: {paths}. A container started fresh, for example with docker run after an image update, gets new empty volumes, so the data seems lost. Map a named volume or a host directory to them."
+      },
+      "openvinoGpu": {
+        "stoppedTitle": "OpenVINO GPU failed",
+        "stoppedMessage": "The OpenVINO GPU stopped working, so BirdNET-Go stopped using it until the next restart. Models set to run on the GPU detect nothing until then. Restart BirdNET-Go to use the GPU again, or set the OpenVINO device to CPU in Settings > Analysis > Inference."
       }
     },
     "loading": "Loading notifications..."
@@ -2051,7 +2055,9 @@
       "lastSuccessNever": "None since the model loaded",
       "modelFailingHelp": "{reason} Try another build of this model in Settings > Analysis > Models, or check the backend and precision shown above.",
       "modelFailingReasonNonFinite": "Every recent analysis failed because the model returned invalid (NaN or infinite) scores, so it detects nothing.",
-      "modelFailingReasonError": "Every recent analysis failed because inference returned an error, so it detects nothing."
+      "modelFailingReasonError": "Every recent analysis failed because inference returned an error, so it detects nothing.",
+      "modelFailingGPUFault": "Every recent analysis failed because the OpenVINO GPU failed. GPU inference is stopped until BirdNET-Go restarts.",
+      "deviceFailed": "{device} (failed)"
     },
     "metrics": {
       "cpu": "CPU",
@@ -6213,7 +6219,8 @@
           "gpu": "GPU",
           "gpuDefault": "OpenVINO default: {name}",
           "gpuNamed": "{name} ({type})",
-          "notDetected": "{id} (not detected)"
+          "notDetected": "{id} (not detected)",
+          "failed": "{label} (failed)"
         },
         "gpuTypes": {
           "integrated": "integrated",
@@ -6223,6 +6230,7 @@
       "reloadNote": "Changing the backend or device reloads the models, so detection pauses for a few seconds.",
       "backendsLoading": "Checking which runtimes this device supports.",
       "backendsUnavailable": "Could not read which runtimes this device supports. The backend and device can be changed once it loads.",
+      "gpuFailed": "The OpenVINO GPU failed in this run, so BirdNET-Go stopped using it until the next restart.",
       "running": {
         "title": "Running now",
         "description": "The runtime and precision each enabled classifier runs with.",
