@@ -50,17 +50,19 @@ func (o *Orchestrator) requestGPURecovery() {
 // the pass: the latch is tripped, the selection is auto, the orchestrator is
 // published and no pass is running. A true result has set running and counted the
 // pass in wg (under mu, so a Delete that set stopped before waiting never misses
-// it); the caller runs runGPURecovery and calls wg.Done.
+// it); the caller runs runGPURecovery and calls wg.Done. The selection is read under
+// mu, and an explicit one clears the due mark instead of setting it.
 func (o *Orchestrator) claimGPURecovery() bool {
 	faulted, _ := ovGPUFault()
 	if !faulted {
 		return false
 	}
-	explicit := o.gpuSelectionExplicit()
 	st := &o.gpuRecovery
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if explicit {
+	// Read under mu: a stale explicit read must not clear a due mark that a trigger
+	// after a switch back to auto has just set.
+	if o.gpuSelectionExplicit() {
 		st.due = false
 		return false
 	}
@@ -147,7 +149,8 @@ func (o *Orchestrator) ReconcileGPUFaultAfterSettingsReload() {
 }
 
 // recoverModelsFromFailedGPU is one pass: it rebuilds, in registry ID order, every
-// loaded model whose live instance still runs on the failed OpenVINO GPU. The planner
+// loaded model whose live instance still runs on the failed OpenVINO GPU, and stops
+// when Delete began or the selection became explicit. The planner
 // skips the GPU now, so on amd64 the rebuilt models run on ONNX Runtime. A rebuild
 // that fails keeps the old instance; the next user-driven trigger retries it. It
 // holds no orchestrator lock across a rebuild.
@@ -158,7 +161,7 @@ func (o *Orchestrator) recoverModelsFromFailedGPU() {
 	log := GetLogger()
 	movedAny := false
 	for _, id := range o.modelsOnFailedGPU() {
-		if o.gpuRecoveryStopped() {
+		if o.gpuRecoveryStopped() || o.gpuSelectionExplicit() {
 			break
 		}
 		swapped, err := o.rebuildFromCurrentSettings(id, true)
@@ -232,13 +235,14 @@ func (o *Orchestrator) notifyGPURecoveryMoved() {
 // one model so the pipeline can re-plan its cadence and the UI refresh. It runs
 // holding no orchestrator lock, on the pass goroutine, and must not call this
 // setter. Registering waits for a call in flight, and replays once a move that
-// happened while no callback was registered. A nil cb clears it, also waiting.
+// happened while no callback was registered, unless Delete already stopped recovery.
+// A nil cb clears it, also waiting.
 func (o *Orchestrator) SetGPURecoveryCallback(cb func()) {
 	st := &o.gpuRecovery
 	st.callbackMu.Lock()
 	defer st.callbackMu.Unlock()
 	st.callback = cb
-	if cb != nil && st.moved {
+	if cb != nil && st.moved && !o.gpuRecoveryStopped() {
 		st.moved = false
 		cb()
 	}

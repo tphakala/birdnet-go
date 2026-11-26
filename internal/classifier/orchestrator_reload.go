@@ -474,7 +474,9 @@ func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
 // the recovery pass that moves a model off a failed OpenVINO GPU (onlyIfOnFailedGPU
 // skips an entry that is no longer on it). A failed build leaves the previous instance
 // serving. The v2.4 builder ignores the thread budget (NewBirdNET reads
-// settings.BirdNET.Threads); secondary builders use it.
+// settings.BirdNET.Threads); other builders use it. Every model except the anchor
+// records the settings triplet it was built from. It returns an error when there are
+// no settings.
 func (o *Orchestrator) rebuildFromCurrentSettings(registryID string, onlyIfOnFailedGPU bool) (swapped bool, err error) {
 	build, ok := o.variantSwapBuilder(registryID)
 	if !ok {
@@ -490,6 +492,13 @@ func (o *Orchestrator) rebuildFromCurrentSettings(registryID string, onlyIfOnFai
 	// ReloadSecondaryModels; the clone is private, so the v2.4 builder's loadLabels never
 	// mutates the published snapshot.
 	settings := conf.CloneSettings(o.currentSettings())
+	if settings == nil {
+		return false, errors.Newf("no settings to rebuild model %s from", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Context("registry_id", registryID).
+			Build()
+	}
 	threads := o.computeThreadAllocation(settings)[registryID]
 	if threads <= 0 {
 		// A loaded secondary absent from settings.Models.Enabled is not keyed in the
@@ -500,7 +509,14 @@ func (o *Orchestrator) rebuildFromCurrentSettings(registryID string, onlyIfOnFai
 			threads = runtime.NumCPU()
 		}
 	}
-	return o.reloadEntry(registryID, build, reloadOpts{settings: settings, threads: threads, onlyIfOnFailedGPU: onlyIfOnFailedGPU})
+	opts := reloadOpts{settings: settings, threads: threads, onlyIfOnFailedGPU: onlyIfOnFailedGPU}
+	if registryID != RegistryIDBirdNETV24 {
+		// The rebuilt instance is built from these settings, so the entry's gate record
+		// says so (ReloadSecondaryModels skips an entry already on the current triplet).
+		triplet := secondaryTripletFor(settings)
+		opts.backend = &triplet
+	}
+	return o.reloadEntry(registryID, build, opts)
 }
 
 // v24SettingsReloadCheck reproduces the reachable settings-reload refusals of the former

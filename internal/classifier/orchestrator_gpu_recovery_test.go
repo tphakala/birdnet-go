@@ -32,8 +32,10 @@ type recoveryBuilder struct {
 	release chan struct{} // the build waits on it when non-nil
 	err     error
 	once    sync.Once
-	mu      sync.Mutex
-	built   []*reloadFakeModel
+	// releaseOnce makes closing release idempotent for the tests that also release in a cleanup.
+	releaseOnce sync.Once
+	mu          sync.Mutex
+	built       []*reloadFakeModel
 }
 
 func (b *recoveryBuilder) build(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
