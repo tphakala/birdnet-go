@@ -389,13 +389,22 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 }
 
 // TestGetSpeciesSummary_MinConfidence verifies that min_confidence filters
-// detections through the v2 repository cleanly (including date range filtering)
-// and rejects legacy-only setups when min_confidence > 0.
+// detections through the v2 repository only when enhanced database mode is active
+// and falls back / rejects legacy-only or mid-migration setups when min_confidence > 0.
 func TestGetSpeciesSummary_MinConfidence(t *testing.T) {
-	t.Parallel()
+	restoreMode := func(wasEnhanced bool) {
+		if wasEnhanced {
+			datastoreV2.SetEnhancedDatabaseMode()
+		} else {
+			datastoreV2.ResetDatabaseMode()
+		}
+	}
 
 	t.Run("filters species detections via v2 manager", func(t *testing.T) {
-		t.Parallel()
+		wasEnhanced := datastoreV2.IsEnhancedDatabase()
+		datastoreV2.SetEnhancedDatabaseMode()
+		t.Cleanup(func() { restoreMode(wasEnhanced) })
+
 		mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
 			DirectPath: filepath.Join(t.TempDir(), "v2.db"),
 		})
@@ -451,12 +460,66 @@ func TestGetSpeciesSummary_MinConfidence(t *testing.T) {
 	})
 
 	t.Run("requires v2 database when min_confidence is positive", func(t *testing.T) {
-		t.Parallel()
 		e, _, controller := setupAnalyticsTestEnvironment(t)
 
 		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?min_confidence=70")
 		require.NoError(t, controller.GetSpeciesSummary(c))
 		assert.Equal(t, http.StatusConflict, rec.Code)
+	})
+
+	t.Run("skips incomplete v2 manager while enhanced mode is disabled", func(t *testing.T) {
+		wasEnhanced := datastoreV2.IsEnhancedDatabase()
+		datastoreV2.ResetDatabaseMode()
+		t.Cleanup(func() { restoreMode(wasEnhanced) })
+
+		mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
+			DirectPath: filepath.Join(t.TempDir(), "migrating.db"),
+		})
+		require.NoError(t, err)
+		require.NoError(t, mgr.Initialize())
+		t.Cleanup(func() { assert.NoError(t, mgr.Close()) })
+
+		db := mgr.DB()
+		var model entities.AIModel
+		require.NoError(t, db.First(&model).Error)
+		var labelType entities.LabelType
+		require.NoError(t, db.First(&labelType).Error)
+		robinLabel := entities.Label{ScientificName: sciAmericanRobin, ModelID: model.ID, LabelTypeID: labelType.ID}
+		require.NoError(t, db.Create(&robinLabel).Error)
+		require.NoError(t, db.Create(&entities.Detection{
+			LabelID:    robinLabel.ID,
+			ModelID:    model.ID,
+			Confidence: 0.90,
+			DetectedAt: time.Date(2026, 11, 15, 10, 0, 0, 0, time.Local).Unix(),
+		}).Error)
+
+		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+		controller.Core.V2Manager = mgr
+		controller.loadCommonNameMap = func() map[string]string {
+			return map[string]string{sciBlueJay: "Blue Jay"}
+		}
+
+		// When min_confidence > 0 during migration, the endpoint must fail closed with 409.
+		cConflict, recConflict := newAnalyticsContext(e, "/api/v2/analytics/species/summary?min_confidence=70")
+		require.NoError(t, controller.GetSpeciesSummary(cConflict))
+		assert.Equal(t, http.StatusConflict, recConflict.Code)
+
+		// When min_confidence == 0 during migration, it must still query the active legacy store.
+		mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{
+			{ScientificName: sciBlueJay, CommonName: "Blue Jay", Count: 4, AvgConfidence: 0.72, MaxConfidence: 0.88},
+		}, nil).Once()
+
+		cLegacy, recLegacy := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
+		require.NoError(t, controller.GetSpeciesSummary(cLegacy))
+		require.Equal(t, http.StatusOK, recLegacy.Code)
+
+		var response []SpeciesSummary
+		require.NoError(t, json.Unmarshal(recLegacy.Body.Bytes(), &response))
+		require.Len(t, response, 1)
+		assert.Equal(t, sciBlueJay, response[0].ScientificName)
+		assert.Equal(t, "Blue Jay", response[0].CommonName)
+		assert.Equal(t, 4, response[0].Count)
+		mockDS.AssertExpectations(t)
 	})
 }
 

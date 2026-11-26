@@ -27,6 +27,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
@@ -55,7 +56,7 @@ func (c *Handler) speciesSummaryRepo() repository.DetectionRepository {
 	if c.detectionRepo != nil {
 		return c.detectionRepo
 	}
-	if c.V2Manager == nil {
+	if c.V2Manager == nil || !datastoreV2.IsEnhancedDatabase() {
 		return nil
 	}
 	db := c.V2Manager.DB()
