@@ -262,6 +262,12 @@ type Orchestrator struct {
 	// observer; nil before NewOrchestrator registers it. Called once by Delete.
 	unregisterGPUFaultObserver func()
 
+	// gpuRecovery moves the models off a failed OpenVINO GPU under an auto selection;
+	// see orchestrator_gpu_recovery.go. Its mu and callbackMu are leaf locks outside the
+	// order above: mu only guards flags, and callbackMu is taken with no orchestrator
+	// lock held.
+	gpuRecovery gpuRecoveryState
+
 	// pendingWarmups queues deferred warm-ups recorded by model loaders while
 	// they hold o.mu (write lock). Drained by runPendingWarmups after o.mu is
 	// released, so the warm-up inference runs via the serialized inference path
@@ -335,7 +341,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	o.settingsAtomic.Store(settings)
 
 	// Watch for the OpenVINO GPU fault latch before any model loads, so a fault in
-	// a startup warm-up is seen. The observer only schedules a notice reconcile.
+	// a startup warm-up is seen. The observer marks the GPU recovery due and schedules a notice reconcile.
 	o.unregisterGPUFaultObserver = inference.RegisterOpenVINOGPUFaultObserver(o.onOpenVINOGPUFault)
 
 	// Resolve the gallery models directory up front, before the loaders run below.
@@ -427,6 +433,11 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// clones settings before building (loadBirdNETV24) instead of mutating the live
 	// published snapshot under a concurrent reader.
 	o.published.Store(true)
+
+	// A GPU fault during construction (or a latch that tripped before this orchestrator
+	// existed) only marked a recovery due: move the models off the GPU now, before the
+	// notices below are evaluated and before the pipeline plans its first cadence.
+	o.runGPURecoveryAfterPublish()
 
 	// Evaluate the persistent "no acoustic model" bell notice now the orchestrator is
 	// published. If the notification service is not up yet at construction, the sync latches
@@ -2013,12 +2024,19 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 // After calling Delete, the Orchestrator must not be used. It also clears the bell
 // notices that describe the loaded models (inference failures, BirdNET Geomodel missing).
 // It stops the OpenVINO GPU notice latch and removes the GPU fault observer, so
-// a late fault raises nothing; a GPU notice already raised stays in the store.
+// a late fault raises nothing; a GPU notice already raised stays in the store. It
+// stops GPU recovery first (no new pass, no callback or replay) and waits for a pass
+// in flight after the models are closed.
 // The geomodel latch is not stopped: with no model loaded its status has no geomodel issue,
 // so a later sync can only delete the notice, and a delete that fails here is retried on
 // the latch's bounded timer instead of leaving the notice behind. The acoustic-model latch
 // is stopped instead, because "no model loaded" is exactly the state that raises its notice.
 func (o *Orchestrator) Delete() {
+	// Stop GPU recovery first: no new pass starts and no move is reported or replayed,
+	// then clearing the callback waits for one in flight. A pass already running is
+	// waited for after the models are closed.
+	o.stopGPURecovery()
+	o.SetGPURecoveryCallback(nil)
 	// Stop the acoustic-model latch first, before o.mu (its sync takes the latch lock
 	// and then o.mu): a retry of a failed "no acoustic model" notice must not raise one
 	// for this torn-down orchestrator.
@@ -2088,6 +2106,10 @@ func (o *Orchestrator) Delete() {
 		dropInferenceHealth(id)
 		entry.mu.Unlock()
 	}
+
+	// A recovery pass in flight now finds the models gone (its build is closed by
+	// reloadEntry's orphan path); wait for it before the final reconcile.
+	o.gpuRecovery.wg.Wait()
 
 	// Clear the failure notices of the models just closed and stop their latches
 	// (no model is loaded now; a latch whose delete fails is kept for a retry).

@@ -58,6 +58,10 @@ type reloadOpts struct {
 	// a refusal can tell whether another reload published a newer instance since (see
 	// unloadRefusedModel), and the settings the build used.
 	snapshot *reloadSnapshot
+	// onlyIfOnFailedGPU makes the reload a no-op (swapped=false, nil error, nothing
+	// built) unless the entry's serving instance runs on the failed OpenVINO GPU, so a
+	// recovery pass skips an entry another reload or swap already moved.
+	onlyIfOnFailedGPU bool
 }
 
 // reloadSnapshot is what a reload started from; see reloadOpts.snapshot.
@@ -69,8 +73,11 @@ type reloadSnapshot struct {
 // reloadEntry rebuilds one loaded model from the current settings and swaps it in
 // transactionally. It returns swapped=true only when the entry's instance was actually
 // replaced. Serialized by o.reloadMu for the whole operation. A new instance whose
-// OpenVINO GPU faulted during its warm-up or probe is never published: it is closed,
-// the previous instance stays published and open, and the error wraps
+// OpenVINO GPU faulted during its warm-up or probe is never published: it is closed.
+// Under an explicit selection the previous instance stays published and open and the
+// error is an OpenVINORefusalError. Under auto the model is rebuilt once from the same
+// settings, which now plan without the GPU, and that instance is published; when the
+// rebuild faults too, the previous instance stays and the error wraps
 // inference.ErrOpenVINOGPUFault.
 //
 // Lock order: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
@@ -119,118 +126,66 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		*opts.snapshot = reloadSnapshot{revision: newEntryRevision(registryID, entry), settings: settings}
 	}
 
-	// 3. Build holding only o.reloadMu (NOT o.mu / entry.mu / inferenceMu), so the build never
-	//    blocks inference on other models. Use the caller-supplied thread budget (opts.threads):
-	//    the v2.4 builder ignores it, secondary builders use it, and ReloadSecondaryModels
-	//    computes it once for the batch. Capture RSS-before only when we will record it (step 5):
-	//    the in-place v2.4 reload never recorded modelRSS, so the anchor skips it.
+	// 2b. A recovery rebuild only acts on an entry that still runs on the failed
+	//     OpenVINO GPU: another reload or swap may have moved it since the pass chose it.
+	if opts.onlyIfOnFailedGPU {
+		entry.mu.Lock()
+		onFailedGPU := builtOnFailedOpenVINOGPU(entry.instance)
+		entry.mu.Unlock()
+		if !onFailedGPU {
+			return false, nil
+		}
+	}
+
+	// 3-6. Build, warm up, probe and swap. A build whose OpenVINO GPU faulted is never
+	//      published. Under an auto selection it is rebuilt once from the same settings,
+	//      which now plan without the GPU, so the reload completes off the GPU; under an
+	//      explicit selection it is a refusal. The loop leaves with entry.mu held.
 	recordRSS := registryID != RegistryIDBirdNETV24
-	var before uint64
-	if recordRSS {
-		before = o.captureRSSBefore()
-	}
-	next, buildErr := build(o, settings, opts.threads)
-	if buildErr != nil {
-		// A refusal (explicit OpenVINO selection, OpenVINO cannot run the model) is not
-		// a failed reload that leaves the old instance serving: the settings callers
-		// unload the model, and they log it, so it is returned without the "keeping the
-		// previous model instance" warning that would be untrue for them.
-		if _, refused := errors.AsType[*OpenVINORefusalError](buildErr); !refused {
-			o.logReloadFailure(registryID, buildErr) // old keeps serving
+	var cand *reloadCandidate
+	var old ModelInstance
+	for attempt := 0; ; attempt++ {
+		var prepErr error
+		cand, prepErr = o.prepareReloadCandidate(registryID, entry, build, settings, opts)
+		if cand == nil {
+			return false, prepErr
 		}
-		return false, buildErr
-	}
 
-	// 4. Read the serving instance and run the family refusal check, both unlocked (old
-	//    keeps serving). An orphaned entry (a concurrent Delete/Unload) closes next.
-	entry.mu.Lock()
-	old := entry.instance
-	entry.mu.Unlock()
-	if old == nil {
-		o.closeDiscardedReloadInstance(registryID, next)
-		return false, o.orphanReloadResult()
-	}
-	if opts.check != nil {
-		if cerr := opts.check(old, next); cerr != nil {
-			o.closeDiscardedReloadInstance(registryID, next)
-			o.logReloadFailure(registryID, cerr) // refused; old keeps serving
-			return false, cerr
+		// Swap under entry.mu. Re-check the orphan guard: a Delete/Unload may have raced
+		// the build/warm-up. Keeping the same *modelEntry preserves its mutex identity and
+		// the globalInferenceCounters keying.
+		entry.mu.Lock()
+		old = entry.instance
+		if old == nil {
+			entry.mu.Unlock()
+			o.closeDiscardedReloadInstance(registryID, cand.next)
+			if recordRSS {
+				// Drop the RSS entry recorded by the warm-up for the instance we will not publish.
+				o.restoreModelRSS(registryID, 0, false)
+			}
+			return false, o.orphanReloadResult()
 		}
-	}
-
-	// 5. Warm up the private instance under inferenceMu, SECONDARIES ONLY. The in-place
-	//    v2.4 reload never warmed up or re-recorded RSS (it served the fresh classifier
-	//    cold and left modelRSS[v24] at its startup value), so PR3 skips warm-up+RSS for
-	//    the v2.4 anchor to stay byte-identical. Secondaries warm up exactly as before,
-	//    serialized behind live inference on inferenceMu (bounded by warmupTimeout).
-	input := silentInput(next.Spec())
-	var warmedUp bool
-	var prevRSS int64
-	var hadPrevRSS bool
-	if recordRSS {
-		func() {
-			o.inferenceMu.Lock()
-			defer o.inferenceMu.Unlock()
-			// Remember the serving model's figure: the warm-up overwrites it, and a
-			// refused swap must put it back. Read under inferenceMu, the lock the warm-up
-			// writers hold, so a warm-up that just finished is not missed.
-			o.rssMu.Lock()
-			prevRSS, hadPrevRSS = o.modelRSS[registryID]
-			o.rssMu.Unlock()
-			warmedUp = o.warmupAndRecordRSS(registryID, before, next, input)
-		}()
-	}
-
-	// 5b. Probe inference latency on the private instance (secondaries and the v2.4
-	//     anchor alike). Each run takes only inferenceMu: entry.mu guards the serving
-	//     instance and must not be held. The result is stored after the swap succeeds.
-	//     The anchor skipped the warm-up, and a failed warm-up may not have run the
-	//     lazy allocation, so in both cases the probe starts with an untimed run.
-	//     A warm-up that tripped the OpenVINO GPU fault latch skips the probe: the
-	//     instance is dead and step 6 refuses it.
-	var probed time.Duration
-	var probeOK bool
-	if !builtOnFailedOpenVINOGPU(next) {
-		probed, probeOK = o.probeLatency(registryID, next, input, warmedUp, func(run func()) bool {
-			o.inferenceMu.Lock()
-			defer o.inferenceMu.Unlock()
-			run()
-			return true
-		})
-	}
-
-	// 5c. Describe the private instance for the diagnostic snapshot before any lock is
-	//     taken: NumSpecies can take the instance's own lock, which must not nest inside
-	//     the runtime-snapshot leaf lock. Published with the swap, never on a failed or
-	//     orphaned reload.
-	snap := newModelRuntimeSnapshot(registryID, next, configuredThreadsFor(registryID, settings, opts.threads))
-
-	// 6. Swap under entry.mu. Re-check the orphan guard: a Delete/Unload may have raced
-	//    the build/warm-up. Keeping the same *modelEntry preserves its mutex identity and
-	//    the globalInferenceCounters keying.
-	entry.mu.Lock()
-	old = entry.instance
-	if old == nil {
-		entry.mu.Unlock()
-		o.closeDiscardedReloadInstance(registryID, next)
+		if !builtOnFailedOpenVINOGPU(cand.next) {
+			break
+		}
+		// The GPU faulted during the warm-up or probe, which both swallow errors:
+		// publishing the instance would replace the working one with a dead one and
+		// close the old. The previous instance stays published and open.
 		if recordRSS {
-			// Drop the RSS entry recorded in step 5 for the instance we will not publish.
-			o.restoreModelRSS(registryID, 0, false)
-		}
-		return false, o.orphanReloadResult()
-	}
-	// Refuse an instance whose OpenVINO GPU faulted during its warm-up or probe, which
-	// both swallow errors: publishing it would replace the working instance with a dead
-	// one and close the old. The previous instance stays published and open.
-	if builtOnFailedOpenVINOGPU(next) {
-		if recordRSS {
-			// Put back the serving model's figure that step 5 overwrote, before entry.mu
-			// is released: an unload clears the figure under entry.mu, so a restore after
-			// the unlock could bring back the figure of a model that was just unloaded.
-			o.restoreModelRSS(registryID, prevRSS, hadPrevRSS)
+			// Put back the serving model's figure that the warm-up overwrote, before
+			// entry.mu is released: an unload clears the figure under entry.mu, so a
+			// restore after the unlock could bring back the figure of a model that was
+			// just unloaded.
+			o.restoreModelRSS(registryID, cand.prevRSS, cand.hadPrevRSS)
 		}
 		entry.mu.Unlock()
-		o.closeDiscardedReloadInstance(registryID, next)
+		o.closeDiscardedReloadInstance(registryID, cand.next)
+		explicit := openVINOSelectionExplicit(settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice)
+		if !explicit && attempt == 0 {
+			GetLogger().Info("OpenVINO GPU failed while the model was being reloaded; rebuilding it off the GPU",
+				logger.String("registry_id", registryID))
+			continue
+		}
 		gpuErr := errors.Newf("%w: the new instance runs on the OpenVINO GPU, which has failed, so it was not published", inference.ErrOpenVINOGPUFault).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryModelInit).
@@ -239,13 +194,14 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		// An explicit selection never falls back, so the dead GPU is a refusal there
 		// (the settings callers unload the model; a variant swap keeps the old
 		// instance and its files). An auto selection keeps the plain error.
-		if openVINOSelectionExplicit(settings.BirdNET.Backend, settings.BirdNET.OpenVINODevice) {
-			// snap.Device was read from next before it was closed above.
-			return false, &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: snap.Device, Cause: gpuErr}
+		if explicit {
+			// cand.snap.Device was read from the instance before it was closed above.
+			return false, &OpenVINORefusalError{ModelID: registryID, Reason: ovReasonGPUFailed, Device: cand.snap.Device, Cause: gpuErr}
 		}
 		o.logReloadFailure(registryID, gpuErr)
 		return false, gpuErr
 	}
+	next, snap, probed, probeOK := cand.next, cand.snap, cand.probed, cand.probeOK
 	entry.instance = next
 	entry.generation++
 	o.storeProbedLatency(registryID, probed, probeOK)
@@ -292,6 +248,110 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		o.rebuildSpeciesIndex()
 	}
 	return true, nil
+}
+
+// reloadCandidate is a freshly built, warmed up and probed instance that has not
+// been published yet.
+type reloadCandidate struct {
+	next ModelInstance
+	snap ModelRuntimeSnapshot
+	// probed and probeOK are the latency probe result, stored after the swap succeeds.
+	probed  time.Duration
+	probeOK bool
+	// prevRSS and hadPrevRSS are the serving model's RSS figure before the warm-up
+	// overwrote it, which a refused swap must put back.
+	prevRSS    int64
+	hadPrevRSS bool
+}
+
+// prepareReloadCandidate runs the part of a reload that precedes the swap: the build,
+// the family refusal check, the warm-up and the latency probe, all holding only
+// o.reloadMu. It returns a nil candidate with the reload's result when the reload ends
+// here: a build error, a refusal, or an orphaned entry (which may be a nil error).
+func (o *Orchestrator) prepareReloadCandidate(registryID string, entry *modelEntry, build entryBuilder, settings *conf.Settings, opts reloadOpts) (*reloadCandidate, error) {
+	// Build holding only o.reloadMu (NOT o.mu / entry.mu / inferenceMu), so the build never
+	// blocks inference on other models. Use the caller-supplied thread budget (opts.threads):
+	// the v2.4 builder ignores it, the other builders use it, and ReloadSecondaryModels
+	// computes it once for the batch. Capture RSS-before only when we will record it (the
+	// warm-up): the in-place v2.4 reload never recorded modelRSS, so the anchor skips it.
+	recordRSS := registryID != RegistryIDBirdNETV24
+	var before uint64
+	if recordRSS {
+		before = o.captureRSSBefore()
+	}
+	next, buildErr := build(o, settings, opts.threads)
+	if buildErr != nil {
+		// A refusal (explicit OpenVINO selection, OpenVINO cannot run the model) is not
+		// a failed reload that leaves the old instance serving: the settings callers
+		// unload the model, and they log it, so it is returned without the "keeping the
+		// previous model instance" warning that would be untrue for them.
+		if _, refused := errors.AsType[*OpenVINORefusalError](buildErr); !refused {
+			o.logReloadFailure(registryID, buildErr) // old keeps serving
+		}
+		return nil, buildErr
+	}
+
+	// Read the serving instance and run the family refusal check, both unlocked (old
+	// keeps serving). An orphaned entry (a concurrent Delete/Unload) closes next.
+	entry.mu.Lock()
+	old := entry.instance
+	entry.mu.Unlock()
+	if old == nil {
+		o.closeDiscardedReloadInstance(registryID, next)
+		return nil, o.orphanReloadResult()
+	}
+	if opts.check != nil {
+		if cerr := opts.check(old, next); cerr != nil {
+			o.closeDiscardedReloadInstance(registryID, next)
+			o.logReloadFailure(registryID, cerr) // refused; old keeps serving
+			return nil, cerr
+		}
+	}
+
+	// Warm up the private instance under inferenceMu, except for the v2.4 anchor. The in-place
+	// v2.4 reload never warmed up or re-recorded RSS (it served the fresh classifier
+	// cold and left modelRSS[v24] at its startup value), so PR3 skips warm-up+RSS for
+	// the v2.4 anchor to stay byte-identical. Every other model warms up exactly as before,
+	// serialized behind live inference on inferenceMu (bounded by warmupTimeout).
+	cand := &reloadCandidate{next: next}
+	input := silentInput(next.Spec())
+	var warmedUp bool
+	if recordRSS {
+		func() {
+			o.inferenceMu.Lock()
+			defer o.inferenceMu.Unlock()
+			// Remember the serving model's figure: the warm-up overwrites it, and a
+			// refused swap must put it back. Read under inferenceMu, the lock the warm-up
+			// writers hold, so a warm-up that just finished is not missed.
+			o.rssMu.Lock()
+			cand.prevRSS, cand.hadPrevRSS = o.modelRSS[registryID]
+			o.rssMu.Unlock()
+			warmedUp = o.warmupAndRecordRSS(registryID, before, next, input)
+		}()
+	}
+
+	// Probe inference latency on the private instance (secondaries and the v2.4
+	// anchor alike). Each run takes only inferenceMu: entry.mu guards the serving
+	// instance and must not be held. The result is stored after the swap succeeds.
+	// The anchor skipped the warm-up, and a failed warm-up may not have run the
+	// lazy allocation, so in both cases the probe starts with an untimed run.
+	// A warm-up that tripped the OpenVINO GPU fault latch skips the probe: the
+	// instance is dead and the swap step refuses it.
+	if !builtOnFailedOpenVINOGPU(next) {
+		cand.probed, cand.probeOK = o.probeLatency(registryID, next, input, warmedUp, func(run func()) bool {
+			o.inferenceMu.Lock()
+			defer o.inferenceMu.Unlock()
+			run()
+			return true
+		})
+	}
+
+	// Describe the private instance for the diagnostic snapshot before any lock is
+	// taken: NumSpecies can take the instance's own lock, which must not nest inside
+	// the runtime-snapshot leaf lock. Published with the swap, never on a failed or
+	// orphaned reload.
+	cand.snap = newModelRuntimeSnapshot(registryID, next, configuredThreadsFor(registryID, settings, opts.threads))
+	return cand, nil
 }
 
 // builtOnFailedOpenVINOGPU reports whether inst runs on an OpenVINO GPU device
@@ -408,9 +468,22 @@ func (o *Orchestrator) variantSwapBuilder(registryID string) (entryBuilder, bool
 // v2.4 builder ignores the thread budget (NewBirdNET reads settings.BirdNET.Threads);
 // secondary builders use it.
 func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
+	_, err := o.rebuildFromCurrentSettings(registryID, false)
+	return err
+}
+
+// rebuildFromCurrentSettings build-then-swaps the loaded registryID model from the
+// current settings with no reloadCheck: the path of a within-model variant swap, and of
+// the recovery pass that moves a model off a failed OpenVINO GPU (onlyIfOnFailedGPU
+// skips an entry that is no longer on it). A failed build leaves the previous instance
+// serving. The v2.4 builder ignores the thread budget (NewBirdNET reads
+// settings.BirdNET.Threads); the other builders use it. Every model except the anchor
+// records the settings triplet it was built from. It returns an error when there are
+// no settings.
+func (o *Orchestrator) rebuildFromCurrentSettings(registryID string, onlyIfOnFailedGPU bool) (swapped bool, err error) {
 	build, ok := o.variantSwapBuilder(registryID)
 	if !ok {
-		return errors.Newf("model %s has no variant-swap reload builder", registryID).
+		return false, errors.Newf("model %s has no variant-swap reload builder", registryID).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Context("registry_id", registryID).
@@ -422,6 +495,13 @@ func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
 	// ReloadSecondaryModels; the clone is private, so the v2.4 builder's loadLabels never
 	// mutates the published snapshot.
 	settings := conf.CloneSettings(o.currentSettings())
+	if settings == nil {
+		return false, errors.Newf("no settings to rebuild model %s from", registryID).
+			Component("classifier.orchestrator").
+			Category(errors.CategorySystem).
+			Context("registry_id", registryID).
+			Build()
+	}
 	threads := o.computeThreadAllocation(settings)[registryID]
 	if threads <= 0 {
 		// A loaded secondary absent from settings.Models.Enabled is not keyed in the
@@ -432,8 +512,14 @@ func (o *Orchestrator) ReloadForVariantSwap(registryID string) error {
 			threads = runtime.NumCPU()
 		}
 	}
-	_, err := o.reloadEntry(registryID, build, reloadOpts{settings: settings, threads: threads})
-	return err
+	opts := reloadOpts{settings: settings, threads: threads, onlyIfOnFailedGPU: onlyIfOnFailedGPU}
+	if registryID != RegistryIDBirdNETV24 {
+		// The rebuilt instance is built from these settings, so the entry's gate record
+		// says so (ReloadSecondaryModels skips an entry already on the current triplet).
+		triplet := secondaryTripletFor(settings)
+		opts.backend = &triplet
+	}
+	return o.reloadEntry(registryID, build, opts)
 }
 
 // v24SettingsReloadCheck reproduces the reachable settings-reload refusals of the former

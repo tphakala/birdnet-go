@@ -556,7 +556,10 @@
       },
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU epäonnistui",
-        "stoppedMessage": "OpenVINO-GPU lakkasi toimimasta, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. GPU:lla ajettaviksi asetetut mallit eivät tunnista mitään siihen asti. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen tai aseta OpenVINO-laitteeksi CPU kohdassa Asetukset > Analyysi > Inferenssi."
+        "stoppedMessage": "OpenVINO-GPU lakkasi toimimasta, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. GPU:lla ajettaviksi asetetut mallit eivät tunnista mitään siihen asti. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen tai aseta OpenVINO-laitteeksi CPU kohdassa Asetukset > Analyysi > Inferenssi.",
+        "movedTitle": "OpenVINO-GPU epäonnistui, mallit siirrettiin CPU:lle",
+        "movedMessage": "OpenVINO-GPU lakkasi toimimasta, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti ja siirsi sillä ajetut mallit CPU:lle. Tunnistus jatkuu. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen.",
+        "movedPartialMessage": "OpenVINO-GPU lakkasi toimimasta, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Näitä malleja ei voitu siirtää CPU:lle, eivätkä ne tunnista mitään siihen asti: {models}. Muut GPU:lla ajetut mallit toimivat nyt CPU:lla. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen."
       },
       "openvinoRefused": {
         "title": "{count, plural, one {# mallia ei ole ladattu} other {# mallia ei ole ladattu}}",
@@ -6239,6 +6242,7 @@
       "backendsLoading": "Tarkistetaan, mitä suoritusympäristöjä tämä laite tukee.",
       "backendsUnavailable": "Ei voitu lukea, mitä suoritusympäristöjä tämä laite tukee. Taustajärjestelmä ja laite voidaan vaihtaa latauksen jälkeen.",
       "gpuFailed": "OpenVINO-GPU epäonnistui tässä ajossa, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Vaihda alla OpenVINO-laitteeksi CPU tai käynnistä BirdNET-Go uudelleen kokeillaksesi GPU:ta uudestaan.",
+      "gpuFailedMoved": "OpenVINO-GPU epäonnistui tämän ajon aikana, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Sillä ajetut mallit siirretään CPU:lle, ja jos jotain mallia ei voitu siirtää, ilmoitus nimeää sen. Käynnistä BirdNET-Go uudelleen käyttääksesi GPU:ta uudelleen.",
       "running": {
         "title": "Nyt käynnissä",
         "description": "Suoritusympäristö ja tarkkuus, joilla kukin käytössä oleva luokittelija toimii.",

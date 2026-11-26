@@ -483,6 +483,12 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 			logger.Any("models", retried))
 	}
 
+	// A settings change can leave a model on a failed OpenVINO GPU (a switch from an
+	// explicit selection back to auto), and it changes which GPU notice is true: in
+	// auto mode move any such model off the GPU, and re-evaluate the notice. The move
+	// runs on its own goroutine and re-plans the cadence when it is done.
+	cm.bn.ReconcileGPUFaultAfterSettingsReload()
+
 	// Rebuild range filter after the model reloads and retries, so a model loaded by
 	// the retry is covered.
 	if err := classifier.BuildRangeFilter(cm.bn); err != nil {

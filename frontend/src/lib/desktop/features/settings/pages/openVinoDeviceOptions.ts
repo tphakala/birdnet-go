@@ -21,6 +21,9 @@ const DEVICE_GPU = 'gpu';
 
 /** A concrete GPU id, mirroring conf.IsOVGPUDeviceName in the backend. */
 const CONCRETE_GPU_PATTERN = /^GPU\.(\d+)$/;
+/** birdnet.backend values the explicit-selection rule checks. */
+const BACKEND_OPENVINO = 'openvino';
+const BACKEND_ONNX = 'onnx';
 /** The GPU device class as OpenVINO names it: a lone GPU's id, and the name shown for gpu. */
 const GPU_CLASS_ID = 'GPU';
 /** The id of OpenVINO's default GPU: the lone "GPU", or GPU.0 with several. */
@@ -144,4 +147,18 @@ export function openVinoDeviceField(
       : t('analysis.inference.device.helpText');
 
   return { options: [...options, ...gpuOptions], helpText };
+}
+
+/**
+ * Reports whether a saved backend and OpenVINO device select OpenVINO explicitly: backend openvino,
+ * or a backend other than onnx with the device cpu, gpu or GPU.<n>. Mirrors the server's
+ * openVINOSelectionExplicit (internal/classifier/model_openvino.go); an explicit selection never
+ * falls back, while any other selection moves models off a failed GPU.
+ */
+export function isExplicitOpenVinoSelection(backend: string, device: string): boolean {
+  if (backend === BACKEND_OPENVINO) return true;
+  return (
+    backend !== BACKEND_ONNX &&
+    (device === DEVICE_CPU || device === DEVICE_GPU || CONCRETE_GPU_PATTERN.test(device))
+  );
 }

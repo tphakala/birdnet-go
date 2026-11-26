@@ -58,6 +58,7 @@ vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
 type SectionMap = Record<string, Record<string, unknown>>;
 interface MockSettingsState {
   isLoading: boolean;
+  dataLoaded: boolean;
   isSaving: boolean;
   error: null;
   originalData: SectionMap;
@@ -85,6 +86,7 @@ const { BASE_BIRDNET, BASE_REALTIME, mockStore, validationErrors } = await vi.ho
   };
   const mockStore = writable<MockSettingsState>({
     isLoading: false,
+    dataLoaded: true,
     isSaving: false,
     error: null,
     originalData: { birdnet: { ...BASE_BIRDNET }, realtime: { ...BASE_REALTIME } },
@@ -278,7 +280,12 @@ function resetPage(tabId = 'detection') {
   vi.mocked(settingsActions.updateSection).mockReset();
   modelsList.current = [];
   validationErrors.set([]);
-  mockStore.update(state => ({ ...state, originalData: savedConfig(), formData: savedConfig() }));
+  mockStore.update(state => ({
+    ...state,
+    dataLoaded: true,
+    originalData: savedConfig(),
+    formData: savedConfig(),
+  }));
   vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({ catalog: [] });
   vi.mocked(modelsApi.fetchModelRegions).mockRejectedValue(new Error('no regions in test'));
   vi.mocked(api.get).mockResolvedValue({});
@@ -852,7 +859,9 @@ describe('AnalysisSettingsPage inference runtime', () => {
   });
 
   describe('GPU fault', () => {
-    const GPU_FAILED_TEXT = 'analysis.inference.gpuFailed';
+    // The default test selection is auto, where the models move to the CPU.
+    const GPU_FAILED_TEXT = 'analysis.inference.gpuFailedMoved';
+    const GPU_FAILED_EXPLICIT_TEXT = 'analysis.inference.gpuFailed';
     const GPU_HOST = { devices: ['CPU', 'GPU'], gpus: [{ id: 'GPU', name: 'Iris Xe' }] };
 
     /** Announce a topology change to every registered listener. */
@@ -866,6 +875,48 @@ describe('AnalysisSettingsPage inference runtime', () => {
       mockRuntime(() => new Promise(resolve => pending.push(resolve)));
       return pending;
     }
+
+    it('keeps the fix advice under an explicit device and the moved text under auto', async () => {
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: 'auto', openVinoDevice: 'gpu' });
+      mockRuntime(async () => runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      const explicit = render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_EXPLICIT_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
+      explicit.unmount();
+
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: 'auto', openVinoDevice: 'auto' });
+      render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_EXPLICIT_TEXT)).toBeNull();
+    });
+
+    it('waits for the saved settings before choosing the alert text', async () => {
+      // Before the load the saved copy is empty, which reads as auto.
+      mockStore.update(state => ({ ...state, dataLoaded: false }));
+      mockRuntime(async () => runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      render(AnalysisSettingsPage);
+      const backend = await screen.findByRole('combobox', { name: BACKEND_LABEL });
+      await waitFor(() => expect(backend).toBeEnabled());
+      expect(screen.queryByTestId('inference-gpu-failed')).toBeNull();
+
+      seedSection('birdnet', { ...BASE_BIRDNET, backend: 'auto', openVinoDevice: 'gpu' });
+      mockStore.update(state => ({ ...state, dataLoaded: true }));
+      expect(await screen.findByText(GPU_FAILED_EXPLICIT_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_TEXT)).toBeNull();
+    });
+
+    it('keeps the saved selection text while an unsaved edit picks an explicit device', async () => {
+      mockRuntime(async () => runtimeStatus({ ...GPU_HOST, gpuFailed: true }));
+      render(AnalysisSettingsPage);
+      expect(await screen.findByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+
+      // The server acts on the saved auto selection until a save, so the text must not follow
+      // the form.
+      editSection('birdnet', { backend: 'auto', openVinoDevice: 'gpu' });
+      await tick();
+      expect(screen.getByText(GPU_FAILED_TEXT)).toBeInTheDocument();
+      expect(screen.queryByText(GPU_FAILED_EXPLICIT_TEXT)).toBeNull();
+    });
 
     it('shows no alert while the GPU works', async () => {
       mockRuntime(async () => runtimeStatus(GPU_HOST));

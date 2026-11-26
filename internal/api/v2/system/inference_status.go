@@ -192,7 +192,7 @@ type OpenVINOBackendStatus struct {
 	Supported bool `json:"supported"`
 	Active    bool `json:"active"`
 	// GPUFailed is true once the OpenVINO GPU fault latch has tripped in this
-	// process. Models on the GPU then fail until the process restarts. Devices
+	// process. Under an explicit selection models on the GPU then fail until the process restarts; under auto they are moved to the CPU unless the rebuild fails. Devices
 	// and GPUs stay probe facts and still list the GPU.
 	GPUFailed bool `json:"gpuFailed,omitempty"`
 	// Devices lists the device classes the host can target ("CPU", "GPU"); a host

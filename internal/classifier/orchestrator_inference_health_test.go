@@ -453,6 +453,7 @@ func setOVGPUFault(t *testing.T, faulted bool) {
 // and the ovGPUFault seam.
 func TestGPUFaultNotice_Sequence(t *testing.T) {
 	svc := setupTestNotification(t)
+	setGlobalBackend(t, "auto", "gpu", "") // explicit: the "stopped" notice, no recovery
 	faulted := false
 	orig := ovGPUFault
 	t.Cleanup(func() { ovGPUFault = orig })
@@ -543,6 +544,7 @@ func TestGPUFaultNotice_Sequence(t *testing.T) {
 func TestGPUFaultNotice_NoServiceThenSync(t *testing.T) {
 	notification.ResetForTest()
 	t.Cleanup(notification.ResetForTest)
+	setGlobalBackend(t, "auto", "gpu", "") // explicit: the "stopped" notice, no recovery
 	setOVGPUFault(t, true)
 	o := newTestOrchestrator(t)
 

@@ -422,7 +422,7 @@ type OpenVINOInfo struct {
 	Initialized bool `json:"initialized"`
 	Active      bool `json:"active"`
 	// GPUFailed is true once the OpenVINO GPU fault latch has tripped in this
-	// process; models on the GPU fail until restart.
+	// process; under an explicit selection models on the GPU fail until restart, under auto they are moved to the CPU unless the rebuild fails.
 	GPUFailed bool `json:"gpu_failed"`
 	// LibraryFile, LibraryDir and LibrarySource describe the library that is
 	// really loaded, as for ONNXRuntimeInfo.

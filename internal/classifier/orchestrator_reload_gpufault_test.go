@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -92,6 +93,28 @@ func setGPUFaultSeam(t *testing.T) *atomic.Bool {
 	return &faulted
 }
 
+// deadGPUBuilder returns a builder that hands out a fresh GPU fake per build, each
+// tripping the fault latch on its first Predict, and the fakes built so far. Under an
+// auto selection a reload that finds its build dead rebuilds once, so a test that
+// checks what happens to the faulted instances needs every build.
+func deadGPUBuilder(id string, faulted *atomic.Bool) (build entryBuilder, built func() []*gpuFaultFakeModel) {
+	var mu sync.Mutex
+	var all []*gpuFaultFakeModel
+	build = func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
+		m := newGPUFaultFake(id, faulted)
+		mu.Lock()
+		all = append(all, m)
+		mu.Unlock()
+		return m, nil
+	}
+	built = func() []*gpuFaultFakeModel {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(all)
+	}
+	return build, built
+}
+
 func TestBuiltOnFailedOpenVINOGPU(t *testing.T) {
 	faulted := setGPUFaultSeam(t)
 	gpu := &gpuFaultFakeModel{}
@@ -120,17 +143,18 @@ func TestReloadEntry_GPUFaultDuringWarmupKeepsOldInstance(t *testing.T) {
 	o.models[testSecondaryID] = &modelEntry{instance: old, backend: secondaryBackendKey{backend: "onnx"}}
 	o.modelRSS[testSecondaryID] = gpuFaultTestRSS
 
-	next := newGPUFaultFake(testSecondaryID, faulted)
-	registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
-		return next, nil
-	})
+	build, built := deadGPUBuilder(testSecondaryID, faulted)
+	registerTestSecondaryBuilder(t, testSecondaryID, build)
 
 	require.Error(t, o.ReloadSecondaryModels())
 
 	assert.Same(t, ModelInstance(old), o.models[testSecondaryID].instance, "the faulted instance must not be published")
 	assert.Equal(t, int32(0), old.closes.Load(), "the serving instance must stay open")
-	assert.Equal(t, int32(1), next.closes.Load(), "the faulted instance must be closed")
-	assert.Equal(t, int32(1), next.predicted.Load(), "the latency probe must be skipped after the fault")
+	require.Len(t, built(), 2, "an auto reload rebuilds once, and that build is dead too")
+	for _, next := range built() {
+		assert.Equal(t, int32(1), next.closes.Load(), "each faulted instance must be closed")
+		assert.Equal(t, int32(1), next.predicted.Load(), "the latency probe must be skipped after the fault")
+	}
 	assert.Equal(t, gpuFaultTestRSS, o.modelRSS[testSecondaryID], "the previous RSS figure must be restored")
 }
 
@@ -165,10 +189,8 @@ func TestReplaceVariant_GPUFaultDuringWarmupRollsBackKeepingOldFiles(t *testing.
 	old := &reloadFakeModel{id: gaplessSecondaryID}
 	o, mm, entry, modelsDir, srvURL := seedLoadedSecondary(t, old)
 
-	next := newGPUFaultFake(gaplessSecondaryID, faulted)
-	registerTestSecondaryBuilder(t, gaplessSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
-		return next, nil
-	})
+	build, built := deadGPUBuilder(gaplessSecondaryID, faulted)
+	registerTestSecondaryBuilder(t, gaplessSecondaryID, build)
 
 	fp32Path := filepath.Join(modelsDir, entry.ID, "model.onnx")
 	require.NoError(t, os.MkdirAll(filepath.Dir(fp32Path), 0o755))
@@ -181,7 +203,9 @@ func TestReplaceVariant_GPUFaultDuringWarmupRollsBackKeepingOldFiles(t *testing.
 	require.ErrorIs(t, err, inference.ErrOpenVINOGPUFault)
 	assert.Same(t, ModelInstance(old), o.models[gaplessSecondaryID].instance, "the old variant keeps serving")
 	assert.Equal(t, int32(0), old.closes.Load())
-	assert.Equal(t, int32(1), next.closes.Load())
+	for _, next := range built() {
+		assert.Equal(t, int32(1), next.closes.Load())
+	}
 	assert.FileExists(t, fp32Path, "the old variant's file must be kept")
 	_, statErr := os.Stat(filepath.Join(modelsDir, entry.ID, "model_int8.onnx"))
 	assert.True(t, os.IsNotExist(statErr), "the refused new variant's file must be removed")
@@ -271,16 +295,16 @@ func TestReloadEntry_GPUFaultDuringProbeRefusesAnchor(t *testing.T) {
 
 	old := &mockModelInstance{id: RegistryIDBirdNETV24}
 	o := newTestOrchestrator(t, old)
-	next := newGPUFaultFake(RegistryIDBirdNETV24, faulted)
+	build, built := deadGPUBuilder(RegistryIDBirdNETV24, faulted)
 
-	swapped, err := o.reloadEntry(RegistryIDBirdNETV24, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
-		return next, nil
-	}, reloadOpts{settings: conftest.GetTestSettings()})
+	swapped, err := o.reloadEntry(RegistryIDBirdNETV24, build, reloadOpts{settings: conftest.GetTestSettings()})
 
 	require.ErrorIs(t, err, inference.ErrOpenVINOGPUFault)
 	assert.False(t, swapped)
 	assert.Same(t, ModelInstance(old), o.models[RegistryIDBirdNETV24].instance, "the anchor keeps serving")
-	assert.Equal(t, int32(1), next.closes.Load(), "the faulted instance must be closed")
+	for _, next := range built() {
+		assert.Equal(t, int32(1), next.closes.Load(), "the faulted instance must be closed")
+	}
 }
 
 // TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel pins that a refusal
@@ -297,11 +321,9 @@ func TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel(t *testing.T) 
 	o.models[testSecondaryID] = &modelEntry{instance: oldFaulty, backend: onnx}
 	o.models[gpuFaultHealthySecondaryID] = &modelEntry{instance: oldHealthy, backend: onnx}
 
-	newFaulty := newGPUFaultFake(testSecondaryID, faulted)
+	buildFaulty, builtFaulty := deadGPUBuilder(testSecondaryID, faulted)
 	newHealthy := &reloadFakeModel{id: gpuFaultHealthySecondaryID}
-	registerTestSecondaryBuilder(t, testSecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
-		return newFaulty, nil
-	})
+	registerTestSecondaryBuilder(t, testSecondaryID, buildFaulty)
 	registerTestSecondaryBuilder(t, gpuFaultHealthySecondaryID, func(*Orchestrator, *conf.Settings, int) (ModelInstance, error) {
 		return newHealthy, nil
 	})
@@ -310,7 +332,9 @@ func TestReloadSecondaryModels_GPUFaultRefusesOnlyTheFaultedModel(t *testing.T) 
 
 	assert.Same(t, ModelInstance(oldFaulty), o.models[testSecondaryID].instance, "the faulted model keeps its old instance")
 	assert.Same(t, ModelInstance(newHealthy), o.models[gpuFaultHealthySecondaryID].instance, "the other model must still swap")
-	assert.Equal(t, int32(1), newFaulty.closes.Load())
+	for _, next := range builtFaulty() {
+		assert.Equal(t, int32(1), next.closes.Load())
+	}
 	assert.Equal(t, int32(1), oldHealthy.closes.Load())
 }
 

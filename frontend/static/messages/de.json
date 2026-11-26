@@ -556,7 +556,10 @@
       },
       "openvinoGpu": {
         "stoppedTitle": "OpenVINO-GPU ausgefallen",
-        "stoppedMessage": "Die OpenVINO-GPU funktioniert nicht mehr, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Modelle, die auf der GPU laufen sollen, erkennen bis dahin nichts. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden, oder stellen Sie das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf CPU."
+        "stoppedMessage": "Die OpenVINO-GPU funktioniert nicht mehr, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Modelle, die auf der GPU laufen sollen, erkennen bis dahin nichts. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden, oder stellen Sie das OpenVINO-Gerät unter Einstellungen > Analyse > Inferenz auf CPU.",
+        "movedTitle": "OpenVINO-GPU ausgefallen, Modelle auf die CPU verschoben",
+        "movedMessage": "Die OpenVINO-GPU funktioniert nicht mehr, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr und hat die Modelle, die darauf liefen, auf die CPU verschoben. Die Erkennung läuft weiter. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden.",
+        "movedPartialMessage": "Die OpenVINO-GPU funktioniert nicht mehr, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Diese Modelle konnten nicht auf die CPU verschoben werden und erkennen bis dahin nichts: {models}. Alle anderen Modelle, die auf der GPU liefen, laufen jetzt auf der CPU. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden."
       },
       "openvinoRefused": {
         "title": "{count, plural, one {# Modell ist nicht geladen} other {# Modelle sind nicht geladen}}",
@@ -6239,6 +6242,7 @@
       "backendsLoading": "Es wird geprüft, welche Laufzeitumgebungen dieses Gerät unterstützt.",
       "backendsUnavailable": "Es konnte nicht gelesen werden, welche Laufzeitumgebungen dieses Gerät unterstützt. Backend und Gerät können nach dem Laden geändert werden.",
       "gpuFailed": "Die OpenVINO-GPU ist in diesem Lauf ausgefallen, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Stellen Sie unten das OpenVINO-Gerät auf CPU um oder starten Sie BirdNET-Go neu, um es erneut mit der GPU zu versuchen.",
+      "gpuFailedMoved": "Die OpenVINO-GPU ist in diesem Lauf ausgefallen, daher verwendet BirdNET-Go sie bis zum nächsten Neustart nicht mehr. Die Modelle, die darauf liefen, werden auf die CPU verschoben, und eine Benachrichtigung nennt jedes Modell, das nicht verschoben werden konnte. Starten Sie BirdNET-Go neu, um die GPU wieder zu verwenden.",
       "running": {
         "title": "Aktuell aktiv",
         "description": "Laufzeitumgebung und Präzision, mit der jeder aktivierte Klassifikator läuft.",

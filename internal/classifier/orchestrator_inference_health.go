@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -296,7 +297,7 @@ type inferenceHealthState struct {
 	mu      sync.Mutex
 	notices map[string]*notification.PersistentNotice // per model ID
 	failing map[string]bool                           // failing set at the last reconcile
-	// gpuNotice latches the one OpenVINO GPU bell notice; see gpuFaultNoticeSignature.
+	// gpuNotice latches the one OpenVINO GPU bell notice; see gpuFaultNotice.
 	gpuNotice notification.PersistentNotice
 	// gpuSeen is set by the first pass that sees the GPU fault latch, so that
 	// pass tells the observer once (the status API now reports gpuFailed).
@@ -456,34 +457,62 @@ func (o *Orchestrator) reconcileGPUFaultNoticeLocked(svc *notification.Service) 
 		return firstSeen, st.gpuNotice.ID() != ""
 	}
 	st.gpuNotice.SetRetry(o.kickInferenceHealthSync)
-	if err := st.gpuNotice.Reconcile(svc, func() (string, func() *notification.Notification) {
-		sig := gpuFaultNoticeSignature()
-		if sig == "" {
-			return "", nil
-		}
-		return sig, newGPUFaultNotification
-	}); err != nil {
+	if err := st.gpuNotice.Reconcile(svc, o.gpuFaultNotice); err != nil {
 		GetLogger().Warn("failed to update OpenVINO GPU notification", logger.Error(err))
 	}
 	return firstSeen, st.gpuNotice.ID() != ""
 }
 
-// gpuNoticeStopped is the signature of the "OpenVINO GPU stopped" notice.
-const gpuNoticeStopped = "openvino_gpu_stopped"
+// Signatures of the OpenVINO GPU notice variants. A signature change replaces the
+// notice.
+const (
+	gpuNoticeStopped = "openvino_gpu_stopped"
+	gpuNoticeMoved   = "openvino_gpu_moved"
+	// gpuNoticePartial is followed by the IDs of the models that could not be moved.
+	gpuNoticePartial = "openvino_gpu_partial|"
+)
 
-// gpuFaultNoticeSignature identifies the OpenVINO GPU notice the fault latch
-// calls for: "" while the GPU works, otherwise the signature of the notice text.
-func gpuFaultNoticeSignature() string {
-	if faulted, _ := ovGPUFault(); faulted {
-		return gpuNoticeStopped
+// gpuFaultNotice is the Reconcile compute for the OpenVINO GPU notice, true to the
+// current state. It returns no notice while the GPU works, and none while a recovery
+// pass is due or running (the outcome is not known yet, so "stopped" never precedes
+// "moved"). An explicit selection is never recovered: "stopped". Under auto the
+// models still on the failed GPU decide: none is "moved"; a partial notice names
+// those a pass failed to move; and while one has not been tried yet there is no
+// notice.
+func (o *Orchestrator) gpuFaultNotice() (sig string, build func() *notification.Notification) {
+	if faulted, _ := ovGPUFault(); !faulted {
+		return "", nil
 	}
-	return ""
+	if o.gpuSelectionExplicit() {
+		return gpuNoticeStopped, newGPUStoppedNotification
+	}
+	if o.recoveryPending() {
+		return "", nil
+	}
+	// A model still on the GPU that no pass has tried to move means recovery has not
+	// run yet (a settings reload swaps models before the reconcile), so wait rather
+	// than claim it could not be moved.
+	var left []string
+	for _, id := range o.modelsOnFailedGPU() {
+		if !o.moveFailed(id) {
+			return "", nil
+		}
+		left = append(left, id)
+	}
+	if len(left) == 0 {
+		return gpuNoticeMoved, newGPUMovedNotification
+	}
+	return gpuNoticePartial + strings.Join(left, refusalModelIDSep), func() *notification.Notification {
+		return newGPUPartialNotification(gpuModelNames(left))
+	}
 }
 
 // onOpenVINOGPUFault is the OpenVINO GPU fault observer. It runs on the
 // inference goroutine whose call first returned the fault, possibly under
-// inference or orchestrator locks, so it only kicks the asynchronous reconcile.
+// inference or orchestrator locks, so it only marks the recovery due (starting its
+// goroutine) and kicks the asynchronous reconcile.
 func (o *Orchestrator) onOpenVINOGPUFault() {
+	o.requestGPURecovery()
 	o.kickInferenceHealthSync()
 }
 
@@ -495,27 +524,51 @@ func (o *Orchestrator) SyncInferenceNotices() {
 	o.kickInferenceHealthSync()
 }
 
-// Fallback English texts of the GPU notice; they mirror en.json
+// Fallback English texts of the GPU notices; they mirror en.json
 // (notifications.content.openvinoGpu).
 const (
-	gpuStoppedTitle   = "OpenVINO GPU failed"
-	gpuStoppedMessage = "The OpenVINO GPU stopped working, so BirdNET-Go stopped using it until the next restart. Models set to run on the GPU detect nothing until then. Restart BirdNET-Go to use the GPU again, or set the OpenVINO device to CPU in Settings > Analysis > Inference."
+	gpuStoppedTitle        = "OpenVINO GPU failed"
+	gpuStoppedMessage      = "The OpenVINO GPU stopped working, so BirdNET-Go stopped using it until the next restart. Models set to run on the GPU detect nothing until then. Restart BirdNET-Go to use the GPU again, or set the OpenVINO device to CPU in Settings > Analysis > Inference."
+	gpuMovedTitle          = "OpenVINO GPU failed, models moved to the CPU"
+	gpuMovedMessage        = "The OpenVINO GPU stopped working, so BirdNET-Go stopped using it until the next restart and moved the models that ran on it to the CPU. Detection continues. Restart BirdNET-Go to use the GPU again."
+	gpuMovedPartialMessage = "The OpenVINO GPU stopped working, so BirdNET-Go stopped using it until the next restart. These models could not be moved to the CPU and detect nothing until then: {models}. Any other models that ran on the GPU now run on the CPU. Restart BirdNET-Go to use the GPU again."
 )
 
-// newGPUFaultNotification builds the persistent bell notice for a tripped
-// OpenVINO GPU fault latch. It carries no metadata: scalar metadata would render
-// in the bell.
-func newGPUFaultNotification() *notification.Notification {
+// newGPUNotification builds a persistent bell notice for a tripped OpenVINO GPU
+// fault latch. It carries no metadata: scalar metadata would render in the bell.
+func newGPUNotification(title, message, titleKey, messageKey string, params map[string]any) *notification.Notification {
 	return notification.NewNotification(
 		notification.TypeError,
 		notification.PriorityHigh,
-		gpuStoppedTitle,
-		gpuStoppedMessage,
+		title,
+		message,
 	).
 		WithComponent(notification.ComponentClassifier).
-		WithTitleKey(notification.MsgOpenVINOGPUStoppedTitle, nil).
-		WithMessageKey(notification.MsgOpenVINOGPUStoppedMessage, nil).
+		WithTitleKey(titleKey, nil).
+		WithMessageKey(messageKey, params).
 		WithDeliveryTarget(notification.DeliveryTargetBell)
+}
+
+// newGPUStoppedNotification is the notice for an explicit selection: the models on the
+// failed GPU stopped.
+func newGPUStoppedNotification() *notification.Notification {
+	return newGPUNotification(gpuStoppedTitle, gpuStoppedMessage,
+		notification.MsgOpenVINOGPUStoppedTitle, notification.MsgOpenVINOGPUStoppedMessage, nil)
+}
+
+// newGPUMovedNotification is the notice for an auto selection whose GPU models were
+// all moved to the CPU.
+func newGPUMovedNotification() *notification.Notification {
+	return newGPUNotification(gpuMovedTitle, gpuMovedMessage,
+		notification.MsgOpenVINOGPUMovedTitle, notification.MsgOpenVINOGPUMovedMessage, nil)
+}
+
+// newGPUPartialNotification is the notice for an auto selection where the named
+// models could not be moved. It uses the neutral stopped title, since not every model
+// moved.
+func newGPUPartialNotification(models string) *notification.Notification {
+	return newGPUNotification(gpuStoppedTitle, strings.ReplaceAll(gpuMovedPartialMessage, refusalPlaceholderModels, models),
+		notification.MsgOpenVINOGPUStoppedTitle, notification.MsgOpenVINOGPUMovedPartialMessage, map[string]any{"models": models})
 }
 
 // noNotice is the Reconcile compute for "no notice due".

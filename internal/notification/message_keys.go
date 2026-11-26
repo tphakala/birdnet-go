@@ -282,6 +282,12 @@ const (
 	MsgOpenVINOGPUStoppedTitle   = "notifications.content.openvinoGpu.stoppedTitle"
 	MsgOpenVINOGPUStoppedMessage = "notifications.content.openvinoGpu.stoppedMessage"
 
+	// OpenVINO GPU recovery notices (backend and OpenVINO device on auto): the models that
+	// ran on the failed GPU were rebuilt on the CPU, or only some of them could be.
+	MsgOpenVINOGPUMovedTitle          = "notifications.content.openvinoGpu.movedTitle"
+	MsgOpenVINOGPUMovedMessage        = "notifications.content.openvinoGpu.movedMessage"
+	MsgOpenVINOGPUMovedPartialMessage = "notifications.content.openvinoGpu.movedPartialMessage"
+
 	// OpenVINO refusal notices: models set to run on OpenVINO (an explicit selection) that
 	// OpenVINO cannot run are not loaded and never fall back to ONNX Runtime. One notice
 	// per group of reasons that share a fix.

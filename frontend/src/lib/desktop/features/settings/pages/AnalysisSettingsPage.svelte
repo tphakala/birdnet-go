@@ -73,7 +73,7 @@
     type ThresholdRow,
     type ThresholdSectionValues,
   } from './analysisThresholds';
-  import { openVinoDeviceField } from './openVinoDeviceOptions';
+  import { isExplicitOpenVinoSelection, openVinoDeviceField } from './openVinoDeviceOptions';
   import { wizardState } from '$lib/desktop/features/wizard/wizardState.svelte';
   import type { InstalledModelContext } from '$lib/desktop/features/wizard/types';
   import {
@@ -642,6 +642,9 @@
   const selectedDevice = $derived(birdnet?.openVinoDevice || INFERENCE_AUTO);
   const savedBackend = $derived(store.originalData.birdnet?.backend || INFERENCE_AUTO);
   const savedDevice = $derived(store.originalData.birdnet?.openVinoDevice || INFERENCE_AUTO);
+  // Unless the saved selection is explicit, the server moves the models that ran on a failed
+  // GPU to the CPU; under an explicit selection its GPU models stay stopped.
+  const gpuFaultMovesModels = $derived(!isExplicitOpenVinoSelection(savedBackend, savedDevice));
   const inferenceChange: ChangePair = $derived({
     original: {
       backend: savedBackend,
@@ -3205,9 +3208,14 @@
           />
         </p>
       {/if}
-      {#if inferenceBackends?.openvino.gpuFailed}
+      <!-- The text follows the saved selection, so the alert waits until the settings loaded. -->
+      {#if inferenceBackends?.openvino.gpuFailed && store.dataLoaded}
         <ErrorAlert type="error" className="mb-6" data-testid="inference-gpu-failed">
-          {t('analysis.inference.gpuFailed')}
+          {t(
+            gpuFaultMovesModels
+              ? 'analysis.inference.gpuFailedMoved'
+              : 'analysis.inference.gpuFailed'
+          )}
         </ErrorAlert>
       {/if}
       <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
