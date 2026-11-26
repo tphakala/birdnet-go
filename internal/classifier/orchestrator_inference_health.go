@@ -154,13 +154,6 @@ func recordInferenceSuccess(modelID string, now time.Time) (ended int64, class i
 	return ended, inferenceErrorClass(h.lastErrClass.Load())
 }
 
-// successNeedsSync reports whether a success that ended a run of the given
-// length and class must reconcile the failure notice: the run was failing, which
-// takes the generic threshold or, for the OpenVINO GPU fault, a single window.
-func successNeedsSync(ended int64, class inferenceErrorClass) bool {
-	return ended >= failureThresholdFor(class)
-}
-
 // failureThresholdFor returns the consecutive failed windows after which a model
 // whose latest failure has the given class is failing.
 func failureThresholdFor(class inferenceErrorClass) int64 {
@@ -432,12 +425,7 @@ func (o *Orchestrator) syncInferenceHealth() {
 	st.tracked.Store(int32(tracked)) //nolint:gosec // G115: bounded by the loaded model count
 	st.mu.Unlock()
 
-	if maps.Equal(previous, failing) {
-		if gpuChanged {
-			if cb := st.changed.Load(); cb != nil {
-				(*cb)()
-			}
-		}
+	if maps.Equal(previous, failing) && !gpuChanged {
 		return
 	}
 	logFailingTransitions(health, previous, failing)

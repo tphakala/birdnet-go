@@ -801,15 +801,12 @@
               {#if openvino.supported && openvino.devices && openvino.devices.length > 0}
                 <span class="text-xs text-muted">{t('system.inference.devices')}:</span>
                 {#each openvino.devices as device}
-                  {#if openvino.gpuFailed && device === OPENVINO_GPU_DEVICE}
-                    <Badge
-                      variant="error"
-                      size="sm"
-                      text={t('system.inference.deviceFailed', { device })}
-                    />
-                  {:else}
-                    <Badge variant="neutral" size="sm" text={device} />
-                  {/if}
+                  {@const failed = openvino.gpuFailed && device === OPENVINO_GPU_DEVICE}
+                  <Badge
+                    variant={failed ? 'error' : 'neutral'}
+                    size="sm"
+                    text={failed ? t('system.inference.deviceFailed', { device }) : device}
+                  />
                 {/each}
               {/if}
             </div>

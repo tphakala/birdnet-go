@@ -861,7 +861,8 @@ func (o *Orchestrator) PredictModelTimed(ctx context.Context, modelID string, sa
 			o.kickInferenceHealthSync()
 		}
 	default:
-		if ended, class := recordInferenceSuccess(modelID, end); successNeedsSync(ended, class) {
+		// A success that ends a failing run (the class sets the threshold) reconciles.
+		if ended, class := recordInferenceSuccess(modelID, end); ended >= failureThresholdFor(class) {
 			o.kickInferenceHealthSync()
 		}
 		globalInferenceCounters.RecordInvoke(modelID, duration.Microseconds())
