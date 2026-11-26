@@ -227,9 +227,9 @@ type Orchestrator struct {
 
 	// modelLoadErrors records the last load failure per registry ID
 	// (registryID -> loadFailure), set alongside modelLoadFailures by
-	// recordLoadFailure so modelNotLoadedReason can explain why a model is missing
-	// and RetryFailedLoadsForBackendChange can tell whether the inference settings
-	// changed since the failure. Lock-free.
+	// recordLoadFailure or recordLoadFailureUnder so modelNotLoadedReason can
+	// explain why a model is missing and RetryFailedLoadsForBackendChange can tell
+	// whether the inference settings changed since the failure. Lock-free.
 	modelLoadErrors sync.Map
 
 	// modelUnloaded is a tombstone set (registryID -> struct{}{}) marking models
@@ -2149,8 +2149,9 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			logger.String("registry_id", registryID),
 			logger.Int("threads", dynamicThreads))
 
+		key := inferenceLoadKeyFor(o.currentSettings())
 		if err := loader(o, dynamicThreads); err != nil {
-			o.recordLoadFailure(registryID, err)
+			o.recordLoadFailureUnder(registryID, err, key)
 			return err
 		}
 		o.publishLoadedModelLocked(registryID, o.currentSettings(), dynamicThreads)
@@ -2209,7 +2210,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 // models.enabled takes effect without a restart (Phase 4, since models.enabled is
 // authoritative). Unloads run first to free memory on constrained hosts before loads
 // allocate. It holds no orchestrator lock across the loop (LoadModel/UnloadModel each take
-// o.mu themselves); a model that fails to load is recorded by the loader (recordLoadFailure)
+// o.mu themselves); a model that fails to load is recorded by LoadModel (recordLoadFailureUnder)
 // and skipped so one bad model does not block the rest, matching startup loadEnabledModels.
 // The acoustic-model notice is re-evaluated once at the end regardless of per-model outcome.
 func (o *Orchestrator) ReconcileEnabledModels() (loaded, unloaded []string, err error) {
@@ -2267,18 +2268,24 @@ func (o *Orchestrator) ReconcileEnabledModels() (loaded, unloaded []string, err 
 }
 
 // recordLoadFailure atomically increments the load-failure counter for registryID
-// and records the last error text together with the inference settings key the
-// load ran under (see RetryFailedLoadsForBackendChange), so a later "model not loaded" diagnosis
-// (modelNotLoadedReason) can explain why the model is missing. Safe to call
-// concurrently; does not require o.mu.
+// and records the last error text together with the inference settings key
+// current now (see RetryFailedLoadsForBackendChange), so a later "model not
+// loaded" diagnosis (modelNotLoadedReason) can explain why the model is
+// missing. LoadModel and loadEnabledModels use recordLoadFailureUnder with the
+// key taken before the loader runs. Safe to call concurrently; does not require o.mu.
 func (o *Orchestrator) recordLoadFailure(registryID string, err error) {
+	o.recordLoadFailureUnder(registryID, err, inferenceLoadKeyFor(o.currentSettings()))
+}
+
+// recordLoadFailureUnder is recordLoadFailure with the inference settings key
+// the failed load started under. Callers that load take the key before the
+// loader runs, so a settings change that lands during a slow load leaves the
+// failure retryable instead of stamping it with settings it never ran under.
+func (o *Orchestrator) recordLoadFailureUnder(registryID string, err error, key inferenceLoadKey) {
 	v, _ := o.modelLoadFailures.LoadOrStore(registryID, new(atomic.Int64))
 	v.(*atomic.Int64).Add(1)
 	if err != nil {
-		o.modelLoadErrors.Store(registryID, loadFailure{
-			msg: err.Error(),
-			key: inferenceLoadKeyFor(o.currentSettings()),
-		})
+		o.modelLoadErrors.Store(registryID, loadFailure{msg: err.Error(), key: key})
 	}
 }
 
@@ -2313,7 +2320,7 @@ func inferenceLoadKeyFor(settings *conf.Settings) inferenceLoadKey {
 // RetryFailedLoadsForBackendChange loads every enabled model that is not loaded
 // and whose last load failed under different inference settings than the current
 // ones, in registry ID order. It returns the IDs that loaded. A model that fails
-// again records the current key, so it is not retried until the settings change
+// again records the key its load started under, so it is not retried until the settings change
 // once more. Call it after a settings reload, so a corrected backend, device or
 // ONNX Runtime path takes effect without a restart. Holds no lock across the
 // loads; each LoadModel takes the locks it needs.
@@ -2333,7 +2340,7 @@ func (o *Orchestrator) RetryFailedLoadsForBackendChange() []string {
 	var loaded []string
 	for _, id := range candidates {
 		if err := o.LoadModel(id); err != nil {
-			continue // LoadModel recorded the failure under the current key
+			continue // LoadModel recorded the failure under the key it started with
 		}
 		loaded = append(loaded, id)
 	}
@@ -2965,6 +2972,9 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) {
 		}
 		registryID := m.registryID
 
+		// The inference settings this load starts under, for the failure record.
+		loadKey := inferenceLoadKeyFor(o.currentSettings())
+
 		// Closure with defer ensures the mutex is released even if a
 		// loader panics during model initialization.
 		loadErr := func() error {
@@ -3003,7 +3013,7 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) {
 			// leaves the process running degraded rather than exiting; AcousticModelsState
 			// then reports load_failed. An installed enabled model is retried by the startup
 			// model scan (loadInstalledModels); a model with no on-disk install is not.
-			o.recordLoadFailure(registryID, loadErr)
+			o.recordLoadFailureUnder(registryID, loadErr, loadKey)
 			log.Warn("model failed to load, will retry on the next model scan if installed",
 				logger.String("registry_id", registryID),
 				logger.Error(loadErr))

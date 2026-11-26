@@ -93,3 +93,49 @@ func TestRetryFailedLoadsForBackendChange(t *testing.T) {
 	assert.Empty(t, o.RetryFailedLoadsForBackendChange())
 	assert.EqualValues(t, 1, v3Calls.Load(), "the failed retry recorded the current key")
 }
+
+// TestRecordLoadFailure_KeyIsTakenBeforeTheLoad pins that a failure is stamped with the
+// settings the load started under, not the ones current when it failed. A settings change
+// that lands while a load is still running must leave that failure retryable.
+func TestRecordLoadFailure_KeyIsTakenBeforeTheLoad(t *testing.T) {
+	// Not parallel: swaps modelLoaders and the global settings snapshot.
+	isolateTestConfig(t)
+
+	settings := conftest.GetTestSettings()
+	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	settings.BirdNET.Backend = conf.BackendPrefAuto
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	o, err := NewOrchestrator(settings)
+	require.NoError(t, err)
+	t.Cleanup(o.Delete)
+
+	var calls atomic.Int32
+	orig, had := modelLoaders[RegistryIDPerchV2]
+	modelLoaders[RegistryIDPerchV2] = func(orc *Orchestrator, _ int) error {
+		if calls.Add(1) == 1 {
+			// The user saves a new backend while this load is still running, then it fails.
+			changed := conftest.GetTestSettings()
+			changed.Models.Enabled = []string{conf.ModelIDPerchV2}
+			changed.BirdNET.Backend = conf.BackendPrefONNX
+			conftest.SetTestSettings(changed)
+			return errors.NewStd("simulated load failure")
+		}
+		orc.models[RegistryIDPerchV2] = &modelEntry{instance: &mockModelInstance{id: RegistryIDPerchV2}}
+		return nil
+	}
+	t.Cleanup(func() {
+		if had {
+			modelLoaders[RegistryIDPerchV2] = orig
+		} else {
+			delete(modelLoaders, RegistryIDPerchV2)
+		}
+	})
+
+	require.Error(t, o.LoadModel(RegistryIDPerchV2))
+	require.EqualValues(t, 1, calls.Load())
+
+	assert.Equal(t, []string{RegistryIDPerchV2}, o.RetryFailedLoadsForBackendChange(),
+		"the load never ran under the new backend, so the settings change must retry it")
+}
