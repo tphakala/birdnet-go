@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Zkuste jiné sestavení tohoto modelu v Nastavení > Analýza > Modely nebo zkontrolujte backend a přesnost uvedené výše.",
       "modelFailingReasonNonFinite": "Všechny nedávné analýzy selhaly, protože model vrátil neplatné skóre (NaN nebo nekonečné), takže nic nedetekuje.",
       "modelFailingReasonError": "Všechny nedávné analýzy selhaly, protože inference vrátila chybu, takže model nic nedetekuje.",
-      "modelFailingGPUFault": "Všechny nedávné analýzy selhaly, protože selhala GPU OpenVINO. Inference na GPU je zastavena do restartu BirdNET-Go.",
+      "modelFailingGPUFault": "Všechny nedávné analýzy selhaly, protože selhala GPU OpenVINO. Inference na GPU je zastavena do restartu BirdNET-Go. Opravíte to nastavením zařízení OpenVINO na CPU v nastavení inference, nebo restartujte BirdNET-Go a zkuste GPU znovu.",
       "deviceFailed": "{device} (selhalo)"
     },
     "metrics": {
@@ -6230,7 +6230,7 @@
       "reloadNote": "Změna backendu nebo zařízení znovu načte modely, takže se detekce na několik sekund pozastaví.",
       "backendsLoading": "Zjišťuje se, která běhová prostředí toto zařízení podporuje.",
       "backendsUnavailable": "Nepodařilo se zjistit, která běhová prostředí toto zařízení podporuje. Backend a zařízení lze změnit po jejich načtení.",
-      "gpuFailed": "GPU OpenVINO v tomto běhu selhala, proto ji BirdNET-Go přestal používat až do dalšího restartu.",
+      "gpuFailed": "GPU OpenVINO v tomto běhu selhala, proto ji BirdNET-Go přestal používat až do dalšího restartu. Nastavte níže zařízení OpenVINO na CPU, nebo restartujte BirdNET-Go a zkuste GPU znovu.",
       "running": {
         "title": "Aktuálně spuštěno",
         "description": "Běhové prostředí a přesnost, se kterými běží každý povolený klasifikátor.",

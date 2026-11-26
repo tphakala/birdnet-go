@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Izmēģiniet citu šī modeļa versiju sadaļā Iestatījumi > Analīze > Modeļi vai pārbaudiet augstāk redzamo aizmugursistēmu un precizitāti.",
       "modelFailingReasonNonFinite": "Visas nesenās analīzes neizdevās, jo modelis atgrieza nederīgus rezultātus (NaN vai bezgalīgus), tāpēc tas neko nenosaka.",
       "modelFailingReasonError": "Visas nesenās analīzes neizdevās, jo secināšana atgrieza kļūdu, tāpēc modelis neko nenosaka.",
-      "modelFailingGPUFault": "Visas nesenās analīzes neizdevās, jo OpenVINO GPU atteicās. Secināšana uz GPU ir apturēta līdz BirdNET-Go restartēšanai.",
+      "modelFailingGPUFault": "Visas nesenās analīzes neizdevās, jo OpenVINO GPU atteicās. Secināšana uz GPU ir apturēta līdz BirdNET-Go restartēšanai. Lai to novērstu, secināšanas iestatījumos iestatiet OpenVINO ierīci uz CPU vai restartējiet BirdNET-Go, lai vēlreiz izmēģinātu GPU.",
       "deviceFailed": "{device} (atteicās)"
     },
     "metrics": {
@@ -6230,7 +6230,7 @@
       "reloadNote": "Aizmugursistēmas vai ierīces maiņa pārlādē modeļus, tāpēc noteikšana tiek apturēta uz dažām sekundēm.",
       "backendsLoading": "Pārbauda, kuras izpildvides šī ierīce atbalsta.",
       "backendsUnavailable": "Neizdevās nolasīt, kuras izpildvides šī ierīce atbalsta. Aizmugursistēmu un ierīci var mainīt pēc ielādes.",
-      "gpuFailed": "OpenVINO GPU šajā darbināšanas reizē atteicās, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai.",
+      "gpuFailed": "OpenVINO GPU šajā darbināšanas reizē atteicās, tāpēc BirdNET-Go to nelieto līdz nākamajai restartēšanai. Iestatiet zemāk OpenVINO ierīci uz CPU vai restartējiet BirdNET-Go, lai vēlreiz izmēģinātu GPU.",
       "running": {
         "title": "Pašlaik darbojas",
         "description": "Izpildvide un precizitāte, ar kādu darbojas katrs iespējotais klasifikators.",

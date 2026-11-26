@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Próbálja ki a modell egy másik változatát a Beállítások > Elemzés > Modellek oldalon, vagy ellenőrizze a fent látható háttérrendszert és pontosságot.",
       "modelFailingReasonNonFinite": "Minden legutóbbi elemzés sikertelen volt, mert a modell érvénytelen (NaN vagy végtelen) pontszámokat adott, így semmit sem észlel.",
       "modelFailingReasonError": "Minden legutóbbi elemzés sikertelen volt, mert a következtetés hibát adott, így a modell semmit sem észlel.",
-      "modelFailingGPUFault": "Minden legutóbbi elemzés sikertelen volt, mert az OpenVINO GPU meghibásodott. A GPU-s következtetés a BirdNET-Go újraindításáig le van állítva.",
+      "modelFailingGPUFault": "Minden legutóbbi elemzés sikertelen volt, mert az OpenVINO GPU meghibásodott. A GPU-s következtetés a BirdNET-Go újraindításáig le van állítva. A javításhoz állítsa a következtetési beállításokban az OpenVINO eszközt CPU-ra, vagy indítsa újra a BirdNET-Go-t a GPU újbóli kipróbálásához.",
       "deviceFailed": "{device} (meghibásodott)"
     },
     "metrics": {
@@ -6230,7 +6230,7 @@
       "reloadNote": "A háttérrendszer vagy az eszköz módosítása újratölti a modelleket, így az észlelés néhány másodpercre szünetel.",
       "backendsLoading": "Annak ellenőrzése, mely futtatókörnyezeteket támogatja ez az eszköz.",
       "backendsUnavailable": "Nem sikerült kiolvasni, mely futtatókörnyezeteket támogatja ez az eszköz. A háttérrendszer és az eszköz betöltés után módosítható.",
-      "gpuFailed": "Az OpenVINO GPU ebben a futásban meghibásodott, ezért a BirdNET-Go a következő újraindításig nem használja.",
+      "gpuFailed": "Az OpenVINO GPU ebben a futásban meghibásodott, ezért a BirdNET-Go a következő újraindításig nem használja. Állítsa lent az OpenVINO eszközt CPU-ra, vagy indítsa újra a BirdNET-Go-t a GPU újbóli kipróbálásához.",
       "running": {
         "title": "Jelenleg futó",
         "description": "Az egyes engedélyezett osztályozók által használt futtatókörnyezet és pontosság.",

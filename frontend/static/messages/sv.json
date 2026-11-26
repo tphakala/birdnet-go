@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Prova en annan version av den här modellen under Inställningar > Analys > Modeller, eller kontrollera den backend och precision som visas ovan.",
       "modelFailingReasonNonFinite": "Alla senaste analyser misslyckades eftersom modellen returnerade ogiltiga poäng (NaN eller oändliga), så den upptäcker ingenting.",
       "modelFailingReasonError": "Alla senaste analyser misslyckades eftersom inferensen returnerade ett fel, så modellen upptäcker ingenting.",
-      "modelFailingGPUFault": "Alla senaste analyser misslyckades eftersom OpenVINO-GPU:n fallerade. Inferens på GPU:n är stoppad tills BirdNET-Go startas om.",
+      "modelFailingGPUFault": "Alla senaste analyser misslyckades eftersom OpenVINO-GPU:n fallerade. Inferens på GPU:n är stoppad tills BirdNET-Go startas om. Åtgärda det genom att ställa in OpenVINO-enheten på CPU i inferensinställningarna, eller starta om BirdNET-Go för att försöka med GPU:n igen.",
       "deviceFailed": "{device} (fallerade)"
     },
     "metrics": {
@@ -6230,7 +6230,7 @@
       "reloadNote": "Byte av backend eller enhet laddar om modellerna, så detekteringen pausar i några sekunder.",
       "backendsLoading": "Kontrollerar vilka körtider den här enheten stöder.",
       "backendsUnavailable": "Kunde inte läsa vilka körtider den här enheten stöder. Backend och enhet kan ändras när den har lästs in.",
-      "gpuFailed": "OpenVINO-GPU:n fallerade i den här körningen, så BirdNET-Go har slutat använda den till nästa omstart.",
+      "gpuFailed": "OpenVINO-GPU:n fallerade i den här körningen, så BirdNET-Go har slutat använda den till nästa omstart. Ställ in OpenVINO-enheten på CPU nedan, eller starta om BirdNET-Go för att försöka med GPU:n igen.",
       "running": {
         "title": "Körs nu",
         "description": "Körtiden och precisionen som varje aktiverad klassificerare körs med.",

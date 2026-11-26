@@ -2056,7 +2056,7 @@
       "modelFailingHelp": "{reason} Kokeile tämän mallin toista versiota kohdassa Asetukset > Analyysi > Mallit tai tarkista yllä näkyvä taustajärjestelmä ja tarkkuus.",
       "modelFailingReasonNonFinite": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska malli palautti virheellisiä pisteitä (NaN tai äärettömiä), joten se ei tunnista mitään.",
       "modelFailingReasonError": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska päättely palautti virheen, joten malli ei tunnista mitään.",
-      "modelFailingGPUFault": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska OpenVINO-GPU epäonnistui. GPU:n päättely on pysäytetty, kunnes BirdNET-Go käynnistetään uudelleen.",
+      "modelFailingGPUFault": "Kaikki viimeaikaiset analyysit epäonnistuivat, koska OpenVINO-GPU epäonnistui. GPU:n päättely on pysäytetty, kunnes BirdNET-Go käynnistetään uudelleen. Korjaa vaihtamalla päättelyasetuksissa OpenVINO-laitteeksi CPU tai käynnistä BirdNET-Go uudelleen kokeillaksesi GPU:ta uudestaan.",
       "deviceFailed": "{device} (epäonnistui)"
     },
     "metrics": {
@@ -6230,7 +6230,7 @@
       "reloadNote": "Taustajärjestelmän tai laitteen vaihtaminen lataa mallit uudelleen, joten tunnistus keskeytyy muutamaksi sekunniksi.",
       "backendsLoading": "Tarkistetaan, mitä suoritusympäristöjä tämä laite tukee.",
       "backendsUnavailable": "Ei voitu lukea, mitä suoritusympäristöjä tämä laite tukee. Taustajärjestelmä ja laite voidaan vaihtaa latauksen jälkeen.",
-      "gpuFailed": "OpenVINO-GPU epäonnistui tässä ajossa, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti.",
+      "gpuFailed": "OpenVINO-GPU epäonnistui tässä ajossa, joten BirdNET-Go lopetti sen käytön seuraavaan uudelleenkäynnistykseen asti. Vaihda OpenVINO-laitteeksi alta CPU tai käynnistä BirdNET-Go uudelleen kokeillaksesi GPU:ta uudestaan.",
       "running": {
         "title": "Nyt käynnissä",
         "description": "Suoritusympäristö ja tarkkuus, joilla kukin käytössä oleva luokittelija toimii.",
