@@ -65,20 +65,19 @@ func (o *Orchestrator) claimGPURecovery() bool {
 	st := &o.gpuRecovery
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	// Every request, and an explicit period, starts from "untried": a failure recorded
+	// by an earlier pass says nothing about the retry this trigger asks for.
+	st.failedMoves = nil
 	// Read under mu: a stale explicit read must not clear a due mark that a trigger
 	// after a switch back to auto has just set.
 	if o.gpuSelectionExplicit() {
 		st.due = false
-		st.failedMoves = nil // an explicit period ends the record, as a new request does
 		return false
 	}
 	if st.stopped {
 		return false
 	}
 	st.due = true
-	// Every pass starts from "untried": a failure recorded by an earlier pass says
-	// nothing about the retry this trigger asks for.
-	st.failedMoves = nil
 	if st.running || !o.published.Load() {
 		return false
 	}
@@ -160,8 +159,8 @@ func (o *Orchestrator) ReconcileGPUFaultAfterSettingsReload() {
 // recoverModelsFromFailedGPU is one pass: it rebuilds, in registry ID order, every
 // loaded model whose live instance still runs on the failed OpenVINO GPU, and stops
 // when Delete began or the selection became explicit. It records which models it
-// failed to move, which the partial notice names. The planner
-// skips the GPU now, so on amd64 the rebuilt models run on ONNX Runtime. A rebuild
+// failed to move, which the partial notice names. The planner skips the GPU now, so
+// on amd64 the rebuilt models run on ONNX Runtime. A rebuild
 // that fails keeps the old instance; the next user-driven trigger retries it. It
 // holds no orchestrator lock across a rebuild.
 func (o *Orchestrator) recoverModelsFromFailedGPU() {
