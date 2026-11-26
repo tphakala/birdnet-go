@@ -1951,8 +1951,9 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 		})
 		if rerr != nil {
 			if _, isRefusal := errors.AsType[*OpenVINORefusalError](rerr); isRefusal {
-				// Not a build error to report: the entry is unloaded below and a bell
-				// notice names the reason. No gate advance, the entry goes away.
+				// Not a build error to report: the entry is unloaded below (unless a
+				// newer instance replaced it) and a bell notice names the reason. No
+				// gate advance, since an unloaded entry has no gate.
 				refused = append(refused, refusedEntry{rev: snap.revision, err: rerr})
 				continue
 			}
