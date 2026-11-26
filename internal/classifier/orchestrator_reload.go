@@ -53,6 +53,17 @@ type reloadOpts struct {
 	// ReloadSecondaryModels computes the per-model budget once for the whole batch and
 	// passes it here, so reloadEntry does not recompute the allocation per entry.
 	threads int
+	// snapshot, when non-nil, receives what this reload started from, read under
+	// o.reloadMu just before the build: the entry's revision, so a caller that unloads on
+	// a refusal can tell whether another reload published a newer instance since (see
+	// unloadRefusedModel), and the settings the build used.
+	snapshot *reloadSnapshot
+}
+
+// reloadSnapshot is what a reload started from; see reloadOpts.snapshot.
+type reloadSnapshot struct {
+	revision entryRevision
+	settings *conf.Settings
 }
 
 // reloadEntry rebuilds one loaded model from the current settings and swaps it in
@@ -103,6 +114,9 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	settings := opts.settings
 	if settings == nil {
 		settings = conf.CloneSettings(o.currentSettings())
+	}
+	if opts.snapshot != nil {
+		*opts.snapshot = reloadSnapshot{revision: newEntryRevision(registryID, entry), settings: settings}
 	}
 
 	// 3. Build holding only o.reloadMu (NOT o.mu / entry.mu / inferenceMu), so the build never

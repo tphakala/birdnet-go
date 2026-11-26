@@ -1687,22 +1687,86 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 // When OpenVINO refuses the rebuilt model (an *OpenVINORefusalError: the selection is
 // explicit and OpenVINO cannot run it), the model is recorded as failed and unloaded
 // instead of left serving on the old instance, so a settings reload leaves the same
-// loaded set a restart with those settings would; the refusal is returned.
+// loaded set a restart with those settings would; the refusal is returned. The unload
+// is skipped when another reload or a variant swap published a newer instance while the
+// refused build ran (see unloadRefusedModel).
 func (o *Orchestrator) ReloadModel() error {
-	_, err := o.reloadEntry(RegistryIDBirdNETV24, v24ReloadBuilder, reloadOpts{check: v24SettingsReloadCheck})
+	return o.reloadV24(v24ReloadBuilder)
+}
+
+// reloadV24 is ReloadModel with the builder supplied, so a test can make the rebuild
+// refuse. reloadEntry reports the settings clone it built from, which also keys the
+// recorded failure, so a settings save that lands during a slow build cannot stamp a
+// refusal with settings the build never used (the retry would then skip the model).
+func (o *Orchestrator) reloadV24(build entryBuilder) error {
+	var snap reloadSnapshot
+	_, err := o.reloadEntry(RegistryIDBirdNETV24, build, reloadOpts{check: v24SettingsReloadCheck, snapshot: &snap})
 	if _, refused := errors.AsType[*OpenVINORefusalError](err); refused {
-		o.unloadRefusedModel(RegistryIDBirdNETV24, err, inferenceLoadKeyFor(o.currentSettings()))
+		o.unloadRefusedModel(snap.revision, err, inferenceLoadKeyFor(snap.settings))
 		o.syncOpenVINORefusalNotices()
 	}
 	return err
 }
 
+// entryRevision identifies the instance of a loaded model a reload started from: the
+// entry and its swap generation. A refusal unloads the model only while the entry still
+// holds that instance, so it cannot unload one a concurrent reload, variant swap or
+// reinstall published in the meantime.
+type entryRevision struct {
+	id         string
+	entry      *modelEntry // nil when the model was not loaded
+	generation uint64
+}
+
+// entryRevisionOf returns the current revision of registryID's entry.
+func (o *Orchestrator) entryRevisionOf(registryID string) entryRevision {
+	o.mu.RLock()
+	entry := o.models[registryID]
+	o.mu.RUnlock()
+	return newEntryRevision(registryID, entry)
+}
+
+// newEntryRevision reads entry's generation under entry.mu. A nil entry gives a revision
+// that unloadRefusedModel ignores. Every path that publishes an instance
+// (reloadEntry's swap) bumps the generation under the same lock, which is what makes
+// the revision a complete check.
+func newEntryRevision(registryID string, entry *modelEntry) entryRevision {
+	rev := entryRevision{id: registryID, entry: entry}
+	if entry != nil {
+		entry.mu.Lock()
+		rev.generation = entry.generation
+		entry.mu.Unlock()
+	}
+	return rev
+}
+
 // unloadRefusedModel records an OpenVINO refusal as the model's last load failure and
-// then unloads the model. Recording comes first so the acoustic-model notice that
-// UnloadModel re-evaluates already sees the failure (a load_failed state, one
-// notice). It does not sync the refusal notices: callers do that once after a batch.
-// It relies only on the refusal, never on the entry's recorded backend triplet.
-func (o *Orchestrator) unloadRefusedModel(registryID string, refusal error, key inferenceLoadKey) {
+// then unloads the model, provided the entry still holds the instance the refused reload
+// started from (rev). It runs under reloadMu, like every other swap, so no reload can
+// publish a new instance between that check and the unload; when one already did, the
+// model keeps serving and nothing is recorded. Recording comes first so the
+// acoustic-model notice that UnloadModel re-evaluates already sees the failure (a
+// load_failed state, one notice). It does not sync the refusal notices: callers do
+// that once after a batch. It relies only on the refusal, never on the entry's
+// recorded backend triplet.
+func (o *Orchestrator) unloadRefusedModel(rev entryRevision, refusal error, key inferenceLoadKey) {
+	registryID := rev.id
+	o.reloadMu.Lock()
+	defer o.reloadMu.Unlock()
+	if rev.entry == nil {
+		return
+	}
+	o.mu.RLock()
+	current := o.models[registryID]
+	o.mu.RUnlock()
+	rev.entry.mu.Lock()
+	generation := rev.entry.generation
+	rev.entry.mu.Unlock()
+	if current != rev.entry || generation != rev.generation {
+		GetLogger().Debug("refused model was replaced since the reload started; keeping it",
+			logger.String("registry_id", registryID))
+		return
+	}
 	o.recordLoadFailureUnder(registryID, refusal, key)
 	if err := o.UnloadModel(registryID); err != nil {
 		// Already unloaded by a concurrent uninstall or delete: nothing left to stop.
@@ -1770,7 +1834,8 @@ func secondaryTripletFor(settings *conf.Settings) secondaryBackendKey {
 // An *OpenVINORefusalError (explicit selection that OpenVINO cannot honor for the
 // model) is not a build error to report: the model is recorded as failed and
 // unloaded after the loop, so the reload leaves the loaded set a restart would, and
-// a bell notice names the reason (syncOpenVINORefusalNotices).
+// a bell notice names the reason (syncOpenVINORefusalNotices). An entry another reload
+// or a variant swap replaced in the meantime is left serving (see unloadRefusedModel).
 //
 // Returns the first build error encountered (for caller notification). The
 // reload itself does not fail on a secondary error because the primary model
@@ -1832,7 +1897,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	// unloaded after the loop, since the unload rebuilds the species index and must not
 	// interleave with the per-entry gate reads.
 	type refusedEntry struct {
-		id  string
+		rev entryRevision
 		err error
 	}
 	var refused []refusedEntry
@@ -1876,17 +1941,19 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 				threads = runtime.NumCPU()
 			}
 		}
+		var snap reloadSnapshot
 		sw, rerr := o.reloadEntry(ref.id, openvinoCapableSecondaryBuilders[ref.id], reloadOpts{
 			backend:          &triplet,
 			skipSpeciesIndex: true,
 			threads:          threads,
 			settings:         settings,
+			snapshot:         &snap,
 		})
 		if rerr != nil {
 			if _, isRefusal := errors.AsType[*OpenVINORefusalError](rerr); isRefusal {
 				// Not a build error to report: the entry is unloaded below and a bell
 				// notice names the reason. No gate advance, the entry goes away.
-				refused = append(refused, refusedEntry{id: ref.id, err: rerr})
+				refused = append(refused, refusedEntry{rev: snap.revision, err: rerr})
 				continue
 			}
 			if firstErr == nil {
@@ -1924,7 +1991,7 @@ func (o *Orchestrator) ReloadSecondaryModels() error {
 	if len(refused) > 0 {
 		key := inferenceLoadKeyFor(settings)
 		for _, r := range refused {
-			o.unloadRefusedModel(r.id, r.err, key)
+			o.unloadRefusedModel(r.rev, r.err, key)
 		}
 		o.syncOpenVINORefusalNotices()
 	}
