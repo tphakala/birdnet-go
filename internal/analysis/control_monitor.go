@@ -439,10 +439,10 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	if cm.bn.IsModelLoaded(classifier.RegistryIDBirdNETV24) {
 		if err := cm.bn.ReloadModel(); err != nil {
 			// An OpenVINO refusal (explicit selection that OpenVINO cannot run) has
-			// already unloaded the model and raised its bell notice, so it is logged
-			// as a warning without an error toast.
+			// already unloaded the model, unless a newer instance replaced it, and
+			// raised its bell notice, so it is logged as a warning without an error toast.
 			if _, refused := errors.AsType[*classifier.OpenVINORefusalError](err); refused {
-				GetLogger().Warn("BirdNET model unloaded: OpenVINO cannot run it with the selected backend and device", logger.Error(err))
+				GetLogger().Warn("BirdNET model refused: OpenVINO cannot run it with the selected backend and device", logger.Error(err))
 			} else {
 				GetLogger().Error("Failed to reload BirdNET model", logger.Error(err))
 				cm.notifyError("Failed to reload BirdNET model", err)
