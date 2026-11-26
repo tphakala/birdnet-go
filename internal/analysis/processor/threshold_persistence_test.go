@@ -167,7 +167,7 @@ func (m *MockDatastore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.Clip
 	return nil, nil
 }
 func (m *MockDatastore) CountHourlyDetections(string, string, int) (int64, error) { return 0, nil }
-func (m *MockDatastore) GetSpeciesSummaryData(context.Context, string, string, float64) ([]datastore.SpeciesSummaryData, error) {
+func (m *MockDatastore) GetSpeciesSummaryData(context.Context, string, string) ([]datastore.SpeciesSummaryData, error) {
 	return make([]datastore.SpeciesSummaryData, 0), nil
 }
 func (m *MockDatastore) GetHourlyAnalyticsData(context.Context, string, string) ([]datastore.HourlyAnalyticsData, error) {

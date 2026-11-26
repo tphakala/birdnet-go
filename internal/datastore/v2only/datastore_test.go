@@ -1950,7 +1950,7 @@ func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 	require.NoError(t, ds.Save(note, nil))
 
 	// Query with no date filter; this was returning empty before the fix
-	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "", 0)
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
 	require.NoError(t, err)
 	require.NotEmpty(t, summaries, "summary should return data when no date filter is provided")
 	assert.Equal(t, "Corvus corax", summaries[0].ScientificName)
@@ -1979,60 +1979,15 @@ func TestGetSpeciesSummaryData_WithDateFilter(t *testing.T) {
 	require.NoError(t, ds.Save(note, nil))
 
 	// Query with matching date range
-	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "2024-06-15", "2024-06-15", 0)
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "2024-06-15", "2024-06-15")
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 	assert.Equal(t, 1, summaries[0].Count)
 
 	// Query with non-matching date range
-	summaries, err = ds.GetSpeciesSummaryData(t.Context(), "2024-07-01", "2024-07-31", 0)
+	summaries, err = ds.GetSpeciesSummaryData(t.Context(), "2024-07-01", "2024-07-31")
 	require.NoError(t, err)
 	assert.Empty(t, summaries, "should return empty for dates with no detections")
-}
-
-// TestGetSpeciesSummaryData_MinConfidence verifies that species summary filters
-// detections below minConfidence and omits species with no qualifying detections.
-func TestGetSpeciesSummaryData_MinConfidence(t *testing.T) {
-	labels := []string{
-		"Corvus corax_Common Raven",
-		"Parus major_Great Tit",
-	}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
-	defer cleanup()
-
-	require.NoError(t, ds.Save(&datastore.Note{
-		Date:           "2024-06-15",
-		Time:           "09:00:00",
-		ScientificName: "Corvus corax",
-		CommonName:     "Common Raven",
-		Confidence:     0.55,
-	}, nil))
-	require.NoError(t, ds.Save(&datastore.Note{
-		Date:           "2024-06-15",
-		Time:           "10:00:00",
-		ScientificName: "Corvus corax",
-		CommonName:     "Common Raven",
-		Confidence:     0.92,
-	}, nil))
-	require.NoError(t, ds.Save(&datastore.Note{
-		Date:           "2024-06-15",
-		Time:           "11:00:00",
-		ScientificName: "Parus major",
-		CommonName:     "Great Tit",
-		Confidence:     0.76,
-	}, nil))
-
-	unfiltered, err := ds.GetSpeciesSummaryData(t.Context(), "2024-06-15", "2024-06-15", 0)
-	require.NoError(t, err)
-	require.Len(t, unfiltered, 2)
-
-	filtered, err := ds.GetSpeciesSummaryData(t.Context(), "2024-06-15", "2024-06-15", 0.80)
-	require.NoError(t, err)
-	require.Len(t, filtered, 1)
-	assert.Equal(t, "Corvus corax", filtered[0].ScientificName)
-	assert.Equal(t, 1, filtered[0].Count)
-	assert.InDelta(t, 0.92, filtered[0].AvgConfidence, 0.001)
-	assert.InDelta(t, 0.92, filtered[0].MaxConfidence, 0.001)
 }
 
 func TestV2OnlyDatastore_SetSpeciesIndex_SwapsSnapshot(t *testing.T) {

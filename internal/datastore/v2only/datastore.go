@@ -3077,13 +3077,13 @@ func unixTimeOrZero(epoch int64, loc *time.Location) time.Time {
 }
 
 // GetSpeciesSummaryData retrieves species summary data.
-func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, minConfidence float64) ([]datastore.SpeciesSummaryData, error) {
+func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil, minConfidence)
+	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil, 0)
 	if err != nil {
 		return nil, err
 	}

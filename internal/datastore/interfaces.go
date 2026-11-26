@@ -198,7 +198,7 @@ type Interface interface {
 	GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
 	// Analytics methods
-	GetSpeciesSummaryData(ctx context.Context, startDate, endDate string, minConfidence float64) ([]SpeciesSummaryData, error)
+	GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error)
 	GetHourlyAnalyticsData(ctx context.Context, date string, species string) ([]HourlyAnalyticsData, error)
 	GetDailyAnalyticsData(ctx context.Context, startDate, endDate string, species string) ([]DailyAnalyticsData, error)
 	GetDetectionTrends(ctx context.Context, period string, limit int) ([]DailyAnalyticsData, error)

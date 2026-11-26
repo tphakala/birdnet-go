@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -23,6 +24,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -97,7 +100,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 
 	// Setup mock expectations
 	// Expect call with specific empty strings for no date filters
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
 
 	// Create a request
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
@@ -175,7 +178,7 @@ func TestGetSpeciesSummary_ZeroTimeOmitsHeardFields(t *testing.T) {
 			MaxConfidence: 0.85,
 		},
 	}
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
 
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
@@ -207,7 +210,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 
 	// Setup mock to return a database error (like the SQL aggregate error)
 	dbError := errors.NewStd("Error 1140 (42000): In aggregated query without GROUP BY, expression #3 of SELECT list contains nonaggregated column 'datastore.notes.species_code'")
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return([]datastore.SpeciesSummaryData{}, dbError)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
 
 	// Create a request
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
@@ -269,7 +272,7 @@ func TestAnalyticsEndpointContextErrors(t *testing.T) {
 			name: "species summary",
 			path: "/api/v2/analytics/species/summary",
 			setupMock: func(m *mocks.MockInterface, queryErr error) {
-				m.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).
+				m.On("GetSpeciesSummaryData", mock.Anything, "", "").
 					Return([]datastore.SpeciesSummaryData{}, queryErr)
 			},
 			invoke: func(c *Handler, ctx echo.Context) error { return c.GetSpeciesSummary(ctx) },
@@ -355,7 +358,7 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	}
 
 	// Setup mock expectations with date filters
-	mockDS.On("GetSpeciesSummaryData", mock.Anything, "2024-01-15", "2024-01-16", float64(0)).Return(mockSummaryData, nil)
+	mockDS.On("GetSpeciesSummaryData", mock.Anything, "2024-01-15", "2024-01-16").Return(mockSummaryData, nil)
 
 	// Create a request with date parameters
 	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16")
@@ -385,42 +388,79 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestGetSpeciesSummary_MinConfidence verifies that min_confidence is parsed identically
-// to GetDailySpeciesSummary and forwarded to the datastore.
+// TestGetSpeciesSummary_MinConfidence verifies that min_confidence filters
+// detections through the v2 repository cleanly (including date range filtering)
+// and rejects legacy-only setups when min_confidence > 0.
 func TestGetSpeciesSummary_MinConfidence(t *testing.T) {
 	t.Parallel()
 
-	t.Run("parses percentage min_confidence", func(t *testing.T) {
+	t.Run("filters species detections via v2 manager", func(t *testing.T) {
 		t.Parallel()
-		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+		mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
+			DirectPath: filepath.Join(t.TempDir(), "v2.db"),
+		})
+		require.NoError(t, err)
+		require.NoError(t, mgr.Initialize())
+		t.Cleanup(func() { assert.NoError(t, mgr.Close()) })
 
-		mockDS.On("GetSpeciesSummaryData", mock.Anything, "2026-11-14", "2026-11-20", 0.7).Return([]datastore.SpeciesSummaryData{
-			{ScientificName: "Turdus migratorius", CommonName: "American Robin", Count: 3, MaxConfidence: 0.91},
-		}, nil)
+		db := mgr.DB()
+		var model entities.AIModel
+		require.NoError(t, db.First(&model).Error)
+		var labelType entities.LabelType
+		require.NoError(t, db.First(&labelType).Error)
 
-		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?start_date=2026-11-14&end_date=2026-11-20&min_confidence=70")
+		robinLabel := entities.Label{ScientificName: sciAmericanRobin, ModelID: model.ID, LabelTypeID: labelType.ID}
+		jayLabel := entities.Label{ScientificName: sciBlueJay, ModelID: model.ID, LabelTypeID: labelType.ID}
+		require.NoError(t, db.Create(&robinLabel).Error)
+		require.NoError(t, db.Create(&jayLabel).Error)
+
+		ts := func(hour int) int64 {
+			return time.Date(2026, 11, 15, hour, 0, 0, 0, time.Local).Unix()
+		}
+		// American Robin has detections at 0.50 (below floor), 0.85 (above floor), and 0.95 (false positive).
+		require.NoError(t, db.Create(&entities.Detection{LabelID: robinLabel.ID, ModelID: model.ID, Confidence: 0.50, DetectedAt: ts(9)}).Error)
+		require.NoError(t, db.Create(&entities.Detection{LabelID: robinLabel.ID, ModelID: model.ID, Confidence: 0.85, DetectedAt: ts(10)}).Error)
+		fpDet := entities.Detection{LabelID: robinLabel.ID, ModelID: model.ID, Confidence: 0.95, DetectedAt: ts(11)}
+		require.NoError(t, db.Create(&fpDet).Error)
+		require.NoError(t, db.Create(&entities.DetectionReview{DetectionID: fpDet.ID, Verified: entities.VerificationFalsePositive}).Error)
+
+		// Blue Jay only reaches 0.76, so min_confidence=80 (0.80) excludes it.
+		require.NoError(t, db.Create(&entities.Detection{LabelID: jayLabel.ID, ModelID: model.ID, Confidence: 0.76, DetectedAt: ts(12)}).Error)
+
+		e, _, controller := setupAnalyticsTestEnvironment(t)
+		controller.Core.V2Manager = mgr
+		controller.loadCommonNameMap = func() map[string]string {
+			return map[string]string{
+				sciAmericanRobin: "American Robin",
+				sciBlueJay:       "Blue Jay",
+			}
+		}
+
+		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?start_date=2026-11-14&end_date=2026-11-20&min_confidence=80")
 		require.NoError(t, controller.GetSpeciesSummary(c))
-		assert.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusOK, rec.Code)
 
-		var response []map[string]any
+		var response []SpeciesSummary
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 		require.Len(t, response, 1)
-		assert.Equal(t, "Turdus migratorius", response[0]["scientific_name"])
-		mockDS.AssertExpectations(t)
+		assert.Equal(t, sciAmericanRobin, response[0].ScientificName)
+		assert.Equal(t, "American Robin", response[0].CommonName)
+		assert.Equal(t, 1, response[0].Count)
+		assert.InDelta(t, 0.85, response[0].AvgConfidence, 0.001)
+		assert.InDelta(t, 0.85, response[0].MaxConfidence, 0.001)
 	})
 
-	t.Run("invalid min_confidence falls back to zero", func(t *testing.T) {
+	t.Run("requires v2 database when min_confidence is positive", func(t *testing.T) {
 		t.Parallel()
-		e, mockDS, controller := setupAnalyticsTestEnvironment(t)
+		e, _, controller := setupAnalyticsTestEnvironment(t)
 
-		mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return([]datastore.SpeciesSummaryData{}, nil)
-
-		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?min_confidence=not-a-number")
+		c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?min_confidence=70")
 		require.NoError(t, controller.GetSpeciesSummary(c))
-		assert.Equal(t, http.StatusOK, rec.Code)
-		mockDS.AssertExpectations(t)
+		assert.Equal(t, http.StatusConflict, rec.Code)
 	})
 }
+
+// TestGetHourlyAnalytics tests the hourly analytics endpoint
 func TestGetHourlyAnalytics(t *testing.T) {
 	t.Parallel()
 	// Go 1.25: Add test metadata for better organization and reporting
@@ -1046,7 +1086,7 @@ func TestThumbnailsDeferToMediaProxy(t *testing.T) {
 			serve: func(t *testing.T) map[string]string {
 				t.Helper()
 				mockDS := mocks.NewMockInterface(t)
-				mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "", float64(0)).Return([]datastore.SpeciesSummaryData{
+				mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{
 					{ScientificName: sciAmericanCrow, CommonName: "American Crow", Count: 5},
 				}, nil)
 
