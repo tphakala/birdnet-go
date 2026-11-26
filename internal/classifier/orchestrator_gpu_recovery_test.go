@@ -408,3 +408,24 @@ func TestReloadEntry_OnlyIfOnFailedGPUSkipsHealthyEntry(t *testing.T) {
 	assert.False(t, swapped)
 	assert.Equal(t, int32(0), builds.Load(), "an entry already off the GPU is not rebuilt")
 }
+
+func TestGPURecovery_ReloadWithNothingOnGPUKeepsNotice(t *testing.T) {
+	a := &recoveryBuilder{id: testSecondaryID}
+	env := newGPURecoveryEnv(t, "auto", "auto", map[string]*recoveryBuilder{testSecondaryID: a}, []string{testSecondaryID})
+	env.faulted.Store(true)
+	env.o.onOpenVINOGPUFault()
+	env.settle()
+	before := gpuNoticesNow(t, env.svc)
+	require.Len(t, before, 1)
+
+	// Unpublished, a requested recovery stays due instead of running, so whether the
+	// reload requested one is observable without racing the pass goroutine.
+	env.o.published.Store(false)
+	env.o.ReconcileGPUFaultAfterSettingsReload()
+	env.settle()
+
+	assert.False(t, env.o.recoveryPending(), "nothing is on the GPU, so the reload requests no recovery")
+	after := gpuNoticesNow(t, env.svc)
+	require.Len(t, after, 1)
+	assert.Equal(t, before[0].ID, after[0].ID, "an unrelated settings reload must not delete and re-raise the notice")
+}

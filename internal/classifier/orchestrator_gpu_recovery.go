@@ -134,10 +134,15 @@ func (o *Orchestrator) runGPURecoveryAfterPublish() {
 
 // ReconcileGPUFaultAfterSettingsReload re-evaluates the GPU fault after a settings
 // reload: in auto mode it moves any model still on the failed GPU (a selection
-// change can leave one), and the GPU notice is reconciled either way. The pass runs
-// on its own goroutine. The control monitor calls it at the end of a BirdNET reload.
+// change can leave one), and the GPU notice is reconciled either way. A pass starts
+// only when a model is on the failed GPU, and runs on its own goroutine. The control
+// monitor calls it at the end of a BirdNET reload.
 func (o *Orchestrator) ReconcileGPUFaultAfterSettingsReload() {
-	o.requestGPURecovery()
+	// A pass with nothing on the GPU would only hide the notice while it runs, so
+	// the notice would be deleted and raised again on an unrelated settings change.
+	if len(o.modelsOnFailedGPU()) > 0 {
+		o.requestGPURecovery()
+	}
 	o.kickInferenceHealthSync()
 }
 
