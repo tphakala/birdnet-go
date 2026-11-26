@@ -16,9 +16,11 @@ package classifier
 import (
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -55,7 +57,9 @@ type reloadOpts struct {
 
 // reloadEntry rebuilds one loaded model from the current settings and swaps it in
 // transactionally. It returns swapped=true only when the entry's instance was actually
-// replaced. Serialized by o.reloadMu for the whole operation.
+// replaced. Serialized by o.reloadMu for the whole operation. A new instance whose
+// OpenVINO GPU faulted during its warm-up or probe is never published: it is closed,
+// the previous instance keeps serving, and the error wraps inference.ErrOpenVINOGPUFault.
 //
 // Lock order: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
 // reloadEntry holds o.reloadMu across build, swap and notify; it takes o.mu only to
@@ -140,7 +144,14 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	//    serialized behind live inference on inferenceMu (bounded by warmupTimeout).
 	input := silentInput(next.Spec())
 	var warmedUp bool
+	var prevRSS int64
+	var hadPrevRSS bool
 	if recordRSS {
+		// Remember the serving model's figure: the warm-up overwrites it, and a refused
+		// swap must put it back.
+		o.rssMu.Lock()
+		prevRSS, hadPrevRSS = o.modelRSS[registryID]
+		o.rssMu.Unlock()
 		func() {
 			o.inferenceMu.Lock()
 			defer o.inferenceMu.Unlock()
@@ -153,12 +164,18 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	//     instance and must not be held. The result is stored after the swap succeeds.
 	//     The anchor skipped the warm-up, and a failed warm-up may not have run the
 	//     lazy allocation, so in both cases the probe starts with an untimed run.
-	probed, probeOK := o.probeLatency(registryID, next, input, warmedUp, func(run func()) bool {
-		o.inferenceMu.Lock()
-		defer o.inferenceMu.Unlock()
-		run()
-		return true
-	})
+	//     A warm-up that tripped the OpenVINO GPU fault latch skips the probe: the
+	//     instance is dead and step 6 refuses it.
+	var probed time.Duration
+	var probeOK bool
+	if !builtOnFailedOpenVINOGPU(next) {
+		probed, probeOK = o.probeLatency(registryID, next, input, warmedUp, func(run func()) bool {
+			o.inferenceMu.Lock()
+			defer o.inferenceMu.Unlock()
+			run()
+			return true
+		})
+	}
 
 	// 5c. Describe the private instance for the diagnostic snapshot before any lock is
 	//     taken: NumSpecies can take the instance's own lock, which must not nest inside
@@ -181,6 +198,30 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 			o.rssMu.Unlock()
 		}
 		return false, o.orphanReloadResult()
+	}
+	// Refuse an instance whose OpenVINO GPU faulted during its warm-up or probe, which
+	// both swallow errors: publishing it would replace the working instance with a dead
+	// one and close the old. The previous instance keeps serving.
+	if builtOnFailedOpenVINOGPU(next) {
+		entry.mu.Unlock()
+		o.closeDiscardedReloadInstance(registryID, next)
+		if recordRSS {
+			// Put back the serving model's figure that step 5 overwrote.
+			o.rssMu.Lock()
+			if hadPrevRSS {
+				o.modelRSS[registryID] = prevRSS
+			} else {
+				delete(o.modelRSS, registryID)
+			}
+			o.rssMu.Unlock()
+		}
+		gpuErr := errors.Newf("%w: built on the OpenVINO GPU, which failed during its warm-up; the previous instance keeps serving", inference.ErrOpenVINOGPUFault).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryModelInit).
+			Context("registry_id", registryID).
+			Build()
+		o.logReloadFailure(registryID, gpuErr)
+		return false, gpuErr
 	}
 	entry.instance = next
 	entry.generation++
@@ -228,6 +269,19 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		o.rebuildSpeciesIndex()
 	}
 	return true, nil
+}
+
+// builtOnFailedOpenVINOGPU reports whether inst runs on an OpenVINO GPU device
+// while the process-wide OpenVINO GPU fault latch is tripped, so the instance is
+// dead on arrival: its native calls fail fast and it can detect nothing. It is
+// generic over any ModelInstance, so reload, variant-swap and recovery paths can
+// all use it.
+func builtOnFailedOpenVINOGPU(inst ModelInstance) bool {
+	if faulted, _ := ovGPUFault(); !faulted {
+		return false
+	}
+	device, backend, _ := inst.RuntimeInfo()
+	return backend == BackendOpenVINO && inference.OpenVINOIsGPUDevice(device)
 }
 
 // closeDiscardedReloadInstance closes a freshly built instance that will not be
