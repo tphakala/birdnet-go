@@ -56,7 +56,7 @@ func (o *Orchestrator) requestGPURecovery() {
 // pass in wg (under mu, so a Delete that set stopped before waiting never misses
 // it); the caller runs runGPURecovery and calls wg.Done. The selection is read under
 // mu, and an explicit one clears the due mark instead of setting it. Either way the
-// moves earlier passes failed are forgotten.
+// moves earlier passes failed are forgotten, unless recovery was stopped.
 func (o *Orchestrator) claimGPURecovery() bool {
 	faulted, _ := ovGPUFault()
 	if !faulted {
@@ -66,8 +66,11 @@ func (o *Orchestrator) claimGPURecovery() bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	// Every request, and an explicit period, starts from "untried": a failure recorded
-	// by an earlier pass says nothing about the retry this trigger asks for.
-	st.failedMoves = nil
+	// by an earlier pass says nothing about the retry this trigger asks for. Once
+	// stopped no pass runs again, so the record the notice shows is kept.
+	if !st.stopped {
+		st.failedMoves = nil
+	}
 	// Read under mu: a stale explicit read must not clear a due mark that a trigger
 	// after a switch back to auto has just set.
 	if o.gpuSelectionExplicit() {

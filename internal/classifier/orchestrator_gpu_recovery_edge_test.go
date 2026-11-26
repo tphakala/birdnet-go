@@ -103,3 +103,24 @@ func TestGPUNotice_FailureRecordDoesNotSurviveAnExplicitRoundTrip(t *testing.T) 
 	env.o.syncInferenceHealth()
 	assert.Empty(t, gpuNoticesNow(t, env.svc))
 }
+
+func TestGPUNotice_StoppedRecoveryKeepsFailedMoves(t *testing.T) {
+	env := newGPURecoveryEnv(t, "auto", "auto", nil, []string{testSecondaryID})
+	env.faulted.Store(true)
+	env.o.setMoveFailed(testSecondaryID, true)
+	env.o.syncInferenceHealth()
+	before := gpuNoticesNow(t, env.svc)
+	require.Len(t, before, 1)
+	require.Equal(t, notification.MsgOpenVINOGPUMovedPartialMessage, before[0].MessageKey)
+
+	// Delete stops recovery before it clears the models; a settings reload in that
+	// window requests a pass that never runs, so the record the notice shows stays.
+	env.o.stopGPURecovery()
+	env.o.ReconcileGPUFaultAfterSettingsReload()
+	env.settle()
+
+	assert.True(t, env.o.moveFailed(testSecondaryID), "no pass runs once recovery is stopped")
+	after := gpuNoticesNow(t, env.svc)
+	require.Len(t, after, 1)
+	assert.Equal(t, before[0].ID, after[0].ID, "the raised partial notice stays")
+}
