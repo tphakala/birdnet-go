@@ -30,12 +30,9 @@ func TestClassifierEmbeddingOnly_Functional(t *testing.T) {
 		MustInitORT(os.Getenv("ONNX_TEST_ORT_LIB"))
 	}
 
-	// Mirror how the bat pipeline loads the embedding model: a placeholder label with
-	// validation skipped, since the model produces no species logits to match.
-	c, err := NewClassifier(modelPath,
-		WithLabels([]string{"placeholder"}),
-		WithSkipLabelValidation(),
-	)
+	// Mirror how the bat pipeline loads the embedding model: no labels and validation
+	// skipped, since the model produces no species logits to match.
+	c, err := NewClassifier(modelPath, WithSkipLabelValidation())
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, c.Close()) })
 
