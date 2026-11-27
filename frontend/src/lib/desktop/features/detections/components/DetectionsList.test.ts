@@ -177,4 +177,34 @@ describe('DetectionsList sort indicator and page-size sync', () => {
     expect(speciesHeader).toHaveAttribute('aria-sort', 'ascending');
     expect(confidenceHeader).not.toHaveAttribute('aria-sort');
   });
+
+  it('keeps a picked page size when a refetch returns the old page size before the pick is fetched', async () => {
+    const onNumResultsChange = vi.fn();
+    const props = {
+      onPageChange: vi.fn(),
+      onDetailsClick: vi.fn(),
+      onRefresh: vi.fn(),
+      onNumResultsChange,
+      onSortChange: vi.fn(),
+    };
+    const { rerender } = render(DetectionsList, { props: { ...props, data: dataWithRow } });
+
+    const trigger = screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' });
+    await fireEvent.click(trigger);
+    await fireEvent.click(screen.getByRole('option', { name: '50' }));
+    expect(onNumResultsChange).toHaveBeenCalledWith(50);
+    expect(trigger).toHaveTextContent('50');
+
+    // An unrelated refetch (for example a refresh) lands while the debounced page-size fetch is pending
+    await rerender({ ...props, data: { ...dataWithRow } });
+    expect(trigger).toHaveTextContent('50');
+
+    // The page-size fetch lands
+    await rerender({ ...props, data: { ...dataWithRow, numResults: 50, itemsPerPage: 50 } });
+    expect(trigger).toHaveTextContent('50');
+
+    // A later page-size change from the parent (for example browser back) is followed
+    await rerender({ ...props, data: { ...dataWithRow, numResults: 10, itemsPerPage: 10 } });
+    expect(trigger).toHaveTextContent('10');
+  });
 });

@@ -57,7 +57,7 @@
     Trash2,
     XCircle,
   } from '@lucide/svelte';
-  import { onMount, untrack } from 'svelte';
+  import { onMount } from 'svelte';
   import { useSelectionMode } from '../composables/useSelectionMode.svelte';
   import { useDetectionActions } from '../composables/useDetectionActions.svelte';
   import {
@@ -157,15 +157,11 @@
     onNumResultsChange?.(numResults);
   }
 
-  // State for number of results - synced when parent data.numResults changes
-  let selectedNumResults = $state(untrack(() => String(data?.numResults ?? 25)));
+  // Number of results: follows data.numResults, and a local pick overrides it until the
+  // next value arrives. Keyed on the number rather than on data, so a refetch that returns
+  // the same page size does not undo a pick that is still waiting on its debounced fetch.
   const incomingNumResults = $derived(data?.numResults);
-
-  $effect(() => {
-    if (incomingNumResults !== undefined) {
-      selectedNumResults = String(incomingNumResults);
-    }
-  });
+  let selectedNumResults = $derived(String(incomingNumResults ?? 25));
 
   // --- View mode state (persisted in localStorage) ---
   const VIEW_STORAGE_KEY = 'detectionsViewMode';
@@ -229,22 +225,15 @@
     }
   }
 
-  // Initialize from sortBy prop if provided, otherwise fall back to URL sortBy parameter
-  const initialSort = parseSortBy(
-    untrack(() => sortBy) ??
-      (typeof window !== 'undefined'
-        ? (new URLSearchParams(window.location.search).get('sortBy') ?? undefined)
-        : undefined)
-  );
-  let sortField = $state<SortField>(initialSort.field);
-  let sortDirection = $state<SortDirection>(initialSort.direction);
-
-  $effect(() => {
-    if (sortBy === undefined) return;
-    const parsed = parseSortBy(sortBy);
-    sortField = parsed.field;
-    sortDirection = parsed.direction;
-  });
+  // The URL sortBy parameter is the fallback when the parent passes no sortBy
+  const urlSortBy =
+    typeof window !== 'undefined'
+      ? (new URLSearchParams(window.location.search).get('sortBy') ?? undefined)
+      : undefined;
+  const resolvedSort = $derived(parseSortBy(sortBy ?? urlSortBy));
+  // Follow the resolved sort; handleSort overrides them locally until sortBy changes
+  let sortField = $derived<SortField>(resolvedSort.field);
+  let sortDirection = $derived<SortDirection>(resolvedSort.direction);
 
   const SORT_FIELDS: Set<string> = new Set<string>(['dateTime', 'species', 'confidence', 'status']);
 
