@@ -19,6 +19,8 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Identifies the latest fetch, so a response that arrives after a newer request is dropped
+  let latestRequestId = 0;
 
   // Local storage keys for user preferences
   const RESULTS_PER_PAGE_KEY = 'birdnet-detections-results-per-page';
@@ -115,6 +117,7 @@
 
   // Fetch detections data
   async function fetchDetections() {
+    const requestId = ++latestRequestId;
     loading = true;
     error = null;
 
@@ -136,6 +139,7 @@
       const data = await fetchWithCSRF<PaginatedDetectionResponse>(
         `/api/v2/detections?${queryString.toString()}`
       );
+      if (requestId !== latestRequestId) return;
 
       // Validate numResults before using
       const validatedNumResults =
@@ -162,10 +166,11 @@
         showingTo: Math.min((queryParams.offset || 0) + (data.data?.length || 0), data.total || 0),
       };
     } catch (err) {
+      if (requestId !== latestRequestId) return;
       error = err instanceof Error ? err.message : t('detections.errors.fetchFailed');
       logger.error('Error fetching detections:', err);
     } finally {
-      loading = false;
+      if (requestId === latestRequestId) loading = false;
     }
   }
 

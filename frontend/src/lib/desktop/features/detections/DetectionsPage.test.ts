@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import type { PaginatedDetectionResponse } from '$lib/types/detection.types';
 import DetectionsPage from './DetectionsPage.svelte';
+import { deferred } from '../../../../test/async-helpers';
 
 // Keys mirror the preference keys in DetectionsPage.svelte
 const SORT_BY_KEY = 'birdnet-detections-sort-by';
@@ -184,5 +185,33 @@ describe('DetectionsPage saved preferences', () => {
     const lastUrl = String(mocks.fetchWithCSRF.mock.lastCall?.[0]);
     expect(lastUrl).toContain('numResults=100');
     expect(lastUrl).toContain('offset=100');
+  });
+
+  it('shows the rows of the latest request when an older response arrives last', async () => {
+    const rowsFor = (commonName: string, scientificName: string): PaginatedDetectionResponse => ({
+      ...oneRow,
+      data: [{ ...oneRow.data[0], commonName, scientificName }],
+    });
+    mocks.fetchWithCSRF.mockResolvedValueOnce(oneRow);
+    render(DetectionsPage);
+    await screen.findByRole('columnheader', { name: 'detections.headers.species' });
+
+    const older = deferred<PaginatedDetectionResponse>();
+    const newer = deferred<PaginatedDetectionResponse>();
+    mocks.fetchWithCSRF.mockReturnValueOnce(older.promise).mockReturnValueOnce(newer.promise);
+    await fireEvent.click(screen.getByTestId('sort-species'));
+    await fireEvent.click(screen.getByTestId('sort-confidence'));
+
+    newer.resolve(rowsFor('Newer Bird', 'Testus newerus'));
+    await screen.findAllByText('Newer Bird');
+    older.resolve(rowsFor('Older Bird', 'Testus olderus'));
+    await older.promise;
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(screen.getAllByText('Newer Bird').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Older Bird')).toHaveLength(0);
+    expect(
+      screen.getByRole('columnheader', { name: 'detections.headers.confidence' })
+    ).toHaveAttribute('aria-sort', 'ascending');
   });
 });
