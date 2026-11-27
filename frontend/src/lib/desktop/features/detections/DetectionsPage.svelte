@@ -167,7 +167,10 @@
   // Handle page change
   function handlePageChange(newPage: number) {
     if (detectionsData) {
-      const newOffset = (newPage - 1) * detectionsData.itemsPerPage;
+      // First row of the page asked for, at the size the pager was drawn with
+      const rowOffset = (newPage - 1) * detectionsData.itemsPerPage;
+      // A size picked since then (its fetch still debounced) starts its pages at that size
+      const newOffset = rowOffset - (rowOffset % currentNumResults);
       const params = new URLSearchParams(window.location.search);
       params.set('offset', String(newOffset));
 
@@ -195,16 +198,14 @@
     // Set loading state immediately for user feedback
     loading = true;
 
+    // Write the URL now, so a fetch that starts before the debounced one uses the new size
+    const params = new URLSearchParams(window.location.search);
+    params.set('numResults', String(newNumResults));
+    params.set('offset', '0'); // Reset to first page
+    navigation.writeUrl(`${window.location.pathname}?${params.toString()}`, 'push');
+
     // Debounce the actual fetch
     debounceTimer = setTimeout(() => {
-      const params = new URLSearchParams(window.location.search);
-      params.set('numResults', String(newNumResults));
-      params.set('offset', '0'); // Reset to first page
-
-      // Update URL without navigation
-      navigation.writeUrl(`${window.location.pathname}?${params.toString()}`, 'push');
-
-      // Fetch new data
       fetchDetections();
     }, 300); // 300ms debounce delay
   }
