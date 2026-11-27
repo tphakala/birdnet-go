@@ -106,7 +106,7 @@ describe('DetectionsPage saved preferences', () => {
     expect(speciesHeader).toHaveAttribute('aria-sort', 'descending');
     expect(
       screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' })
-    ).toHaveTextContent('10');
+    ).toHaveTextContent(/^\s*10\s*$/);
   });
 
   it('follows the sort and page size of the history entry on back or forward', async () => {

@@ -144,6 +144,6 @@ describe('DetectionsList sort indicator and page size', () => {
 
     // The select shows the parent's value, not the pick it made itself
     await rerender({ ...props, data: dataWithRow, numResults: 10 });
-    expect(trigger).toHaveTextContent('10');
+    expect(trigger).toHaveTextContent(/^\s*10\s*$/);
   });
 });
