@@ -8,6 +8,7 @@ The `jobqueue` package provides a job queue implementation with the following ke
 
 - **Configurable Retry Policies**: Exponential backoff with jitter for failed jobs
 - **Rate Limiting**: Control the maximum number of jobs in the queue
+- **Bounded Execution**: Each queue runs at most two action attempts concurrently, including timed-out actions that have not returned
 - **Job Prioritization**: Ability to drop oldest jobs when the queue is full
 - **Graceful Shutdown**: Wait for in-progress jobs to complete
 - **Panic Recovery**: Automatically recover from panics in job execution
@@ -195,7 +196,9 @@ queue.Stop()
 
 ### Concurrency Control
 
-The job queue uses a mutex (`sync.Mutex`) to protect shared state and ensure thread safety. Jobs are executed in separate goroutines, allowing for concurrent processing while maintaining control over the number of jobs in the queue.
+The job queue uses a mutex (`sync.Mutex`) to protect shared state and ensure thread safety. Each queue admits at most two concurrent action attempts. Excess jobs stay pending or retrying until capacity is available. A finished action wakes the dispatcher as it frees its slot, so waiting work starts then rather than on the next processing tick; waiting does not consume attempts or start the 30-second execution timeout. The existing queue overflow and drop policy still applies to the backlog.
+
+An action that ignores cancellation continues occupying its slot until `Execute` returns, even after a timeout, terminal failure, or stopping and restarting the queue. Shutdown remains bounded because it does not wait for abandoned actions. If both slots are occupied by uncooperative actions, the backlog cannot progress until one returns. The bound is shared by all action types, so slow audio exports can also delay notifications and other fast actions. It limits concurrent work but cannot make a single MP3 encode faster or interrupt its synchronous encoding loop.
 
 ### Exponential Backoff
 
