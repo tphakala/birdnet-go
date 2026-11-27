@@ -108,7 +108,11 @@ func TestResolveLabels(t *testing.T) {
 			default:
 				require.NoError(t, err)
 			}
-			assert.Equal(t, tt.want, labels)
+			if len(tt.want) == 0 {
+				assert.Empty(t, labels)
+			} else {
+				assert.Equal(t, tt.want, labels)
+			}
 		})
 	}
 }
