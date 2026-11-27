@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import type { Detection, DetectionsListData } from '$lib/types/detection.types';
 import DetectionsList from './DetectionsList.svelte';
@@ -39,172 +39,95 @@ const dataWithRow: DetectionsListData = {
   showingTo: 1,
 };
 
-afterEach(() => {
-  vi.clearAllMocks();
-  localStorage.clear();
-  window.location.search = '';
-});
+// Fresh callbacks and the resolved sort and page size the page always passes
+function baseProps() {
+  return {
+    sortBy: 'date_desc' as const,
+    numResults: 25,
+    onPageChange: vi.fn(),
+    onDetailsClick: vi.fn(),
+    onRefresh: vi.fn(),
+    onNumResultsChange: vi.fn(),
+    onSortChange: vi.fn(),
+  };
+}
 
 describe('DetectionsList accessibility', () => {
   it('names the results-per-page dropdown independently of the selected page size', () => {
-    render(DetectionsList, {
-      props: {
-        data: emptyData,
-        onPageChange: vi.fn(),
-        onDetailsClick: vi.fn(),
-        onRefresh: vi.fn(),
-        onNumResultsChange: vi.fn(),
-        onSortChange: vi.fn(),
-      },
-    });
+    render(DetectionsList, { props: { ...baseProps(), data: emptyData } });
 
     const trigger = screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' });
     expect(trigger).toHaveTextContent('25');
   });
 });
 
-describe('DetectionsList sort indicator and page-size sync', () => {
-  it('syncs sort indicator and results-per-page dropdown when resolved sortBy and data arrive after initial loading', async () => {
-    const { rerender } = render(DetectionsList, {
-      props: {
-        data: null,
-        loading: true,
-        onPageChange: vi.fn(),
-        onDetailsClick: vi.fn(),
-        onRefresh: vi.fn(),
-        onNumResultsChange: vi.fn(),
-        onSortChange: vi.fn(),
-      },
-    });
+describe('DetectionsList sort indicator and page size', () => {
+  it('shows the sort and page size resolved by the parent once data arrives', async () => {
+    const props = baseProps();
+    const { rerender } = render(DetectionsList, { props: { ...props, data: null, loading: true } });
 
     const trigger = screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' });
     expect(trigger).toHaveTextContent('25');
 
+    // A saved preference restored by the parent, as on returning to the page
     await rerender({
+      ...props,
       data: { ...dataWithRow, numResults: 50, itemsPerPage: 50 },
       loading: false,
       sortBy: 'confidence_asc',
-      onPageChange: vi.fn(),
-      onDetailsClick: vi.fn(),
-      onRefresh: vi.fn(),
-      onNumResultsChange: vi.fn(),
-      onSortChange: vi.fn(),
+      numResults: 50,
     });
 
-    const confidenceHeader = screen.getByRole('columnheader', {
-      name: 'detections.headers.confidence',
-    });
-    const dateTimeHeader = screen.getByRole('columnheader', {
-      name: 'detections.headers.dateTime',
-    });
-    expect(confidenceHeader).toHaveAttribute('aria-sort', 'ascending');
-    expect(dateTimeHeader).not.toHaveAttribute('aria-sort');
+    expect(
+      screen.getByRole('columnheader', { name: 'detections.headers.confidence' })
+    ).toHaveAttribute('aria-sort', 'ascending');
+    expect(
+      screen.getByRole('columnheader', { name: 'detections.headers.dateTime' })
+    ).not.toHaveAttribute('aria-sort');
     expect(trigger).toHaveTextContent('50');
   });
 
-  it('toggles restored sort column direction on click and resets on subsequent sortBy prop updates', async () => {
-    const onSortChange = vi.fn();
+  it('reports a header click and shows the sort the parent passes back', async () => {
+    const props = baseProps();
     const { rerender } = render(DetectionsList, {
-      props: {
-        data: dataWithRow,
-        sortBy: 'species_asc',
-        onPageChange: vi.fn(),
-        onDetailsClick: vi.fn(),
-        onRefresh: vi.fn(),
-        onNumResultsChange: vi.fn(),
-        onSortChange,
-      },
+      props: { ...props, data: dataWithRow, sortBy: 'species_asc' },
     });
-
     const speciesHeader = screen.getByRole('columnheader', {
       name: 'detections.headers.species',
     });
     expect(speciesHeader).toHaveAttribute('aria-sort', 'ascending');
 
     await fireEvent.click(screen.getByTestId('sort-species'));
-    expect(onSortChange).toHaveBeenCalledWith('species_desc');
+    expect(props.onSortChange).toHaveBeenLastCalledWith('species_desc');
+
+    await rerender({ ...props, data: dataWithRow, sortBy: 'species_desc' });
     expect(speciesHeader).toHaveAttribute('aria-sort', 'descending');
 
-    await rerender({
-      data: dataWithRow,
-      sortBy: 'date_desc',
-      onPageChange: vi.fn(),
-      onDetailsClick: vi.fn(),
-      onRefresh: vi.fn(),
-      onNumResultsChange: vi.fn(),
-      onSortChange,
-    });
-
-    const dateTimeHeader = screen.getByRole('columnheader', {
-      name: 'detections.headers.dateTime',
-    });
-    expect(dateTimeHeader).toHaveAttribute('aria-sort', 'descending');
-    expect(speciesHeader).not.toHaveAttribute('aria-sort');
+    await fireEvent.click(screen.getByTestId('sort-dateTime'));
+    expect(props.onSortChange).toHaveBeenLastCalledWith('date_desc');
   });
 
-  it('falls back to URL sortBy when prop is omitted and prefers sortBy prop over conflicting URL param', async () => {
-    window.location.search = '?sortBy=confidence_desc';
+  it('keeps the status indicator ascending since status sorts one way only', async () => {
+    const props = baseProps();
+    render(DetectionsList, { props: { ...props, data: dataWithRow, sortBy: 'status' } });
+    const statusHeader = screen.getByRole('columnheader', { name: 'detections.headers.status' });
+    expect(statusHeader).toHaveAttribute('aria-sort', 'ascending');
 
-    const { rerender } = render(DetectionsList, {
-      props: {
-        data: dataWithRow,
-        onPageChange: vi.fn(),
-        onDetailsClick: vi.fn(),
-        onRefresh: vi.fn(),
-        onNumResultsChange: vi.fn(),
-        onSortChange: vi.fn(),
-      },
-    });
-
-    const confidenceHeader = screen.getByRole('columnheader', {
-      name: 'detections.headers.confidence',
-    });
-    expect(confidenceHeader).toHaveAttribute('aria-sort', 'descending');
-
-    await rerender({
-      data: dataWithRow,
-      sortBy: 'species_asc',
-      onPageChange: vi.fn(),
-      onDetailsClick: vi.fn(),
-      onRefresh: vi.fn(),
-      onNumResultsChange: vi.fn(),
-      onSortChange: vi.fn(),
-    });
-
-    const speciesHeader = screen.getByRole('columnheader', {
-      name: 'detections.headers.species',
-    });
-    expect(speciesHeader).toHaveAttribute('aria-sort', 'ascending');
-    expect(confidenceHeader).not.toHaveAttribute('aria-sort');
+    await fireEvent.click(screen.getByTestId('sort-status'));
+    expect(props.onSortChange).toHaveBeenLastCalledWith('status');
+    expect(statusHeader).toHaveAttribute('aria-sort', 'ascending');
   });
 
-  it('keeps a picked page size when a refetch returns the old page size before the pick is fetched', async () => {
-    const onNumResultsChange = vi.fn();
-    const props = {
-      onPageChange: vi.fn(),
-      onDetailsClick: vi.fn(),
-      onRefresh: vi.fn(),
-      onNumResultsChange,
-      onSortChange: vi.fn(),
-    };
+  it('reports a page-size pick and shows the page size the parent passes back', async () => {
+    const props = baseProps();
     const { rerender } = render(DetectionsList, { props: { ...props, data: dataWithRow } });
 
     const trigger = screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' });
     await fireEvent.click(trigger);
     await fireEvent.click(screen.getByRole('option', { name: '50' }));
-    expect(onNumResultsChange).toHaveBeenCalledWith(50);
-    expect(trigger).toHaveTextContent('50');
+    expect(props.onNumResultsChange).toHaveBeenCalledWith(50);
 
-    // An unrelated refetch (for example a refresh) lands while the debounced page-size fetch is pending
-    await rerender({ ...props, data: { ...dataWithRow } });
+    await rerender({ ...props, data: dataWithRow, numResults: 50 });
     expect(trigger).toHaveTextContent('50');
-
-    // The page-size fetch lands
-    await rerender({ ...props, data: { ...dataWithRow, numResults: 50, itemsPerPage: 50 } });
-    expect(trigger).toHaveTextContent('50');
-
-    // A later page-size change from the parent (for example browser back) is followed
-    await rerender({ ...props, data: { ...dataWithRow, numResults: 10, itemsPerPage: 10 } });
-    expect(trigger).toHaveTextContent('10');
   });
 });

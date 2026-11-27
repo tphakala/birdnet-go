@@ -16,7 +16,9 @@
   const logger = getLogger('app');
 
   let detectionsData = $state<DetectionsListData | null>(null);
-  let currentSortBy = $state<DetectionSortBy | undefined>(undefined);
+  // Resolved sort and page size; set on each fetch and right away on a user change
+  let currentSortBy = $state<DetectionSortBy>('date_desc');
+  let currentNumResults = $state(25);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -114,6 +116,7 @@
     try {
       const queryParams = getQueryParams();
       currentSortBy = queryParams.sortBy ?? 'date_desc';
+      currentNumResults = queryParams.numResults ?? getSavedResultsPerPage();
       // Build query string
       const queryString = new URLSearchParams();
       Object.entries(queryParams).forEach(([key, value]) => {
@@ -178,6 +181,7 @@
 
   // Handle numResults change with debouncing
   function handleNumResultsChange(newNumResults: number) {
+    currentNumResults = newNumResults;
     // Save user preference to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(RESULTS_PER_PAGE_KEY, String(newNumResults));
@@ -284,6 +288,7 @@
     {loading}
     {error}
     sortBy={currentSortBy}
+    numResults={currentNumResults}
     onPageChange={handlePageChange}
     onDetailsClick={handleDetailsClick}
     onRefresh={fetchDetections}
