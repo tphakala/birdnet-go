@@ -103,8 +103,23 @@ describe('DetectionsList sort indicator and page size', () => {
     await rerender({ ...props, data: dataWithRow, sortBy: 'species_desc' });
     expect(speciesHeader).toHaveAttribute('aria-sort', 'descending');
 
+    // A second click on the active descending column asks for ascending
+    await fireEvent.click(screen.getByTestId('sort-species'));
+    expect(props.onSortChange).toHaveBeenLastCalledWith('species_asc');
+
     await fireEvent.click(screen.getByTestId('sort-dateTime'));
     expect(props.onSortChange).toHaveBeenLastCalledWith('date_desc');
+  });
+
+  it('asks for ascending on a first click on Species or Confidence', async () => {
+    const props = baseProps();
+    render(DetectionsList, { props: { ...props, data: dataWithRow } });
+
+    await fireEvent.click(screen.getByTestId('sort-species'));
+    expect(props.onSortChange).toHaveBeenLastCalledWith('species_asc');
+
+    await fireEvent.click(screen.getByTestId('sort-confidence'));
+    expect(props.onSortChange).toHaveBeenLastCalledWith('confidence_asc');
   });
 
   it('keeps the status indicator ascending since status sorts one way only', async () => {
@@ -118,7 +133,7 @@ describe('DetectionsList sort indicator and page size', () => {
     expect(statusHeader).toHaveAttribute('aria-sort', 'ascending');
   });
 
-  it('reports a page-size pick and shows the page size the parent passes back', async () => {
+  it('reports a page-size pick and follows the page size the parent passes after it', async () => {
     const props = baseProps();
     const { rerender } = render(DetectionsList, { props: { ...props, data: dataWithRow } });
 
@@ -127,7 +142,8 @@ describe('DetectionsList sort indicator and page size', () => {
     await fireEvent.click(screen.getByRole('option', { name: '50' }));
     expect(props.onNumResultsChange).toHaveBeenCalledWith(50);
 
-    await rerender({ ...props, data: dataWithRow, numResults: 50 });
-    expect(trigger).toHaveTextContent('50');
+    // The select shows the parent's value, not the pick it made itself
+    await rerender({ ...props, data: dataWithRow, numResults: 10 });
+    expect(trigger).toHaveTextContent('10');
   });
 });

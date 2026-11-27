@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import type { PaginatedDetectionResponse } from '$lib/types/detection.types';
 import DetectionsPage from './DetectionsPage.svelte';
 
@@ -75,6 +75,57 @@ describe('DetectionsPage saved preferences', () => {
     expect(
       screen.getByRole('columnheader', { name: 'detections.headers.dateTime' })
     ).not.toHaveAttribute('aria-sort');
+    expect(
+      screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' })
+    ).toHaveTextContent('50');
+  });
+
+  it('shows Date and Time descending and 25 rows when nothing is saved and the URL is empty', async () => {
+    mocks.fetchWithCSRF.mockResolvedValue(oneRow);
+    render(DetectionsPage);
+
+    const dateTimeHeader = await screen.findByRole('columnheader', {
+      name: 'detections.headers.dateTime',
+    });
+    expect(dateTimeHeader).toHaveAttribute('aria-sort', 'descending');
+    expect(
+      screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' })
+    ).toHaveTextContent('25');
+  });
+
+  it('prefers the sort and page size in the URL over the saved ones', async () => {
+    localStorage.setItem(SORT_BY_KEY, 'confidence_asc');
+    localStorage.setItem(RESULTS_PER_PAGE_KEY, '50');
+    window.location.search = '?sortBy=species_desc&numResults=10';
+    mocks.fetchWithCSRF.mockResolvedValue(oneRow);
+    render(DetectionsPage);
+
+    const speciesHeader = await screen.findByRole('columnheader', {
+      name: 'detections.headers.species',
+    });
+    expect(speciesHeader).toHaveAttribute('aria-sort', 'descending');
+    expect(
+      screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' })
+    ).toHaveTextContent('10');
+  });
+
+  it('follows the sort and page size of the history entry on back or forward', async () => {
+    window.location.search = '?sortBy=species_asc&numResults=25';
+    mocks.fetchWithCSRF.mockResolvedValue(oneRow);
+    render(DetectionsPage);
+    const speciesHeader = await screen.findByRole('columnheader', {
+      name: 'detections.headers.species',
+    });
+    expect(speciesHeader).toHaveAttribute('aria-sort', 'ascending');
+
+    window.location.search = '?sortBy=confidence_desc&numResults=50';
+    window.dispatchEvent(new PopStateEvent('popstate'));
+
+    const confidenceHeader = screen.getByRole('columnheader', {
+      name: 'detections.headers.confidence',
+    });
+    await waitFor(() => expect(confidenceHeader).toHaveAttribute('aria-sort', 'descending'));
+    expect(speciesHeader).not.toHaveAttribute('aria-sort');
     expect(
       screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' })
     ).toHaveTextContent('50');
