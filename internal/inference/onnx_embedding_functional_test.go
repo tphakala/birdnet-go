@@ -30,7 +30,7 @@ func TestNewONNXClassifier_LabelFreeEmbedding_Functional(t *testing.T) {
 		t.Skipf("set %s to the bat embedding model to run", envBatEmbModel)
 	}
 	require.NoError(t, InitONNXRuntime(os.Getenv(envTensorLib)))
-	t.Cleanup(func() { _ = DestroyONNXRuntime() })
+	t.Cleanup(func() { assert.NoError(t, DestroyONNXRuntime()) })
 
 	c, err := NewONNXClassifier(modelPath, ONNXClassifierOptions{Threads: 1, SkipLabelValidation: true})
 	require.NoError(t, err)
