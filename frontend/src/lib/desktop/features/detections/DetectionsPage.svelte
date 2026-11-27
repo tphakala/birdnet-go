@@ -19,10 +19,20 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // Identifies the latest fetch, so a response that arrives after a newer request is dropped
+  let latestRequestId = 0;
 
   // Local storage keys for user preferences
   const RESULTS_PER_PAGE_KEY = 'birdnet-detections-results-per-page';
   const SORT_BY_KEY = 'birdnet-detections-sort-by';
+
+  // Used when neither the URL nor a saved preference sets a value
+  const DEFAULT_SORT_BY: DetectionSortBy = 'date_desc';
+  const DEFAULT_RESULTS_PER_PAGE = 25;
+
+  // Resolved sort and page size; set on each fetch and right away on a user change
+  let currentSortBy = $state<DetectionSortBy>(DEFAULT_SORT_BY);
+  let currentNumResults = $state(DEFAULT_RESULTS_PER_PAGE);
 
   const ALLOWED_SORT_VALUES = new Set<string>([
     'date_desc',
@@ -46,7 +56,7 @@
         }
       }
     }
-    return 25; // Default
+    return DEFAULT_RESULTS_PER_PAGE;
   }
 
   // Extract query parameters from URL
@@ -107,11 +117,14 @@
 
   // Fetch detections data
   async function fetchDetections() {
+    const requestId = ++latestRequestId;
     loading = true;
     error = null;
 
     try {
       const queryParams = getQueryParams();
+      currentSortBy = queryParams.sortBy ?? DEFAULT_SORT_BY;
+      currentNumResults = queryParams.numResults ?? getSavedResultsPerPage();
       // Build query string
       const queryString = new URLSearchParams();
       Object.entries(queryParams).forEach(([key, value]) => {
@@ -126,6 +139,7 @@
       const data = await fetchWithCSRF<PaginatedDetectionResponse>(
         `/api/v2/detections?${queryString.toString()}`
       );
+      if (requestId !== latestRequestId) return;
 
       // Validate numResults before using
       const validatedNumResults =
@@ -152,17 +166,21 @@
         showingTo: Math.min((queryParams.offset || 0) + (data.data?.length || 0), data.total || 0),
       };
     } catch (err) {
+      if (requestId !== latestRequestId) return;
       error = err instanceof Error ? err.message : t('detections.errors.fetchFailed');
       logger.error('Error fetching detections:', err);
     } finally {
-      loading = false;
+      if (requestId === latestRequestId) loading = false;
     }
   }
 
   // Handle page change
   function handlePageChange(newPage: number) {
     if (detectionsData) {
-      const newOffset = (newPage - 1) * detectionsData.itemsPerPage;
+      // First row of the page asked for, at the size the pager was drawn with
+      const rowOffset = (newPage - 1) * detectionsData.itemsPerPage;
+      // A size picked since then (its fetch still debounced) starts its pages at that size
+      const newOffset = rowOffset - (rowOffset % currentNumResults);
       const params = new URLSearchParams(window.location.search);
       params.set('offset', String(newOffset));
 
@@ -176,6 +194,7 @@
 
   // Handle numResults change with debouncing
   function handleNumResultsChange(newNumResults: number) {
+    currentNumResults = newNumResults;
     // Save user preference to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(RESULTS_PER_PAGE_KEY, String(newNumResults));
@@ -189,29 +208,31 @@
     // Set loading state immediately for user feedback
     loading = true;
 
+    // Write the URL now, so a fetch that starts before the debounced one uses the new size
+    const params = new URLSearchParams(window.location.search);
+    params.set('numResults', String(newNumResults));
+    params.set('offset', '0'); // Reset to first page
+    navigation.writeUrl(`${window.location.pathname}?${params.toString()}`, 'push');
+
+    // A response still pending for the previous size is dropped; the debounced fetch replaces it
+    latestRequestId++;
+
     // Debounce the actual fetch
     debounceTimer = setTimeout(() => {
-      const params = new URLSearchParams(window.location.search);
-      params.set('numResults', String(newNumResults));
-      params.set('offset', '0'); // Reset to first page
-
-      // Update URL without navigation
-      navigation.writeUrl(`${window.location.pathname}?${params.toString()}`, 'push');
-
-      // Fetch new data
       fetchDetections();
     }, 300); // 300ms debounce delay
   }
 
   // Handle sort change from DetectionsList
   function handleSortChange(newSortBy: DetectionSortBy) {
+    currentSortBy = newSortBy;
     // Save preference to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(SORT_BY_KEY, newSortBy);
     }
 
     const params = new URLSearchParams(window.location.search);
-    if (newSortBy && newSortBy !== 'date_desc') {
+    if (newSortBy && newSortBy !== DEFAULT_SORT_BY) {
       params.set('sortBy', newSortBy);
     } else {
       params.delete('sortBy');
@@ -280,6 +301,8 @@
     data={detectionsData}
     {loading}
     {error}
+    sortBy={currentSortBy}
+    numResults={currentNumResults}
     onPageChange={handlePageChange}
     onDetailsClick={handleDetailsClick}
     onRefresh={fetchDetections}

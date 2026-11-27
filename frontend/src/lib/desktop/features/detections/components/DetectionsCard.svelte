@@ -6,6 +6,8 @@
     data: DetectionsListData | null;
     loading?: boolean;
     error?: string | null;
+    sortBy: DetectionSortBy;
+    numResults: number;
     onPageChange: (_newPage: number) => void;
     onDetailsClick: (_id: number) => void;
     onRefresh: () => void;
@@ -17,6 +19,8 @@
     data = null,
     loading = false,
     error = null,
+    sortBy,
+    numResults,
     onPageChange,
     onDetailsClick,
     onRefresh,
@@ -31,6 +35,8 @@
       {data}
       {loading}
       {error}
+      {sortBy}
+      {numResults}
       {onPageChange}
       {onDetailsClick}
       {onRefresh}

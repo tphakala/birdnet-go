@@ -23,6 +23,8 @@
   - data: DetectionsListData | null - Paginated detection data
   - loading?: boolean - Loading state indicator
   - error?: string | null - Error message display
+  - sortBy: DetectionSortBy - Active sort order, drives the column sort indicator
+  - numResults: number - Active results per page, drives the page-size select
   - onPageChange?: (page: number) => void - Pagination handler
   - onDetailsClick?: (id: number) => void - Detail view handler
   - onRefresh?: () => void - Data refresh handler
@@ -56,7 +58,7 @@
     Trash2,
     XCircle,
   } from '@lucide/svelte';
-  import { onMount, untrack } from 'svelte';
+  import { onMount } from 'svelte';
   import { useSelectionMode } from '../composables/useSelectionMode.svelte';
   import { useDetectionActions } from '../composables/useDetectionActions.svelte';
   import {
@@ -76,6 +78,8 @@
     data: DetectionsListData | null;
     loading?: boolean;
     error?: string | null;
+    sortBy: DetectionSortBy;
+    numResults: number;
     onPageChange?: (_page: number) => void;
     onDetailsClick?: (_id: number) => void;
     onRefresh?: () => void;
@@ -88,6 +92,8 @@
     data,
     loading = false,
     error = null,
+    sortBy,
+    numResults,
     onPageChange,
     onDetailsClick,
     onRefresh,
@@ -150,13 +156,10 @@
     const numResults = parseInt(value as string);
     if (isNaN(numResults) || ![10, 25, 50, 100].includes(numResults)) return;
     selection.clear();
-    selectedNumResults = String(numResults);
     onNumResultsChange?.(numResults);
   }
 
-  // State for number of results - captures initial value without creating dependency
-  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
-  let selectedNumResults = $state(untrack(() => String(data?.numResults ?? 25)));
+  const selectedNumResults = $derived(String(numResults));
 
   // --- View mode state (persisted in localStorage) ---
   const VIEW_STORAGE_KEY = 'detectionsViewMode';
@@ -184,7 +187,7 @@
     }
   }
 
-  // --- Sort state (driven by backend via URL params) ---
+  // --- Sort state (controlled by the sortBy prop) ---
 
   /** Map backend sortBy value to frontend field + direction */
   function parseSortBy(sortBy?: string): { field: SortField; direction: SortDirection } {
@@ -220,14 +223,7 @@
     }
   }
 
-  // Initialize from URL sortBy parameter
-  const initialSort = parseSortBy(
-    typeof window !== 'undefined'
-      ? (new URLSearchParams(window.location.search).get('sortBy') ?? undefined)
-      : undefined
-  );
-  let sortField = $state<SortField>(initialSort.field);
-  let sortDirection = $state<SortDirection>(initialSort.direction);
+  const sort = $derived(parseSortBy(sortBy));
 
   const SORT_FIELDS: Set<string> = new Set<string>(['dateTime', 'species', 'confidence', 'status']);
 
@@ -238,13 +234,13 @@
   function handleSort(field: string) {
     if (!isSortField(field)) return;
     selection.clear();
-    if (sortField === field) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    let direction: SortDirection;
+    if (sort.field === field) {
+      direction = sort.direction === 'asc' ? 'desc' : 'asc';
     } else {
-      sortField = field;
-      sortDirection = field === 'dateTime' ? 'desc' : 'asc';
+      direction = field === 'dateTime' ? 'desc' : 'asc';
     }
-    onSortChange?.(toBackendSortBy(sortField, sortDirection));
+    onSortChange?.(toBackendSortBy(field, direction));
   }
 
   // Selection mode
@@ -603,8 +599,8 @@
                 <SortableHeader
                   label={t('detections.headers.dateTime')}
                   field="dateTime"
-                  activeField={sortField}
-                  direction={sortDirection}
+                  activeField={sort.field}
+                  direction={sort.direction}
                   onSort={handleSort}
                 />
                 <th scope="col" class="hidden md:table-cell">{t('detections.headers.weather')}</th>
@@ -612,22 +608,22 @@
                 <SortableHeader
                   label={t('detections.headers.species')}
                   field="species"
-                  activeField={sortField}
-                  direction={sortDirection}
+                  activeField={sort.field}
+                  direction={sort.direction}
                   onSort={handleSort}
                 />
                 <SortableHeader
                   label={t('detections.headers.confidence')}
                   field="confidence"
-                  activeField={sortField}
-                  direction={sortDirection}
+                  activeField={sort.field}
+                  direction={sort.direction}
                   onSort={handleSort}
                 />
                 <SortableHeader
                   label={t('detections.headers.status')}
                   field="status"
-                  activeField={sortField}
-                  direction={sortDirection}
+                  activeField={sort.field}
+                  direction={sort.direction}
                   onSort={handleSort}
                 />
                 {#if showRecordingColumn}
