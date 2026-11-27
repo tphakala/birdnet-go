@@ -111,3 +111,26 @@ func TestLogORTInitialized_ReportsVersionAndTelemetry(t *testing.T) {
 	assert.Contains(t, out, "telemetry_disabled=true")
 	assert.Contains(t, out, "telemetry_api_disabled=true")
 }
+
+func TestNewONNXClassifier_EmptyLabels(t *testing.T) {
+	t.Parallel()
+
+	// An empty model path fails after the label check, so ErrModelPathRequired shows
+	// the label check let the call through.
+	tests := []struct {
+		name    string
+		skip    bool
+		wantErr error
+	}{
+		{name: "requires labels when SkipLabelValidation is false", skip: false, wantErr: ort.ErrLabelsRequired},
+		{name: "allows empty labels when SkipLabelValidation is true", skip: true, wantErr: ort.ErrModelPathRequired},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := NewONNXClassifier("", ONNXClassifierOptions{SkipLabelValidation: tt.skip})
+			require.ErrorIs(t, err, tt.wantErr)
+			assert.Nil(t, c)
+		})
+	}
+}

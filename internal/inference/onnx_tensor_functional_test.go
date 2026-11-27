@@ -27,6 +27,7 @@ func TestNewONNXTensorModel_Functional(t *testing.T) {
 		t.Skipf("set %s to a single-input ONNX model to run", envTensorModel)
 	}
 	require.NoError(t, InitONNXRuntime(os.Getenv(envTensorLib)))
+	t.Cleanup(func() { assert.NoError(t, DestroyONNXRuntime()) })
 
 	m, err := NewONNXTensorModel(modelPath, ONNXTensorModelOptions{Threads: 1})
 	require.NoError(t, err)

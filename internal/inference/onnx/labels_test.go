@@ -1,6 +1,8 @@
 package onnx
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -54,4 +56,63 @@ func TestLoadLabelsText_SkipsBlankLines(t *testing.T) {
 	labels, err := loadLabelsText([]byte("Turdus migratorius_American Robin\n\nCyanocitta cristata_Blue Jay\n"))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Turdus migratorius_American Robin", "Cyanocitta cristata_Blue Jay"}, labels)
+}
+
+func TestResolveLabels(t *testing.T) {
+	t.Parallel()
+
+	const robin = "Turdus migratorius_American Robin"
+	writeLabels := func(t *testing.T) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "labels.txt")
+		require.NoError(t, os.WriteFile(path, []byte(robin+"\n"), 0o600))
+		return path
+	}
+	missingLabels := func(t *testing.T) string {
+		t.Helper()
+		return filepath.Join(t.TempDir(), "missing.txt")
+	}
+
+	tests := []struct {
+		name        string
+		labels      []string
+		labelsPath  func(t *testing.T) string
+		skip        bool
+		want        []string
+		wantErr     error // sentinel the error must wrap; nil means success
+		wantLoadErr bool  // the error must be a *LabelLoadError, not ErrLabelsRequired
+	}{
+		{name: "empty labels rejected without skipLabelValidation", wantErr: ErrLabelsRequired},
+		{name: "empty labels allowed with skipLabelValidation", skip: true},
+		{name: "explicit labels preserved with skipLabelValidation", labels: []string{robin}, skip: true, want: []string{robin}},
+		{name: "explicit labelsPath still loaded with skipLabelValidation", labelsPath: writeLabels, skip: true, want: []string{robin}},
+		{name: "missing labelsPath still errors with skipLabelValidation", labelsPath: missingLabels, skip: true, wantLoadErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &classifierConfig{labels: tt.labels, skipLabelValidation: tt.skip}
+			if tt.labelsPath != nil {
+				cfg.labelsPath = tt.labelsPath(t)
+			}
+
+			labels, err := resolveLabels(cfg)
+
+			switch {
+			case tt.wantLoadErr:
+				var loadErr *LabelLoadError
+				require.ErrorAs(t, err, &loadErr)
+				require.NotErrorIs(t, err, ErrLabelsRequired)
+			case tt.wantErr != nil:
+				require.ErrorIs(t, err, tt.wantErr)
+			default:
+				require.NoError(t, err)
+			}
+			if len(tt.want) == 0 {
+				assert.Empty(t, labels)
+			} else {
+				assert.Equal(t, tt.want, labels)
+			}
+		})
+	}
 }

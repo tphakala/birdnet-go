@@ -27,13 +27,13 @@ func IsORTInitialized() bool {
 
 // ONNXClassifierOptions configures the ONNX species classifier.
 type ONNXClassifierOptions struct {
-	// Labels is the species label list. Required.
+	// Labels is the species label list. Required unless SkipLabelValidation is true.
 	Labels []string
 	// Threads is the number of CPU threads for ONNX inference. 0 = use ONNX defaults.
 	Threads int
-	// SkipLabelValidation disables the label-count-vs-model-output check.
-	// Use when the model is loaded only for embedding extraction and the
-	// caller's label list may not match the model's logits dimension.
+	// SkipLabelValidation disables the label-presence and label-count-vs-model-output
+	// checks. Use when the model is loaded only for embedding extraction and the
+	// caller has no label list or its label list does not match the model's logits dimension.
 	SkipLabelValidation bool
 }
 
@@ -46,8 +46,8 @@ type onnxClassifier struct {
 // NewONNXClassifier creates a Classifier backed by an ONNX Runtime model.
 // The ONNX Runtime must be initialized via InitONNXRuntime before calling this.
 func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier, error) {
-	if len(opts.Labels) == 0 {
-		return nil, fmt.Errorf("ONNX classifier requires labels")
+	if len(opts.Labels) == 0 && !opts.SkipLabelValidation {
+		return nil, fmt.Errorf("ONNX classifier: %w", ort.ErrLabelsRequired)
 	}
 
 	classifierOpts := []ort.ClassifierOption{
@@ -82,7 +82,7 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 
 	return &onnxClassifier{
 		classifier: classifier,
-		numSpecies: len(opts.Labels),
+		numSpecies: classifier.Config().LogitsSize,
 	}, nil
 }
 

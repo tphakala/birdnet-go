@@ -64,9 +64,9 @@ func WithMinConfidence(threshold float32) ClassifierOption {
 	return func(c *classifierConfig) { c.minConf = threshold }
 }
 
-// WithSkipLabelValidation disables the label-count-vs-model-output check.
-// Use when the model is loaded only for embedding extraction and the caller's
-// label list may not match the model's logits output dimension.
+// WithSkipLabelValidation disables the label-presence and label-count-vs-model-output
+// checks. Use when the model is loaded only for embedding extraction and the caller
+// has no label list or its label list does not match the model's logits output dimension.
 func WithSkipLabelValidation() ClassifierOption {
 	return func(c *classifierConfig) { c.skipLabelValidation = true }
 }
@@ -81,7 +81,7 @@ func WithSessionOptions(fn func(*ort.SessionOptions)) ClassifierOption {
 
 // NewClassifier creates a new Classifier from an ONNX model file.
 // Model type is auto-detected from tensor shapes unless overridden with WithModelType.
-// Labels must be provided via WithLabels or WithLabelsPath.
+// Labels must be provided via WithLabels or WithLabelsPath unless WithSkipLabelValidation is set.
 func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, error) {
 	if modelPath == "" {
 		return nil, ErrModelPathRequired
@@ -279,6 +279,9 @@ func resolveLabels(cfg *classifierConfig) ([]string, error) {
 	}
 	if cfg.labelsPath != "" {
 		return LoadLabels(cfg.labelsPath)
+	}
+	if cfg.skipLabelValidation {
+		return nil, nil
 	}
 	return nil, ErrLabelsRequired
 }
