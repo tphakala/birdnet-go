@@ -214,6 +214,9 @@
     params.set('offset', '0'); // Reset to first page
     navigation.writeUrl(`${window.location.pathname}?${params.toString()}`, 'push');
 
+    // A response still pending for the previous size is dropped; the debounced fetch replaces it
+    latestRequestId++;
+
     // Debounce the actual fetch
     debounceTimer = setTimeout(() => {
       fetchDetections();

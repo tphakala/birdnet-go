@@ -214,4 +214,28 @@ describe('DetectionsPage saved preferences', () => {
       screen.getByRole('columnheader', { name: 'detections.headers.confidence' })
     ).toHaveAttribute('aria-sort', 'ascending');
   });
+
+  it('drops a response for the old page size that arrives while a new size is debounced', async () => {
+    mocks.fetchWithCSRF.mockResolvedValueOnce(oneRow);
+    render(DetectionsPage);
+    await screen.findByRole('columnheader', { name: 'detections.headers.species' });
+
+    // A sort fetch is still pending when the page size changes
+    const pending = deferred<PaginatedDetectionResponse>();
+    mocks.fetchWithCSRF.mockReturnValueOnce(pending.promise);
+    await fireEvent.click(screen.getByTestId('sort-species'));
+
+    vi.useFakeTimers();
+    await fireEvent.click(screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' }));
+    await fireEvent.click(screen.getByRole('option', { name: '50' }));
+
+    pending.resolve({
+      ...oneRow,
+      data: [{ ...oneRow.data[0], commonName: 'Older Bird', scientificName: 'Testus olderus' }],
+    });
+    await pending.promise;
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(screen.queryAllByText('Older Bird')).toHaveLength(0);
+  });
 });
