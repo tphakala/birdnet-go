@@ -115,19 +115,22 @@ func TestLogORTInitialized_ReportsVersionAndTelemetry(t *testing.T) {
 func TestNewONNXClassifier_EmptyLabels(t *testing.T) {
 	t.Parallel()
 
-	t.Run("requires labels when SkipLabelValidation is false", func(t *testing.T) {
-		t.Parallel()
-		c, err := NewONNXClassifier("", ONNXClassifierOptions{SkipLabelValidation: false})
-		require.Error(t, err)
-		assert.Nil(t, c)
-		assert.Contains(t, err.Error(), "ONNX classifier requires labels")
-		assert.NotErrorIs(t, err, ort.ErrModelPathRequired)
-	})
-
-	t.Run("allows empty labels when SkipLabelValidation is true", func(t *testing.T) {
-		t.Parallel()
-		c, err := NewONNXClassifier("", ONNXClassifierOptions{SkipLabelValidation: true})
-		require.ErrorIs(t, err, ort.ErrModelPathRequired)
-		assert.Nil(t, c)
-	})
+	// An empty model path fails after the label check, so ErrModelPathRequired shows
+	// the label check let the call through.
+	tests := []struct {
+		name    string
+		skip    bool
+		wantErr error
+	}{
+		{name: "requires labels when SkipLabelValidation is false", skip: false, wantErr: ort.ErrLabelsRequired},
+		{name: "allows empty labels when SkipLabelValidation is true", skip: true, wantErr: ort.ErrModelPathRequired},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := NewONNXClassifier("", ONNXClassifierOptions{SkipLabelValidation: tt.skip})
+			require.ErrorIs(t, err, tt.wantErr)
+			assert.Nil(t, c)
+		})
+	}
 }

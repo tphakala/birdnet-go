@@ -47,15 +47,13 @@ type onnxClassifier struct {
 // The ONNX Runtime must be initialized via InitONNXRuntime before calling this.
 func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier, error) {
 	if len(opts.Labels) == 0 && !opts.SkipLabelValidation {
-		return nil, fmt.Errorf("ONNX classifier requires labels")
+		return nil, fmt.Errorf("ONNX classifier: %w", ort.ErrLabelsRequired)
 	}
 
 	classifierOpts := []ort.ClassifierOption{
+		ort.WithLabels(opts.Labels),
 		ort.WithTopK(0),          // We handle topK in BirdNET-Go's post-processing
 		ort.WithMinConfidence(0), // No filtering, return all raw scores
-	}
-	if len(opts.Labels) > 0 {
-		classifierOpts = append(classifierOpts, ort.WithLabels(opts.Labels))
 	}
 	if opts.SkipLabelValidation {
 		classifierOpts = append(classifierOpts, ort.WithSkipLabelValidation())
@@ -84,7 +82,7 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 
 	return &onnxClassifier{
 		classifier: classifier,
-		numSpecies: len(opts.Labels),
+		numSpecies: classifier.Config().LogitsSize,
 	}, nil
 }
 

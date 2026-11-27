@@ -61,54 +61,54 @@ func TestLoadLabelsText_SkipsBlankLines(t *testing.T) {
 func TestResolveLabels(t *testing.T) {
 	t.Parallel()
 
-	t.Run("empty labels rejected without skipLabelValidation", func(t *testing.T) {
-		t.Parallel()
-		labels, err := resolveLabels(&classifierConfig{skipLabelValidation: false})
-		require.ErrorIs(t, err, ErrLabelsRequired)
-		assert.Nil(t, labels)
-	})
+	const robin = "Turdus migratorius_American Robin"
+	writeLabels := func(t *testing.T) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), "labels.txt")
+		require.NoError(t, os.WriteFile(path, []byte(robin+"\n"), 0o600))
+		return path
+	}
+	missingLabels := func(t *testing.T) string {
+		t.Helper()
+		return filepath.Join(t.TempDir(), "missing.txt")
+	}
 
-	t.Run("empty labels allowed with skipLabelValidation", func(t *testing.T) {
-		t.Parallel()
-		labels, err := resolveLabels(&classifierConfig{skipLabelValidation: true})
-		require.NoError(t, err)
-		assert.Nil(t, labels)
-	})
+	tests := []struct {
+		name        string
+		labels      []string
+		labelsPath  func(t *testing.T) string
+		skip        bool
+		want        []string
+		wantErr     error // sentinel the error must wrap; nil means success
+		wantLoadErr bool  // the error must be a *LabelLoadError, not ErrLabelsRequired
+	}{
+		{name: "empty labels rejected without skipLabelValidation", wantErr: ErrLabelsRequired},
+		{name: "empty labels allowed with skipLabelValidation", skip: true},
+		{name: "explicit labels preserved with skipLabelValidation", labels: []string{robin}, skip: true, want: []string{robin}},
+		{name: "explicit labelsPath still loaded with skipLabelValidation", labelsPath: writeLabels, skip: true, want: []string{robin}},
+		{name: "missing labelsPath still errors with skipLabelValidation", labelsPath: missingLabels, skip: true, wantLoadErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &classifierConfig{labels: tt.labels, skipLabelValidation: tt.skip}
+			if tt.labelsPath != nil {
+				cfg.labelsPath = tt.labelsPath(t)
+			}
 
-	t.Run("explicit labels preserved with skipLabelValidation", func(t *testing.T) {
-		t.Parallel()
-		want := []string{"Turdus migratorius_American Robin"}
-		labels, err := resolveLabels(&classifierConfig{
-			labels:              want,
-			skipLabelValidation: true,
+			labels, err := resolveLabels(cfg)
+
+			switch {
+			case tt.wantLoadErr:
+				var loadErr *LabelLoadError
+				require.ErrorAs(t, err, &loadErr)
+				require.NotErrorIs(t, err, ErrLabelsRequired)
+			case tt.wantErr != nil:
+				require.ErrorIs(t, err, tt.wantErr)
+			default:
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, labels)
 		})
-		require.NoError(t, err)
-		assert.Equal(t, want, labels)
-	})
-
-	t.Run("explicit labelsPath still loaded with skipLabelValidation", func(t *testing.T) {
-		t.Parallel()
-		labelFile := filepath.Join(t.TempDir(), "labels.txt")
-		require.NoError(t, os.WriteFile(labelFile, []byte("Turdus migratorius_American Robin\n"), 0o600))
-
-		labels, err := resolveLabels(&classifierConfig{
-			labelsPath:          labelFile,
-			skipLabelValidation: true,
-		})
-		require.NoError(t, err)
-		assert.Equal(t, []string{"Turdus migratorius_American Robin"}, labels)
-	})
-
-	t.Run("missing labelsPath still errors with skipLabelValidation", func(t *testing.T) {
-		t.Parallel()
-		missing := filepath.Join(t.TempDir(), "missing.txt")
-		labels, err := resolveLabels(&classifierConfig{
-			labelsPath:          missing,
-			skipLabelValidation: true,
-		})
-		var loadErr *LabelLoadError
-		require.ErrorAs(t, err, &loadErr)
-		require.NotErrorIs(t, err, ErrLabelsRequired)
-		assert.Nil(t, labels)
-	})
+	}
 }

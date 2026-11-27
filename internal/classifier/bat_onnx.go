@@ -45,7 +45,6 @@ type Bat struct {
 // BatModelConfig holds configuration for creating a Bat model instance.
 type BatModelConfig struct {
 	EmbeddingModelPath  string
-	EmbeddingLabels     []string
 	ClassifierModelPath string
 	ClassifierLabelPath string
 	ONNXRuntimePath     string
@@ -107,7 +106,6 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 	backend := BackendOpenVINO
 	if embExtractor == nil {
 		embClassifier, cerr := inference.NewONNXClassifier(cfg.EmbeddingModelPath, inference.ONNXClassifierOptions{
-			Labels:              cfg.EmbeddingLabels,
 			Threads:             cfg.Threads,
 			SkipLabelValidation: true,
 		})

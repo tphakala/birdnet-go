@@ -275,13 +275,11 @@ func TestOpenVINOBatEmbeddingParity_Functional(t *testing.T) {
 		maxErr = parsed
 	}
 
-	// Reference backend: ONNX Runtime (f32) embedding extractor. The label list is
-	// irrelevant to the embedding output, so use a single placeholder with validation
-	// skipped, mirroring how the bat pipeline loads the embedding model.
+	// Reference backend: ONNX Runtime (f32) embedding extractor, loaded with no labels
+	// and validation skipped, the way the bat pipeline loads the embedding model.
 	require.NoError(t, InitONNXRuntime(os.Getenv("OV_TEST_ORT_LIB")))
 	t.Cleanup(func() { _ = DestroyONNXRuntime() })
 	ortClassifier, err := NewONNXClassifier(modelPath, ONNXClassifierOptions{
-		Labels:              []string{"placeholder"},
 		Threads:             1,
 		SkipLabelValidation: true,
 	})
