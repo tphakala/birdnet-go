@@ -148,28 +148,41 @@ describe('DetectionsPage saved preferences', () => {
     expect(trigger).toHaveTextContent('50');
   });
 
+  it('moves to the next page at the current size', async () => {
+    window.location.search = '?numResults=25';
+    mocks.fetchWithCSRF.mockResolvedValue({ ...oneRow, total: 200, limit: 25, total_pages: 8 });
+    render(DetectionsPage);
+    await screen.findByRole('columnheader', { name: 'detections.headers.species' });
+
+    await fireEvent.click(screen.getByRole('button', { name: /goToNextPage/i }));
+
+    const lastUrl = String(mocks.fetchWithCSRF.mock.lastCall?.[0]);
+    expect(lastUrl).toContain('numResults=25');
+    expect(lastUrl).toContain('offset=25');
+  });
+
   it('lands on a page of the picked size when the page changes before the debounce fires', async () => {
-    window.location.search = '?numResults=25&offset=50';
+    window.location.search = '?numResults=25&offset=125';
     mocks.fetchWithCSRF.mockResolvedValue({
       ...oneRow,
-      total: 200,
+      total: 300,
       limit: 25,
-      offset: 50,
-      current_page: 3,
-      total_pages: 8,
+      offset: 125,
+      current_page: 6,
+      total_pages: 12,
     });
     render(DetectionsPage);
     await screen.findByRole('columnheader', { name: 'detections.headers.species' });
 
-    // Page 3 of 25 rows; pick 100 and press Next before the debounced fetch runs
+    // Page 6 of 25 rows; pick 100 and press Next before the debounced fetch runs
     vi.useFakeTimers();
     await fireEvent.click(screen.getByRole('combobox', { name: 'detections.aria.resultsPerPage' }));
     await fireEvent.click(screen.getByRole('option', { name: '100' }));
     await fireEvent.click(screen.getByRole('button', { name: /goToNextPage/i }));
 
-    // Row 76 was asked for, which is on the first page of 100
+    // Row 151 was asked for, which is on the second page of 100
     const lastUrl = String(mocks.fetchWithCSRF.mock.lastCall?.[0]);
     expect(lastUrl).toContain('numResults=100');
-    expect(lastUrl).toContain('offset=0');
+    expect(lastUrl).toContain('offset=100');
   });
 });
