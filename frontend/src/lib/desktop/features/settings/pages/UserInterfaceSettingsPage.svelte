@@ -57,9 +57,24 @@
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
-  import { Palette, Globe, Image, Volume2, Info, Languages, Headphones } from '@lucide/svelte';
+  import {
+    Palette,
+    Globe,
+    Image,
+    Volume2,
+    BookOpen,
+    Info,
+    Languages,
+    Headphones,
+  } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
+  import { generateId } from '$lib/utils/uuid';
+  import {
+    SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
+    SPECIES_GUIDE_MAX_WARM_TOP_N,
+    SPECIES_GUIDE_MIN_WARM_TOP_N,
+  } from '$lib/utils/speciesGuideLimits';
 
   let activeTab = $state('appearance');
   let store = $derived($settingsStore);
@@ -272,6 +287,43 @@
     )
   );
 
+  let speciesGuideHasChanges = $derived(
+    hasSettingsChanged(
+      { speciesGuide: store.originalData.realtime?.dashboard?.speciesGuide },
+      { speciesGuide: store.formData.realtime?.dashboard?.speciesGuide }
+    )
+  );
+
+  // Species guide config with safe defaults (show* default to true).
+  let speciesGuide = $derived({
+    enabled: settings.dashboard.speciesGuide?.enabled ?? false,
+    enableWikipedia: settings.dashboard.speciesGuide?.enableWikipedia ?? false,
+    enableSupplementaryLinks: settings.dashboard.speciesGuide?.enableSupplementaryLinks ?? false,
+    preFetchEnabled: settings.dashboard.speciesGuide?.preFetchEnabled ?? true,
+    warmTopN: settings.dashboard.speciesGuide?.warmTopN ?? SPECIES_GUIDE_DEFAULT_WARM_TOP_N,
+    showNotes: settings.dashboard.speciesGuide?.showNotes ?? true,
+    showEnrichments: settings.dashboard.speciesGuide?.showEnrichments ?? true,
+    showSimilarSpecies: settings.dashboard.speciesGuide?.showSimilarSpecies ?? true,
+    showTaxonomy: settings.dashboard.speciesGuide?.showTaxonomy ?? true,
+  });
+
+  // Why the species-guide sub-controls are disabled, or undefined when they are usable.
+  // Surfaced as both a tooltip and a visible note below: a disabled control with only an
+  // opacity change tells the user nothing, and tells a screen-reader user nothing at all
+  // — the ambiguous-disabled-state failure the frontend guidelines call out.
+  // Id of the visible disabled-reason note, which each sub-switch names through describedBy.
+  const SPECIES_GUIDE_REASON_ID = generateId('species-guide-reason');
+
+  let speciesGuideDisabledReason = $derived(
+    speciesGuide.enabled ? undefined : t('settings.userInterface.speciesGuide.disabledReason')
+  );
+
+  // Every species-guide sub-control shares this gate. Stated once so a future
+  // control cannot be added with a subtly different condition.
+  let speciesGuideSubControlsDisabled = $derived(
+    store.isLoading || store.isSaving || !speciesGuide.enabled
+  );
+
   // --- Update handlers ---
   function updateDashboardSetting(key: string, value: string | number | boolean) {
     settingsActions.updateSection('realtime', {
@@ -322,6 +374,17 @@
     });
   }
 
+  function updateSpeciesGuideSetting(key: string, value: string | number | boolean) {
+    // speciesGuide is the derived config with all required fields populated,
+    // so the merged object always satisfies SpeciesGuideSettings.
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        ...settings.dashboard,
+        speciesGuide: { ...speciesGuide, [key]: value },
+      },
+    });
+  }
+
   // --- Tab definitions ---
   let tabs: TabDefinition[] = $derived([
     {
@@ -351,6 +414,13 @@
       icon: Volume2,
       hasChanges: audioPlaybackHasChanges,
       content: audioPlaybackTabContent,
+    },
+    {
+      id: 'speciesGuide',
+      label: t('settings.userInterface.tabs.speciesGuide'),
+      icon: BookOpen,
+      hasChanges: speciesGuideHasChanges,
+      content: speciesGuideTabContent,
     },
   ]);
 </script>
@@ -550,6 +620,133 @@
             {/if}
           </SettingsNote>
         {/if}
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet speciesGuideTabContent()}
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('settings.userInterface.speciesGuide.title')}
+      icon={BookOpen}
+      description={t('settings.userInterface.speciesGuide.description')}
+      originalData={{ speciesGuide: store.originalData.realtime?.dashboard?.speciesGuide }}
+      currentData={{ speciesGuide: store.formData.realtime?.dashboard?.speciesGuide }}
+    >
+      <div class="space-y-6">
+        <ToggleField
+          value={speciesGuide.enabled}
+          label={t('settings.userInterface.speciesGuide.enabled.label')}
+          description={t('settings.userInterface.speciesGuide.enabled.helpText')}
+          disabled={store.isLoading || store.isSaving}
+          onUpdate={value => updateSpeciesGuideSetting('enabled', value)}
+        />
+
+        {#if speciesGuideDisabledReason}
+          <!-- Visible (not tooltip-only) so the reason reaches touch devices and screen
+               readers. role="status" announces it when it appears, and every sub-switch
+               names it through describedBy, so a screen reader reads the reason with
+               the switch's own help text instead of in place of it. -->
+          <p
+            id={SPECIES_GUIDE_REASON_ID}
+            role="status"
+            class="text-sm text-[var(--color-base-content)]/70"
+          >
+            {speciesGuideDisabledReason}
+          </p>
+        {/if}
+
+        <!-- The sub-controls share one enable gate. ToggleField dims a disabled switch
+             itself, without element opacity, so its focus ring stays visible. -->
+        <div class="divide-y divide-[var(--border-100)]">
+          <ToggleField
+            className="pb-4"
+            value={speciesGuide.enableWikipedia}
+            label={t('settings.userInterface.speciesGuide.enableWikipedia.label')}
+            description={t('settings.userInterface.speciesGuide.enableWikipedia.helpText')}
+            disabled={speciesGuideSubControlsDisabled}
+            describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+            onUpdate={value => updateSpeciesGuideSetting('enableWikipedia', value)}
+          />
+          <ToggleField
+            className="py-4"
+            value={speciesGuide.enableSupplementaryLinks}
+            label={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.label')}
+            description={t('settings.userInterface.speciesGuide.enableSupplementaryLinks.helpText')}
+            disabled={speciesGuideSubControlsDisabled}
+            describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+            onUpdate={value => updateSpeciesGuideSetting('enableSupplementaryLinks', value)}
+          />
+          <ToggleField
+            className="pt-4"
+            value={speciesGuide.preFetchEnabled}
+            label={t('settings.userInterface.speciesGuide.preFetchEnabled.label')}
+            description={t('settings.userInterface.speciesGuide.preFetchEnabled.helpText')}
+            disabled={speciesGuideSubControlsDisabled}
+            describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+            onUpdate={value => updateSpeciesGuideSetting('preFetchEnabled', value)}
+          />
+        </div>
+
+        <!-- InlineSlider has no describedBy prop, so the reason rides its help text
+             instead; the visible note above covers it either way. -->
+        <InlineSlider
+          label={t('settings.userInterface.speciesGuide.warmTopN.label')}
+          helpText={speciesGuideDisabledReason ??
+            t('settings.userInterface.speciesGuide.warmTopN.helpText')}
+          value={speciesGuide.warmTopN}
+          onUpdate={value => updateSpeciesGuideSetting('warmTopN', value)}
+          min={SPECIES_GUIDE_MIN_WARM_TOP_N}
+          max={SPECIES_GUIDE_MAX_WARM_TOP_N}
+          step={10}
+          disabled={speciesGuideSubControlsDisabled}
+        />
+
+        <div class="space-y-4">
+          <SettingsGroupLabel divided>
+            {t('settings.userInterface.speciesGuide.sections.title')}
+          </SettingsGroupLabel>
+
+          <div class="divide-y divide-[var(--border-100)]">
+            <ToggleField
+              className="pb-4"
+              value={speciesGuide.showNotes}
+              label={t('settings.userInterface.speciesGuide.showNotes.label')}
+              description={t('settings.userInterface.speciesGuide.showNotes.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showNotes', value)}
+            />
+            <ToggleField
+              className="py-4"
+              value={speciesGuide.showEnrichments}
+              label={t('settings.userInterface.speciesGuide.showEnrichments.label')}
+              description={t('settings.userInterface.speciesGuide.showEnrichments.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showEnrichments', value)}
+            />
+            <ToggleField
+              className="py-4"
+              value={speciesGuide.showSimilarSpecies}
+              label={t('settings.userInterface.speciesGuide.showSimilarSpecies.label')}
+              description={t('settings.userInterface.speciesGuide.showSimilarSpecies.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showSimilarSpecies', value)}
+            />
+            <ToggleField
+              className="pt-4"
+              value={speciesGuide.showTaxonomy}
+              label={t('settings.userInterface.speciesGuide.showTaxonomy.label')}
+              description={t('settings.userInterface.speciesGuide.showTaxonomy.helpText')}
+              disabled={speciesGuideSubControlsDisabled}
+              describedBy={speciesGuideDisabledReason ? SPECIES_GUIDE_REASON_ID : undefined}
+              onUpdate={value => updateSpeciesGuideSetting('showTaxonomy', value)}
+            />
+          </div>
+        </div>
       </div>
     </SettingsSection>
   </div>

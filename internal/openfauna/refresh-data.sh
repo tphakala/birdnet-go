@@ -8,12 +8,14 @@
 #   ./refresh-data.sh /path/to/openfauna/checkout
 #
 # Use a checkout at a release tag. It rebuilds the dataset with the openfauna
-# compiler, gzips translations.csv and metadata.jsonl deterministically (gzip -n: no
-# name/timestamp, so identical data produces an identical blob and a clean git diff)
-# into ./data/, copies the small aliases.json verbatim, regenerates the locale list,
-# records the source commit in ./data/SOURCE.txt, and regenerates the species
-# dictionaries in internal/speciesdict/data from the new translations. Commit the
-# resulting ./data/ and speciesdict changes.
+# compiler (which emits translations.csv, metadata.jsonl, sources.json,
+# manifest.json, and aliases.json), gzips translations.csv and metadata.jsonl
+# deterministically (gzip -n: no name/timestamp, so identical data produces an
+# identical blob and a clean git diff) into ./data/, copies the small JSON files
+# (sources/manifest/aliases) verbatim, regenerates the locale list, records the
+# source commit in ./data/SOURCE.txt, and regenerates the species dictionaries in
+# internal/speciesdict/data from the new translations. Commit the resulting
+# ./data/ and speciesdict changes.
 set -euo pipefail
 
 # Major version of the openfauna build schema this package reads (upstream asks
@@ -26,7 +28,7 @@ REPO_ROOT="$(cd "$DEST/../../.." && pwd)"
 mkdir -p "$DEST"
 
 cd "$OF_DIR"
-go run ./cmd/compiler # writes build/translations.csv and build/metadata.jsonl
+go run ./cmd/compiler # writes build/translations.csv, build/metadata.jsonl, build/sources.json, build/manifest.json, build/aliases.json
 
 # grep -o yields each "schema_version" pair on its own line (a key such as
 # "min_schema_version" does not match the leading quote), and sed -n 1p reads all of
@@ -41,6 +43,8 @@ GEN_DATE="$(date -u +%Y-%m-%d)"
 
 gzip -9 -n -c build/translations.csv >"$DEST/translations.csv.gz"
 gzip -9 -n -c build/metadata.jsonl >"$DEST/metadata.jsonl.gz"
+cp build/sources.json "$DEST/sources.json"
+cp build/manifest.json "$DEST/manifest.json"
 # aliases.json (taxonomic legacy -> canonical map) is small, so it is vendored
 # uncompressed and verbatim for a reviewable diff. Added in openfauna schema 2.1.0.
 cp build/aliases.json "$DEST/aliases.json"

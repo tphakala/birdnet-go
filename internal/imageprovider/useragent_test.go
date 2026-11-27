@@ -7,44 +7,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/useragent"
 )
 
-// TestAppUserAgent_DoesNotLatchAVersionlessString covers the behaviour the
-// memoization exists for.
-//
-// The provider used to build its User-Agent once at construction, so one built
-// before main.go published Version sent "BirdNETGo/unknown" for the whole
-// process lifetime. appUserAgent memoizes only a non-empty version, so an early
-// call cannot poison the value.
-//
-// No t.Parallel(): mutates the settings global and the package-level memo.
-func TestAppUserAgent_DoesNotLatchAVersionlessString(t *testing.T) {
-	prevSettings := conf.GetSettings()
-	prevUA := cachedAppUserAgent.Load()
-	t.Cleanup(func() {
-		conftest.SetTestSettings(prevSettings)
-		cachedAppUserAgent.Store(prevUA)
-	})
+// TestAppUserAgent_DelegatesToSharedBuilder pins the shape this package depends
+// on. The memoization behaviour itself — that a version-less string is never
+// latched for the process lifetime — is covered where it now lives, in
+// internal/useragent.
+func TestAppUserAgent_DelegatesToSharedBuilder(t *testing.T) {
+	t.Parallel()
 
-	cachedAppUserAgent.Store(nil)
-
-	versionless := conftest.NewTestSettings().Build()
-	versionless.Version = ""
-	conftest.SetTestSettings(versionless)
-
-	early := appUserAgent()
-	require.Contains(t, early, userAgentName)
-	assert.Contains(t, early, "unknown", "with no version published the token is a placeholder")
-	assert.Nil(t, cachedAppUserAgent.Load(), "a placeholder must not be memoized")
-
-	published := conftest.NewTestSettings().Build()
-	published.Version = "1.2.3-test"
-	conftest.SetTestSettings(published)
-
-	assert.Contains(t, appUserAgent(), "1.2.3-test",
-		"the User-Agent must pick up the version once it is published")
-	assert.NotContains(t, appUserAgent(), "unknown")
-	assert.Equal(t, userAgentName, strings.Split(appUserAgent(), "/")[0])
+	got := appUserAgent()
+	assert.Equal(t, useragent.Product(), got, "this package must not build its own header")
+	require.Contains(t, got, userAgentName)
+	assert.Contains(t, got, userAgentLibrary)
+	// The leading token must stay the hyphen-less spelling: the Wikimedia edge
+	// refuses a User-Agent that starts with "birdnet-go", case-insensitively.
+	assert.Equal(t, userAgentName, strings.Split(got, "/")[0])
+	assert.NotContains(t, strings.ToLower(strings.Split(got, "/")[0]), "birdnet-go")
 }

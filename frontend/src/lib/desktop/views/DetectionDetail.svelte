@@ -22,6 +22,8 @@
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import Skeleton from '$lib/desktop/components/ui/Skeleton.svelte';
   import SkeletonStatus from '$lib/desktop/components/ui/SkeletonStatus.svelte';
+  import SpeciesComparison from '$lib/desktop/components/ui/SpeciesComparison.svelte';
+  import SpeciesNotes from '$lib/desktop/components/ui/SpeciesNotes.svelte';
   import ActivityLog from '$lib/desktop/features/detections/components/detail/ActivityLog.svelte';
   import ConditionsCard from '$lib/desktop/features/detections/components/detail/ConditionsCard.svelte';
   import DetailCard from '$lib/desktop/features/detections/components/detail/DetailCard.svelte';
@@ -74,14 +76,16 @@
   } from '$lib/desktop/features/detections/components/detail/detailTypes';
   import { t } from '$lib/i18n';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { speciesGuideStoreSettings } from '$lib/stores/settings';
   import { shortcuts } from '$lib/stores/shortcuts.svelte';
   import type { ImageAttribution } from '$lib/types/detection.types';
   import type { PlaybackControls } from '$lib/utils/audio';
-  import { hasReviewPermission } from '$lib/utils/auth';
+  import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { isPlainObject } from '$lib/utils/security';
   import { getLocalDateString } from '$lib/utils/date';
   import { loggers } from '$lib/utils/logger';
   import { localizeSpeciesName } from '$lib/utils/speciesDisplay';
+  import { createSpeciesGuideConfig } from '$lib/utils/speciesGuideConfig.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { useShortcuts } from '$lib/utils/useShortcuts.svelte';
 
@@ -164,6 +168,17 @@
   let displayName = $derived(
     detection ? localizeSpeciesName(detection.scientificName, detection.commonName) : ''
   );
+
+  // Species guide config (gated on settings). The panel itself collapses in place
+  // inside SpeciesComparison. Gating must work for unauthenticated guests too — the
+  // guide endpoints and GET /settings/dashboard are public, but the settings store
+  // is populated only by the auth-protected full-settings load.
+  // resolveSpeciesGuideConfig prefers the store value (live for authenticated users)
+  // and falls back to one cached fetch of the public dashboard-settings endpoint.
+  const guideConfig = createSpeciesGuideConfig(() => $speciesGuideStoreSettings);
+  let guideEnabled = $derived(guideConfig.enabled);
+  let showSimilarSpecies = $derived(guideConfig.showSimilarSpecies);
+  let showNotes = $derived(guideConfig.showNotes);
 
   // The species dialog: the model's other predictions, and the place to change the species.
   let speciesDialogOpen = $state(false);
@@ -867,6 +882,41 @@
           onPlaybackControls={attachPlaybackControls}
           playShortcut={playHint}
         />
+      </div>
+    {/if}
+
+    <!-- Species Guide panel (opt-in; gated on settings). The comparison mounts
+         whenever the guide is enabled: description and enrichments are part of
+         the guide feature itself, while the similar-species section inside it is
+         gated separately by showSimilarSpecies. Dimmed and inert with the grids
+         while the next detection loads. -->
+    {#if guideEnabled}
+      <div
+        class:dd-switching={isLoadingDetection}
+        inert={isLoadingDetection}
+        aria-busy={isLoadingDetection}
+      >
+        <DetailCard padding="even">
+          <div class="space-y-6">
+            <h2 class="sr-only">{t('analytics.species.guide.title')}</h2>
+            <!-- Key on the species so the guide + notes remount (and refetch) when
+                 stepping between detections of different species in place. -->
+            {#key detection.scientificName}
+              <!-- Pass an explicit "Species guide" heading so the collapsible bar
+                   describes the section rather than repeating the bird's name (already
+                   shown in the identity card). -->
+              <SpeciesComparison
+                scientificName={detection.scientificName}
+                commonName={displayName}
+                heading={t('analytics.species.guide.speciesGuide')}
+                {showSimilarSpecies}
+              />
+              {#if showNotes && $isAuthenticated}
+                <SpeciesNotes scientificName={detection.scientificName} />
+              {/if}
+            {/key}
+          </div>
+        </DetailCard>
       </div>
     {/if}
 

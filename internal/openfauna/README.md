@@ -19,7 +19,7 @@ ix, err := openfauna.BuildIndex(scientificNames, "fi")
 if err != nil { /* handle */ }
 
 name, ok := ix.CommonName("Turdus merula") // "mustarastas"
-meta, ok := ix.Meta("Turdus merula")       // Class/Order/Family/FamilyCommon
+meta, ok := ix.Meta("Turdus merula")       // Class/Order/Family/FamilyCommon + Links map (source id -> {id, url?})
 
 // For a one-off species outside your index (rare; scans the dataset, so cache it):
 name, ok = openfauna.Lookup("Barbastella barbastellus", "de")
@@ -28,26 +28,27 @@ name, ok = openfauna.Lookup("Barbastella barbastellus", "de")
 codes := openfauna.Locales()
 
 // Provenance of the embedded data (also logged when an index is built):
-v := openfauna.DataVersion() // e.g. "openfauna@6a663ef 2026-06-07"
+v := openfauna.DataVersion() // e.g. "openfauna@eed01f8 2026-06-28"
 ```
 
-`BuildIndex` streams the embedded gzip once and keeps only the rows you ask for. Metadata is read
-from JSON Lines, one record at a time, and only the taxonomy fields are decoded, so keys added
-upstream (conservation status, etc.) do not break this package or a shipped binary. Link ids and
-media in the same records exist upstream and are not read yet.
+`BuildIndex` streams the embedded gzip once and keeps only the rows you ask for. Translations are CSV; metadata is newline-delimited JSON (`metadata.jsonl`), one species object per line with nested `taxonomy` and a `links` map keyed by source id. Unknown JSON fields (e.g. an upstream `media` array) are ignored, so additions upstream do not break this package or a shipped binary.
 
 ## Embedded data
 
 Committed under `data/` and embedded via `go:embed` (see `embed.go`), matching how this project
 embeds its other large data assets:
 
-| File                       | Schema                                                                                                                                                         |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/translations.csv.gz` | `scientific_name,locale,common_name`                                                                                                                           |
-| `data/metadata.jsonl.gz`   | JSON Lines, one record per species: `scientific_name`, `taxonomy{class,order,family,family_common}`, `links`, `media` (expanding; only the first two are read) |
-| `data/aliases.json`        | taxonomic alias map: a legacy or renamed scientific name to the canonical name the geomodel uses                                                               |
-| `data/locales.txt`         | sorted distinct locale codes, one per line                                                                                                                     |
-| `data/SOURCE.txt`          | provenance: the openfauna commit + date the snapshot was generated from                                                                                        |
+| File                       | Schema                                                                                                                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/translations.csv.gz` | `scientific_name,locale,common_name`                                                                                                                                               |
+| `data/metadata.jsonl.gz`   | one JSON object per species: `scientific_name`, nested `taxonomy` (`class,order,family,family_common`), and `links` map (source id -> `{id, url?}`; `url` is an optional override) |
+| `data/sources.json`        | external-link source registry: source id -> `{name, order, icon, url}` template (`{id}`/`{lang}` placeholders)                                                                     |
+| `data/manifest.json`       | `schema_version` (gated on major 2), `species_count`, `alias_count`                                                                                                                |
+| `data/aliases.json`        | taxonomic alias map: a legacy or renamed scientific name to the canonical name the geomodel uses (applied by `CanonicalName`)                                                      |
+| `data/locales.txt`         | sorted distinct locale codes, one per line                                                                                                                                         |
+| `data/SOURCE.txt`          | provenance: the openfauna commit + date the snapshot was generated from                                                                                                            |
+
+`supplementary_sources.json` (in the package dir, **not** under `data/`) is a birdnet-go-authored registry of scientific-name-templated fallback links (Xeno-canto, a Wikipedia gap-fill). It is opt-in (the `EnableSupplementaryLinks` setting), needs no per-species id, and is **not** regenerated by `refresh-data.sh`.
 
 ## Refreshing the vendored data
 
@@ -60,7 +61,7 @@ tag (the script records whatever the checkout's HEAD is):
 
 This rebuilds the dataset with openfauna's compiler, refuses a build schema major it does not
 support, gzips `translations.csv` and `metadata.jsonl` unmodified and deterministically (`gzip -n`,
-so an unchanged dataset yields an identical blob and a clean diff), copies `aliases.json`,
-regenerates `locales.txt`, records the source commit in `data/SOURCE.txt`, and regenerates the
-species dictionaries in `internal/speciesdict/data`. Commit the resulting `data/` and speciesdict
-changes.
+so an unchanged dataset yields an identical blob and a clean diff), copies the
+`sources.json`/`manifest.json`/`aliases.json` registries, regenerates `locales.txt`, records the
+source commit in `data/SOURCE.txt`, and regenerates the species dictionaries in
+`internal/speciesdict/data`. Commit the resulting `data/` and speciesdict changes.
