@@ -16,9 +16,6 @@
   const logger = getLogger('app');
 
   let detectionsData = $state<DetectionsListData | null>(null);
-  // Resolved sort and page size; set on each fetch and right away on a user change
-  let currentSortBy = $state<DetectionSortBy>('date_desc');
-  let currentNumResults = $state(25);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -26,6 +23,14 @@
   // Local storage keys for user preferences
   const RESULTS_PER_PAGE_KEY = 'birdnet-detections-results-per-page';
   const SORT_BY_KEY = 'birdnet-detections-sort-by';
+
+  // Used when neither the URL nor a saved preference sets a value
+  const DEFAULT_SORT_BY: DetectionSortBy = 'date_desc';
+  const DEFAULT_RESULTS_PER_PAGE = 25;
+
+  // Resolved sort and page size; set on each fetch and right away on a user change
+  let currentSortBy = $state<DetectionSortBy>(DEFAULT_SORT_BY);
+  let currentNumResults = $state(DEFAULT_RESULTS_PER_PAGE);
 
   const ALLOWED_SORT_VALUES = new Set<string>([
     'date_desc',
@@ -49,7 +54,7 @@
         }
       }
     }
-    return 25; // Default
+    return DEFAULT_RESULTS_PER_PAGE;
   }
 
   // Extract query parameters from URL
@@ -115,7 +120,7 @@
 
     try {
       const queryParams = getQueryParams();
-      currentSortBy = queryParams.sortBy ?? 'date_desc';
+      currentSortBy = queryParams.sortBy ?? DEFAULT_SORT_BY;
       currentNumResults = queryParams.numResults ?? getSavedResultsPerPage();
       // Build query string
       const queryString = new URLSearchParams();
@@ -219,7 +224,7 @@
     }
 
     const params = new URLSearchParams(window.location.search);
-    if (newSortBy && newSortBy !== 'date_desc') {
+    if (newSortBy && newSortBy !== DEFAULT_SORT_BY) {
       params.set('sortBy', newSortBy);
     } else {
       params.delete('sortBy');
