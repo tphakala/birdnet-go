@@ -158,9 +158,11 @@ var errDetectionSaveInFlight = errors.NewStd("detection save still running from 
 // panic after the row is stored. A detection the event tracker skips is not saved:
 // the call returns nil and the composite ends there (see skipsLaterSteps), so the
 // event-tracker verdict of this step is the only one the detection gets.
-// The attempt that ends the detection settles DetectionCtx's database outcome for
-// SaveAudioAction: saved through recordSaveSuccess, skipped when the event
-// tracker skips it, failed or unknown through terminate.
+// The call that ends the detection's save settles DetectionCtx's database outcome
+// for SaveAudioAction: saved through recordSaveSuccess, skipped when the event
+// tracker skips it, failed or unknown through terminate. Until then the outcome
+// stays pending, also after a job that ended on errDetectionSaveInFlight, and
+// SaveAudioAction exports after noteIDWaitTimeout.
 func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	attempt := int(a.attempts.Add(1))
 	if !a.acquireSaveSlot(ctx) {
