@@ -78,11 +78,11 @@ type DetectionContext struct {
 	// noteIDWaitTimeout. Read by MqttAction, SSEAction and SaveAudioAction.
 	NoteID atomic.Uint64
 
-	// ClipSaved indicates whether the audio clip was successfully exported to disk.
-	// SaveAudioAction sets this to true after successful audio export, and it is
-	// cleared again when the clip of a detection without a row is removed
-	// (unconfirmedClip). This flag is available for any late consumers that need
-	// to know whether the audio file exists on disk.
+	// ClipSaved reports that SaveAudioAction exported the clip and no verdict has
+	// since claimed it for removal. SaveAudioAction sets it after a successful
+	// export; it is cleared once a skipped or failed verdict claims the held clip
+	// (unconfirmedClip), whether or not the file is then removed: a failed
+	// removal, or a file another export put at the same name, is only logged.
 	ClipSaved atomic.Bool
 
 	// birdImage holds the species image resolved once per detection, so the
@@ -102,7 +102,8 @@ type DetectionContext struct {
 	// dbOutcome is DatabaseAction's verdict on the detection, one of the dbOutcome*
 	// values, set once under dbOutcomeMu. SaveAudioAction waits for it at most
 	// noteIDWaitTimeout; a skipped or failed verdict that lands after the export
-	// removes the clip (unconfirmedClip). dbOutcomeCh is allocated under
+	// claims the held clip for removal (unconfirmedClip, see exportedClip.remove
+	// for when the file is kept). dbOutcomeCh is allocated under
 	// dbOutcomeMu only when a waiter blocks while the verdict is pending, and is
 	// closed when the verdict is set.
 	dbOutcome   atomic.Int32
@@ -110,7 +111,8 @@ type DetectionContext struct {
 	dbOutcomeCh chan struct{}
 
 	// unconfirmedClip is the clip SaveAudioAction exported while the verdict was
-	// still pending, nil otherwise. Whichever of SaveAudioAction and DatabaseAction
+	// still pending; it stays set after a saved or unknown verdict, which never
+	// removes it, and is nil when no clip was held or once one is taken. Whichever of SaveAudioAction and DatabaseAction
 	// finishes last removes it when the verdict proves no row: SaveAudioAction
 	// stores the clip and then reads the verdict, DatabaseAction stores the
 	// verdict and then takes the clip, so at least one of them sees both, and the
@@ -248,10 +250,12 @@ func (d *DetectionContext) removeClipWithoutRow() {
 	c.remove()
 }
 
-// remove deletes the clip through SecureFS on its export directory, but only
-// while the path still holds the file this export wrote: clip names are not
-// unique per detection, and another detection's later export renames a new file
-// onto the same path. Failures are logged; the clip is then left in place.
+// remove deletes the clip through SecureFS on its export directory when the path
+// still holds the file this export wrote: clip names are not unique per
+// detection, and another detection's later export renames a new file onto the
+// same path. The identity check and the removal are separate steps, so a rename
+// that lands between them is not caught. Failures are logged; the clip is then
+// left in place.
 func (c *exportedClip) remove() {
 	cur, err := os.Stat(c.path)
 	if errors.Is(err, fs.ErrNotExist) {

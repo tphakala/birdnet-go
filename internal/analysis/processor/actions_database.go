@@ -868,9 +868,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 			logger.String("operation", "audio_export_stat"))
 	}
 
-	// Signal that the clip file exists on disk. This is used by any late
-	// consumers that check whether the audio was actually exported. Set before
-	// the clip is offered for removal, so a removal's clear always comes after it.
+	// Signal that the clip was exported (see ClipSaved for when it is cleared).
+	// Set before the clip is offered for removal, so a removal's clear always
+	// comes after it.
 	if a.DetectionCtx != nil {
 		a.DetectionCtx.ClipSaved.Store(true)
 	}
