@@ -374,10 +374,25 @@ func (a *DatabaseAction) recordSaveFailure(err error, attempt int) error {
 func (a *DatabaseAction) terminate(err error) {
 	a.terminalErr = err
 	a.saveState.Store(saveStateTerminal)
-	// Signal audio export to abort for every terminal path (including
-	// database_save_outcome_unknown and errDetectionSavePanicked) so it stays
-	// consistent with CompositeAction halting SSE and MQTT.
+	// When the save outcome is unknown (a panic or a non-repeatable connectivity
+	// error such as MySQL "invalid connection" during COMMIT), the row may already
+	// exist in the database with ClipName set. Signal dbOutcomeUnknown so
+	// SaveAudioAction wakes immediately and exports the clip instead of dropping it
+	// or stalling for noteIDWaitTimeout; definite failures mark dbOutcomeFailed.
+	if isSaveOutcomeUnknown(err) {
+		a.DetectionCtx.markDatabaseUnknown()
+		return
+	}
 	a.DetectionCtx.markDatabaseFailed()
+}
+
+// isSaveOutcomeUnknown reports whether err represents a terminal save failure
+// where the database row may have already been committed.
+func isSaveOutcomeUnknown(err error) bool {
+	if errors.Is(err, errDetectionSavePanicked) {
+		return true
+	}
+	return errors.IsConnectivityError(err) && !isRepeatableSaveError(err)
 }
 
 // recordSaveSuccess runs the steps that follow a stored detection, once. The
@@ -914,9 +929,9 @@ const (
 
 // waitForDatabaseOutcome waits up to noteIDWaitTimeout for DatabaseAction to
 // settle or publish NoteID on DetectionCtx. It returns false when DatabaseAction
-// skipped or terminally failed the detection, and true when audio export should
-// proceed (including fail-open on nil DetectionCtx, timeout, or context cancel
-// while the database save is still pending).
+// skipped or definitely failed the detection, and true when audio export should
+// proceed (saved, unknown persistence outcome where a row may exist, nil
+// DetectionCtx, timeout, or context cancel while pending).
 func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 	if a.DetectionCtx == nil {
 		return true
@@ -932,7 +947,7 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 			a.NoteID = liveID
 			return true, true
 		}
-		return outcome == dbOutcomeSaved, true
+		return outcome == dbOutcomeSaved || outcome == dbOutcomeUnknown, true
 	}
 
 	if done, proceed := checkResolved(); done {

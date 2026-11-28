@@ -105,6 +105,7 @@ const (
 	dbOutcomeSaved
 	dbOutcomeSkipped
 	dbOutcomeFailed
+	dbOutcomeUnknown
 )
 
 func (d *DetectionContext) setDatabaseOutcome(outcome int32) {
@@ -132,6 +133,10 @@ func (d *DetectionContext) markDatabaseSkipped() {
 
 func (d *DetectionContext) markDatabaseFailed() {
 	d.setDatabaseOutcome(dbOutcomeFailed)
+}
+
+func (d *DetectionContext) markDatabaseUnknown() {
+	d.setDatabaseOutcome(dbOutcomeUnknown)
 }
 
 func (d *DetectionContext) databaseOutcome() int32 {

@@ -61,6 +61,13 @@ func (r *zeroIDSaveRepository) Save(_ context.Context, _ *detection.Result, _ []
 	return nil
 }
 
+// unknownOutcomeConnectivityError simulates a connectivity failure during COMMIT
+// (MySQL "invalid connection" without ErrDetectionSaveRetrySafe) where the row
+// may already be persisted.
+func unknownOutcomeConnectivityError() error {
+	return fmt.Errorf("failed to commit detection: %w", errors.NewStd("invalid connection"))
+}
+
 func newTestSaveAudioAction(t *testing.T, clipName string, detCtx *DetectionContext, preRenderer PreRendererSubmit) (action *SaveAudioAction, exportDir string) {
 	t.Helper()
 	tmpDir := t.TempDir()
@@ -153,6 +160,24 @@ func TestSaveAudioAction_AbortsWhenDatabaseSkippedOrFailed(t *testing.T) {
 				return runTerminalDatabaseFailure(ctx, detCtx, "failed.wav", "disk full")
 			},
 		},
+		{
+			name: "retry_exhausted_db_failure",
+			settleDB: func(ctx context.Context, detCtx *DetectionContext) error {
+				repo := &scriptedSaveRepository{
+					MockDetectionRepository: NewMockDetectionRepository(),
+					script:                  []error{refusedRetrySafeError(), refusedRetrySafeError()},
+				}
+				db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "exhausted.wav")
+				db.maxAttempts.Store(2)
+				if err := db.Execute(ctx, nil); err == nil {
+					return errors.NewStd("expected first retryable error, got nil")
+				}
+				if err := db.Execute(ctx, nil); err == nil {
+					return errors.NewStd("expected retry-exhausted error, got nil")
+				}
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -238,6 +263,21 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 				return 0, runTerminalDatabaseFailure(ctx, detCtx, "failed.wav", "constraint failed")
 			},
 			wantExported: false,
+		},
+		{
+			name: "outcome_unknown_connectivity_error",
+			settleDB: func(ctx context.Context, detCtx *DetectionContext) (uint, error) {
+				repo := &scriptedSaveRepository{
+					MockDetectionRepository: NewMockDetectionRepository(),
+					script:                  []error{unknownOutcomeConnectivityError()},
+				}
+				db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "unknown.wav")
+				if err := db.Execute(ctx, nil); err == nil {
+					return 0, errors.NewStd("expected connectivity error, got nil")
+				}
+				return 0, nil
+			},
+			wantExported: true,
 		},
 	}
 
@@ -381,6 +421,55 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 			require.NoError(t, action.Execute(t.Context(), nil))
 
 			info, err := os.Stat(filepath.Join(tmpDir, "outage.wav"))
+			require.NoError(t, err)
+			assert.Positive(t, info.Size())
+			assert.True(t, detCtx.ClipSaved.Load())
+			assert.Equal(t, []uint{0}, pre.submittedNoteIDs())
+		})
+	})
+
+	t.Run("outcome_unknown_connectivity_error_exports_immediately", func(t *testing.T) {
+		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			detCtx := &DetectionContext{}
+			repo := &scriptedSaveRepository{
+				MockDetectionRepository: NewMockDetectionRepository(),
+				script:                  []error{unknownOutcomeConnectivityError()},
+			}
+			db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "unknown.wav")
+			require.Error(t, db.Execute(t.Context(), nil))
+
+			pre := &recordingPreRenderer{}
+			action, tmpDir := newTestSaveAudioAction(t, "unknown.wav", detCtx, pre)
+			start := time.Now()
+			require.NoError(t, action.Execute(t.Context(), nil))
+			assert.Less(t, time.Since(start), time.Second)
+
+			info, err := os.Stat(filepath.Join(tmpDir, "unknown.wav"))
+			require.NoError(t, err)
+			assert.Positive(t, info.Size())
+			assert.True(t, detCtx.ClipSaved.Load())
+			assert.Equal(t, []uint{0}, pre.submittedNoteIDs())
+		})
+	})
+
+	t.Run("panicked_save_exports_immediately", func(t *testing.T) {
+		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			detCtx := &DetectionContext{}
+			repo := &panickingSaveRepository{MockDetectionRepository: NewMockDetectionRepository()}
+			db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "panicked.wav")
+			assert.Panics(t, func() {
+				_ = db.Execute(t.Context(), nil)
+			})
+
+			pre := &recordingPreRenderer{}
+			action, tmpDir := newTestSaveAudioAction(t, "panicked.wav", detCtx, pre)
+			start := time.Now()
+			require.NoError(t, action.Execute(t.Context(), nil))
+			assert.Less(t, time.Since(start), time.Second)
+
+			info, err := os.Stat(filepath.Join(tmpDir, "panicked.wav"))
 			require.NoError(t, err)
 			assert.Positive(t, info.Size())
 			assert.True(t, detCtx.ClipSaved.Load())
