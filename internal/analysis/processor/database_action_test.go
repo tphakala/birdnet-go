@@ -1058,6 +1058,10 @@ func TestProcessApprovedDetection_DatabaseJobCarriesNoPCM(t *testing.T) {
 	assert.True(t, sawOther, "an audio job was queued")
 }
 
+// roomyQueueJobs is a queue capacity above the number of jobs one detection's
+// default actions queue, so no job is dropped.
+const roomyQueueJobs = 16
+
 // newHourlyQueue returns a started queue of maxJobs whose hourly tick keeps
 // every job pending for the length of a test.
 func newHourlyQueue(t *testing.T, maxJobs int) *jobqueue.JobQueue {
@@ -1179,30 +1183,46 @@ func TestNotifyJobLost_NilCompositeStepIsSkipped(t *testing.T) {
 	assert.Equal(t, dbOutcomeFailed, detectionCtx.databaseOutcome())
 }
 
-// TestEnqueueActions_FailedEnqueueSettlesOutcomeFailed pins that a database job
+// TestEnqueueActions_SettlesOutcomeOnlyWhenEnqueueFails pins that a database job
 // whose enqueue fails settles the outcome as failed, so the detection's
-// SaveAudioAction aborts instead of exporting a clip no row will reference.
-func TestEnqueueActions_FailedEnqueueSettlesOutcomeFailed(t *testing.T) {
+// SaveAudioAction aborts instead of exporting a clip no row will reference, and
+// that a database job queued normally leaves the outcome to its own save.
+func TestEnqueueActions_SettlesOutcomeOnlyWhenEnqueueFails(t *testing.T) {
 	conf.StoreSettings(nil)
 	t.Cleanup(func() { conf.StoreSettings(nil) })
 
-	p, _, _, _, settings := newMQTTPipelineProcessor(t, true)
-	settings.Realtime.Audio.Export.Enabled = true
-	det := testDetection()
-	actions := p.getDefaultActions(&det, settings)
-	var detectionCtx *DetectionContext
-	for _, action := range actions {
-		if saveAudio, ok := action.(*SaveAudioAction); ok {
-			detectionCtx = saveAudio.DetectionCtx
-		}
+	tests := []struct {
+		name        string
+		stopQueue   bool
+		wantOutcome int32
+	}{
+		{"stopped_queue_settles_failed", true, dbOutcomeFailed},
+		{"queued_job_leaves_outcome_pending", false, dbOutcomePending},
 	}
-	require.NotNil(t, detectionCtx, "the action list exports audio")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, _, _, _, settings := newMQTTPipelineProcessor(t, true)
+			// Room for every job, and an hourly tick so none of them runs.
+			p.JobQueue = newHourlyQueue(t, roomyQueueJobs)
+			settings.Realtime.Audio.Export.Enabled = true
+			det := testDetection()
+			actions := p.getDefaultActions(&det, settings)
+			var detectionCtx *DetectionContext
+			for _, action := range actions {
+				if saveAudio, ok := action.(*SaveAudioAction); ok {
+					detectionCtx = saveAudio.DetectionCtx
+				}
+			}
+			require.NotNil(t, detectionCtx, "the action list exports audio")
 
-	require.NoError(t, p.JobQueue.Stop())
-	p.enqueueActions(&det, actions)
+			if tc.stopQueue {
+				require.NoError(t, p.JobQueue.Stop())
+			}
+			p.enqueueActions(&det, actions)
 
-	assert.Equal(t, dbOutcomeFailed, detectionCtx.databaseOutcome(),
-		"a database job that was never enqueued never ran, so nothing was stored")
+			assert.Equal(t, tc.wantOutcome, detectionCtx.databaseOutcome())
+		})
+	}
 }
 
 // blockingCommentRepository blocks AddComment until releaseComment is closed.
