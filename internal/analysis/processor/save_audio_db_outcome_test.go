@@ -694,15 +694,13 @@ func TestDetectionContext_NoteIDOnlyForWinningSavedVerdict(t *testing.T) {
 	}
 }
 
-// TestDetectionContext_NilReceiverHoldsNoClip verifies that offering a clip on
-// a nil DetectionContext holds nothing and reports no verdict, like the other
-// nil-safe DetectionContext methods, instead of panicking.
 // TestExportedClipRemove_KeepsClipWhileItsPathIsLocked verifies that a removal
 // does not touch a clip while an export to the same path holds the path lock:
 // the identity check and the removal must not interleave with a write there.
-// Once the lock is free, the same clip is removed.
+// Once the lock is free, the same clip is removed. Not parallel: the lock
+// stripes are package-wide, and a parallel export that hashes to the same
+// stripe would make the final removal keep the clip.
 func TestExportedClipRemove_KeepsClipWhileItsPathIsLocked(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "locked.wav")
 	require.NoError(t, os.WriteFile(path, []byte("clip"), 0o600))
@@ -772,6 +770,9 @@ func TestSaveAudioAction_ReleasesClipPathLockWhenEncoderPanics(t *testing.T) {
 	})
 }
 
+// TestDetectionContext_NilReceiverHoldsNoClip verifies that offering a clip on
+// a nil DetectionContext holds nothing and reports no verdict, like the other
+// nil-safe DetectionContext methods, instead of panicking.
 func TestDetectionContext_NilReceiverHoldsNoClip(t *testing.T) {
 	t.Parallel()
 	var d *DetectionContext
