@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -439,7 +440,7 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 			require.NoError(t, err)
 			assert.Positive(t, info.Size())
 			assert.True(t, detCtx.ClipSaved.Load())
-			assert.Equal(t, []uint{0}, pre.submittedNoteIDs())
+			assert.Empty(t, pre.submittedNoteIDs(), "no spectrogram is pre-rendered while the verdict is pending")
 		})
 	})
 
@@ -530,5 +531,295 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 			require.NoError(t, err)
 			assert.Positive(t, info.Size())
 		})
+	})
+}
+
+// TestSaveAudioAction_LateNoRowVerdictRemovesClip verifies that a clip exported
+// while the database verdict was still pending (SaveAudioAction waited out
+// noteIDWaitTimeout) is removed once a verdict proving no row lands, whichever
+// side finishes last, and is kept on any other verdict or when another export
+// has since replaced the file. No spectrogram is pre-rendered while pending.
+// Not parallel because logtest.CaptureBuffer swaps logger.Global().
+func TestSaveAudioAction_LateNoRowVerdictRemovesClip(t *testing.T) {
+	const clipName = "late.wav"
+	replacement := []byte("another detection's clip")
+
+	tests := []struct {
+		name string
+		// duringEncode runs inside the encode seam, after the real encoder wrote
+		// the file: the verdict lands before SaveAudioAction offers the clip.
+		duringEncode func(detCtx *DetectionContext)
+		// afterExport runs once Execute returned: the verdict lands last.
+		afterExport   func(ctx context.Context, detCtx *DetectionContext, clipPath string) error
+		wantRemoved   bool
+		wantClipSaved bool
+		wantContent   []byte
+	}{
+		{
+			name: "failed_after_export_removes_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				return runTerminalDatabaseFailure(ctx, detCtx, clipName, "disk full")
+			},
+			wantRemoved: true,
+		},
+		{
+			name: "saved_after_export_keeps_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				db := newTestDatabaseAction(NewMockDetectionRepository(), NewEventTracker(testEventTrackerInterval), detCtx, clipName)
+				return db.Execute(ctx, nil)
+			},
+			wantClipSaved: true,
+		},
+		{
+			name: "unknown_after_export_keeps_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				repo := &scriptedSaveRepository{
+					MockDetectionRepository: NewMockDetectionRepository(),
+					script:                  []error{unmarkedCommitError()},
+				}
+				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, clipName)
+				if err := db.Execute(ctx, nil); err == nil {
+					return errors.NewStd("expected commit error, got nil")
+				}
+				return nil
+			},
+			wantClipSaved: true,
+		},
+		{
+			name: "skipped_after_export_removes_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				return runRateLimitedDatabaseSkip(ctx, detCtx, clipName)
+			},
+			wantRemoved: true,
+		},
+		{
+			name:         "skipped_during_encode_removes_clip_before_success_log",
+			duringEncode: func(detCtx *DetectionContext) { detCtx.markDatabaseSkipped() },
+			wantRemoved:  true,
+		},
+		{
+			name: "replaced_by_another_export_is_kept",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, clipPath string) error {
+				// Another detection exports to the same name: a new file renamed
+				// onto the path, as every encoder finishes.
+				tmp := filepath.Join(filepath.Dir(clipPath), "replacement.tmp")
+				if err := os.WriteFile(tmp, replacement, 0o600); err != nil {
+					return err
+				}
+				if err := os.Rename(tmp, clipPath); err != nil {
+					return err
+				}
+				return runTerminalDatabaseFailure(ctx, detCtx, clipName, "disk full")
+			},
+			wantContent: replacement,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := logtest.CaptureBuffer(t)
+			synctest.Test(t, func(t *testing.T) {
+				detCtx := &DetectionContext{}
+				pre := &recordingPreRenderer{}
+				action, tmpDir := newTestSaveAudioAction(t, clipName, detCtx, pre)
+				clipPath := filepath.Join(tmpDir, clipName)
+				if tc.duringEncode != nil {
+					action.encode = func(ctx context.Context, encoder string, exportRate, bitrateKbps int, exportFormat, outputPath string, gainDB float64) error {
+						if err := action.runEncoder(ctx, encoder, exportRate, bitrateKbps, exportFormat, outputPath, gainDB); err != nil {
+							return err
+						}
+						tc.duringEncode(detCtx)
+						return nil
+					}
+				}
+
+				require.NoError(t, action.Execute(t.Context(), nil))
+				if tc.afterExport != nil {
+					require.FileExists(t, clipPath, "the clip is exported while the verdict is pending")
+					require.NoError(t, tc.afterExport(t.Context(), detCtx, clipPath))
+				}
+
+				if tc.wantRemoved {
+					assert.NoFileExists(t, clipPath)
+					assert.Contains(t, logs.String(), "audio_export_removed_no_row")
+				} else {
+					assert.FileExists(t, clipPath)
+					assert.NotContains(t, logs.String(), "audio_export_removed_no_row")
+				}
+				if tc.wantContent != nil {
+					got, err := os.ReadFile(clipPath)
+					require.NoError(t, err)
+					assert.Equal(t, tc.wantContent, got, "another export's file must not be removed")
+				}
+				assert.Equal(t, tc.wantClipSaved, detCtx.ClipSaved.Load(), "ClipSaved is cleared once the verdict proves no row")
+				// The success line is logged unless the verdict landed before the
+				// clip was offered for removal.
+				if tc.duringEncode == nil {
+					assert.Contains(t, logs.String(), "audio_export_success")
+				} else {
+					assert.NotContains(t, logs.String(), "audio_export_success")
+				}
+				assert.Empty(t, pre.submittedNoteIDs(), "no spectrogram is pre-rendered while the verdict is pending")
+			})
+		})
+	}
+}
+
+// TestDetectionContext_NoteIDOnlyForWinningSavedVerdict verifies that a saved
+// verdict publishes its NoteID only when it is the verdict that settles the
+// detection: a late save must neither leave an ID on a skipped or failed
+// detection nor replace the ID that woken waiters already read.
+func TestDetectionContext_NoteIDOnlyForWinningSavedVerdict(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		first       func(d *DetectionContext)
+		wantOutcome int32
+		wantNoteID  uint64
+	}{
+		{name: "after_skipped", first: (*DetectionContext).markDatabaseSkipped, wantOutcome: dbOutcomeSkipped},
+		{name: "after_failed", first: (*DetectionContext).markDatabaseFailed, wantOutcome: dbOutcomeFailed},
+		{name: "after_unknown", first: (*DetectionContext).markDatabaseUnknown, wantOutcome: dbOutcomeUnknown},
+		{name: "after_saved", first: func(d *DetectionContext) { d.markDatabaseSaved(7) }, wantOutcome: dbOutcomeSaved, wantNoteID: 7},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			d := &DetectionContext{}
+			tc.first(d)
+			d.markDatabaseSaved(42)
+			assert.Equal(t, tc.wantOutcome, d.databaseOutcome())
+			assert.Equal(t, tc.wantNoteID, d.NoteID.Load())
+		})
+	}
+}
+
+// TestExportedClipRemove_KeepsClipWhileItsPathIsLocked verifies that a removal
+// does not touch a clip while an export to the same path holds the path lock:
+// the identity check and the removal must not interleave with a write there.
+// Once the lock is free, the same clip is removed. Not parallel: the lock
+// stripes are package-wide, and a parallel export that hashes to the same
+// stripe would make the final removal keep the clip.
+func TestExportedClipRemove_KeepsClipWhileItsPathIsLocked(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "locked.wav")
+	written, err := writeClipLocked(path, func() error { return os.WriteFile(path, []byte("clip"), 0o600) })
+	require.NoError(t, err)
+	require.True(t, written.pinned)
+	clip := &exportedClip{exportDir: dir, path: path, relPath: "locked.wav", written: written.info, writeGen: written.gen}
+
+	lock := clipPathLock(path)
+	lock.Lock()
+	clip.remove()
+	lock.Unlock()
+	assert.FileExists(t, path, "a removal must not run while an export holds the path lock")
+
+	clip.remove()
+	assert.NoFileExists(t, path, "the clip is removed once the path lock is free")
+}
+
+// TestSaveAudioAction_HoldsClipPathLockDuringEncode verifies that the export
+// holds the path lock while the encoder writes the clip and until its identity
+// is read, so a removal of another detection's clip at the same name cannot
+// interleave with the write.
+func TestSaveAudioAction_HoldsClipPathLockDuringEncode(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		detCtx := &DetectionContext{}
+		detCtx.markDatabaseSaved(1)
+		action, tmpDir := newTestSaveAudioAction(t, "encode-locked.wav", detCtx, &recordingPreRenderer{})
+		var lockedDuringEncode bool
+		action.encode = func(ctx context.Context, encoder string, exportRate, bitrateKbps int, exportFormat, outputPath string, gainDB float64) error {
+			if err := action.runEncoder(ctx, encoder, exportRate, bitrateKbps, exportFormat, outputPath, gainDB); err != nil {
+				return err
+			}
+			lock := clipPathLock(outputPath)
+			lockedDuringEncode = !lock.TryLock()
+			if !lockedDuringEncode {
+				lock.Unlock()
+			}
+			return nil
+		}
+
+		require.NoError(t, action.Execute(t.Context(), nil))
+		assert.True(t, lockedDuringEncode, "the export holds the path lock while the encoder writes")
+		assert.FileExists(t, filepath.Join(tmpDir, "encode-locked.wav"))
+		lock := clipPathLock(filepath.Join(tmpDir, "encode-locked.wav"))
+		require.True(t, lock.TryLock(), "the export releases the path lock before it returns")
+		lock.Unlock()
+	})
+}
+
+// TestExportedClipRemove_KeepsClipAfterAnotherWriteOnItsStripe verifies that a
+// removal keeps the clip once any other export has written under the same lock
+// stripe since this clip was written. os.SameFile compares device and inode
+// numbers only, and a freed inode number can be given to a later file at the
+// same path, so a matching identity alone does not prove the file is this
+// export's. Not parallel: the stripe counters are package-wide.
+func TestExportedClipRemove_KeepsClipAfterAnotherWriteOnItsStripe(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "first.wav")
+	written, err := writeClipLocked(path, func() error { return os.WriteFile(path, []byte("first"), 0o600) })
+	require.NoError(t, err)
+
+	// Another clip whose path shares the lock stripe; with 256 stripes a few
+	// hundred names are enough to find one.
+	var other string
+	for i := range clipPathLockStripes * 16 {
+		candidate := filepath.Join(dir, fmt.Sprintf("other-%d.wav", i))
+		if clipPathLock(candidate) == clipPathLock(path) {
+			other = candidate
+			break
+		}
+	}
+	require.NotEmpty(t, other, "no path on the same stripe found")
+	_, err = writeClipLocked(other, func() error { return os.WriteFile(other, []byte("other"), 0o600) })
+	require.NoError(t, err)
+
+	clip := &exportedClip{exportDir: dir, path: path, relPath: "first.wav", written: written.info, writeGen: written.gen}
+	clip.remove()
+	assert.FileExists(t, path, "a write on the same stripe since this export must keep the clip")
+}
+
+// TestExportedClipLogRemoveFailure_ScrubsAbsolutePaths verifies that a failed
+// removal does not log the absolute export path: file system errors carry it,
+// and it can contain a user name.
+func TestExportedClipLogRemoveFailure_ScrubsAbsolutePaths(t *testing.T) {
+	logs := logtest.CaptureBuffer(t)
+	const exportDir = "/home/alice/birdnet/clips"
+	clip := &exportedClip{exportDir: exportDir, path: exportDir + "/2026/11/clip.wav", relPath: "2026/11/clip.wav"}
+	clip.logRemoveFailure(&fs.PathError{Op: "remove", Path: clip.path, Err: fs.ErrPermission})
+	assert.Contains(t, logs.String(), "audio_export_remove_failed")
+	assert.NotContains(t, logs.String(), "/home/alice", "the absolute export path must not be logged")
+}
+
+// TestSaveAudioAction_ReleasesClipPathLockWhenEncoderPanics verifies that an
+// encoder panic does not leave the clip path lock held: the job queue recovers
+// the panic and keeps running, so a held stripe would block every later export
+// that hashes to it.
+func TestSaveAudioAction_ReleasesClipPathLockWhenEncoderPanics(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		detCtx := &DetectionContext{}
+		detCtx.markDatabaseSaved(1)
+		action, tmpDir := newTestSaveAudioAction(t, "encode-panics.wav", detCtx, &recordingPreRenderer{})
+		action.encode = func(context.Context, string, int, int, string, string, float64) error {
+			panic("encoder failure")
+		}
+
+		assert.Panics(t, func() { _ = action.Execute(t.Context(), nil) })
+		lock := clipPathLock(filepath.Join(tmpDir, "encode-panics.wav"))
+		require.True(t, lock.TryLock(), "an encoder panic must release the path lock")
+		lock.Unlock()
+	})
+}
+
+// TestDetectionContext_NilReceiverHoldsNoClip verifies that offering a clip on
+// a nil DetectionContext holds nothing and reports no verdict, like the other
+// nil-safe DetectionContext methods, instead of panicking.
+func TestDetectionContext_NilReceiverHoldsNoClip(t *testing.T) {
+	t.Parallel()
+	var d *DetectionContext
+	assert.NotPanics(t, func() {
+		assert.False(t, d.holdUnconfirmedClip(&exportedClip{}))
 	})
 }

@@ -76,6 +76,10 @@ type clipEncoding struct {
 	// are slow" and codec comparisons read wrong.
 	MeasureMs int64 // wall time resolving the loudness gain (0 when normalization is off)
 	EncodeMs  int64 // wall time inside the encoder itself
+
+	// written is the file the encode left at the output path, with its identity
+	// read under the clip path lock (writeClipLocked).
+	written writtenClip
 }
 
 // Execute logs the note to the log file.
@@ -221,8 +225,10 @@ func (a *DatabaseAction) skipsLaterSteps() bool {
 // job will never run: the queue dropped it before its first attempt, or
 // enqueueing it failed. No attempt ran, so nothing was stored. It runs on the
 // goroutine that enqueued, in production while the pending-detection flush holds
-// its lock, so it only logs and marks the outcome. A nil action has no detection
-// to settle.
+// its lock. It logs and marks the outcome, which takes only the
+// DetectionContext's own outcome lock; when SaveAudioAction already exported
+// the clip, markDatabaseFailed then removes it through SecureFS after that lock
+// is released (exportedClip.remove). A nil action has no detection to settle.
 func (a *DatabaseAction) jobLost() {
 	if a == nil {
 		return
@@ -839,27 +845,48 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// before any encoder sees it. The clip file is written once, from this PCM.
 	a.applyExportDenoise(ctx, exportRate)
 
+	// encodeClip writes the clip under the clip path lock and reads the written
+	// file's identity before releasing it (writeClipLocked), so another
+	// detection's removal of a clip at the same name cannot run in between. The
+	// lock is released before this clip is offered for removal below.
 	enc, err := a.encodeClip(ctx, exportRate, exportFormat, outputPath)
 	if err != nil {
 		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
 		return err
 	}
-	a.correctClipSampleRate(ctx, exportRate)
-	a.recordClipDenoised(ctx)
 
-	// Get file size for logging
-	fileInfo, err := os.Stat(outputPath)
+	// The size is logged below, and the FileInfo identifies this export's file
+	// if the clip has to be removed later.
+	fileInfo, statErr := enc.written.info, enc.written.statErr
+	identityPinned := enc.written.pinned
 	var fileSize int64
-	if err == nil {
+	if statErr == nil {
 		fileSize = fileInfo.Size()
 	} else {
 		// Debug log if we can't stat the file (shouldn't happen after successful write)
 		GetLogger().Debug("Failed to stat audio file for size logging",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
-			logger.Error(err),
+			logger.Error(statErr),
 			logger.String("clip_path", a.relativeClipPath(outputPath)),
 			logger.String("operation", "audio_export_stat"))
+	}
+
+	// Signal that the clip was exported (see ClipSaved for when it is cleared).
+	// Set before the clip is offered for removal, so a removal's clear always
+	// comes after it.
+	if a.DetectionCtx != nil {
+		a.DetectionCtx.ClipSaved.Store(true)
+	}
+
+	a.correctClipSampleRate(ctx, exportRate)
+	a.recordClipDenoised(ctx)
+
+	// A clip exported before the verdict was known (the wait timed out) stays
+	// only if the verdict does not prove there is no row: offer it for removal,
+	// and stop here when the verdict already proves it.
+	if identityPinned && a.offerClipForRemoval(outputPath, enc.written) {
+		return nil
 	}
 
 	// Log successful audio export at INFO level (BG-18).
@@ -901,14 +928,10 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	fields = append(fields, logger.String("operation", "audio_export_success"))
 	GetLogger().Info("Audio clip saved successfully", fields...)
 
-	// Signal that the clip file exists on disk. This is used by any late
-	// consumers that check whether the audio was actually exported.
-	if a.DetectionCtx != nil {
-		a.DetectionCtx.ClipSaved.Store(true)
-	}
-
-	// Submit for pre-rendering if enabled
-	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
+	// Submit for pre-rendering if enabled. Not while the verdict is pending: the
+	// clip may yet be removed, and a stored row gets its spectrogram rendered on
+	// first view instead.
+	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil && a.DetectionCtx.verdictKeepsClip() {
 		// Create pre-render job using local DTO (avoids direct spectrogram dependency)
 		job := PreRenderJob{
 			PCMData:    a.pcmData,
@@ -966,18 +989,42 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 	return true
 }
 
+// offerClipForRemoval offers the clip just written at outputPath for removal
+// when the database verdict is still pending or proves no row, and reports
+// whether the verdict proves no row (the clip is then claimed for removal,
+// which exportedClip.remove can still decline). A clip outside
+// the export directory is never offered: it is kept (fail open). written is
+// what writeClipLocked read under the path lock right after the write: the
+// file's pinned identity and the lock stripe's write count, which the removal
+// checks to tell this export's file from a later one at the same name.
+func (a *SaveAudioAction) offerClipForRemoval(outputPath string, written writtenClip) (noRow bool) {
+	if a.DetectionCtx.verdictKeepsClip() {
+		return false
+	}
+	rel, ok := a.localClipPath(outputPath)
+	if !ok {
+		return false
+	}
+	return a.DetectionCtx.holdUnconfirmedClip(&exportedClip{
+		exportDir:     a.Settings.Realtime.Audio.Export.Path,
+		path:          outputPath,
+		relPath:       rel,
+		written:       written.info,
+		writeGen:      written.gen,
+		correlationID: a.CorrelationID,
+	})
+}
+
 // abortedByDatabase reports whether DatabaseAction's verdict proves no row will
 // reference this clip, and logs which verdict it was. Pending, saved and
 // unknown let the export go ahead.
 func (a *SaveAudioAction) abortedByDatabase() bool {
-	var msg, operation string
-	switch a.DetectionCtx.databaseOutcome() {
-	case dbOutcomeSkipped:
-		msg, operation = "Skipping audio export: database save skipped", "audio_export_db_skipped"
-	case dbOutcomeFailed:
-		msg, operation = "Skipping audio export: database save failed", "audio_export_db_failed"
-	default:
+	if !a.DetectionCtx.verdictProvesNoRow() {
 		return false
+	}
+	msg, operation := "Skipping audio export: database save skipped", "audio_export_db_skipped"
+	if a.DetectionCtx.databaseOutcome() == dbOutcomeFailed {
+		msg, operation = "Skipping audio export: database save failed", "audio_export_db_failed"
 	}
 	GetLogger().Debug(msg,
 		logger.String("component", "analysis.processor.actions"),
@@ -1004,20 +1051,30 @@ func (a *SaveAudioAction) abortedByDatabase() bool {
 // resolved back to a file. Recomputed from outputPath rather than reusing
 // a.ClipName because resolveExportParams may have corrected the extension.
 func (a *SaveAudioAction) relativeClipPath(outputPath string) string {
+	if rel, ok := a.localClipPath(outputPath); ok {
+		return rel
+	}
+	// The basename is the safe answer: it still names the clip and still
+	// contains no directory.
+	return filepath.Base(outputPath)
+}
+
+// localClipPath returns outputPath relative to the export directory, with
+// forward slashes, and whether outputPath lies inside that directory.
+func (a *SaveAudioAction) localClipPath(outputPath string) (string, bool) {
 	rel, err := filepath.Rel(a.Settings.Realtime.Audio.Export.Path, outputPath)
 	// Rel reports an error only when it cannot express the relationship at all
 	// (one path absolute and the other relative, different Windows volumes). It
 	// happily walks UP with ".." when both are absolute but outputPath sits
-	// outside the export directory, and that result would defeat the whole point
-	// of the function: "../../../etc/passwd" leaks the layout above the export
-	// directory into a support dump and is not a clip name any consumer can
-	// resolve. IsLocal rejects exactly that, plus absolute results and Windows
-	// reserved names. Either way the basename is the safe answer: it still names
-	// the clip and still contains no directory.
+	// outside the export directory, and that result is wrong for every caller:
+	// "../../../etc/passwd" leaks the layout above the export directory into a
+	// support dump, is not a clip name any consumer can resolve, and is not a
+	// file this export may remove. IsLocal rejects exactly that, plus absolute
+	// results and Windows reserved names.
 	if err != nil || !filepath.IsLocal(rel) {
-		return filepath.Base(outputPath)
+		return "", false
 	}
-	return filepath.ToSlash(rel)
+	return filepath.ToSlash(rel), true
 }
 
 // clipDurationMs is the wall duration of the captured PCM at the export rate.
@@ -1190,6 +1247,10 @@ func lossyBitrateKbps(exportFormat, bitrate string) int {
 // native encoder applies that gain itself and WAV has it applied to the samples
 // before writing. No export format depends on FFmpeg.
 //
+// The encoder writes under the clip path lock, and the written file's identity
+// is read before the lock is released (writeClipLocked); the gain is measured
+// before the lock is taken.
+//
 // The returned clipEncoding is populated as far as the export got, so a caller
 // handling an error can still report the encoder and, past gain resolution, the
 // gain that was going to be applied.
@@ -1220,13 +1281,15 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 	enc.GainResolved = true
 	enc.Normalized = normalized
 
-	encodeStart := time.Now()
 	encode := a.encode
 	if encode == nil {
 		encode = a.runEncoder
 	}
-	err = encode(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
-	enc.EncodeMs = time.Since(encodeStart).Milliseconds()
+	enc.written, err = writeClipLocked(outputPath, func() error {
+		encodeStart := time.Now()
+		defer func() { enc.EncodeMs = time.Since(encodeStart).Milliseconds() }()
+		return encode(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
+	})
 	return enc, err
 }
 

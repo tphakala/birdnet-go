@@ -5,6 +5,8 @@ package processor
 
 import (
 	"context"
+	"io/fs"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,9 +19,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
 // Timeout and interval constants
@@ -68,15 +72,17 @@ const (
 // most noteIDWaitTimeout for the database outcome.
 type DetectionContext struct {
 	// NoteID holds the ID a successful save reported (0 when none was). Write it
-	// only through markDatabaseSaved, which also settles dbOutcome: SaveAudioAction
-	// wakes on dbOutcome, not on NoteID, so a bare Store leaves it waiting
+	// only through markDatabaseSaved, which stores it only when the saved verdict
+	// settles dbOutcome, before publishing that verdict: SaveAudioAction wakes on
+	// dbOutcome, not on NoteID, so a bare Store leaves it waiting
 	// noteIDWaitTimeout. Read by MqttAction, SSEAction and SaveAudioAction.
 	NoteID atomic.Uint64
 
-	// ClipSaved indicates whether the audio clip was successfully exported to disk.
-	// SaveAudioAction sets this to true after successful audio export.
-	// This flag is available for any late consumers that need to know whether the
-	// audio file exists on disk.
+	// ClipSaved reports that SaveAudioAction exported the clip and no verdict has
+	// since claimed it for removal. SaveAudioAction sets it after a successful
+	// export; it is cleared once a skipped or failed verdict claims the held clip
+	// (unconfirmedClip), whether or not the file is then removed: a failed
+	// removal, or a file another export put at the same name, is only logged.
 	ClipSaved atomic.Bool
 
 	// birdImage holds the species image resolved once per detection, so the
@@ -94,13 +100,36 @@ type DetectionContext struct {
 	clipDenoise atomic.Int32
 
 	// dbOutcome is DatabaseAction's verdict on the detection, one of the dbOutcome*
-	// values, set once. SaveAudioAction waits for it at most noteIDWaitTimeout; a
-	// verdict that lands later does not stop an export already under way.
-	// dbOutcomeCh is allocated under dbOutcomeMu only when a waiter blocks while
-	// the verdict is pending, and is closed when the verdict is set.
+	// values, set once under dbOutcomeMu. SaveAudioAction waits for it at most
+	// noteIDWaitTimeout; a skipped or failed verdict that lands after the export
+	// claims the held clip for removal (unconfirmedClip, see exportedClip.remove
+	// for when the file is kept). dbOutcomeCh is allocated under
+	// dbOutcomeMu only when a waiter blocks while the verdict is pending, and is
+	// closed when the verdict is set.
 	dbOutcome   atomic.Int32
 	dbOutcomeMu sync.Mutex
 	dbOutcomeCh chan struct{}
+
+	// unconfirmedClip is the clip SaveAudioAction exported while the verdict was
+	// still pending; it stays set after a saved or unknown verdict, which never
+	// claims it, and is nil when no clip was held or once one is taken. Whichever
+	// of SaveAudioAction and DatabaseAction finishes last claims it for removal
+	// when the verdict proves no row: SaveAudioAction stores the clip and then
+	// reads the verdict, DatabaseAction stores the verdict and then takes the
+	// clip, so at least one of them sees both, and the Swap lets only one of them
+	// claim it. The claimed file can still stay on disk (see exportedClip.remove).
+	unconfirmedClip atomic.Pointer[exportedClip]
+}
+
+// exportedClip is a clip SaveAudioAction wrote before the database verdict was
+// known: what is needed to remove exactly that file later.
+type exportedClip struct {
+	exportDir     string      // export directory of the settings snapshot the clip was written with
+	path          string      // the path the encoder wrote (after resolveExportParams)
+	relPath       string      // path relative to exportDir (relativeClipPath form), for the log lines
+	written       os.FileInfo // Stat taken right after the encode, identity already read (os.SameFile(fi, fi)), for os.SameFile
+	writeGen      uint64      // the lock stripe's write count after this export's write (writtenClip.gen)
+	correlationID string
 }
 
 // Values of DetectionContext.dbOutcome.
@@ -123,40 +152,49 @@ const (
 )
 
 // setDatabaseOutcome moves dbOutcome out of pending once and wakes any waiter;
-// later calls are ignored.
-func (d *DetectionContext) setDatabaseOutcome(outcome int32) {
+// later calls are ignored. A saved verdict stores noteID first, and only when
+// it is the one that settles, so lock-free readers that load dbOutcome and then
+// NoteID see the ID, and a losing call changes nothing.
+func (d *DetectionContext) setDatabaseOutcome(outcome int32, noteID uint64) {
 	if d == nil || outcome == dbOutcomePending {
 		return
 	}
 	d.dbOutcomeMu.Lock()
-	if d.dbOutcome.CompareAndSwap(dbOutcomePending, outcome) && d.dbOutcomeCh != nil {
-		close(d.dbOutcomeCh)
-	}
-	d.dbOutcomeMu.Unlock()
-}
-
-// markDatabaseSaved publishes the stored row's ID, then settles the outcome as saved.
-func (d *DetectionContext) markDatabaseSaved(noteID uint64) {
-	if d == nil {
+	defer d.dbOutcomeMu.Unlock()
+	if d.dbOutcome.Load() != dbOutcomePending {
 		return
 	}
-	d.NoteID.Store(noteID)
-	d.setDatabaseOutcome(dbOutcomeSaved)
+	if outcome == dbOutcomeSaved {
+		d.NoteID.Store(noteID)
+	}
+	d.dbOutcome.Store(outcome)
+	if d.dbOutcomeCh != nil {
+		close(d.dbOutcomeCh)
+	}
 }
 
-// markDatabaseSkipped settles the outcome as skipped by the event tracker.
+// markDatabaseSaved settles the outcome as saved and publishes the stored row's ID.
+func (d *DetectionContext) markDatabaseSaved(noteID uint64) {
+	d.setDatabaseOutcome(dbOutcomeSaved, noteID)
+}
+
+// markDatabaseSkipped settles the outcome as skipped by the event tracker and
+// claims a clip already exported for it for removal (removeClipWithoutRow).
 func (d *DetectionContext) markDatabaseSkipped() {
-	d.setDatabaseOutcome(dbOutcomeSkipped)
+	d.setDatabaseOutcome(dbOutcomeSkipped, 0)
+	d.removeClipWithoutRow()
 }
 
-// markDatabaseFailed settles the outcome as a failure that stored nothing.
+// markDatabaseFailed settles the outcome as a failure that stored nothing and
+// claims a clip already exported for it for removal (removeClipWithoutRow).
 func (d *DetectionContext) markDatabaseFailed() {
-	d.setDatabaseOutcome(dbOutcomeFailed)
+	d.setDatabaseOutcome(dbOutcomeFailed, 0)
+	d.removeClipWithoutRow()
 }
 
 // markDatabaseUnknown settles the outcome as a failure that may have stored the row.
 func (d *DetectionContext) markDatabaseUnknown() {
-	d.setDatabaseOutcome(dbOutcomeUnknown)
+	d.setDatabaseOutcome(dbOutcomeUnknown, 0)
 }
 
 // databaseOutcome returns the current verdict, dbOutcomePending for a nil receiver.
@@ -165,6 +203,131 @@ func (d *DetectionContext) databaseOutcome() int32 {
 		return dbOutcomePending
 	}
 	return d.dbOutcome.Load()
+}
+
+// verdictProvesNoRow reports whether the verdict proves no row will reference
+// the clip (skipped or failed). Once true it stays true.
+func (d *DetectionContext) verdictProvesNoRow() bool {
+	switch d.databaseOutcome() {
+	case dbOutcomeSkipped, dbOutcomeFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+// verdictKeepsClip reports whether the clip stays whatever happens next: a nil
+// receiver, or a saved or unknown verdict. Once true it stays true.
+func (d *DetectionContext) verdictKeepsClip() bool {
+	return d == nil || (d.databaseOutcome() != dbOutcomePending && !d.verdictProvesNoRow())
+}
+
+// holdUnconfirmedClip offers a clip exported before the verdict was known for
+// removal, claims it at once when the verdict already proves no row, and
+// reports whether the verdict proves no row. It reports the verdict, not which
+// side claimed the clip or whether the file was removed: DatabaseAction can
+// take the clip between the Store and this side's own call, and the caller
+// must stop before its success log then.
+// A nil receiver holds nothing and reports false.
+func (d *DetectionContext) holdUnconfirmedClip(c *exportedClip) (noRow bool) {
+	if d == nil {
+		return false
+	}
+	d.unconfirmedClip.Store(c)
+	d.removeClipWithoutRow()
+	return d.verdictProvesNoRow()
+}
+
+// removeClipWithoutRow takes the held clip, at most once, when the verdict
+// proves no row will reference it, and hands it to exportedClip.remove, which
+// keeps the file when it was replaced or cannot be removed. It does file I/O,
+// so it must not run under dbOutcomeMu.
+func (d *DetectionContext) removeClipWithoutRow() {
+	if d == nil || !d.verdictProvesNoRow() {
+		return
+	}
+	c := d.unconfirmedClip.Swap(nil)
+	if c == nil {
+		return
+	}
+	d.ClipSaved.Store(false)
+	c.remove()
+}
+
+// remove deletes the clip through SecureFS on its export directory when the path
+// still holds the file this export wrote: clip names are not unique per
+// detection, and another detection's later export renames a new file onto the
+// same path. The identity check and the removal run under the path lock that
+// SaveAudioAction holds while it writes a clip there (writeClipLocked), so no
+// other SaveAudioAction export renames onto the path in between (the clip
+// import writes historical recordings without it). The lock is only tried:
+// when another export or removal holds the same lock stripe, the clip is kept
+// rather than blocking the caller, which can be the pending-detection flush.
+// The clip is also kept when any export has written under the stripe since
+// this one (clipPathStripe.writes): a freed inode number can be given to a
+// later file at the same path, so os.SameFile alone could match a file this
+// export did not write. Failures are logged; the clip is then left in place.
+func (c *exportedClip) remove() {
+	stripe := clipPathStripeFor(c.path)
+	if !stripe.mu.TryLock() {
+		c.logKept("Kept audio clip: another export or removal holds its path lock stripe")
+		return
+	}
+	defer stripe.mu.Unlock()
+	if stripe.writes != c.writeGen {
+		c.logKept("Kept audio clip: another export wrote under its path lock stripe since")
+		return
+	}
+	cur, err := os.Stat(c.path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return
+	}
+	if err != nil {
+		c.logRemoveFailure(err)
+		return
+	}
+	if !os.SameFile(c.written, cur) {
+		c.logKept("Kept audio clip: another export replaced it")
+		return
+	}
+	sfs, err := securefs.New(c.exportDir)
+	if err != nil {
+		c.logRemoveFailure(err)
+		return
+	}
+	defer func() { _ = sfs.Close() }()
+	if err := sfs.Remove(c.path); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			c.logRemoveFailure(err)
+		}
+		return
+	}
+	GetLogger().Info("Removed audio clip of a detection the database did not store",
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", c.correlationID),
+		logger.String("clip_path", c.relPath),
+		logger.String("operation", "audio_export_removed_no_row"))
+}
+
+// logKept logs why a clip without a row was left in place.
+func (c *exportedClip) logKept(msg string) {
+	GetLogger().Debug(msg,
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", c.correlationID),
+		logger.String("clip_path", c.relPath),
+		logger.String("operation", "audio_export_remove_skipped"))
+}
+
+// logRemoveFailure logs a failed removal of a clip without a row. The error is
+// scrubbed: file system errors carry the absolute path, which can contain a
+// user name.
+func (c *exportedClip) logRemoveFailure(err error) {
+	GetLogger().Warn("Failed to remove audio clip of a detection the database did not store",
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", c.correlationID),
+		logger.String("clip_path", c.relPath),
+		logger.SanitizedError(err),
+		logger.String("operation", "audio_export_remove_failed"))
 }
 
 // databaseOutcomeDone returns a channel that closes when dbOutcome leaves
