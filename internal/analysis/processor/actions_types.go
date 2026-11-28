@@ -88,6 +88,82 @@ type DetectionContext struct {
 	// NoteID it lets whichever of SaveAudioAction and DatabaseAction finishes last
 	// write the denoise marker: the clip can be encoded before its row exists.
 	clipDenoise atomic.Int32
+
+	// dbOutcome tracks the final database save verdict so independent actions
+	// (SaveAudioAction) can abort promptly when DatabaseAction skips or terminally
+	// fails instead of waiting for NoteID and writing orphaned files. Zero value is
+	// dbOutcomePending, and dbOutcomeCh is lazily allocated under dbOutcomeMu only
+	// when a waiter blocks while pending.
+	dbOutcome   atomic.Int32
+	dbOutcomeMu sync.Mutex
+	dbOutcomeCh chan struct{}
+}
+
+// Values of DetectionContext.dbOutcome.
+const (
+	dbOutcomePending int32 = iota
+	dbOutcomeSaved
+	dbOutcomeSkipped
+	dbOutcomeFailed
+)
+
+func (d *DetectionContext) setDatabaseOutcome(outcome int32) {
+	if d == nil || outcome == dbOutcomePending {
+		return
+	}
+	d.dbOutcomeMu.Lock()
+	if d.dbOutcome.CompareAndSwap(dbOutcomePending, outcome) && d.dbOutcomeCh != nil {
+		close(d.dbOutcomeCh)
+	}
+	d.dbOutcomeMu.Unlock()
+}
+
+func (d *DetectionContext) markDatabaseSaved(noteID uint64) {
+	if d == nil {
+		return
+	}
+	d.NoteID.Store(noteID)
+	d.setDatabaseOutcome(dbOutcomeSaved)
+}
+
+func (d *DetectionContext) markDatabaseSkipped() {
+	d.setDatabaseOutcome(dbOutcomeSkipped)
+}
+
+func (d *DetectionContext) markDatabaseFailed() {
+	d.setDatabaseOutcome(dbOutcomeFailed)
+}
+
+func (d *DetectionContext) databaseOutcome() int32 {
+	if d == nil {
+		return dbOutcomePending
+	}
+	return d.dbOutcome.Load()
+}
+
+func (d *DetectionContext) shouldSkipAudioExport() bool {
+	outcome := d.databaseOutcome()
+	return outcome == dbOutcomeSkipped || outcome == dbOutcomeFailed
+}
+
+// databaseOutcomeDone returns a channel that closes when dbOutcome leaves
+// dbOutcomePending, or (nil, outcome) if the outcome is already settled.
+func (d *DetectionContext) databaseOutcomeDone() (done <-chan struct{}, outcome int32) {
+	if d == nil {
+		return nil, dbOutcomePending
+	}
+	if outcome = d.dbOutcome.Load(); outcome != dbOutcomePending {
+		return nil, outcome
+	}
+	d.dbOutcomeMu.Lock()
+	defer d.dbOutcomeMu.Unlock()
+	if outcome = d.dbOutcome.Load(); outcome != dbOutcomePending {
+		return nil, outcome
+	}
+	if d.dbOutcomeCh == nil {
+		d.dbOutcomeCh = make(chan struct{})
+	}
+	return d.dbOutcomeCh, dbOutcomePending
 }
 
 // Values of DetectionContext.clipDenoise.

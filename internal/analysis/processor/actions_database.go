@@ -184,6 +184,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		// Check event frequency (supports scientific name lookup)
 		if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, DatabaseSave) {
 			a.saveState.Store(saveStateSkipped)
+			a.DetectionCtx.markDatabaseSkipped()
 			return nil
 		}
 		// Check if this is a new species and update atomically to prevent race conditions
@@ -373,6 +374,10 @@ func (a *DatabaseAction) recordSaveFailure(err error, attempt int) error {
 func (a *DatabaseAction) terminate(err error) {
 	a.terminalErr = err
 	a.saveState.Store(saveStateTerminal)
+	// Signal audio export to abort for every terminal path (including
+	// database_save_outcome_unknown and errDetectionSavePanicked) so it stays
+	// consistent with CompositeAction halting SSE and MQTT.
+	a.DetectionCtx.markDatabaseFailed()
 }
 
 // recordSaveSuccess runs the steps that follow a stored detection, once. The
@@ -417,9 +422,9 @@ func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 			logger.String("operation", "database_save_recovered"))
 	}
 
-	// Share the database ID with downstream actions (MQTT, SSE) immediately.
+	// Share the database ID with downstream actions (MQTT, SSE, SaveAudio) immediately.
 	if a.DetectionCtx != nil {
-		a.DetectionCtx.NoteID.Store(uint64(a.Result.ID))
+		a.DetectionCtx.markDatabaseSaved(uint64(a.Result.ID))
 		// The clip can be encoded before this row exists; when it was, the marker
 		// is still unwritten and this is the call that writes it.
 		a.DetectionCtx.recordClipDenoise(ctx, a.clipMarks, a.Result.ClipName)
@@ -736,6 +741,13 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		return nil
 	}
 
+	// Abort before deferred Extended Capture retries if DatabaseAction already
+	// skipped or terminally failed this detection.
+	if a.DetectionCtx.shouldSkipAudioExport() {
+		a.logSkippedByDatabase(a.DetectionCtx.databaseOutcome())
+		return nil
+	}
+
 	// Deferred-read path: Extended Capture may schedule an export whose tail
 	// still has not been written to the ring buffer. buildSaveAudioAction
 	// populates bufferMgr/sourceID/beginTime/duration/readyAt and leaves
@@ -780,24 +792,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		return nil
 	}
 
-	// Resolve NoteID from DetectionContext (set by DatabaseAction).
-	if a.DetectionCtx != nil {
-		const noteIDWaitTimeout = 5 * time.Second
-		const noteIDPollInterval = 50 * time.Millisecond
-		deadline := time.Now().Add(noteIDWaitTimeout)
-		for time.Now().Before(deadline) {
-			if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
-				a.NoteID = liveID
-				break
-			}
-			select {
-			case <-ctx.Done():
-			case <-time.After(noteIDPollInterval):
-			}
-			if ctx.Err() != nil {
-				break
-			}
-		}
+	// Wait for DatabaseAction to settle or provide NoteID.
+	if !a.waitForDatabaseOutcome(ctx) {
+		return nil
 	}
 
 	// Get the full path by joining the export path with the relative clip name
@@ -908,6 +905,96 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	}
 
 	return nil
+}
+
+const (
+	noteIDWaitTimeout  = 5 * time.Second
+	noteIDPollInterval = 50 * time.Millisecond
+)
+
+// waitForDatabaseOutcome waits up to noteIDWaitTimeout for DatabaseAction to
+// settle or publish NoteID on DetectionCtx. It returns false when DatabaseAction
+// skipped or terminally failed the detection, and true when audio export should
+// proceed (including fail-open on nil DetectionCtx, timeout, or context cancel
+// while the database save is still pending).
+func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
+	if a.DetectionCtx == nil {
+		return true
+	}
+
+	checkResolved := func() (done bool, proceed bool) {
+		switch outcome := a.DetectionCtx.databaseOutcome(); outcome {
+		case dbOutcomeSkipped, dbOutcomeFailed:
+			a.logSkippedByDatabase(outcome)
+			return true, false
+		case dbOutcomeSaved:
+			if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
+				a.NoteID = liveID
+			}
+			return true, true
+		}
+		if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
+			a.NoteID = liveID
+			return true, true
+		}
+		return false, false
+	}
+
+	if done, proceed := checkResolved(); done {
+		return proceed
+	}
+
+	doneCh, outcome := a.DetectionCtx.databaseOutcomeDone()
+	if outcome != dbOutcomePending {
+		if _, proceed := checkResolved(); !proceed {
+			return false
+		}
+		return true
+	}
+
+	timer := time.NewTimer(noteIDWaitTimeout)
+	defer timer.Stop()
+	ticker := time.NewTicker(noteIDPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-doneCh:
+			if done, proceed := checkResolved(); done {
+				return proceed
+			}
+			return true
+		case <-ticker.C:
+			if done, proceed := checkResolved(); done {
+				return proceed
+			}
+		case <-timer.C:
+			if done, proceed := checkResolved(); done {
+				return proceed
+			}
+			return true
+		case <-ctx.Done():
+			if done, proceed := checkResolved(); done {
+				return proceed
+			}
+			return true
+		}
+	}
+}
+
+func (a *SaveAudioAction) logSkippedByDatabase(outcome int32) {
+	operation := "audio_export_db_skipped"
+	msg := "Skipping audio export: database save skipped"
+	if outcome == dbOutcomeFailed {
+		operation = "audio_export_db_failed"
+		msg = "Skipping audio export: database save failed"
+	}
+	GetLogger().Debug(msg,
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", a.CorrelationID),
+		logger.String("species", a.species),
+		logger.String("clip_name", a.ClipName),
+		logger.String("operation", operation))
 }
 
 // relativeClipPath is the clip's name relative to the export directory, which is
