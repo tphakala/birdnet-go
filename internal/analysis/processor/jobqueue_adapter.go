@@ -20,3 +20,9 @@ func (a *ActionAdapter) Execute(ctx context.Context, data any) error {
 func (a *ActionAdapter) GetDescription() string {
 	return a.action.GetDescription()
 }
+
+// OnDropped implements jobqueue.DropHandler: the queue dropped the job before it
+// ran, so the wrapped action is told that it will never run.
+func (a *ActionAdapter) OnDropped() {
+	notifyJobLost(a.action)
+}

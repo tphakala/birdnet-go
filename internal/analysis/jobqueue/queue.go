@@ -212,6 +212,18 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 		return nil, ErrNilAction
 	}
 
+	// Registered before the lock so it runs after the deferred unlock: the
+	// handler may take the lock again or do slow work.
+	var dropped *Job
+	defer func() {
+		if dropped == nil {
+			return
+		}
+		if h, ok := dropped.Action.(DropHandler); ok {
+			h.OnDropped()
+		}
+	}()
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -223,7 +235,7 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 	// Check if queue is full and handle accordingly
 	if len(q.jobs) >= q.maxJobs {
 		// If DropOldestOnFull is enabled, try to make room
-		if !q.dropOldestPendingJob(ctx) {
+		if dropped = q.dropOldestPendingJob(ctx); dropped == nil {
 			// Could not drop any job, queue is full
 			q.droppedJobs++
 			q.stats.DroppedJobs++
@@ -278,17 +290,18 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 }
 
 // dropOldestPendingJob removes the oldest pending job from the queue
-// to make room for a new job. Returns true if a job was dropped.
+// to make room for a new job. It returns the dropped job, or nil when no job
+// could be dropped. A pending job has never started an attempt.
 //
 // Performance: O(N) scan through jobs. Acceptable for default maxJobs=1000.
 // If maxJobs is set significantly higher and queue-full scenarios are common,
 // consider using a min-heap ordered by CreatedAt for O(log N) removal.
 //
 // IMPORTANT: This method must be called with q.mu already locked.
-func (q *JobQueue) dropOldestPendingJob(ctx context.Context) bool {
+func (q *JobQueue) dropOldestPendingJob(ctx context.Context) *Job {
 	// For testing queue overflow, respect the allowJobDropping setting
 	if !q.allowJobDropping {
-		return false
+		return nil
 	}
 
 	// Find the oldest pending job
@@ -311,7 +324,7 @@ func (q *JobQueue) dropOldestPendingJob(ctx context.Context) bool {
 
 	if oldestIdx == -1 {
 		// No pending jobs found
-		return false
+		return nil
 	}
 
 	// Remove the oldest job
@@ -328,7 +341,7 @@ func (q *JobQueue) dropOldestPendingJob(ctx context.Context) bool {
 	q.stats.ActionStats[actionKey] = stats
 
 	LogJobDropped(ctx, oldestJob.ID, oldestJob.Action.GetDescription())
-	return true
+	return oldestJob
 }
 
 // processJobs is the main job processing loop

@@ -6,6 +6,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -172,6 +173,30 @@ func getBirdImageFromCache(detectionCtx *DetectionContext, cache *imageprovider.
 // that the detection needs no further steps.
 type laterStepSkipper interface {
 	skipsLaterSteps() bool
+}
+
+// jobLossHandler is implemented by an action that must react when its job will
+// never run: the queue dropped it before its first attempt, or enqueueing it
+// failed.
+type jobLossHandler interface {
+	jobLost()
+}
+
+// notifyJobLost tells action, when it cares, that its job will never run.
+func notifyJobLost(action Action) {
+	if h, ok := action.(jobLossHandler); ok {
+		h.jobLost()
+	}
+}
+
+// jobLost tells every step that cares that the composite's job will never run.
+func (a *CompositeAction) jobLost() {
+	a.mu.Lock()
+	actions := slices.Clone(a.Actions)
+	a.mu.Unlock()
+	for _, action := range actions {
+		notifyJobLost(action)
+	}
 }
 
 // Execute runs all actions sequentially, stopping on first error or when a step

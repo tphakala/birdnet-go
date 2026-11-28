@@ -2021,30 +2021,24 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		item.Detection.Result.ModelContributions = resultModelContributions(item.ModelContributions, p.activeModelIDs(item.Source))
 	}
 
-	actionList := p.getActionsForItem(&item.Detection, settings)
-	for _, action := range actionList {
-		task := &Task{Type: TaskTypeAction, Detection: taskDetectionFor(&item.Detection, action), Action: action}
-		if err := p.EnqueueTask(task); err != nil {
-			// Check error message instead of using errors.Is to avoid import cycle
-			if err.Error() == "worker queue is full" {
-				GetLogger().Warn("worker queue is full, dropping task",
-					logger.String("species", speciesName),
-					logger.String("operation", "enqueue_task"),
-					logger.String("error", "queue_full"))
-			} else {
-				sanitizedErr := privacy.WrapError(err)
-				GetLogger().Error("failed to enqueue task",
-					logger.Any("error", sanitizedErr),
-					logger.String("species", speciesName),
-					logger.String("operation", "enqueue_task"))
-			}
-			continue
-		}
-	}
+	p.enqueueActions(&item.Detection, p.getActionsForItem(&item.Detection, settings))
 
 	// Update BirdNET metrics detection counter if enabled
 	if settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
 		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Result.Species.CommonName)
+	}
+}
+
+// enqueueActions queues one job per action of the detection det. EnqueueTaskCtx
+// logs a refused enqueue (a full or stopped queue, or any other queue error)
+// itself, at the level its cause calls for. An action whose job could not be
+// queued is told that it will never run (notifyJobLost).
+func (p *Processor) enqueueActions(det *Detections, actions []Action) {
+	for _, action := range actions {
+		task := &Task{Type: TaskTypeAction, Detection: taskDetectionFor(det, action), Action: action}
+		if err := p.EnqueueTask(task); err != nil {
+			notifyJobLost(action)
+		}
 	}
 }
 

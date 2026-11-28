@@ -8,7 +8,7 @@ The `jobqueue` package provides a job queue implementation with the following ke
 
 - **Configurable Retry Policies**: Exponential backoff with jitter for failed jobs
 - **Rate Limiting**: Control the maximum number of jobs in the queue
-- **Job Prioritization**: Ability to drop oldest jobs when the queue is full
+- **Job Prioritization**: Ability to drop oldest jobs when the queue is full; an action that implements `DropHandler` is told when its job is dropped
 - **Graceful Shutdown**: Wait for in-progress jobs to complete
 - **Panic Recovery**: Automatically recover from panics in job execution
 - **Comprehensive Statistics**: Track success, failure, and retry metrics per action type
@@ -215,7 +215,7 @@ The queue implements several mechanisms to manage memory:
 
 1. **Maximum Queue Size**: Limits the number of pending jobs
 2. **Completed-Job Discard**: Completed and failed jobs are dropped from the active queue on the next cleanup tick, making their Action payloads eligible for garbage collection
-3. **Job Dropping**: Can drop oldest jobs when the queue is full
+3. **Job Dropping**: Can drop the oldest pending job when the queue is full; an action that implements `DropHandler` gets `OnDropped` after the queue lock is released
 
 ### Panic Recovery
 
