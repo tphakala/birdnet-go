@@ -885,7 +885,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// A clip exported before the verdict was known (the wait timed out) stays
 	// only if the verdict does not prove there is no row: offer it for removal,
 	// and stop here when the verdict already proves it.
-	if identityPinned && a.offerClipForRemoval(outputPath, fileInfo) {
+	if identityPinned && a.offerClipForRemoval(outputPath, enc.written) {
 		return nil
 	}
 
@@ -993,11 +993,11 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 // when the database verdict is still pending or proves no row, and reports
 // whether the verdict proves no row (the clip is then claimed for removal,
 // which exportedClip.remove can still decline). A clip outside
-// the export directory is never offered: it is kept (fail open). written must
-// already carry its file identity (os.SameFile(written, written) called right
-// after the Stat): on Windows os.Stat leaves the identity to be read from the
-// path later, when another export may have replaced the file.
-func (a *SaveAudioAction) offerClipForRemoval(outputPath string, written os.FileInfo) (noRow bool) {
+// the export directory is never offered: it is kept (fail open). written is
+// what writeClipLocked read under the path lock right after the write: the
+// file's pinned identity and the lock stripe's write count, which the removal
+// checks to tell this export's file from a later one at the same name.
+func (a *SaveAudioAction) offerClipForRemoval(outputPath string, written writtenClip) (noRow bool) {
 	if a.DetectionCtx.verdictKeepsClip() {
 		return false
 	}
@@ -1009,7 +1009,8 @@ func (a *SaveAudioAction) offerClipForRemoval(outputPath string, written os.File
 		exportDir:     a.Settings.Realtime.Audio.Export.Path,
 		path:          outputPath,
 		relPath:       rel,
-		written:       written,
+		written:       written.info,
+		writeGen:      written.gen,
 		correlationID: a.CorrelationID,
 	})
 }

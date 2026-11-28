@@ -128,6 +128,7 @@ type exportedClip struct {
 	path          string      // the path the encoder wrote (after resolveExportParams)
 	relPath       string      // path relative to exportDir (relativeClipPath form), for the log lines
 	written       os.FileInfo // Stat taken right after the encode, identity already read (os.SameFile(fi, fi)), for os.SameFile
+	writeGen      uint64      // the lock stripe's write count after this export's write (writtenClip.gen)
 	correlationID string
 }
 
@@ -262,18 +263,21 @@ func (d *DetectionContext) removeClipWithoutRow() {
 // import writes historical recordings without it). The lock is only tried:
 // when another export or removal holds the same lock stripe, the clip is kept
 // rather than blocking the caller, which can be the pending-detection flush.
-// Failures are logged; the clip is then left in place.
+// The clip is also kept when any export has written under the stripe since
+// this one (clipPathStripe.writes): a freed inode number can be given to a
+// later file at the same path, so os.SameFile alone could match a file this
+// export did not write. Failures are logged; the clip is then left in place.
 func (c *exportedClip) remove() {
-	lock := clipPathLock(c.path)
-	if !lock.TryLock() {
-		GetLogger().Debug("Kept audio clip: another export or removal holds its path lock stripe",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", c.correlationID),
-			logger.String("clip_path", c.relPath),
-			logger.String("operation", "audio_export_remove_skipped"))
+	stripe := clipPathStripeFor(c.path)
+	if !stripe.mu.TryLock() {
+		c.logKept("Kept audio clip: another export or removal holds its path lock stripe")
 		return
 	}
-	defer lock.Unlock()
+	defer stripe.mu.Unlock()
+	if stripe.writes != c.writeGen {
+		c.logKept("Kept audio clip: another export wrote under its path lock stripe since")
+		return
+	}
 	cur, err := os.Stat(c.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return
@@ -283,11 +287,7 @@ func (c *exportedClip) remove() {
 		return
 	}
 	if !os.SameFile(c.written, cur) {
-		GetLogger().Debug("Kept audio clip: another export replaced it",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", c.correlationID),
-			logger.String("clip_path", c.relPath),
-			logger.String("operation", "audio_export_remove_skipped"))
+		c.logKept("Kept audio clip: another export replaced it")
 		return
 	}
 	sfs, err := securefs.New(c.exportDir)
@@ -309,13 +309,24 @@ func (c *exportedClip) remove() {
 		logger.String("operation", "audio_export_removed_no_row"))
 }
 
-// logRemoveFailure logs a failed removal of a clip without a row.
+// logKept logs why a clip without a row was left in place.
+func (c *exportedClip) logKept(msg string) {
+	GetLogger().Debug(msg,
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", c.correlationID),
+		logger.String("clip_path", c.relPath),
+		logger.String("operation", "audio_export_remove_skipped"))
+}
+
+// logRemoveFailure logs a failed removal of a clip without a row. The error is
+// scrubbed: file system errors carry the absolute path, which can contain a
+// user name.
 func (c *exportedClip) logRemoveFailure(err error) {
 	GetLogger().Warn("Failed to remove audio clip of a detection the database did not store",
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", c.correlationID),
 		logger.String("clip_path", c.relPath),
-		logger.Error(err),
+		logger.SanitizedError(err),
 		logger.String("operation", "audio_export_remove_failed"))
 }
 

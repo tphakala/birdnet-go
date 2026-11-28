@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -703,11 +704,10 @@ func TestDetectionContext_NoteIDOnlyForWinningSavedVerdict(t *testing.T) {
 func TestExportedClipRemove_KeepsClipWhileItsPathIsLocked(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "locked.wav")
-	require.NoError(t, os.WriteFile(path, []byte("clip"), 0o600))
-	written, err := os.Stat(path)
+	written, err := writeClipLocked(path, func() error { return os.WriteFile(path, []byte("clip"), 0o600) })
 	require.NoError(t, err)
-	require.True(t, os.SameFile(written, written))
-	clip := &exportedClip{exportDir: dir, path: path, relPath: "locked.wav", written: written}
+	require.True(t, written.pinned)
+	clip := &exportedClip{exportDir: dir, path: path, relPath: "locked.wav", written: written.info, writeGen: written.gen}
 
 	lock := clipPathLock(path)
 	lock.Lock()
@@ -748,6 +748,49 @@ func TestSaveAudioAction_HoldsClipPathLockDuringEncode(t *testing.T) {
 		require.True(t, lock.TryLock(), "the export releases the path lock before it returns")
 		lock.Unlock()
 	})
+}
+
+// TestExportedClipRemove_KeepsClipAfterAnotherWriteOnItsStripe verifies that a
+// removal keeps the clip once any other export has written under the same lock
+// stripe since this clip was written. os.SameFile compares device and inode
+// numbers only, and a freed inode number can be given to a later file at the
+// same path, so a matching identity alone does not prove the file is this
+// export's. Not parallel: the stripe counters are package-wide.
+func TestExportedClipRemove_KeepsClipAfterAnotherWriteOnItsStripe(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "first.wav")
+	written, err := writeClipLocked(path, func() error { return os.WriteFile(path, []byte("first"), 0o600) })
+	require.NoError(t, err)
+
+	// Another clip whose path shares the lock stripe; with 256 stripes a few
+	// hundred names are enough to find one.
+	var other string
+	for i := range clipPathLockStripes * 16 {
+		candidate := filepath.Join(dir, fmt.Sprintf("other-%d.wav", i))
+		if clipPathLock(candidate) == clipPathLock(path) {
+			other = candidate
+			break
+		}
+	}
+	require.NotEmpty(t, other, "no path on the same stripe found")
+	_, err = writeClipLocked(other, func() error { return os.WriteFile(other, []byte("other"), 0o600) })
+	require.NoError(t, err)
+
+	clip := &exportedClip{exportDir: dir, path: path, relPath: "first.wav", written: written.info, writeGen: written.gen}
+	clip.remove()
+	assert.FileExists(t, path, "a write on the same stripe since this export must keep the clip")
+}
+
+// TestExportedClipLogRemoveFailure_ScrubsAbsolutePaths verifies that a failed
+// removal does not log the absolute export path: file system errors carry it,
+// and it can contain a user name.
+func TestExportedClipLogRemoveFailure_ScrubsAbsolutePaths(t *testing.T) {
+	logs := logtest.CaptureBuffer(t)
+	const exportDir = "/home/alice/birdnet/clips"
+	clip := &exportedClip{exportDir: exportDir, path: exportDir + "/2026/11/clip.wav", relPath: "2026/11/clip.wav"}
+	clip.logRemoveFailure(&fs.PathError{Op: "remove", Path: clip.path, Err: fs.ErrPermission})
+	assert.Contains(t, logs.String(), "audio_export_remove_failed")
+	assert.NotContains(t, logs.String(), "/home/alice", "the absolute export path must not be logged")
 }
 
 // TestSaveAudioAction_ReleasesClipPathLockWhenEncoderPanics verifies that an
