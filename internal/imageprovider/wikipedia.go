@@ -515,8 +515,7 @@ func (l *wikiMediaProvider) handleJSONParseError(body []byte, parseErr error) er
 
 // LazyWikiMediaProvider wraps the actual Wikipedia provider with lazy initialization.
 // This ensures the provider is only created when configuration is properly available,
-// preventing race conditions during startup where conf.Setting() might return nil
-// or have an empty Version field.
+// preventing race conditions during startup where conf.Setting() might return nil.
 type LazyWikiMediaProvider struct {
 	// initSem is a one-slot semaphore rather than a sync.Mutex so that
 	// acquisition is cancellable. Initialization waits up to configWaitTimeout
@@ -621,7 +620,7 @@ func (l *LazyWikiMediaProvider) failInit(err error) {
 	l.nextRetry = time.Now().Add(lazyInitRetryInterval)
 }
 
-// waitForValidConfig waits until configuration is available with a valid version.
+// waitForValidConfig waits until configuration is available.
 func (l *LazyWikiMediaProvider) waitForValidConfig(ctx context.Context, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(configCheckInterval)
@@ -629,7 +628,7 @@ func (l *LazyWikiMediaProvider) waitForValidConfig(ctx context.Context, timeout 
 
 	for {
 		settings := conf.Setting()
-		if settings != nil && settings.Version != "" {
+		if settings != nil {
 			GetLogger().Debug("LazyWikiMediaProvider: Valid configuration detected",
 				logger.String("provider", wikiProviderName),
 				logger.String("version", settings.Version))
