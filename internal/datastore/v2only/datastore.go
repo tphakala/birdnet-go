@@ -863,11 +863,12 @@ func retrySafe(err error) error {
 // saveDetection is the single v2 write path behind every save entry point. It
 // resolves the model, labels and audio source, writes the detection and its
 // predictions in one transaction, then stores model contributions best effort.
-// It returns the database-assigned detection ID. A failure that happened before
-// COMMIT was sent wraps datastore.ErrDetectionSaveRetrySafe, including a
-// transaction database/sql rolled back because its context ended before COMMIT
-// was sent; a failure of COMMIT itself does not, because the server may have
-// applied it.
+// It returns the database-assigned detection ID. A failure of the reference data
+// lookups and writes, Begin or the inserts wraps
+// datastore.ErrDetectionSaveRetrySafe, and so does a transaction database/sql
+// rolled back because its context ended before COMMIT was sent; any other COMMIT
+// error does not, because it cannot be told apart from a COMMIT the server may
+// have applied.
 func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint, error) {
 	// Use the model info from the write if available, otherwise fall back to the default.
 	// This allows multi-model detections to be attributed to the correct model.
