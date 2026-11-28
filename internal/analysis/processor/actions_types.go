@@ -67,9 +67,10 @@ const (
 // in order; SaveAudioAction runs as its own job outside the composite and waits at
 // most noteIDWaitTimeout for the database outcome.
 type DetectionContext struct {
-	// NoteID holds the database primary key after a successful save. It is written
-	// only through markDatabaseSaved, which also settles dbOutcome, and read by
-	// MqttAction, SSEAction and SaveAudioAction.
+	// NoteID holds the database primary key after a successful save. Write it
+	// only through markDatabaseSaved, which also settles dbOutcome: SaveAudioAction
+	// wakes on dbOutcome, not on NoteID, so a bare Store leaves it waiting
+	// noteIDWaitTimeout. Read by MqttAction, SSEAction and SaveAudioAction.
 	NoteID atomic.Uint64
 
 	// ClipSaved indicates whether the audio clip was successfully exported to disk.

@@ -799,7 +799,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		return nil
 	}
 
-	// Wait for DatabaseAction to settle or provide NoteID.
+	// Wait for DatabaseAction's verdict (dbOutcome); NoteID is read after it.
 	if !a.waitForDatabaseOutcome(ctx) {
 		return nil
 	}
