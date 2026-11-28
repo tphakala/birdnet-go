@@ -30,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // testEventTrackerInterval is used to create EventTrackers for tests.
@@ -249,6 +250,8 @@ func TestDatabaseAction_Execute_ReturnsErrorOnSaveFailure(t *testing.T) {
 	// Verify DetectionContext was not updated
 	assert.Equal(t, uint64(0), detectionCtx.NoteID.Load(),
 		"DetectionContext.NoteID should not be updated on error")
+	assert.Equal(t, dbOutcomeUnknown, detectionCtx.databaseOutcome(),
+		"an unmarked legacy failure may follow a stored row, so the outcome is unknown")
 }
 
 // TestDatabaseAction_Execute_EventTrackerLimiting verifies that
@@ -611,33 +614,60 @@ func TestDatabaseAction_RetrySafeFailureSavesOnceWithoutRegating(t *testing.T) {
 }
 
 // TestDatabaseAction_CommitOutcomeUnknownIsNotRetried covers a save that failed
-// with a connectivity error the store did not mark retry safe, as a lost COMMIT
-// reply does. The server may have stored the row, so a repeat could duplicate it.
+// with an error the store did not mark retry safe, as a lost COMMIT reply or a
+// COMMIT-phase I/O error does. The server may have stored the row, so a repeat
+// could duplicate it, and the outcome is logged and settled as unknown.
+// Not parallel because logtest.CaptureBuffer swaps logger.Global().
 func TestDatabaseAction_CommitOutcomeUnknownIsNotRetried(t *testing.T) {
-	t.Parallel()
-
-	repo := &scriptedSaveRepository{
-		MockDetectionRepository: NewMockDetectionRepository(),
-		script:                  []error{fmt.Errorf("failed to save detection: %w", mysql.ErrInvalidConn)},
+	tests := []struct {
+		name             string
+		saveErr          error
+		wantConnectivity bool
+	}{
+		{
+			name:             "lost_commit_reply",
+			saveErr:          fmt.Errorf("failed to save detection: %w", mysql.ErrInvalidConn),
+			wantConnectivity: true,
+		},
+		{
+			name:             "unmarked_commit_error",
+			saveErr:          unmarkedCommitError(),
+			wantConnectivity: false,
+		},
 	}
-	det := testDetection()
-	action := &DatabaseAction{
-		Settings:     &conf.Settings{Debug: true},
-		Repo:         repo,
-		Result:       det.Result,
-		Results:      det.Results,
-		EventTracker: NewEventTracker(time.Hour),
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := logtest.CaptureBuffer(t)
+			repo := &scriptedSaveRepository{
+				MockDetectionRepository: NewMockDetectionRepository(),
+				script:                  []error{tc.saveErr},
+			}
+			det := testDetection()
+			detCtx := &DetectionContext{}
+			action := &DatabaseAction{
+				Settings:     &conf.Settings{Debug: true},
+				Repo:         repo,
+				Result:       det.Result,
+				Results:      det.Results,
+				EventTracker: NewEventTracker(time.Hour),
+				DetectionCtx: detCtx,
+			}
+			retry := action.saveRetryConfig()
+
+			firstErr := action.ExecuteContext(t.Context(), nil)
+			require.Error(t, firstErr)
+			assert.Equal(t, tc.wantConnectivity, errors.IsConnectivityError(firstErr))
+			assert.False(t, retry.Retryable(firstErr), "an unknown commit outcome ends the job")
+
+			require.Error(t, action.ExecuteContext(t.Context(), nil), "a later call reports the same failure")
+			assert.Equal(t, 1, repo.saveCalls(), "the save is never repeated")
+			assert.Zero(t, repo.GetSavedCount())
+			assert.Equal(t, dbOutcomeUnknown, detCtx.databaseOutcome())
+			assert.Contains(t, logs.String(), "database_save_outcome_unknown")
+			assert.NotContains(t, logs.String(), "database_save_repository")
+		})
 	}
-	retry := action.saveRetryConfig()
-
-	firstErr := action.ExecuteContext(t.Context(), nil)
-	require.Error(t, firstErr)
-	require.True(t, errors.IsConnectivityError(firstErr), "the error looks transient")
-	assert.False(t, retry.Retryable(firstErr), "an unknown commit outcome ends the job")
-
-	require.Error(t, action.ExecuteContext(t.Context(), nil), "a later call reports the same failure")
-	assert.Equal(t, 1, repo.saveCalls(), "the save is never repeated")
-	assert.Zero(t, repo.GetSavedCount())
 }
 
 // TestDatabaseAction_RetryWaitsForInFlightSave covers a save that outlasts its
@@ -747,55 +777,77 @@ func TestDatabaseAction_RetryWindowEnds(t *testing.T) {
 		assert.Equal(t, lastAttempt, repo.saveCalls(), "no save after the window")
 	})
 
-	t.Run("save_outlives_the_last_attempt", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			repo := &scriptedSaveRepository{
-				MockDetectionRepository: NewMockDetectionRepository(),
-				script:                  []error{refusedRetrySafeError()},
-				release:                 make(chan struct{}),
-			}
-			det := testDetection()
-			action := &DatabaseAction{
-				Settings: &conf.Settings{Debug: true}, Repo: repo, Result: det.Result, Results: det.Results,
-				EventTracker: NewEventTracker(time.Hour),
-			}
-			retry := action.saveRetryConfig()
-			action.maxAttempts.Store(lastAttempt)
+	// A save that outlives the last attempt settles the outcome when it ends: a
+	// refused save proves no row, an unmarked failure may follow a stored row and
+	// is logged as such, not as "Detection not saved".
+	// Not parallel because logtest.CaptureBuffer swaps logger.Global().
+	for _, tc := range []struct {
+		name          string
+		saveErr       error
+		wantOutcome   int32
+		wantOperation string
+	}{
+		{"save_outlives_the_last_attempt", refusedRetrySafeError(), dbOutcomeFailed, "database_save_abandoned"},
+		{"unmarked_save_outlives_the_last_attempt", unmarkedCommitError(), dbOutcomeUnknown, "database_save_outcome_unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := logtest.CaptureBuffer(t)
+			synctest.Test(t, func(t *testing.T) {
+				repo := &scriptedSaveRepository{
+					MockDetectionRepository: NewMockDetectionRepository(),
+					script:                  []error{tc.saveErr},
+					release:                 make(chan struct{}),
+				}
+				det := testDetection()
+				detCtx := &DetectionContext{}
+				action := &DatabaseAction{
+					Settings: &conf.Settings{Debug: true}, Repo: repo, Result: det.Result, Results: det.Results,
+					EventTracker: NewEventTracker(time.Hour), DetectionCtx: detCtx,
+				}
+				retry := action.saveRetryConfig()
+				action.maxAttempts.Store(lastAttempt)
 
-			first := make(chan error, 1)
-			go func() { first <- action.ExecuteContext(t.Context(), nil) }()
-			synctest.Wait()
+				first := make(chan error, 1)
+				go func() { first <- action.ExecuteContext(t.Context(), nil) }()
+				synctest.Wait()
 
-			ctx, cancel := context.WithTimeout(t.Context(), CompositeActionTimeout)
-			defer cancel()
-			require.ErrorIs(t, action.ExecuteContext(ctx, nil), errDetectionSaveInFlight)
-			assert.True(t, action.windowEnded.Load(), "the last attempt gave up on the running save")
+				ctx, cancel := context.WithTimeout(t.Context(), CompositeActionTimeout)
+				defer cancel()
+				require.ErrorIs(t, action.ExecuteContext(ctx, nil), errDetectionSaveInFlight)
+				assert.True(t, action.windowEnded.Load(), "the last attempt gave up on the running save")
 
-			close(repo.release)
-			require.Error(t, <-first, "the abandoned save was refused")
-			assert.False(t, retry.Retryable(nil), "nothing retries after the window")
-			assert.Equal(t, 1, repo.saveCalls())
+				close(repo.release)
+				require.Error(t, <-first, "the abandoned save failed")
+				assert.False(t, retry.Retryable(nil), "nothing retries after the window")
+				assert.Equal(t, 1, repo.saveCalls())
+				assert.Equal(t, tc.wantOutcome, detCtx.databaseOutcome())
+				assert.Contains(t, logs.String(), tc.wantOperation)
+			})
 		})
-	})
+	}
 }
 
 // TestDatabaseAction_LegacyStoreIsNotRetried verifies that a failure of the legacy
-// datastore path ends the job, whatever the error says.
+// datastore path ends the job, whatever the error says. The error is a refused
+// dial without the store's retry-safe marker: it never reached the server, so
+// the outcome is failed and the clip is not exported.
 func TestDatabaseAction_LegacyStoreIsNotRetried(t *testing.T) {
 	t.Parallel()
 
 	mockDs := NewActionMockDatastore()
-	mockDs.SetSaveError(refusedRetrySafeError())
+	mockDs.SetSaveError(&net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)})
 	det := testDetection()
+	detCtx := &DetectionContext{}
 	action := &DatabaseAction{
 		Settings: &conf.Settings{Debug: true}, Ds: mockDs, Result: det.Result, Results: det.Results,
-		EventTracker: NewEventTracker(time.Hour),
+		EventTracker: NewEventTracker(time.Hour), DetectionCtx: detCtx,
 	}
 	retry := action.saveRetryConfig()
 
 	require.Error(t, action.ExecuteContext(t.Context(), nil))
 	assert.False(t, retry.Retryable(nil))
 	assert.Equal(t, 1, mockDs.GetSaveCalls())
+	assert.Equal(t, dbOutcomeFailed, detCtx.databaseOutcome(), "an unsent save proves no row")
 }
 
 // TestDatabaseAction_UnlikelyCommentAfterRetry verifies that the follow-up steps

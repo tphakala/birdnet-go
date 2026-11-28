@@ -105,7 +105,7 @@ func TestSaveAudioAction_RecordsClipDenoised(t *testing.T) {
 			if tc.denoise != nil {
 				a.denoise = tc.denoise
 			}
-			detectionCtx.NoteID.Store(denoiseMarkNoteID)
+			detectionCtx.markDatabaseSaved(denoiseMarkNoteID)
 
 			require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -119,7 +119,7 @@ func TestSaveAudioAction_NilClipMarksIsNoOp(t *testing.T) {
 	t.Parallel()
 	a, detectionCtx, _ := newMarkedExportAction(t, true, noisyPCM(conf.SampleRate, 1.5))
 	a.clipMarks = nil
-	detectionCtx.NoteID.Store(denoiseMarkNoteID)
+	detectionCtx.markDatabaseSaved(denoiseMarkNoteID)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 }
