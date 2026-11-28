@@ -777,38 +777,54 @@ func TestDatabaseAction_RetryWindowEnds(t *testing.T) {
 		assert.Equal(t, lastAttempt, repo.saveCalls(), "no save after the window")
 	})
 
-	t.Run("save_outlives_the_last_attempt", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			repo := &scriptedSaveRepository{
-				MockDetectionRepository: NewMockDetectionRepository(),
-				script:                  []error{refusedRetrySafeError()},
-				release:                 make(chan struct{}),
-			}
-			det := testDetection()
-			detCtx := &DetectionContext{}
-			action := &DatabaseAction{
-				Settings: &conf.Settings{Debug: true}, Repo: repo, Result: det.Result, Results: det.Results,
-				EventTracker: NewEventTracker(time.Hour), DetectionCtx: detCtx,
-			}
-			retry := action.saveRetryConfig()
-			action.maxAttempts.Store(lastAttempt)
+	// A save that outlives the last attempt settles the outcome when it ends: a
+	// refused save proves no row, an unmarked failure may follow a stored row and
+	// is logged as such, not as "Detection not saved".
+	// Not parallel because logtest.CaptureBuffer swaps logger.Global().
+	for _, tc := range []struct {
+		name          string
+		saveErr       error
+		wantOutcome   int32
+		wantOperation string
+	}{
+		{"save_outlives_the_last_attempt", refusedRetrySafeError(), dbOutcomeFailed, "database_save_abandoned"},
+		{"unmarked_save_outlives_the_last_attempt", unmarkedCommitError(), dbOutcomeUnknown, "database_save_outcome_unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := logtest.CaptureBuffer(t)
+			synctest.Test(t, func(t *testing.T) {
+				repo := &scriptedSaveRepository{
+					MockDetectionRepository: NewMockDetectionRepository(),
+					script:                  []error{tc.saveErr},
+					release:                 make(chan struct{}),
+				}
+				det := testDetection()
+				detCtx := &DetectionContext{}
+				action := &DatabaseAction{
+					Settings: &conf.Settings{Debug: true}, Repo: repo, Result: det.Result, Results: det.Results,
+					EventTracker: NewEventTracker(time.Hour), DetectionCtx: detCtx,
+				}
+				retry := action.saveRetryConfig()
+				action.maxAttempts.Store(lastAttempt)
 
-			first := make(chan error, 1)
-			go func() { first <- action.ExecuteContext(t.Context(), nil) }()
-			synctest.Wait()
+				first := make(chan error, 1)
+				go func() { first <- action.ExecuteContext(t.Context(), nil) }()
+				synctest.Wait()
 
-			ctx, cancel := context.WithTimeout(t.Context(), CompositeActionTimeout)
-			defer cancel()
-			require.ErrorIs(t, action.ExecuteContext(ctx, nil), errDetectionSaveInFlight)
-			assert.True(t, action.windowEnded.Load(), "the last attempt gave up on the running save")
+				ctx, cancel := context.WithTimeout(t.Context(), CompositeActionTimeout)
+				defer cancel()
+				require.ErrorIs(t, action.ExecuteContext(ctx, nil), errDetectionSaveInFlight)
+				assert.True(t, action.windowEnded.Load(), "the last attempt gave up on the running save")
 
-			close(repo.release)
-			require.Error(t, <-first, "the abandoned save was refused")
-			assert.False(t, retry.Retryable(nil), "nothing retries after the window")
-			assert.Equal(t, 1, repo.saveCalls())
-			assert.Equal(t, dbOutcomeFailed, detCtx.databaseOutcome(), "a refused late save proves no row")
+				close(repo.release)
+				require.Error(t, <-first, "the abandoned save failed")
+				assert.False(t, retry.Retryable(nil), "nothing retries after the window")
+				assert.Equal(t, 1, repo.saveCalls())
+				assert.Equal(t, tc.wantOutcome, detCtx.databaseOutcome())
+				assert.Contains(t, logs.String(), tc.wantOperation)
+			})
 		})
-	})
+	}
 }
 
 // TestDatabaseAction_LegacyStoreIsNotRetried verifies that a failure of the legacy
