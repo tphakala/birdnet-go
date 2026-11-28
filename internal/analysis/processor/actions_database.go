@@ -841,22 +841,28 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// before any encoder sees it. The clip file is written once, from this PCM.
 	a.applyExportDenoise(ctx, exportRate)
 
+	// The path lock is held from the encode until the written file's identity is
+	// read, so another detection's removal of a clip at the same name cannot run
+	// in between (exportedClip.remove). It is released before this clip is
+	// offered for removal below, which may take it again.
+	pathLock := clipPathLock(outputPath)
+	pathLock.Lock()
 	enc, err := a.encodeClip(ctx, exportRate, exportFormat, outputPath)
 	if err != nil {
+		pathLock.Unlock()
 		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
 		return err
 	}
 
 	// Stat right after the encode: the size is logged below, and the FileInfo
-	// identifies this export's file if the clip has to be removed later. Another
-	// export can rename a new file onto the same name at any time after this
-	// one's rename, so the closer this runs to the encode the better.
+	// identifies this export's file if the clip has to be removed later.
 	fileInfo, statErr := os.Stat(outputPath)
 	// The self-compare is not a no-op: on Windows os.Stat records only the path,
 	// and os.SameFile reads the file ID from that path at its first call, so
 	// without it the identity would be taken from whatever file holds the name
 	// when the removal runs (see StatSource in internal/spectrogram/generator.go).
 	identityPinned := statErr == nil && os.SameFile(fileInfo, fileInfo)
+	pathLock.Unlock()
 	var fileSize int64
 	if statErr == nil {
 		fileSize = fileInfo.Size()

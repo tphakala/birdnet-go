@@ -697,6 +697,61 @@ func TestDetectionContext_NoteIDOnlyForWinningSavedVerdict(t *testing.T) {
 // TestDetectionContext_NilReceiverHoldsNoClip verifies that offering a clip on
 // a nil DetectionContext holds nothing and reports no verdict, like the other
 // nil-safe DetectionContext methods, instead of panicking.
+// TestExportedClipRemove_KeepsClipWhileItsPathIsLocked verifies that a removal
+// does not touch a clip while an export to the same path holds the path lock:
+// the identity check and the removal must not interleave with a write there.
+// Once the lock is free, the same clip is removed.
+func TestExportedClipRemove_KeepsClipWhileItsPathIsLocked(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "locked.wav")
+	require.NoError(t, os.WriteFile(path, []byte("clip"), 0o600))
+	written, err := os.Stat(path)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(written, written))
+	clip := &exportedClip{exportDir: dir, path: path, relPath: "locked.wav", written: written}
+
+	lock := clipPathLock(path)
+	lock.Lock()
+	clip.remove()
+	lock.Unlock()
+	assert.FileExists(t, path, "a removal must not run while an export holds the path lock")
+
+	clip.remove()
+	assert.NoFileExists(t, path, "the clip is removed once the path lock is free")
+}
+
+// TestSaveAudioAction_HoldsClipPathLockDuringEncode verifies that the export
+// holds the path lock while the encoder writes the clip and until its identity
+// is read, so a removal of another detection's clip at the same name cannot
+// interleave with the write.
+func TestSaveAudioAction_HoldsClipPathLockDuringEncode(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		detCtx := &DetectionContext{}
+		detCtx.markDatabaseSaved(1)
+		action, tmpDir := newTestSaveAudioAction(t, "encode-locked.wav", detCtx, &recordingPreRenderer{})
+		var lockedDuringEncode bool
+		action.encode = func(ctx context.Context, encoder string, exportRate, bitrateKbps int, exportFormat, outputPath string, gainDB float64) error {
+			if err := action.runEncoder(ctx, encoder, exportRate, bitrateKbps, exportFormat, outputPath, gainDB); err != nil {
+				return err
+			}
+			lock := clipPathLock(outputPath)
+			lockedDuringEncode = !lock.TryLock()
+			if !lockedDuringEncode {
+				lock.Unlock()
+			}
+			return nil
+		}
+
+		require.NoError(t, action.Execute(t.Context(), nil))
+		assert.True(t, lockedDuringEncode, "the export holds the path lock while the encoder writes")
+		assert.FileExists(t, filepath.Join(tmpDir, "encode-locked.wav"))
+		lock := clipPathLock(filepath.Join(tmpDir, "encode-locked.wav"))
+		require.True(t, lock.TryLock(), "the export releases the path lock before it returns")
+		lock.Unlock()
+	})
+}
+
 func TestDetectionContext_NilReceiverHoldsNoClip(t *testing.T) {
 	t.Parallel()
 	var d *DetectionContext
