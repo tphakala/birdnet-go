@@ -439,7 +439,7 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 			require.NoError(t, err)
 			assert.Positive(t, info.Size())
 			assert.True(t, detCtx.ClipSaved.Load())
-			assert.Equal(t, []uint{0}, pre.submittedNoteIDs())
+			assert.Empty(t, pre.submittedNoteIDs(), "no spectrogram is pre-rendered while the verdict is pending")
 		})
 	})
 
@@ -531,4 +531,150 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 			assert.Positive(t, info.Size())
 		})
 	})
+}
+
+// TestSaveAudioAction_LateNoRowVerdictRemovesClip verifies that a clip exported
+// while the database verdict was still pending (SaveAudioAction waited out
+// noteIDWaitTimeout) is removed once a verdict proving no row lands, whichever
+// side finishes last, and is kept on any other verdict or when another export
+// has since replaced the file. No spectrogram is pre-rendered while pending.
+// Not parallel because logtest.CaptureBuffer swaps logger.Global().
+func TestSaveAudioAction_LateNoRowVerdictRemovesClip(t *testing.T) {
+	const clipName = "late.wav"
+	replacement := []byte("another detection's clip")
+
+	tests := []struct {
+		name string
+		// duringEncode runs inside the encode seam, after the real encoder wrote
+		// the file: the verdict lands before SaveAudioAction offers the clip.
+		duringEncode func(detCtx *DetectionContext)
+		// afterExport runs once Execute returned: the verdict lands last.
+		afterExport   func(ctx context.Context, detCtx *DetectionContext, clipPath string) error
+		wantRemoved   bool
+		wantClipSaved bool
+		wantContent   []byte
+	}{
+		{
+			name: "failed_after_export_removes_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				return runTerminalDatabaseFailure(ctx, detCtx, clipName, "disk full")
+			},
+			wantRemoved: true,
+		},
+		{
+			name: "unknown_after_export_keeps_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				repo := &scriptedSaveRepository{
+					MockDetectionRepository: NewMockDetectionRepository(),
+					script:                  []error{unmarkedCommitError()},
+				}
+				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, clipName)
+				if err := db.Execute(ctx, nil); err == nil {
+					return errors.NewStd("expected commit error, got nil")
+				}
+				return nil
+			},
+			wantClipSaved: true,
+		},
+		{
+			name:         "skipped_during_encode_removes_clip_before_success_log",
+			duringEncode: func(detCtx *DetectionContext) { detCtx.markDatabaseSkipped() },
+			wantRemoved:  true,
+		},
+		{
+			name: "replaced_by_another_export_is_kept",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, clipPath string) error {
+				// Another detection exports to the same name: a new file renamed
+				// onto the path, as every encoder finishes.
+				tmp := filepath.Join(filepath.Dir(clipPath), "replacement.tmp")
+				if err := os.WriteFile(tmp, replacement, 0o600); err != nil {
+					return err
+				}
+				if err := os.Rename(tmp, clipPath); err != nil {
+					return err
+				}
+				return runTerminalDatabaseFailure(ctx, detCtx, clipName, "disk full")
+			},
+			wantContent: replacement,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := logtest.CaptureBuffer(t)
+			synctest.Test(t, func(t *testing.T) {
+				detCtx := &DetectionContext{}
+				pre := &recordingPreRenderer{}
+				action, tmpDir := newTestSaveAudioAction(t, clipName, detCtx, pre)
+				clipPath := filepath.Join(tmpDir, clipName)
+				if tc.duringEncode != nil {
+					action.encode = func(ctx context.Context, encoder string, exportRate, bitrateKbps int, exportFormat, outputPath string, gainDB float64) error {
+						if err := action.runEncoder(ctx, encoder, exportRate, bitrateKbps, exportFormat, outputPath, gainDB); err != nil {
+							return err
+						}
+						tc.duringEncode(detCtx)
+						return nil
+					}
+				}
+
+				require.NoError(t, action.Execute(t.Context(), nil))
+				if tc.afterExport != nil {
+					require.FileExists(t, clipPath, "the clip is exported while the verdict is pending")
+					require.NoError(t, tc.afterExport(t.Context(), detCtx, clipPath))
+				}
+
+				if tc.wantRemoved {
+					assert.NoFileExists(t, clipPath)
+					assert.Contains(t, logs.String(), "audio_export_removed_no_row")
+				} else {
+					assert.FileExists(t, clipPath)
+					assert.NotContains(t, logs.String(), "audio_export_removed_no_row")
+				}
+				if tc.wantContent != nil {
+					got, err := os.ReadFile(clipPath)
+					require.NoError(t, err)
+					assert.Equal(t, tc.wantContent, got, "another export's file must not be removed")
+				}
+				assert.Equal(t, tc.wantClipSaved, detCtx.ClipSaved.Load(), "ClipSaved is cleared once the verdict proves no row")
+				// The success line is logged unless the verdict landed before the
+				// clip was offered for removal.
+				if tc.duringEncode == nil {
+					assert.Contains(t, logs.String(), "audio_export_success")
+				} else {
+					assert.NotContains(t, logs.String(), "audio_export_success")
+				}
+				assert.Empty(t, pre.submittedNoteIDs(), "no spectrogram is pre-rendered while the verdict is pending")
+			})
+		})
+	}
+}
+
+// TestDetectionContext_NoteIDOnlyForWinningSavedVerdict verifies that a saved
+// verdict publishes its NoteID only when it is the verdict that settles the
+// detection: a late save must neither leave an ID on a skipped or failed
+// detection nor replace the ID that woken waiters already read.
+func TestDetectionContext_NoteIDOnlyForWinningSavedVerdict(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		first       func(d *DetectionContext)
+		wantOutcome int32
+		wantNoteID  uint64
+	}{
+		{name: "after_skipped", first: (*DetectionContext).markDatabaseSkipped, wantOutcome: dbOutcomeSkipped},
+		{name: "after_failed", first: (*DetectionContext).markDatabaseFailed, wantOutcome: dbOutcomeFailed},
+		{name: "after_unknown", first: (*DetectionContext).markDatabaseUnknown, wantOutcome: dbOutcomeUnknown},
+		{name: "after_saved", first: func(d *DetectionContext) { d.markDatabaseSaved(7) }, wantOutcome: dbOutcomeSaved, wantNoteID: 7},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			d := &DetectionContext{}
+			tc.first(d)
+			d.markDatabaseSaved(42)
+			assert.Equal(t, tc.wantOutcome, d.databaseOutcome())
+			assert.Equal(t, tc.wantNoteID, d.NoteID.Load())
+		})
+	}
 }

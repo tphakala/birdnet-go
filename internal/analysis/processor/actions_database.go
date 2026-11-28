@@ -844,22 +844,40 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
 		return err
 	}
-	a.correctClipSampleRate(ctx, exportRate)
-	a.recordClipDenoised(ctx)
 
-	// Get file size for logging
-	fileInfo, err := os.Stat(outputPath)
+	// Stat right after the encode: the size is logged below, and the FileInfo
+	// identifies this export's file if the clip has to be removed later. Another
+	// export can rename a new file onto the same name at any time after this
+	// one's rename, so the closer this runs to the encode the better.
+	fileInfo, statErr := os.Stat(outputPath)
 	var fileSize int64
-	if err == nil {
+	if statErr == nil {
 		fileSize = fileInfo.Size()
 	} else {
 		// Debug log if we can't stat the file (shouldn't happen after successful write)
 		GetLogger().Debug("Failed to stat audio file for size logging",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
-			logger.Error(err),
+			logger.Error(statErr),
 			logger.String("clip_path", a.relativeClipPath(outputPath)),
 			logger.String("operation", "audio_export_stat"))
+	}
+
+	// Signal that the clip file exists on disk. This is used by any late
+	// consumers that check whether the audio was actually exported. Set before
+	// the clip is offered for removal, so a removal's clear always comes after it.
+	if a.DetectionCtx != nil {
+		a.DetectionCtx.ClipSaved.Store(true)
+	}
+
+	a.correctClipSampleRate(ctx, exportRate)
+	a.recordClipDenoised(ctx)
+
+	// A clip exported before the verdict was known (the wait timed out) stays
+	// only if the verdict does not prove there is no row: offer it for removal,
+	// and stop here when the verdict already proves it.
+	if statErr == nil && a.offerClipForRemoval(outputPath, fileInfo) {
+		return nil
 	}
 
 	// Log successful audio export at INFO level (BG-18).
@@ -901,14 +919,10 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	fields = append(fields, logger.String("operation", "audio_export_success"))
 	GetLogger().Info("Audio clip saved successfully", fields...)
 
-	// Signal that the clip file exists on disk. This is used by any late
-	// consumers that check whether the audio was actually exported.
-	if a.DetectionCtx != nil {
-		a.DetectionCtx.ClipSaved.Store(true)
-	}
-
-	// Submit for pre-rendering if enabled
-	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
+	// Submit for pre-rendering if enabled. Not while the verdict is pending: the
+	// clip may yet be removed, and a stored row gets its spectrogram rendered on
+	// first view instead.
+	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil && a.DetectionCtx.verdictKeepsClip() {
 		// Create pre-render job using local DTO (avoids direct spectrogram dependency)
 		job := PreRenderJob{
 			PCMData:    a.pcmData,
@@ -966,18 +980,37 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 	return true
 }
 
+// offerClipForRemoval offers the clip just written at outputPath for removal
+// when the database verdict is still pending or proves no row, and reports
+// whether the verdict proves no row (the clip is then removed). A clip outside
+// the export directory is never offered: it is kept (fail open).
+func (a *SaveAudioAction) offerClipForRemoval(outputPath string, written os.FileInfo) (noRow bool) {
+	if a.DetectionCtx.verdictKeepsClip() {
+		return false
+	}
+	rel, ok := a.localClipPath(outputPath)
+	if !ok {
+		return false
+	}
+	return a.DetectionCtx.holdUnconfirmedClip(&exportedClip{
+		exportDir:     a.Settings.Realtime.Audio.Export.Path,
+		path:          outputPath,
+		relPath:       rel,
+		written:       written,
+		correlationID: a.CorrelationID,
+	})
+}
+
 // abortedByDatabase reports whether DatabaseAction's verdict proves no row will
 // reference this clip, and logs which verdict it was. Pending, saved and
 // unknown let the export go ahead.
 func (a *SaveAudioAction) abortedByDatabase() bool {
-	var msg, operation string
-	switch a.DetectionCtx.databaseOutcome() {
-	case dbOutcomeSkipped:
-		msg, operation = "Skipping audio export: database save skipped", "audio_export_db_skipped"
-	case dbOutcomeFailed:
-		msg, operation = "Skipping audio export: database save failed", "audio_export_db_failed"
-	default:
+	if !a.DetectionCtx.verdictProvesNoRow() {
 		return false
+	}
+	msg, operation := "Skipping audio export: database save skipped", "audio_export_db_skipped"
+	if a.DetectionCtx.databaseOutcome() == dbOutcomeFailed {
+		msg, operation = "Skipping audio export: database save failed", "audio_export_db_failed"
 	}
 	GetLogger().Debug(msg,
 		logger.String("component", "analysis.processor.actions"),
@@ -1004,20 +1037,30 @@ func (a *SaveAudioAction) abortedByDatabase() bool {
 // resolved back to a file. Recomputed from outputPath rather than reusing
 // a.ClipName because resolveExportParams may have corrected the extension.
 func (a *SaveAudioAction) relativeClipPath(outputPath string) string {
+	if rel, ok := a.localClipPath(outputPath); ok {
+		return rel
+	}
+	// The basename is the safe answer: it still names the clip and still
+	// contains no directory.
+	return filepath.Base(outputPath)
+}
+
+// localClipPath returns outputPath relative to the export directory, with
+// forward slashes, and whether outputPath lies inside that directory.
+func (a *SaveAudioAction) localClipPath(outputPath string) (string, bool) {
 	rel, err := filepath.Rel(a.Settings.Realtime.Audio.Export.Path, outputPath)
 	// Rel reports an error only when it cannot express the relationship at all
 	// (one path absolute and the other relative, different Windows volumes). It
 	// happily walks UP with ".." when both are absolute but outputPath sits
-	// outside the export directory, and that result would defeat the whole point
-	// of the function: "../../../etc/passwd" leaks the layout above the export
-	// directory into a support dump and is not a clip name any consumer can
-	// resolve. IsLocal rejects exactly that, plus absolute results and Windows
-	// reserved names. Either way the basename is the safe answer: it still names
-	// the clip and still contains no directory.
+	// outside the export directory, and that result is wrong for every caller:
+	// "../../../etc/passwd" leaks the layout above the export directory into a
+	// support dump, is not a clip name any consumer can resolve, and is not a
+	// file this export may remove. IsLocal rejects exactly that, plus absolute
+	// results and Windows reserved names.
 	if err != nil || !filepath.IsLocal(rel) {
-		return filepath.Base(outputPath)
+		return "", false
 	}
-	return filepath.ToSlash(rel)
+	return filepath.ToSlash(rel), true
 }
 
 // clipDurationMs is the wall duration of the captured PCM at the export rate.
