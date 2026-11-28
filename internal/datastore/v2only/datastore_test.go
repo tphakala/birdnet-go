@@ -2,6 +2,7 @@ package v2only
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
+	"gorm.io/gorm"
 )
 
 // buildTestConfig constructs the shared repositories and Config for in-memory test datastores.
@@ -476,6 +478,46 @@ func TestV2OnlyDatastore_SaveAndGet(t *testing.T) {
 	assert.Equal(t, "12:30:00", notes[0].Time)
 	assert.Equal(t, "Passer domesticus", notes[0].ScientificName)
 	assert.InDelta(t, 0.85, notes[0].Confidence, 0.001)
+}
+
+// TestSaveDetection_RollbackBeforeCommitIsRetrySafe pins that a transaction whose
+// context ends after the inserts but before COMMIT is marked retry safe:
+// database/sql refuses to send COMMIT and rolls the transaction back, so nothing
+// was stored and a repeat cannot create a second row.
+func TestSaveDetection_RollbackBeforeCommitIsRetrySafe(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	detectionsTable := ds.detectionsTableName()
+	// Cancel once the detection insert has run inside the transaction; the
+	// reference data creates before the transaction must not trigger it.
+	require.NoError(t, ds.manager.DB().Callback().Create().After("gorm:create").
+		Register("test:cancel_before_commit", func(tx *gorm.DB) {
+			if tx.Statement.Table == detectionsTable && tx.Error == nil {
+				cancel()
+			}
+		}))
+
+	note := &datastore.Note{
+		Date:           "2024-01-15",
+		Time:           "12:30:00",
+		ScientificName: "Passer domesticus",
+		CommonName:     "House Sparrow",
+		Confidence:     0.85,
+		ClipName:       "rolled_back.wav",
+	}
+	_, err := ds.saveDetection(ctx, writeFromNote(note, nil, time.UTC))
+	require.Error(t, err)
+	require.ErrorIs(t, err, datastore.ErrDetectionSaveRetrySafe, "COMMIT was never sent")
+	assert.True(t, errors.Is(err, sql.ErrTxDone) || errors.Is(err, context.Canceled),
+		"the error came from Tx.Commit: %v", err)
+	assert.NotContains(t, err.Error(), "failed to save detection", "the body completed")
+
+	var rows int64
+	require.NoError(t, ds.manager.DB().WithContext(t.Context()).Table(detectionsTable).Count(&rows).Error)
+	assert.Zero(t, rows, "the transaction was rolled back")
 }
 
 func TestV2OnlyDatastore_GetAllDetectedSpeciesReturnsOnlyDetectionLabels(t *testing.T) {
