@@ -1128,6 +1128,42 @@ func TestDroppedDatabaseJobSettlesOutcomeFailed(t *testing.T) {
 	}
 }
 
+// TestEnqueueAction_LostWrappedDatabaseJobSettlesOutcomeFailed pins that a
+// database action handed to the queue by an enqueueAction step is told when its
+// job will never run: its own enqueue failed, or the composite holding the step
+// was lost before the step ran.
+func TestEnqueueAction_LostWrappedDatabaseJobSettlesOutcomeFailed(t *testing.T) {
+	t.Parallel()
+
+	enqueueOK := func(context.Context, *Task) error { return nil }
+	enqueueFails := func(context.Context, *Task) error { return jobqueue.ErrQueueStopped }
+	tests := []struct {
+		name string
+		// lose makes the step's job lost and returns what the step returned, if it ran.
+		lose func(step *enqueueAction) error
+	}{
+		{"wrapped_enqueue_fails", func(step *enqueueAction) error {
+			step.enqueue = enqueueFails
+			return step.Execute(t.Context(), nil)
+		}},
+		{"outer_composite_lost", func(step *enqueueAction) error {
+			step.enqueue = enqueueOK
+			notifyJobLost(&CompositeAction{Actions: []Action{&MockAction{}, step}})
+			return nil
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			detectionCtx := &DetectionContext{}
+			db := newTestDatabaseAction(NewMockDetectionRepository(), NewEventTracker(testEventTrackerInterval), detectionCtx, "")
+			require.NoError(t, tc.lose(&enqueueAction{action: db}), "the step never fails the composite")
+			assert.Equal(t, dbOutcomeFailed, detectionCtx.databaseOutcome(),
+				"the wrapped database job never ran, so nothing was stored")
+		})
+	}
+}
+
 // TestEnqueueActions_FailedEnqueueSettlesOutcomeFailed pins that a database job
 // whose enqueue fails settles the outcome as failed, so the detection's
 // SaveAudioAction aborts instead of exporting a clip no row will reference.

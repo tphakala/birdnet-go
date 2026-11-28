@@ -350,11 +350,20 @@ type enqueueAction struct {
 // EnqueueTaskCtx logs a full or stopped queue with the species; a context that
 // is already done returns without a log, and then the composite is being
 // abandoned. Returning the error would stop the composite and skip the later
-// steps for a detection that is already saved.
+// steps for a detection that is already saved. The wrapped action is told that
+// its job will never run (notifyJobLost).
 func (a *enqueueAction) Execute(ctx context.Context, _ any) error {
 	task := &Task{Type: TaskTypeAction, Detection: a.detection, Action: a.action}
-	_ = a.enqueue(ctx, task)
+	if err := a.enqueue(ctx, task); err != nil {
+		notifyJobLost(a.action)
+	}
 	return nil
+}
+
+// jobLost tells the wrapped action that its job will never run: the job of the
+// composite holding this step was lost before the step could enqueue it.
+func (a *enqueueAction) jobLost() {
+	notifyJobLost(a.action)
 }
 
 // GetDescription returns a human-readable description of the step.
