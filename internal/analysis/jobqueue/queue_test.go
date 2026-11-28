@@ -1061,6 +1061,7 @@ func TestEnqueue_NotifiesDroppedActionOutsideTheLock(t *testing.T) {
 	}}
 	_, err := queue.Enqueue(t.Context(), victim, nil, RetryConfig{})
 	require.NoError(t, err)
+	require.Zero(t, drops.Load(), "an enqueue that drops nothing notifies nobody")
 
 	enqueued := make(chan error, 1)
 	go func() {
