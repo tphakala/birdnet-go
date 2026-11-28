@@ -1,29 +1,30 @@
 /**
  * Tests for the useAudibleBats composable.
  *
- * The composable owns only the request/blob lifecycle (no $effect/onMount), so it
- * can be exercised directly. fetch and the URL object-URL helpers are mocked.
+ * The composable fetches the detection clip (optionally denoised) and expands
+ * it client-side into a WAV object URL. fetch and URL object-URL helpers are mocked.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useAudibleBats } from './useAudibleBats.svelte';
+import { makeBatWavBuffer } from '../../test/audioFixtures';
 import type { AudibleBatsSettings } from '$lib/desktop/features/dashboard/components/AudibleBatsButton.svelte';
 
 const SETTINGS: AudibleBatsSettings = {
   expansion: 10,
 };
 
-function okResponse() {
-  // Body is a plain string, not a Blob: jsdom's Blob global is incompatible with
-  // undici's Response internals in this test environment ("stream is not a
-  // function"). The composable only forwards response.blob() into the (mocked)
-  // URL.createObjectURL, so the body's actual bytes are irrelevant here.
-  return new Response('wav-data', { status: 200 });
+function okResponse(sampleRate = 256000) {
+  return {
+    ok: true,
+    status: 200,
+    arrayBuffer: async () => makeBatWavBuffer(sampleRate),
+  };
 }
 
-function errorResponse(message: string) {
+function errorResponse(message: string, status = 422) {
   return new Response(JSON.stringify({ message }), {
-    status: 422,
+    status,
     headers: { 'Content-Type': 'application/json' },
   });
 }
@@ -35,16 +36,15 @@ describe('useAudibleBats', () => {
   beforeEach(() => {
     urlCounter = 0;
     vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:mock-${++urlCounter}`);
-    revokeObjectURL = vi.fn<(url: string) => void>();
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(revokeObjectURL);
+    revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  it('sends the denoise preset read when the request is made', async () => {
+  it('fetches denoised clip via GET when getDenoise returns a preset', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse()));
     vi.stubGlobal('fetch', fetchMock);
     let preset = 'light-medium';
@@ -54,119 +54,111 @@ describe('useAudibleBats', () => {
     preset = '';
     await bats.enable(SETTINGS);
 
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body).denoise).toBe('light-medium');
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body).denoise).toBe('');
+    const urls = fetchMock.mock.calls.map(c => String(c[0]));
+    expect(urls).toEqual(['/api/v2/audio/5?denoise=light-medium', '/api/v2/audio/5']);
   });
 
-  it('generates a derived URL and reports active on enable', async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse()));
+  it('falls back to the stored clip when the denoised clip returns 422, 500, or 503', async () => {
+    for (const status of [422, 500, 503]) {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(errorResponse('denoise failed', status))
+        .mockResolvedValueOnce(okResponse());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const bats = useAudibleBats({ getDetectionId: () => 9, getDenoise: () => 'light-medium' });
+      await bats.enable(SETTINGS);
+
+      expect(bats.active).toBe(true);
+      expect(bats.error).toBeNull();
+      expect(fetchMock.mock.calls.map(c => String(c[0]))).toEqual([
+        '/api/v2/audio/9?denoise=light-medium',
+        '/api/v2/audio/9',
+      ]);
+    }
+  });
+
+  it('surfaces localized UI error instead of raw technical details when expansion fails', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(48000));
     vi.stubGlobal('fetch', fetchMock);
     const onActivate = vi.fn();
 
-    const bats = useAudibleBats({ getDetectionId: () => 123, onActivate });
+    const bats = useAudibleBats({ getDetectionId: () => 8, onActivate });
     await bats.enable(SETTINGS);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toContain('/api/v2/audio/123/audible-bats');
-    expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({
-      expansion: 10,
-      denoise: '',
-      normalize: false,
-      gain_db: 0,
+    expect(bats.active).toBe(false);
+    expect(bats.url).toBeNull();
+    expect(bats.error).toBe('media.audio.audibleBats.error');
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('tracks URL lifecycle across enable, disable, and regeneration failure', async () => {
+    let fail = false;
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(fail ? errorResponse('regen failed', 404) : okResponse())
+        )
+    );
+    const onActivate = vi.fn();
+    const onDeactivate = vi.fn();
+
+    const bats = useAudibleBats({
+      getDetectionId: () => 12,
+      onActivate,
+      onDeactivate,
     });
 
+    await bats.enable(SETTINGS);
     expect(bats.active).toBe(true);
-    expect(bats.generating).toBe(false);
-    expect(bats.error).toBeNull();
     expect(bats.url).toBe('blob:mock-1');
     expect(onActivate).toHaveBeenCalledWith('blob:mock-1');
-  });
 
-  it('surfaces the server message and stays inactive on failure', async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(errorResponse('boom')));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const bats = useAudibleBats({ getDetectionId: () => 1 });
-    await bats.enable(SETTINGS);
-
-    expect(bats.active).toBe(false);
-    expect(bats.generating).toBe(false);
-    expect(bats.error).toBe('boom');
-    expect(bats.url).toBeNull();
-  });
-
-  it('returns to normal playback and revokes the URL on disable', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation(() => Promise.resolve(okResponse()))
-    );
-    const onDeactivate = vi.fn();
-
-    const bats = useAudibleBats({ getDetectionId: () => 1, onDeactivate });
-    await bats.enable(SETTINGS);
-    expect(bats.active).toBe(true);
-
-    bats.disable();
-
-    expect(bats.active).toBe(false);
-    expect(bats.url).toBeNull();
-    expect(onDeactivate).toHaveBeenCalledTimes(1);
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-1');
-  });
-
-  it('reset clears state without invoking the swap callbacks', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation(() => Promise.resolve(okResponse()))
-    );
-    const onDeactivate = vi.fn();
-
-    const bats = useAudibleBats({ getDetectionId: () => 1, onDeactivate });
-    await bats.enable(SETTINGS);
-
-    bats.reset();
-
-    expect(bats.active).toBe(false);
-    expect(bats.url).toBeNull();
-    expect(onDeactivate).not.toHaveBeenCalled();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-1');
-  });
-
-  it('revokes the previous derived URL when regenerating', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation(() => Promise.resolve(okResponse()))
-    );
-
-    const bats = useAudibleBats({ getDetectionId: () => 1 });
-    await bats.enable(SETTINGS);
-    expect(bats.url).toBe('blob:mock-1');
-
-    await bats.enable({ ...SETTINGS, expansion: 20 });
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-1');
-    expect(bats.url).toBe('blob:mock-2');
-  });
-
-  it('deactivates and revokes the stale URL when a regeneration request fails', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(() => Promise.resolve(okResponse()))
-      .mockImplementationOnce(() => Promise.resolve(errorResponse('regen failed')));
-    vi.stubGlobal('fetch', fetchMock);
-    const onDeactivate = vi.fn();
-
-    const bats = useAudibleBats({ getDetectionId: () => 1, onDeactivate });
-    await bats.enable(SETTINGS);
-    expect(bats.url).toBe('blob:mock-1');
-
-    await bats.enable({ ...SETTINGS, expansion: 20 });
-
+    fail = true;
+    await bats.enable({ expansion: 20 });
     expect(bats.active).toBe(false);
     expect(bats.error).toBe('regen failed');
     expect(bats.url).toBeNull();
     expect(onDeactivate).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-1');
+
+    fail = false;
+    await bats.enable(SETTINGS);
+    bats.disable();
+    expect(bats.active).toBe(false);
+    expect(bats.url).toBeNull();
+    expect(onDeactivate).toHaveBeenCalledTimes(2);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-2');
+  });
+
+  it('ignores superseded requests when aborted by a newer enable', async () => {
+    let resolveFirst: (value: unknown) => void = () => {};
+    let firstSignal: AbortSignal | undefined;
+    let call = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+        call++;
+        if (call === 1) {
+          firstSignal = init?.signal ?? undefined;
+          return new Promise(resolve => {
+            resolveFirst = resolve;
+          });
+        }
+        return Promise.resolve(okResponse());
+      })
+    );
+
+    const bats = useAudibleBats({ getDetectionId: () => 22 });
+    const first = bats.enable(SETTINGS);
+    await bats.enable({ expansion: 20 });
+    expect(firstSignal?.aborted).toBe(true);
+
+    resolveFirst(okResponse());
+    await first;
+    expect(bats.active).toBe(true);
+    expect(bats.url).toBe('blob:mock-1');
   });
 });

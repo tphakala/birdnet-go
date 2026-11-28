@@ -6,6 +6,7 @@
  * element's load algorithm (src assignment pauses without a pause event).
  */
 
+import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
 import {
@@ -320,6 +321,7 @@ describe('AudioPlayer recovery', () => {
       globalThis.fetch = vi.fn().mockImplementation(async () => ({
         ok: true,
         status: 200,
+        arrayBuffer: async () => makeBatWavBuffer(),
         blob: async () => new Blob(['bats']),
         headers: new Headers(),
       }));

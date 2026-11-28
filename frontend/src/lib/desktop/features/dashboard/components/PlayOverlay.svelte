@@ -68,7 +68,7 @@
     filterFreq?: number;
     playbackSpeed?: number;
     onAudioContextAvailable?: (_isAvailable: boolean) => void;
-    // When set, playback uses this server-generated time-expanded (slowed) "audible
+    // When set, playback uses this client-side time-expanded (slowed) "audible
     // bats" clip instead of the original. The spectrogram still spans the full
     // original clip; the playhead stays in sync because progress is computed as a
     // fraction of whichever source's duration is loaded.

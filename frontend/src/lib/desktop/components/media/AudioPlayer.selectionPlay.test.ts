@@ -2,6 +2,7 @@
  * Selection playback and the clip extraction listeners in AudioPlayer.
  */
 
+import { makeBatWavBuffer } from '../../../../test/audioFixtures';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
 import type { ComponentProps } from 'svelte';
@@ -313,6 +314,7 @@ describe('AudioPlayer selection play', () => {
       globalThis.fetch = vi.fn().mockImplementation(async () => ({
         ok: true,
         status: 200,
+        arrayBuffer: async () => makeBatWavBuffer(),
         blob: async () => new Blob(['bats']),
         headers: new Headers(),
       }));
