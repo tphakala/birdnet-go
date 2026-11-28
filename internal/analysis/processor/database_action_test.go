@@ -828,22 +828,26 @@ func TestDatabaseAction_RetryWindowEnds(t *testing.T) {
 }
 
 // TestDatabaseAction_LegacyStoreIsNotRetried verifies that a failure of the legacy
-// datastore path ends the job, whatever the error says.
+// datastore path ends the job, whatever the error says. The error is a refused
+// dial without the store's retry-safe marker: it never reached the server, so
+// the outcome is failed and the clip is not exported.
 func TestDatabaseAction_LegacyStoreIsNotRetried(t *testing.T) {
 	t.Parallel()
 
 	mockDs := NewActionMockDatastore()
-	mockDs.SetSaveError(refusedRetrySafeError())
+	mockDs.SetSaveError(&net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)})
 	det := testDetection()
+	detCtx := &DetectionContext{}
 	action := &DatabaseAction{
 		Settings: &conf.Settings{Debug: true}, Ds: mockDs, Result: det.Result, Results: det.Results,
-		EventTracker: NewEventTracker(time.Hour),
+		EventTracker: NewEventTracker(time.Hour), DetectionCtx: detCtx,
 	}
 	retry := action.saveRetryConfig()
 
 	require.Error(t, action.ExecuteContext(t.Context(), nil))
 	assert.False(t, retry.Retryable(nil))
 	assert.Equal(t, 1, mockDs.GetSaveCalls())
+	assert.Equal(t, dbOutcomeFailed, detCtx.databaseOutcome(), "an unsent save proves no row")
 }
 
 // TestDatabaseAction_UnlikelyCommentAfterRetry verifies that the follow-up steps
