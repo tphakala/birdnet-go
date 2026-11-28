@@ -685,3 +685,14 @@ func TestDetectionContext_NoteIDOnlyForWinningSavedVerdict(t *testing.T) {
 		})
 	}
 }
+
+// TestDetectionContext_NilReceiverHoldsNoClip verifies that offering a clip on
+// a nil DetectionContext holds nothing and reports no verdict, like the other
+// nil-safe DetectionContext methods, instead of panicking.
+func TestDetectionContext_NilReceiverHoldsNoClip(t *testing.T) {
+	t.Parallel()
+	var d *DetectionContext
+	assert.NotPanics(t, func() {
+		assert.False(t, d.holdUnconfirmedClip(&exportedClip{}))
+	})
+}

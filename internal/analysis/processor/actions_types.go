@@ -223,7 +223,11 @@ func (d *DetectionContext) verdictKeepsClip() bool {
 // reports whether it does. It reports the verdict, not which side removed the
 // file: DatabaseAction can take and remove the clip between the Store and this
 // side's own removal call, and the caller must stop before its success log then.
+// A nil receiver holds nothing and reports false.
 func (d *DetectionContext) holdUnconfirmedClip(c *exportedClip) (noRow bool) {
+	if d == nil {
+		return false
+	}
 	d.unconfirmedClip.Store(c)
 	d.removeClipWithoutRow()
 	return d.verdictProvesNoRow()
