@@ -577,6 +577,13 @@ func TestSaveAudioAction_LateNoRowVerdictRemovesClip(t *testing.T) {
 			wantClipSaved: true,
 		},
 		{
+			name: "skipped_after_export_removes_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				return runRateLimitedDatabaseSkip(ctx, detCtx, clipName)
+			},
+			wantRemoved: true,
+		},
+		{
 			name:         "skipped_during_encode_removes_clip_before_success_log",
 			duringEncode: func(detCtx *DetectionContext) { detCtx.markDatabaseSkipped() },
 			wantRemoved:  true,
