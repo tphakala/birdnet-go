@@ -67,7 +67,7 @@ const (
 // in order; SaveAudioAction runs as its own job outside the composite and waits at
 // most noteIDWaitTimeout for the database outcome.
 type DetectionContext struct {
-	// NoteID holds the database primary key after a successful save. Write it
+	// NoteID holds the ID a successful save reported (0 when none was). Write it
 	// only through markDatabaseSaved, which also settles dbOutcome: SaveAudioAction
 	// wakes on dbOutcome, not on NoteID, so a bare Store leaves it waiting
 	// noteIDWaitTimeout. Read by MqttAction, SSEAction and SaveAudioAction.
@@ -107,7 +107,8 @@ type DetectionContext struct {
 const (
 	// dbOutcomePending: no verdict yet.
 	dbOutcomePending int32 = iota
-	// dbOutcomeSaved: the row is stored and NoteID is published.
+	// dbOutcomeSaved: the row is stored; NoteID holds its ID, or 0 when the
+	// repository reported none.
 	dbOutcomeSaved
 	// dbOutcomeSkipped: the event tracker skipped the detection before any save,
 	// so nothing was stored.
