@@ -190,7 +190,11 @@ func notifyJobLost(action Action) {
 }
 
 // jobLost tells every step that cares that the composite's job will never run.
+// A nil composite has no steps, as in Execute.
 func (a *CompositeAction) jobLost() {
+	if a == nil {
+		return
+	}
 	a.mu.Lock()
 	actions := slices.Clone(a.Actions)
 	a.mu.Unlock()
@@ -361,8 +365,12 @@ func (a *enqueueAction) Execute(ctx context.Context, _ any) error {
 }
 
 // jobLost tells the wrapped action that its job will never run: the job of the
-// composite holding this step was lost before the step could enqueue it.
+// composite holding this step was lost before the step could enqueue it. A nil
+// step wraps nothing.
 func (a *enqueueAction) jobLost() {
+	if a == nil {
+		return
+	}
 	notifyJobLost(a.action)
 }
 

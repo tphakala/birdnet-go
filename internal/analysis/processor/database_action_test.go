@@ -1164,6 +1164,21 @@ func TestEnqueueAction_LostWrappedDatabaseJobSettlesOutcomeFailed(t *testing.T) 
 	}
 }
 
+// TestNotifyJobLost_NilCompositeStepIsSkipped pins that a lost composite whose
+// steps include a nil *CompositeAction, *DatabaseAction or *enqueueAction (each
+// accepted as an Action value) skips them instead of panicking on the enqueuing
+// goroutine, and still notifies the real steps.
+func TestNotifyJobLost_NilCompositeStepIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	detectionCtx := &DetectionContext{}
+	db := newTestDatabaseAction(NewMockDetectionRepository(), NewEventTracker(testEventTrackerInterval), detectionCtx, "")
+	outer := &CompositeAction{Actions: []Action{(*CompositeAction)(nil), (*DatabaseAction)(nil), (*enqueueAction)(nil), db}}
+
+	require.NotPanics(t, func() { notifyJobLost(outer) })
+	assert.Equal(t, dbOutcomeFailed, detectionCtx.databaseOutcome())
+}
+
 // TestEnqueueActions_FailedEnqueueSettlesOutcomeFailed pins that a database job
 // whose enqueue fails settles the outcome as failed, so the detection's
 // SaveAudioAction aborts instead of exporting a clip no row will reference.
