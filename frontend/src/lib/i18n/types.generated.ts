@@ -580,6 +580,10 @@ export type TranslationKey =
   | 'dashboard.dailySummary.subtitle'
   | 'dashboard.dailySummary.columns.species'
   | 'dashboard.dailySummary.columns.detections'
+  | 'dashboard.dailySummary.dayparts.night'
+  | 'dashboard.dailySummary.dayparts.morning'
+  | 'dashboard.dailySummary.dayparts.afternoon'
+  | 'dashboard.dailySummary.dayparts.evening'
   | 'dashboard.dailySummary.daylight.label'
   | 'dashboard.dailySummary.daylight.sunrise' // params: time
   | 'dashboard.dailySummary.daylight.sunset' // params: time
@@ -589,6 +593,8 @@ export type TranslationKey =
   | 'dashboard.dailySummary.navigation.previousDay'
   | 'dashboard.dailySummary.navigation.nextDay'
   | 'dashboard.dailySummary.navigation.today'
+  | 'dashboard.dailySummary.navigation.previousDaypart'
+  | 'dashboard.dailySummary.navigation.nextDaypart'
   | 'dashboard.dailySummary.tooltips.viewHourly' // params: hour
   | 'dashboard.dailySummary.tooltips.viewBiHourly' // params: startHour, endHour
   | 'dashboard.dailySummary.tooltips.viewSixHourly' // params: startHour, endHour
