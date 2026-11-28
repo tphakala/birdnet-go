@@ -562,6 +562,14 @@ func TestSaveAudioAction_LateNoRowVerdictRemovesClip(t *testing.T) {
 			wantRemoved: true,
 		},
 		{
+			name: "saved_after_export_keeps_clip",
+			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
+				db := newTestDatabaseAction(NewMockDetectionRepository(), NewEventTracker(testEventTrackerInterval), detCtx, clipName)
+				return db.Execute(ctx, nil)
+			},
+			wantClipSaved: true,
+		},
+		{
 			name: "unknown_after_export_keeps_clip",
 			afterExport: func(ctx context.Context, detCtx *DetectionContext, _ string) error {
 				repo := &scriptedSaveRepository{

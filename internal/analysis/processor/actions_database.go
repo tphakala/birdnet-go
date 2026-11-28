@@ -221,8 +221,10 @@ func (a *DatabaseAction) skipsLaterSteps() bool {
 // job will never run: the queue dropped it before its first attempt, or
 // enqueueing it failed. No attempt ran, so nothing was stored. It runs on the
 // goroutine that enqueued, in production while the pending-detection flush holds
-// its lock, so it only logs and marks the outcome. A nil action has no detection
-// to settle.
+// its lock. It logs and marks the outcome, which takes only the
+// DetectionContext's own outcome lock; when SaveAudioAction already exported
+// the clip, markDatabaseFailed then removes it through SecureFS after that lock
+// is released (exportedClip.remove). A nil action has no detection to settle.
 func (a *DatabaseAction) jobLost() {
 	if a == nil {
 		return
