@@ -16,18 +16,16 @@ export interface NoveltyFlags {
   is_new_species?: boolean;
   is_new_this_year?: boolean;
   is_new_this_season?: boolean;
-  /** Days since the previous detection before a return; drives the infrequent tier. */
-  days_since_last_seen?: number;
+  /**
+   * Set by the server when a returning species' absence gap exceeds the
+   * configured infrequent-tracking threshold. Decided server-side so guests,
+   * who cannot read the protected settings, get the same tier as logged-in users.
+   */
+  is_infrequent?: boolean;
 }
 
 /** Options controlling the infrequent fallback tier. */
 export interface NoveltyResolveOptions {
-  /**
-   * Absence threshold in days above which a returning species counts as
-   * "infrequent". Omitted (undefined) when infrequent tracking is disabled, so
-   * the tier never activates.
-   */
-  infrequentThresholdDays?: number;
   /**
    * Infrequent reflects live tracker state, so it only applies to today's view.
    * Past dates never surface the infrequent tier.
@@ -48,15 +46,9 @@ export function resolveNoveltyCategory(
   if (item.is_new_this_year) return 'year';
   if (item.is_new_this_season) return 'season';
 
-  // Infrequent fallback: only on today's view, only when tracking supplies a
-  // threshold, and only for a genuine absence gap. The `?? 0` guard handles API
-  // omission of days_since_last_seen for first-ever and same-day returns.
-  const { infrequentThresholdDays, isToday } = options;
-  if (
-    isToday === true &&
-    infrequentThresholdDays !== undefined &&
-    (item.days_since_last_seen ?? 0) > infrequentThresholdDays
-  ) {
+  // Infrequent fallback: only on today's view. The server sets is_infrequent only
+  // when infrequent tracking is enabled and the absence gap exceeds its threshold.
+  if (options.isToday === true && item.is_infrequent === true) {
     return 'infrequent';
   }
 
