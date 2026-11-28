@@ -217,6 +217,24 @@ func (a *DatabaseAction) skipsLaterSteps() bool {
 	return a.saveState.Load() == saveStateSkipped
 }
 
+// jobLost settles the database outcome as failed when the detection's database
+// job will never run: the queue dropped it before its first attempt, or
+// enqueueing it failed. No attempt ran, so nothing was stored. It runs on the
+// goroutine that enqueued, in production while the pending-detection flush holds
+// its lock, so it only logs and marks the outcome. A nil action has no detection
+// to settle.
+func (a *DatabaseAction) jobLost() {
+	if a == nil {
+		return
+	}
+	GetLogger().Warn("Detection not saved: its database job never ran",
+		logger.String("component", "analysis.processor.actions"),
+		logger.String("detection_id", a.CorrelationID),
+		logger.String("species", a.Result.Species.CommonName),
+		logger.String("operation", "database_save_job_lost"))
+	a.DetectionCtx.markDatabaseFailed()
+}
+
 // acquireSaveSlot takes the save slot, or reports false when ctx ends first. A
 // free slot is taken even when ctx is already done.
 func (a *DatabaseAction) acquireSaveSlot(ctx context.Context) bool {
@@ -355,7 +373,7 @@ func (a *DatabaseAction) recordSaveFailure(err error, attempt int) error {
 			GetLogger().Debug("Detection save failed again, will be retried", fields("database_save_retry_scheduled")...)
 		}
 		return err
-	case a.Repo != nil && !isRepeatableSaveError(err):
+	case !isRepeatableSaveError(err):
 		a.terminate(err)
 		GetLogger().Error("Detection save outcome unknown, not retried to avoid a duplicate", fields("database_save_outcome_unknown")...)
 	case a.windowEnded.Load():

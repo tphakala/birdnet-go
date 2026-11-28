@@ -217,10 +217,11 @@ func TestDatabaseAction_Execute_WithoutDetectionContext(t *testing.T) {
 }
 
 // TestDatabaseAction_Execute_ReturnsErrorOnSaveFailure verifies that
-// DatabaseAction returns an error when the datastore save fails.
+// DatabaseAction returns an error when the datastore save fails, and that the
+// legacy path (no Repo) logs an unmarked failure as an unknown outcome, the
+// verdict the audio export uses. Not parallel: it captures the global logger.
 func TestDatabaseAction_Execute_ReturnsErrorOnSaveFailure(t *testing.T) {
-	t.Parallel()
-
+	logs := logtest.CaptureBuffer(t)
 	mockDs := NewActionMockDatastore()
 	settings := &conf.Settings{Debug: true}
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -252,6 +253,9 @@ func TestDatabaseAction_Execute_ReturnsErrorOnSaveFailure(t *testing.T) {
 		"DetectionContext.NoteID should not be updated on error")
 	assert.Equal(t, dbOutcomeUnknown, detectionCtx.databaseOutcome(),
 		"an unmarked legacy failure may follow a stored row, so the outcome is unknown")
+	assert.Contains(t, logs.String(), "database_save_outcome_unknown",
+		"the log must say the outcome is unknown, as the export verdict does")
+	assert.NotContains(t, logs.String(), "Failed to save note and results to database")
 }
 
 // TestDatabaseAction_Execute_EventTrackerLimiting verifies that
@@ -1052,6 +1056,173 @@ func TestProcessApprovedDetection_DatabaseJobCarriesNoPCM(t *testing.T) {
 	}
 	assert.True(t, sawDatabase, "a database job was queued")
 	assert.True(t, sawOther, "an audio job was queued")
+}
+
+// roomyQueueJobs is a queue capacity above the number of jobs one detection's
+// default actions queue, so no job is dropped.
+const roomyQueueJobs = 16
+
+// newHourlyQueue returns a started queue of maxJobs whose hourly tick keeps
+// every job pending for the length of a test.
+func newHourlyQueue(t *testing.T, maxJobs int) *jobqueue.JobQueue {
+	t.Helper()
+	queue := jobqueue.NewJobQueueWithOptions(maxJobs, false)
+	queue.SetProcessingInterval(time.Hour)
+	queue.StartWithContext(t.Context())
+	t.Cleanup(func() { _ = queue.Stop() })
+	return queue
+}
+
+// TestProcessApprovedDetection_FullQueueLogsOnlyAtWarn pins that a task the full
+// queue refuses is logged at Warn by EnqueueTaskCtx and that the enqueue loop
+// adds no Error line for it.
+func TestProcessApprovedDetection_FullQueueLogsOnlyAtWarn(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
+	// Audio export stays off: with no buffer manager it would log an unrelated Error.
+	p, _, _, _, settings := newMQTTPipelineProcessor(t, true)
+	p.JobQueue = newHourlyQueue(t, 1)
+	p.JobQueue.SetAllowJobDropping(false)
+	_, err := p.JobQueue.Enqueue(t.Context(), &MockAction{}, nil, jobqueue.RetryConfig{})
+	require.NoError(t, err, "the filler job fills the queue")
+
+	logs := logtest.CaptureBuffer(t)
+	det := testDetection()
+	item := &PendingDetection{Detection: det, FirstDetected: time.Now(), Source: e2eSource}
+	p.processApprovedDetection(item, det.Result.Species.CommonName, settings)
+
+	out := logs.String()
+	assert.Contains(t, out, "Job queue is full, dropping task")
+	assert.NotContains(t, out, "level=ERROR", "a full queue is not an Error")
+}
+
+// TestDroppedDatabaseJobSettlesOutcomeFailed pins that a database job the full
+// queue drops before it ever ran settles the outcome as failed, so the
+// detection's SaveAudioAction does not export a clip no row will reference.
+func TestDroppedDatabaseJobSettlesOutcomeFailed(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
+	tests := []struct {
+		name string
+		job  func(db *DatabaseAction) Action
+	}{
+		{"bare_database_action", func(db *DatabaseAction) Action { return db }},
+		{"composite_with_database_step", func(db *DatabaseAction) Action {
+			return &CompositeAction{Actions: []Action{db, &MockAction{}}, RetryConfig: db.saveRetryConfig()}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, _, _, _, _ := newMQTTPipelineProcessor(t, true)
+			p.JobQueue = newHourlyQueue(t, 1)
+			det := testDetection()
+			detectionCtx := &DetectionContext{}
+			db := newTestDatabaseAction(p.Repo, p.EventTracker, detectionCtx, "")
+
+			require.NoError(t, p.EnqueueTask(&Task{Type: TaskTypeAction, Detection: det, Action: tc.job(db)}))
+			require.NoError(t, p.EnqueueTask(&Task{Type: TaskTypeAction, Detection: det, Action: &MockAction{}}),
+				"the second job drops the pending database job")
+
+			assert.Equal(t, 1, p.JobQueue.GetStats().DroppedJobs)
+			assert.Equal(t, dbOutcomeFailed, detectionCtx.databaseOutcome(),
+				"a dropped database job never ran, so nothing was stored")
+		})
+	}
+}
+
+// TestEnqueueAction_LostWrappedDatabaseJobSettlesOutcomeFailed pins that a
+// database action handed to the queue by an enqueueAction step is told when its
+// job will never run: its own enqueue failed, or the composite holding the step
+// was lost before the step ran.
+func TestEnqueueAction_LostWrappedDatabaseJobSettlesOutcomeFailed(t *testing.T) {
+	t.Parallel()
+
+	enqueueOK := func(context.Context, *Task) error { return nil }
+	enqueueFails := func(context.Context, *Task) error { return jobqueue.ErrQueueStopped }
+	tests := []struct {
+		name string
+		// lose makes the step's job lost and returns what the step returned, if it ran.
+		lose func(step *enqueueAction) error
+	}{
+		{"wrapped_enqueue_fails", func(step *enqueueAction) error {
+			step.enqueue = enqueueFails
+			return step.Execute(t.Context(), nil)
+		}},
+		{"outer_composite_lost", func(step *enqueueAction) error {
+			step.enqueue = enqueueOK
+			notifyJobLost(&CompositeAction{Actions: []Action{&MockAction{}, step}})
+			return nil
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			detectionCtx := &DetectionContext{}
+			db := newTestDatabaseAction(NewMockDetectionRepository(), NewEventTracker(testEventTrackerInterval), detectionCtx, "")
+			require.NoError(t, tc.lose(&enqueueAction{action: db}), "the step never fails the composite")
+			assert.Equal(t, dbOutcomeFailed, detectionCtx.databaseOutcome(),
+				"the wrapped database job never ran, so nothing was stored")
+		})
+	}
+}
+
+// TestNotifyJobLost_NilCompositeStepIsSkipped pins that a lost composite whose
+// steps include a nil *CompositeAction, *DatabaseAction or *enqueueAction (each
+// accepted as an Action value) skips them instead of panicking on the enqueuing
+// goroutine, and still notifies the real steps.
+func TestNotifyJobLost_NilCompositeStepIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	detectionCtx := &DetectionContext{}
+	db := newTestDatabaseAction(NewMockDetectionRepository(), NewEventTracker(testEventTrackerInterval), detectionCtx, "")
+	outer := &CompositeAction{Actions: []Action{(*CompositeAction)(nil), (*DatabaseAction)(nil), (*enqueueAction)(nil), db}}
+
+	require.NotPanics(t, func() { notifyJobLost(outer) })
+	assert.Equal(t, dbOutcomeFailed, detectionCtx.databaseOutcome())
+}
+
+// TestEnqueueActions_SettlesOutcomeOnlyWhenEnqueueFails pins that a database job
+// whose enqueue fails settles the outcome as failed, so the detection's
+// SaveAudioAction aborts instead of exporting a clip no row will reference, and
+// that a database job queued normally leaves the outcome to its own save.
+func TestEnqueueActions_SettlesOutcomeOnlyWhenEnqueueFails(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
+	tests := []struct {
+		name        string
+		stopQueue   bool
+		wantOutcome int32
+	}{
+		{"stopped_queue_settles_failed", true, dbOutcomeFailed},
+		{"queued_job_leaves_outcome_pending", false, dbOutcomePending},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p, _, _, _, settings := newMQTTPipelineProcessor(t, true)
+			// Room for every job, and an hourly tick so none of them runs.
+			p.JobQueue = newHourlyQueue(t, roomyQueueJobs)
+			settings.Realtime.Audio.Export.Enabled = true
+			det := testDetection()
+			actions := p.getDefaultActions(&det, settings)
+			var detectionCtx *DetectionContext
+			for _, action := range actions {
+				if saveAudio, ok := action.(*SaveAudioAction); ok {
+					detectionCtx = saveAudio.DetectionCtx
+				}
+			}
+			require.NotNil(t, detectionCtx, "the action list exports audio")
+
+			if tc.stopQueue {
+				require.NoError(t, p.JobQueue.Stop())
+			}
+			p.enqueueActions(&det, actions)
+
+			assert.Equal(t, tc.wantOutcome, detectionCtx.databaseOutcome())
+		})
+	}
 }
 
 // blockingCommentRepository blocks AddComment until releaseComment is closed.

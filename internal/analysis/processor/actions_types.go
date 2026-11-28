@@ -114,7 +114,8 @@ const (
 	// so nothing was stored.
 	dbOutcomeSkipped
 	// dbOutcomeFailed: the save ended with an error proving nothing was stored
-	// (isRepeatableSaveError).
+	// (isRepeatableSaveError), or the database job never ran (the queue dropped
+	// it, or enqueueing it failed).
 	dbOutcomeFailed
 	// dbOutcomeUnknown: the save ended without that proof, an unmarked error or a
 	// panic, so the row may exist.

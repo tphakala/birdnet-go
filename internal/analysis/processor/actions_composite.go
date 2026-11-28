@@ -6,6 +6,7 @@ package processor
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -174,6 +175,34 @@ type laterStepSkipper interface {
 	skipsLaterSteps() bool
 }
 
+// jobLossHandler is implemented by an action that must react when its job will
+// never run: the queue dropped it before its first attempt, or enqueueing it
+// failed.
+type jobLossHandler interface {
+	jobLost()
+}
+
+// notifyJobLost tells action, when it cares, that its job will never run.
+func notifyJobLost(action Action) {
+	if h, ok := action.(jobLossHandler); ok {
+		h.jobLost()
+	}
+}
+
+// jobLost tells every step that cares that the composite's job will never run.
+// A nil composite has no steps, as in Execute.
+func (a *CompositeAction) jobLost() {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	actions := slices.Clone(a.Actions)
+	a.mu.Unlock()
+	for _, action := range actions {
+		notifyJobLost(action)
+	}
+}
+
 // Execute runs all actions sequentially, stopping on first error or when a step
 // reports that the later steps must not run.
 // This method is designed to prevent deadlocks and handle timeouts properly
@@ -325,11 +354,24 @@ type enqueueAction struct {
 // EnqueueTaskCtx logs a full or stopped queue with the species; a context that
 // is already done returns without a log, and then the composite is being
 // abandoned. Returning the error would stop the composite and skip the later
-// steps for a detection that is already saved.
+// steps for a detection that is already saved. The wrapped action is told that
+// its job will never run (notifyJobLost).
 func (a *enqueueAction) Execute(ctx context.Context, _ any) error {
 	task := &Task{Type: TaskTypeAction, Detection: a.detection, Action: a.action}
-	_ = a.enqueue(ctx, task)
+	if err := a.enqueue(ctx, task); err != nil {
+		notifyJobLost(a.action)
+	}
 	return nil
+}
+
+// jobLost tells the wrapped action that its job will never run: the job of the
+// composite holding this step was lost before the step could enqueue it. A nil
+// step wraps nothing.
+func (a *enqueueAction) jobLost() {
+	if a == nil {
+		return
+	}
+	notifyJobLost(a.action)
 }
 
 // GetDescription returns a human-readable description of the step.
