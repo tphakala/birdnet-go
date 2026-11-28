@@ -3,6 +3,7 @@ package v2only
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -518,6 +519,38 @@ func TestSaveDetection_RollbackBeforeCommitIsRetrySafe(t *testing.T) {
 	var rows int64
 	require.NoError(t, ds.manager.DB().WithContext(t.Context()).Table(detectionsTable).Count(&rows).Error)
 	assert.Zero(t, rows, "the transaction was rolled back")
+}
+
+// TestRolledBackBeforeCommit pins each half of the check on its own: which error
+// Tx.Commit returns after the context ends depends on scheduling, so the save
+// test above cannot tell the two apart. A COMMIT error that is not the context's
+// own error must stay unmarked even when the context has ended.
+func TestRolledBackBeforeCommit(t *testing.T) {
+	live := t.Context()
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	expired, cancelExpired := context.WithDeadline(t.Context(), time.Unix(0, 0))
+	defer cancelExpired()
+
+	tests := []struct {
+		name  string
+		txCtx context.Context
+		err   error
+		want  bool
+	}{
+		{"tx done with live context", live, sql.ErrTxDone, true},
+		{"wrapped tx done", live, fmt.Errorf("commit: %w", sql.ErrTxDone), true},
+		{"cancelled context error", cancelled, context.Canceled, true},
+		{"expired deadline error", expired, context.DeadlineExceeded, true},
+		{"context error with live context", live, context.Canceled, false},
+		{"driver error after context ended", cancelled, driver.ErrBadConn, false},
+		{"other context error than the one that ended it", cancelled, context.DeadlineExceeded, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, rolledBackBeforeCommit(tt.txCtx, tt.err))
+		})
+	}
 }
 
 func TestV2OnlyDatastore_GetAllDetectedSpeciesReturnsOnlyDetectionLabels(t *testing.T) {
