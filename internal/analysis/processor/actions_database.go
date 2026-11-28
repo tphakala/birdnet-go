@@ -76,6 +76,10 @@ type clipEncoding struct {
 	// are slow" and codec comparisons read wrong.
 	MeasureMs int64 // wall time resolving the loudness gain (0 when normalization is off)
 	EncodeMs  int64 // wall time inside the encoder itself
+
+	// written is the file the encode left at the output path, with its identity
+	// read under the clip path lock (writeClipLocked).
+	written writtenClip
 }
 
 // Execute logs the note to the log file.
@@ -841,28 +845,20 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// before any encoder sees it. The clip file is written once, from this PCM.
 	a.applyExportDenoise(ctx, exportRate)
 
-	// The path lock is held from the encode until the written file's identity is
-	// read, so another detection's removal of a clip at the same name cannot run
-	// in between (exportedClip.remove). It is released before this clip is
-	// offered for removal below, which may take it again.
-	pathLock := clipPathLock(outputPath)
-	pathLock.Lock()
+	// encodeClip writes the clip under the clip path lock and reads the written
+	// file's identity before releasing it (writeClipLocked), so another
+	// detection's removal of a clip at the same name cannot run in between. The
+	// lock is released before this clip is offered for removal below.
 	enc, err := a.encodeClip(ctx, exportRate, exportFormat, outputPath)
 	if err != nil {
-		pathLock.Unlock()
 		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
 		return err
 	}
 
-	// Stat right after the encode: the size is logged below, and the FileInfo
-	// identifies this export's file if the clip has to be removed later.
-	fileInfo, statErr := os.Stat(outputPath)
-	// The self-compare is not a no-op: on Windows os.Stat records only the path,
-	// and os.SameFile reads the file ID from that path at its first call, so
-	// without it the identity would be taken from whatever file holds the name
-	// when the removal runs (see StatSource in internal/spectrogram/generator.go).
-	identityPinned := statErr == nil && os.SameFile(fileInfo, fileInfo)
-	pathLock.Unlock()
+	// The size is logged below, and the FileInfo identifies this export's file
+	// if the clip has to be removed later.
+	fileInfo, statErr := enc.written.info, enc.written.statErr
+	identityPinned := enc.written.pinned
 	var fileSize int64
 	if statErr == nil {
 		fileSize = fileInfo.Size()
@@ -1250,6 +1246,10 @@ func lossyBitrateKbps(exportFormat, bitrate string) int {
 // native encoder applies that gain itself and WAV has it applied to the samples
 // before writing. No export format depends on FFmpeg.
 //
+// The encoder writes under the clip path lock, and the written file's identity
+// is read before the lock is released (writeClipLocked); the gain is measured
+// before the lock is taken.
+//
 // The returned clipEncoding is populated as far as the export got, so a caller
 // handling an error can still report the encoder and, past gain resolution, the
 // gain that was going to be applied.
@@ -1280,13 +1280,15 @@ func (a *SaveAudioAction) encodeClip(ctx context.Context, exportRate int, export
 	enc.GainResolved = true
 	enc.Normalized = normalized
 
-	encodeStart := time.Now()
 	encode := a.encode
 	if encode == nil {
 		encode = a.runEncoder
 	}
-	err = encode(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
-	enc.EncodeMs = time.Since(encodeStart).Milliseconds()
+	enc.written, err = writeClipLocked(outputPath, func() error {
+		encodeStart := time.Now()
+		defer func() { enc.EncodeMs = time.Since(encodeStart).Milliseconds() }()
+		return encode(ctx, enc.Encoder, exportRate, enc.BitrateKbps, exportFormat, outputPath, gainDB)
+	})
 	return enc, err
 }
 

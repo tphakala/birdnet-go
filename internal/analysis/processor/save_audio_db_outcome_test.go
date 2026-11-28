@@ -752,6 +752,26 @@ func TestSaveAudioAction_HoldsClipPathLockDuringEncode(t *testing.T) {
 	})
 }
 
+// TestSaveAudioAction_ReleasesClipPathLockWhenEncoderPanics verifies that an
+// encoder panic does not leave the clip path lock held: the job queue recovers
+// the panic and keeps running, so a held stripe would block every later export
+// that hashes to it.
+func TestSaveAudioAction_ReleasesClipPathLockWhenEncoderPanics(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		detCtx := &DetectionContext{}
+		detCtx.markDatabaseSaved(1)
+		action, tmpDir := newTestSaveAudioAction(t, "encode-panics.wav", detCtx, &recordingPreRenderer{})
+		action.encode = func(context.Context, string, int, int, string, string, float64) error {
+			panic("encoder failure")
+		}
+
+		assert.Panics(t, func() { _ = action.Execute(t.Context(), nil) })
+		lock := clipPathLock(filepath.Join(tmpDir, "encode-panics.wav"))
+		require.True(t, lock.TryLock(), "an encoder panic must release the path lock")
+		lock.Unlock()
+	})
+}
+
 func TestDetectionContext_NilReceiverHoldsNoClip(t *testing.T) {
 	t.Parallel()
 	var d *DetectionContext

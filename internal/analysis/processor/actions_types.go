@@ -257,16 +257,16 @@ func (d *DetectionContext) removeClipWithoutRow() {
 // still holds the file this export wrote: clip names are not unique per
 // detection, and another detection's later export renames a new file onto the
 // same path. The identity check and the removal run under the path lock that
-// SaveAudioAction holds while it writes a clip there (clipPathLock), so no
+// SaveAudioAction holds while it writes a clip there (writeClipLocked), so no
 // other SaveAudioAction export renames onto the path in between (the clip
 // import writes historical recordings without it). The lock is only tried:
-// when an export to a path on the same stripe is in progress, the clip is kept
+// when another export or removal holds the same lock stripe, the clip is kept
 // rather than blocking the caller, which can be the pending-detection flush.
 // Failures are logged; the clip is then left in place.
 func (c *exportedClip) remove() {
 	lock := clipPathLock(c.path)
 	if !lock.TryLock() {
-		GetLogger().Debug("Kept audio clip: an export to the same path is in progress",
+		GetLogger().Debug("Kept audio clip: another export or removal holds its path lock stripe",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", c.correlationID),
 			logger.String("clip_path", c.relPath),
