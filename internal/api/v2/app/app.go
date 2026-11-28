@@ -46,24 +46,25 @@ const onboardingSeedTimeout = 5 * time.Second
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
 type AppConfigResponse struct {
-	CSRFToken          string                `json:"csrfToken"`
-	Security           SecurityConfigDTO     `json:"security"`
-	Version            string                `json:"version"`
-	SpeciesDictVersion string                `json:"speciesDictVersion"`        // dataset version for content-addressed dictionary URL construction
-	BasePath           string                `json:"basePath"`                  // reverse proxy prefix for frontend URL construction
-	ColorScheme        string                `json:"colorScheme,omitempty"`     // admin-configured color scheme for all visitors
-	CustomColors       *conf.CustomColors    `json:"customColors,omitempty"`    // custom scheme hex colors (when colorScheme is "custom")
-	LogoStyle          string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
-	LiveSpectrogram    bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
-	AudioExportEnabled bool                  `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
-	PlaybackDenoise    string                `json:"playbackDenoise"`           // denoise preset applied to playback and downloads by default, "" when none applies (off, or export-stage denoise is on)
-	PlaybackDefaults   PlaybackDefaultsDTO   `json:"playbackDefaults"`          // default gain and high-pass cutoff for clip players, which guests cannot read from the settings
-	Layout             *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
-	FreshInstall       bool                  `json:"freshInstall"`              // true when this is a brand-new installation
-	NewVersion         bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
-	PreviousVersion    string                `json:"previousVersion,omitempty"` // last version the user acknowledged
-	Sentry             *SentryFrontendConfig `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
-	ProjectLinks       ProjectLinksConfig    `json:"projectLinks"`              // project identity/links served to the frontend
+	CSRFToken           string                 `json:"csrfToken"`
+	Security            SecurityConfigDTO      `json:"security"`
+	Version             string                 `json:"version"`
+	SpeciesDictVersion  string                 `json:"speciesDictVersion"`        // dataset version for content-addressed dictionary URL construction
+	BasePath            string                 `json:"basePath"`                  // reverse proxy prefix for frontend URL construction
+	ColorScheme         string                 `json:"colorScheme,omitempty"`     // admin-configured color scheme for all visitors
+	CustomColors        *conf.CustomColors     `json:"customColors,omitempty"`    // custom scheme hex colors (when colorScheme is "custom")
+	LogoStyle           string                 `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
+	LiveSpectrogram     bool                   `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
+	AudioExportEnabled  bool                   `json:"audioExportEnabled"`        // whether audio clip export is enabled; drives showing per-detection spectrogram/audio in the UI
+	PlaybackDenoise     string                 `json:"playbackDenoise"`           // denoise preset applied to playback and downloads by default, "" when none applies (off, or export-stage denoise is on)
+	PlaybackDefaults    PlaybackDefaultsDTO    `json:"playbackDefaults"`          // default gain and high-pass cutoff for clip players, which guests cannot read from the settings
+	SpectrogramDefaults SpectrogramDefaultsDTO `json:"spectrogramDefaults"`       // default card spectrogram size and raw mode so guests and initial renders avoid a settings race
+	Layout              *conf.DashboardLayout  `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
+	FreshInstall        bool                   `json:"freshInstall"`              // true when this is a brand-new installation
+	NewVersion          bool                   `json:"newVersion"`                // true when the app was upgraded since last dismiss
+	PreviousVersion     string                 `json:"previousVersion,omitempty"` // last version the user acknowledged
+	Sentry              *SentryFrontendConfig  `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
+	ProjectLinks        ProjectLinksConfig     `json:"projectLinks"`              // project identity/links served to the frontend
 }
 
 // PlaybackDefaultsDTO carries the playback defaults the browser applies itself,
@@ -73,6 +74,13 @@ type AppConfigResponse struct {
 type PlaybackDefaultsDTO struct {
 	GainDb     float64 `json:"gainDb"`     // default playback gain in dB
 	HighPassHz int     `json:"highPassHz"` // default high-pass cutoff in Hz, 0 when off
+}
+
+// SpectrogramDefaultsDTO carries the dashboard spectrogram size and raw-mode
+// settings so guests and initial card mounts use the station default immediately.
+type SpectrogramDefaultsDTO struct {
+	Size string `json:"size"` // configured size key: sm, md, lg, or xl
+	Raw  bool   `json:"raw"`  // true when spectrograms omit axes and legends
 }
 
 // SentryFrontendConfig exposes telemetry configuration to the frontend.
@@ -237,6 +245,10 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		PlaybackDefaults: PlaybackDefaultsDTO{
 			GainDb:     settings.Realtime.Dashboard.DefaultAudioGain,
 			HighPassHz: settings.Realtime.Dashboard.Playback.HighPassHz,
+		},
+		SpectrogramDefaults: SpectrogramDefaultsDTO{
+			Size: settings.Realtime.Dashboard.Spectrogram.Size,
+			Raw:  settings.Realtime.Dashboard.Spectrogram.Raw,
 		},
 		FreshInstall:    freshInstall,
 		NewVersion:      newVersion,

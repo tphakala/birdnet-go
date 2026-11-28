@@ -34,6 +34,12 @@
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { getPlaybackDefaults } from '$lib/utils/playbackDefaults';
+  import { appState } from '$lib/stores/appState.svelte';
+  import { savedDashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
+  import {
+    getSpectrogramDefaults,
+    resolveSpectrogramDefaults,
+  } from '$lib/utils/spectrogramDefaults';
   import { t } from '$lib/i18n';
 
   // Read once per card instance, not at module load: cards are recycled via
@@ -68,7 +74,10 @@
     onDelete,
   }: Props = $props();
 
-  const loader = createSpectrogramLoader({ size: 'md', raw: true });
+  const loader = createSpectrogramLoader({
+    size: () => getSpectrogramDefaults().size,
+    raw: () => getSpectrogramDefaults().raw,
+  });
 
   let cardElement = $state<HTMLElement | undefined>(undefined);
   let isVisible = $state(false);
@@ -157,7 +166,33 @@
 
   // Start/stop loader based on visibility. Skip entirely when this detection has
   // no clip: there is no spectrogram to fetch.
+  const spectrogramConfig = $derived(
+    resolveSpectrogramDefaults(
+      $settingsDataLoaded,
+      $savedDashboardSettings?.spectrogram,
+      appState.spectrogramDefaults
+    )
+  );
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramSize = spectrogramConfig.size;
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramRaw = spectrogramConfig.raw;
+
   $effect(() => {
+    // If configured spectrogram size or raw mode changes, restart loader
+    if (
+      spectrogramConfig.size !== previousSpectrogramSize ||
+      spectrogramConfig.raw !== previousSpectrogramRaw
+    ) {
+      previousSpectrogramSize = spectrogramConfig.size;
+      previousSpectrogramRaw = spectrogramConfig.raw;
+      if (detection.clipName && isVisible) {
+        loader.restart(detection.id);
+        return;
+      }
+      loader.reset();
+    }
+
     if (detection.clipName && isVisible) {
       loader.start(detection.id);
     } else {
@@ -242,13 +277,13 @@
         {/if}
       </div>
     {:else if detection.spectrogramOnly}
-      <!-- Retention removed the audio but kept the image: no loader, no polling. Same
-           size and raw flag as the list view's player so the same cached file is used. -->
+      <!-- Retention removed the audio but kept the image: no loader, no polling.
+           Request the configured card spectrogram defaults so kept images match. -->
       <div class="spectrogram-container">
         <SpectrogramImage
           detectionId={detection.id.toString()}
-          size="md"
-          raw={true}
+          size={spectrogramConfig.size}
+          raw={spectrogramConfig.raw}
           cover
           alt={t('components.audio.spectrogramForSpecies', { species: detection.commonName })}
         />

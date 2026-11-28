@@ -8,7 +8,7 @@
 
   Props:
   - detectionId: Unique ID for the detection
-  - size: Spectrogram size - md/lg/xl
+  - size: Spectrogram size - sm/md/lg/xl
   - raw: Request the raw render (true) or the render with axes and legend (false). Always
     sent explicitly, because the server treats an omitted raw parameter as true
   - className: Extra classes for the image container
@@ -22,10 +22,11 @@
   import { XCircle } from '@lucide/svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { t } from '$lib/i18n';
+  import type { SpectrogramSize } from '$lib/stores/settings';
 
   interface Props {
     detectionId: string;
-    size: 'md' | 'lg' | 'xl';
+    size: SpectrogramSize;
     raw: boolean;
     className?: string;
     alt?: string;

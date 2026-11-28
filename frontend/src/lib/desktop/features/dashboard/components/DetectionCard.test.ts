@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/svelte';
 import DetectionCard from './DetectionCard.svelte';
 import type { Detection } from '$lib/types/detection.types';
+import { tick } from 'svelte';
+import { get } from 'svelte/store';
 import { appState } from '$lib/stores/appState.svelte';
+import { DEFAULT_SPECTROGRAM_SETTINGS, settingsStore } from '$lib/stores/settings';
+import { seedSavedRealtime } from '../../../../../test/settings-store-helpers';
 import { installFakeMediaElement, settle } from '../../../../../test/fakeMediaElement';
 import { mockAudioProbe } from '../../../../../test/audioProbeMock';
 
@@ -222,5 +226,146 @@ describe('DetectionCard playback gain and high-pass defaults', () => {
     expect(sliders(container).filter.value).toBe(String(DEFAULT_CUTOFF_HZ));
     expect(sliders(container).gain.value).toBe(String(DEFAULT_GAIN_DB));
     expect(container.querySelector('.settings-indicator')).toBeNull();
+  });
+});
+
+describe('DetectionCard dynamic spectrogram defaults', () => {
+  const OriginalIO = globalThis.IntersectionObserver;
+  const initialStore = get(settingsStore);
+  const initialAppSpec = { ...appState.spectrogramDefaults };
+  let statusUrls: string[];
+
+  beforeEach(() => {
+    statusUrls = [];
+    appState.spectrogramDefaults = { size: 'lg', raw: false };
+    settingsStore.set(initialStore);
+
+    class VisibleIntersectionObserver implements IntersectionObserver {
+      readonly root: Element | null = null;
+      readonly rootMargin = '';
+      readonly scrollMargin = '';
+      readonly thresholds: ReadonlyArray<number> = [];
+      private readonly cb: IntersectionObserverCallback;
+      constructor(cb: IntersectionObserverCallback) {
+        this.cb = cb;
+      }
+      observe = vi.fn((target: Element) => {
+        const rect = target.getBoundingClientRect();
+        const entry: IntersectionObserverEntry = {
+          boundingClientRect: rect,
+          intersectionRatio: 1,
+          intersectionRect: rect,
+          isIntersecting: true,
+          rootBounds: null,
+          target,
+          time: 0,
+        };
+        this.cb([entry], this);
+      });
+      unobserve = vi.fn();
+      disconnect = vi.fn();
+      takeRecords = vi.fn().mockReturnValue([]);
+    }
+    globalThis.IntersectionObserver = VisibleIntersectionObserver;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/status?')) {
+          statusUrls.push(url);
+          return new Response(JSON.stringify({ data: { status: 'exists' } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response('{}', { status: 200 });
+      })
+    );
+  });
+
+  afterEach(() => {
+    globalThis.IntersectionObserver = OriginalIO;
+    settingsStore.set(initialStore);
+    appState.spectrogramDefaults = initialAppDefaultsReset(initialAppSpec);
+    vi.unstubAllGlobals();
+  });
+
+  function initialAppDefaultsReset(val: typeof appState.spectrogramDefaults) {
+    return val;
+  }
+
+  it('uses /app/config spectrogramDefaults on mount without an initial sm request or spurious restart', async () => {
+    render(DetectionCard, { props: { detection: createDetection({ clipName: 'clip_654.wav' }) } });
+    await tick();
+    await Promise.resolve();
+
+    expect(statusUrls).toEqual(['/api/v2/spectrogram/654/status?size=lg&raw=false']);
+
+    // When /api/v2/settings resolves with matching values, no duplicate restart occurs.
+    seedSavedRealtime({
+      dashboard: {
+        spectrogram: { ...DEFAULT_SPECTROGRAM_SETTINGS, size: 'lg', raw: false },
+      },
+    });
+    await tick();
+    await Promise.resolve();
+
+    expect(statusUrls).toEqual(['/api/v2/spectrogram/654/status?size=lg&raw=false']);
+
+    // Updating size/raw in settings restarts the loader with the new values.
+    seedSavedRealtime({
+      dashboard: {
+        spectrogram: { ...DEFAULT_SPECTROGRAM_SETTINGS, size: 'xl', raw: true },
+      },
+    });
+    await tick();
+    await Promise.resolve();
+
+    expect(statusUrls).toEqual([
+      '/api/v2/spectrogram/654/status?size=lg&raw=false',
+      '/api/v2/spectrogram/654/status?size=xl&raw=true',
+    ]);
+
+    // Unsaved formData edits must not restart the loader.
+    settingsStore.update(
+      store =>
+        ({
+          ...store,
+          formData: {
+            ...store.formData,
+            realtime: {
+              ...store.formData.realtime,
+              dashboard: {
+                ...store.formData.realtime?.dashboard,
+                spectrogram: { ...DEFAULT_SPECTROGRAM_SETTINGS, size: 'sm', raw: false },
+              },
+            },
+          },
+        }) as unknown as typeof store
+    );
+    await tick();
+    await Promise.resolve();
+
+    expect(statusUrls).toEqual([
+      '/api/v2/spectrogram/654/status?size=lg&raw=false',
+      '/api/v2/spectrogram/654/status?size=xl&raw=true',
+    ]);
+  });
+
+  it('applies configured size and raw mode to retained spectrogramOnly cards', async () => {
+    seedSavedRealtime({
+      dashboard: {
+        spectrogram: { ...DEFAULT_SPECTROGRAM_SETTINGS, size: 'sm', raw: false },
+      },
+    });
+    const { container } = render(DetectionCard, {
+      props: { detection: createDetection({ spectrogramOnly: true }) },
+    });
+    await tick();
+
+    const img = container.querySelector('img.spectrogram-img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toContain('/api/v2/spectrogram/654?size=sm&raw=false');
   });
 });

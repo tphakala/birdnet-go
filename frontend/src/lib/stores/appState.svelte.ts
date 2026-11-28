@@ -76,6 +76,8 @@ interface AppConfigResponse {
   playbackDenoise?: string;
   /** Default gain and high-pass cutoff the browser applies to players (guests read them here) */
   playbackDefaults?: { gainDb?: number; highPassHz?: number };
+  /** Default spectrogram size and raw mode for detection cards (guests and initial mounts read them here) */
+  spectrogramDefaults?: { size?: string; raw?: boolean };
   layout?: {
     elements: {
       id?: string;
@@ -144,6 +146,8 @@ interface AppState {
   playbackDenoise: string;
   /** Default gain (dB) and high-pass cutoff (Hz, 0 when off) players start with; guests read them here */
   playbackDefaults: { gainDb: number; highPassHz: number };
+  /** Default detection-card spectrogram size and raw flag from public config */
+  spectrogramDefaults: { size: 'sm' | 'md' | 'lg' | 'xl'; raw: boolean };
   /** Dataset version for the per-locale species-name dictionary. Empty string when unknown. */
   speciesDictVersion: string;
   /** Dashboard layout from public config (available before auth) */
@@ -196,6 +200,7 @@ const DEFAULT_STATE: AppState = {
   audioExportEnabled: true,
   playbackDenoise: '',
   playbackDefaults: { gainDb: 0, highPassHz: 0 },
+  spectrogramDefaults: { size: 'md', raw: true },
   speciesDictVersion: '',
   layout: null,
   projectLinks: DEFAULT_PROJECT_LINKS,
@@ -426,6 +431,15 @@ export async function initApp(): Promise<boolean> {
       appState.playbackDefaults = {
         gainDb: config.playbackDefaults?.gainDb ?? 0,
         highPassHz: config.playbackDefaults?.highPassHz ?? 0,
+      };
+      const rawSpecSize = config.spectrogramDefaults?.size;
+      const validSpecSize =
+        rawSpecSize === 'sm' || rawSpecSize === 'md' || rawSpecSize === 'lg' || rawSpecSize === 'xl'
+          ? rawSpecSize
+          : 'md';
+      appState.spectrogramDefaults = {
+        size: validSpecSize,
+        raw: config.spectrogramDefaults?.raw ?? true,
       };
       appState.speciesDictVersion = config.speciesDictVersion ?? '';
       appState.layout = config.layout ?? null;
