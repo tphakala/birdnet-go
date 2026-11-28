@@ -124,7 +124,7 @@ type exportedClip struct {
 	exportDir     string      // export directory of the settings snapshot the clip was written with
 	path          string      // the path the encoder wrote (after resolveExportParams)
 	relPath       string      // path relative to exportDir (relativeClipPath form), for the log lines
-	written       os.FileInfo // Stat taken right after the encode, for os.SameFile
+	written       os.FileInfo // Stat taken right after the encode, identity already read (os.SameFile(fi, fi)), for os.SameFile
 	correlationID string
 }
 

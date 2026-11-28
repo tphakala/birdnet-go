@@ -850,6 +850,11 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// export can rename a new file onto the same name at any time after this
 	// one's rename, so the closer this runs to the encode the better.
 	fileInfo, statErr := os.Stat(outputPath)
+	// The self-compare is not a no-op: on Windows os.Stat records only the path,
+	// and os.SameFile reads the file ID from that path at its first call, so
+	// without it the identity would be taken from whatever file holds the name
+	// when the removal runs (see StatSource in internal/spectrogram/generator.go).
+	identityPinned := statErr == nil && os.SameFile(fileInfo, fileInfo)
 	var fileSize int64
 	if statErr == nil {
 		fileSize = fileInfo.Size()
@@ -876,7 +881,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// A clip exported before the verdict was known (the wait timed out) stays
 	// only if the verdict does not prove there is no row: offer it for removal,
 	// and stop here when the verdict already proves it.
-	if statErr == nil && a.offerClipForRemoval(outputPath, fileInfo) {
+	if identityPinned && a.offerClipForRemoval(outputPath, fileInfo) {
 		return nil
 	}
 
@@ -983,7 +988,10 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 // offerClipForRemoval offers the clip just written at outputPath for removal
 // when the database verdict is still pending or proves no row, and reports
 // whether the verdict proves no row (the clip is then removed). A clip outside
-// the export directory is never offered: it is kept (fail open).
+// the export directory is never offered: it is kept (fail open). written must
+// already carry its file identity (os.SameFile(written, written) called right
+// after the Stat): on Windows os.Stat leaves the identity to be read from the
+// path later, when another export may have replaced the file.
 func (a *SaveAudioAction) offerClipForRemoval(outputPath string, written os.FileInfo) (noRow bool) {
 	if a.DetectionCtx.verdictKeepsClip() {
 		return false
