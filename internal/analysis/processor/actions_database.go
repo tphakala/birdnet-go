@@ -743,8 +743,8 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 
 	// Abort before deferred Extended Capture retries if DatabaseAction already
 	// skipped or terminally failed this detection.
-	if a.DetectionCtx.shouldSkipAudioExport() {
-		a.logSkippedByDatabase(a.DetectionCtx.databaseOutcome())
+	if outcome := a.DetectionCtx.databaseOutcome(); outcome == dbOutcomeSkipped || outcome == dbOutcomeFailed {
+		a.logSkippedByDatabase(outcome)
 		return nil
 	}
 
@@ -923,33 +923,26 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 	}
 
 	checkResolved := func() (done bool, proceed bool) {
-		switch outcome := a.DetectionCtx.databaseOutcome(); outcome {
-		case dbOutcomeSkipped, dbOutcomeFailed:
+		outcome := a.DetectionCtx.databaseOutcome()
+		if outcome == dbOutcomeSkipped || outcome == dbOutcomeFailed {
 			a.logSkippedByDatabase(outcome)
 			return true, false
-		case dbOutcomeSaved:
-			if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
-				a.NoteID = liveID
-			}
-			return true, true
 		}
 		if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
 			a.NoteID = liveID
 			return true, true
 		}
-		return false, false
+		return outcome == dbOutcomeSaved, true
 	}
 
 	if done, proceed := checkResolved(); done {
 		return proceed
 	}
 
-	doneCh, outcome := a.DetectionCtx.databaseOutcomeDone()
-	if outcome != dbOutcomePending {
-		if _, proceed := checkResolved(); !proceed {
-			return false
-		}
-		return true
+	doneCh := a.DetectionCtx.databaseOutcomeDone()
+	if doneCh == nil {
+		_, proceed := checkResolved()
+		return proceed
 	}
 
 	timer := time.NewTimer(noteIDWaitTimeout)
@@ -959,26 +952,17 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 
 	for {
 		select {
-		case <-doneCh:
-			if done, proceed := checkResolved(); done {
-				return proceed
-			}
-			return true
 		case <-ticker.C:
 			if done, proceed := checkResolved(); done {
 				return proceed
 			}
+			continue
+		case <-doneCh:
 		case <-timer.C:
-			if done, proceed := checkResolved(); done {
-				return proceed
-			}
-			return true
 		case <-ctx.Done():
-			if done, proceed := checkResolved(); done {
-				return proceed
-			}
-			return true
 		}
+		_, proceed := checkResolved()
+		return proceed
 	}
 }
 

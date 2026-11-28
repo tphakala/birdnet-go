@@ -141,29 +141,21 @@ func (d *DetectionContext) databaseOutcome() int32 {
 	return d.dbOutcome.Load()
 }
 
-func (d *DetectionContext) shouldSkipAudioExport() bool {
-	outcome := d.databaseOutcome()
-	return outcome == dbOutcomeSkipped || outcome == dbOutcomeFailed
-}
-
 // databaseOutcomeDone returns a channel that closes when dbOutcome leaves
-// dbOutcomePending, or (nil, outcome) if the outcome is already settled.
-func (d *DetectionContext) databaseOutcomeDone() (done <-chan struct{}, outcome int32) {
-	if d == nil {
-		return nil, dbOutcomePending
-	}
-	if outcome = d.dbOutcome.Load(); outcome != dbOutcomePending {
-		return nil, outcome
+// dbOutcomePending, or nil if the receiver is nil or the outcome is already settled.
+func (d *DetectionContext) databaseOutcomeDone() <-chan struct{} {
+	if d == nil || d.dbOutcome.Load() != dbOutcomePending {
+		return nil
 	}
 	d.dbOutcomeMu.Lock()
 	defer d.dbOutcomeMu.Unlock()
-	if outcome = d.dbOutcome.Load(); outcome != dbOutcomePending {
-		return nil, outcome
+	if d.dbOutcome.Load() != dbOutcomePending {
+		return nil
 	}
 	if d.dbOutcomeCh == nil {
 		d.dbOutcomeCh = make(chan struct{})
 	}
-	return d.dbOutcomeCh, dbOutcomePending
+	return d.dbOutcomeCh
 }
 
 // Values of DetectionContext.clipDenoise.

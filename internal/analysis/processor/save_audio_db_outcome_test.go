@@ -1,9 +1,11 @@
 package processor
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -46,9 +48,7 @@ func (r *recordingPreRenderer) Stop() {}
 func (r *recordingPreRenderer) submittedNoteIDs() []uint {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]uint, len(r.noteIDs))
-	copy(out, r.noteIDs)
-	return out
+	return slices.Clone(r.noteIDs)
 }
 
 // zeroIDSaveRepository succeeds on Save without assigning result.ID (defensive #2453 path).
@@ -100,6 +100,19 @@ func newTestDatabaseAction(repo datastore.DetectionRepository, tracker *EventTra
 	}
 }
 
+func runRateLimitedDatabaseSkip(t *testing.T, detCtx *DetectionContext, clipName string) {
+	t.Helper()
+	tracker := NewEventTracker(15 * time.Second)
+	repo := NewMockDetectionRepository()
+
+	first := newTestDatabaseAction(repo, tracker, &DetectionContext{}, "first.wav")
+	require.NoError(t, first.Execute(t.Context(), nil))
+
+	second := newTestDatabaseAction(repo, tracker, detCtx, clipName)
+	require.NoError(t, second.Execute(t.Context(), nil))
+	require.True(t, second.skipsLaterSteps())
+}
+
 // TestSaveAudioAction_AbortsWhenDatabaseSkippedOrFailed verifies that SaveAudioAction
 // skips audio encoding, file creation, and spectrogram pre-rendering without waiting
 // for noteIDWaitTimeout when DatabaseAction rate-limits or terminally fails.
@@ -113,17 +126,7 @@ func TestSaveAudioAction_AbortsWhenDatabaseSkippedOrFailed(t *testing.T) {
 			name: "rate_limited_skip",
 			settleDB: func(t *testing.T, detCtx *DetectionContext) {
 				t.Helper()
-				tracker := NewEventTracker(15 * time.Second)
-				repo := NewMockDetectionRepository()
-
-				// First detection consumes the per-species DatabaseSave window.
-				first := newTestDatabaseAction(repo, tracker, &DetectionContext{}, "first.wav")
-				require.NoError(t, first.Execute(t.Context(), nil))
-
-				// Second detection of the same species within interval is skipped.
-				second := newTestDatabaseAction(repo, tracker, detCtx, "skipped.wav")
-				require.NoError(t, second.Execute(t.Context(), nil))
-				require.True(t, second.skipsLaterSteps())
+				runRateLimitedDatabaseSkip(t, detCtx, "skipped.wav")
 			},
 		},
 		{
@@ -172,17 +175,12 @@ func TestSaveAudioAction_AbortsWhenDatabaseSkippedOrFailed(t *testing.T) {
 // outcome channel before the 50ms poll interval rather than polling or stalling 5s.
 func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) {
 	const settleDelay = 25 * time.Millisecond
-	const pollInterval = 50 * time.Millisecond
 
 	tests := []struct {
-		name           string
-		settleDB       func(t *testing.T, detCtx *DetectionContext) uint
-		wantExported   bool
-		wantPreRender  bool
-		checkNoteID    bool
-		presetNoteID   uint
-		wantFinalID    uint
-		expectZeroPres bool
+		name         string
+		settleDB     func(t *testing.T, detCtx *DetectionContext) uint
+		wantExported bool
+		presetNoteID uint
 	}{
 		{
 			name: "saved_with_id",
@@ -194,9 +192,7 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 				require.NotZero(t, db.Result.ID)
 				return db.Result.ID
 			},
-			wantExported:  true,
-			wantPreRender: true,
-			checkNoteID:   true,
+			wantExported: true,
 		},
 		{
 			name: "saved_with_zero_id",
@@ -208,27 +204,17 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 				require.Zero(t, db.Result.ID)
 				return 0
 			},
-			wantExported:   true,
-			wantPreRender:  true,
-			presetNoteID:   77,
-			wantFinalID:    77,
-			expectZeroPres: true,
+			wantExported: true,
+			presetNoteID: 77,
 		},
 		{
 			name: "rate_limited_skip",
 			settleDB: func(t *testing.T, detCtx *DetectionContext) uint {
 				t.Helper()
-				tracker := NewEventTracker(15 * time.Second)
-				repo := NewMockDetectionRepository()
-				first := newTestDatabaseAction(repo, tracker, &DetectionContext{}, "first.wav")
-				require.NoError(t, first.Execute(t.Context(), nil))
-
-				second := newTestDatabaseAction(repo, tracker, detCtx, "skipped.wav")
-				require.NoError(t, second.Execute(t.Context(), nil))
+				runRateLimitedDatabaseSkip(t, detCtx, "skipped.wav")
 				return 0
 			},
-			wantExported:  false,
-			wantPreRender: false,
+			wantExported: false,
 		},
 		{
 			name: "terminal_failure",
@@ -242,8 +228,7 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 				require.Error(t, db.Execute(t.Context(), nil))
 				return 0
 			},
-			wantExported:  false,
-			wantPreRender: false,
+			wantExported: false,
 		},
 	}
 
@@ -272,7 +257,7 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 				<-dbDone
 
 				require.NoError(t, err)
-				assert.Less(t, elapsed, pollInterval, "SaveAudioAction must wake via outcome channel before poll tick")
+				assert.Less(t, elapsed, noteIDPollInterval, "SaveAudioAction must wake via outcome channel before poll tick")
 
 				outputPath := filepath.Join(tmpDir, "concurrent.wav")
 				if tc.wantExported {
@@ -280,25 +265,15 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 					require.NoError(t, statErr)
 					assert.Positive(t, info.Size())
 					assert.True(t, detCtx.ClipSaved.Load())
+
+					wantID := cmp.Or(savedID, tc.presetNoteID)
+					assert.Equal(t, wantID, action.NoteID)
+					assert.Equal(t, []uint{wantID}, pre.submittedNoteIDs())
 				} else {
 					entries, readErr := os.ReadDir(tmpDir)
 					require.NoError(t, readErr)
 					assert.Empty(t, entries)
 					assert.False(t, detCtx.ClipSaved.Load())
-				}
-
-				if tc.wantPreRender {
-					ids := pre.submittedNoteIDs()
-					require.Len(t, ids, 1)
-					if tc.checkNoteID {
-						assert.Equal(t, savedID, action.NoteID)
-						assert.Equal(t, savedID, ids[0])
-					}
-					if tc.expectZeroPres {
-						assert.Equal(t, tc.wantFinalID, action.NoteID)
-						assert.Equal(t, tc.wantFinalID, ids[0])
-					}
-				} else {
 					assert.Empty(t, pre.submittedNoteIDs())
 				}
 			})
@@ -337,13 +312,7 @@ func TestSaveAudioAction_DeferredExtendedCaptureAbortsWhenDatabaseSettled(t *tes
 		assert.Less(t, time.Since(start), time.Second)
 
 		// DatabaseAction now rate-limits and skips the detection.
-		tracker := NewEventTracker(15 * time.Second)
-		repo := NewMockDetectionRepository()
-		first := newTestDatabaseAction(repo, tracker, &DetectionContext{}, "first.wav")
-		require.NoError(t, first.Execute(t.Context(), nil))
-		second := newTestDatabaseAction(repo, tracker, detCtx, "deferred.wav")
-		require.NoError(t, second.Execute(t.Context(), nil))
-		require.True(t, second.skipsLaterSteps())
+		runRateLimitedDatabaseSkip(t, detCtx, "deferred.wav")
 
 		// Attempt 2: even with readyAt still in the future (and no capture buffer allocated),
 		// SaveAudioAction must abort cleanly instead of returning errAudioExportDeferred or reading bufferMgr.
