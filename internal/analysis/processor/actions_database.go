@@ -158,6 +158,9 @@ var errDetectionSaveInFlight = errors.NewStd("detection save still running from 
 // panic after the row is stored. A detection the event tracker skips is not saved:
 // the call returns nil and the composite ends there (see skipsLaterSteps), so the
 // event-tracker verdict of this step is the only one the detection gets.
+// The attempt that ends the detection settles DetectionCtx's database outcome for
+// SaveAudioAction: saved through recordSaveSuccess, skipped when the event
+// tracker skips it, failed or unknown through terminate.
 func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	attempt := int(a.attempts.Add(1))
 	if !a.acquireSaveSlot(ctx) {
@@ -350,6 +353,9 @@ func (a *DatabaseAction) recordSaveFailure(err error, attempt int) error {
 			GetLogger().Debug("Detection save failed again, will be retried", fields("database_save_retry_scheduled")...)
 		}
 		return err
+	case a.Repo != nil && !isRepeatableSaveError(err):
+		a.terminate(err)
+		GetLogger().Error("Detection save outcome unknown, not retried to avoid a duplicate", fields("database_save_outcome_unknown")...)
 	case a.windowEnded.Load():
 		a.terminate(err)
 		GetLogger().Error("Detection not saved: the save failed after its job ended", fields("database_save_abandoned")...)
@@ -357,9 +363,6 @@ func (a *DatabaseAction) recordSaveFailure(err error, attempt int) error {
 		a.terminate(err)
 		GetLogger().Error("Detection not saved: database unavailable for the whole retry window",
 			append(fields("database_save_retry_exhausted"), logger.Duration("retry_window", databaseSaveRetryWindow))...)
-	case a.Repo != nil && errors.IsConnectivityError(err) && !isRepeatableSaveError(err):
-		a.terminate(err)
-		GetLogger().Error("Detection save outcome unknown, not retried to avoid a duplicate", fields("database_save_outcome_unknown")...)
 	case a.Repo != nil:
 		a.terminate(err)
 		GetLogger().Error("Failed to save detection to database", fields("database_save_repository")...)
@@ -370,29 +373,19 @@ func (a *DatabaseAction) recordSaveFailure(err error, attempt int) error {
 	return err
 }
 
-// terminate records err as the final failure of the detection.
+// terminate records err as the final failure of the detection and settles the
+// database outcome for SaveAudioAction: failed when err proves nothing was
+// stored (isRepeatableSaveError), unknown otherwise, because an error without
+// that proof, a panic included, can follow a stored row (see
+// datastore.ErrDetectionSaveRetrySafe).
 func (a *DatabaseAction) terminate(err error) {
 	a.terminalErr = err
 	a.saveState.Store(saveStateTerminal)
-	// When the save outcome is unknown (a panic or a non-repeatable connectivity
-	// error such as MySQL "invalid connection" during COMMIT), the row may already
-	// exist in the database with ClipName set. Signal dbOutcomeUnknown so
-	// SaveAudioAction wakes immediately and exports the clip instead of dropping it
-	// or stalling for noteIDWaitTimeout; definite failures mark dbOutcomeFailed.
-	if isSaveOutcomeUnknown(err) {
-		a.DetectionCtx.markDatabaseUnknown()
+	if isRepeatableSaveError(err) {
+		a.DetectionCtx.markDatabaseFailed()
 		return
 	}
-	a.DetectionCtx.markDatabaseFailed()
-}
-
-// isSaveOutcomeUnknown reports whether err represents a terminal save failure
-// where the database row may have already been committed.
-func isSaveOutcomeUnknown(err error) bool {
-	if errors.Is(err, errDetectionSavePanicked) {
-		return true
-	}
-	return errors.IsConnectivityError(err) && !isRepeatableSaveError(err)
+	a.DetectionCtx.markDatabaseUnknown()
 }
 
 // recordSaveSuccess runs the steps that follow a stored detection, once. The
@@ -758,8 +751,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 
 	// Abort before deferred Extended Capture retries if DatabaseAction already
 	// skipped or terminally failed this detection.
-	if outcome := a.DetectionCtx.databaseOutcome(); outcome == dbOutcomeSkipped || outcome == dbOutcomeFailed {
-		a.logSkippedByDatabase(outcome)
+	if a.abortedByDatabase() {
 		return nil
 	}
 
@@ -922,71 +914,50 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	return nil
 }
 
-const (
-	noteIDWaitTimeout  = 5 * time.Second
-	noteIDPollInterval = 50 * time.Millisecond
-)
+// noteIDWaitTimeout bounds how long SaveAudioAction waits for DatabaseAction's
+// verdict before it exports anyway (fail open): a save still pending after it is
+// most likely a database outage, and the row may yet be stored.
+const noteIDWaitTimeout = 5 * time.Second
 
-// waitForDatabaseOutcome waits up to noteIDWaitTimeout for DatabaseAction to
-// settle or publish NoteID on DetectionCtx. It returns false when DatabaseAction
-// skipped or definitely failed the detection, and true when audio export should
-// proceed (saved, unknown persistence outcome where a row may exist, nil
-// DetectionCtx, timeout, or context cancel while pending).
+// waitForDatabaseOutcome waits up to noteIDWaitTimeout for DatabaseAction's
+// verdict on DetectionCtx, then resolves it once. It returns false when the
+// verdict proves no row will reference the clip (abortedByDatabase), and true
+// otherwise: saved, unknown, no verdict within noteIDWaitTimeout, ctx ended, or a
+// nil DetectionCtx. On true it takes the stored row's ID when there is one.
 func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 	if a.DetectionCtx == nil {
 		return true
 	}
-
-	checkResolved := func() (done bool, proceed bool) {
-		outcome := a.DetectionCtx.databaseOutcome()
-		if outcome == dbOutcomeSkipped || outcome == dbOutcomeFailed {
-			a.logSkippedByDatabase(outcome)
-			return true, false
-		}
-		if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
-			a.NoteID = liveID
-			return true, true
-		}
-		return outcome == dbOutcomeSaved || outcome == dbOutcomeUnknown, true
-	}
-
-	if done, proceed := checkResolved(); done {
-		return proceed
-	}
-
-	doneCh := a.DetectionCtx.databaseOutcomeDone()
-	if doneCh == nil {
-		_, proceed := checkResolved()
-		return proceed
-	}
-
-	timer := time.NewTimer(noteIDWaitTimeout)
-	defer timer.Stop()
-	ticker := time.NewTicker(noteIDPollInterval)
-	defer ticker.Stop()
-
-	for {
+	if done := a.DetectionCtx.databaseOutcomeDone(); done != nil {
+		timer := time.NewTimer(noteIDWaitTimeout)
+		defer timer.Stop()
 		select {
-		case <-ticker.C:
-			if done, proceed := checkResolved(); done {
-				return proceed
-			}
-			continue
-		case <-doneCh:
+		case <-done:
 		case <-timer.C:
 		case <-ctx.Done():
 		}
-		_, proceed := checkResolved()
-		return proceed
 	}
+	if a.abortedByDatabase() {
+		return false
+	}
+	if id := uint(a.DetectionCtx.NoteID.Load()); id > 0 {
+		a.NoteID = id
+	}
+	return true
 }
 
-func (a *SaveAudioAction) logSkippedByDatabase(outcome int32) {
-	operation := "audio_export_db_skipped"
-	msg := "Skipping audio export: database save skipped"
-	if outcome == dbOutcomeFailed {
-		operation = "audio_export_db_failed"
-		msg = "Skipping audio export: database save failed"
+// abortedByDatabase reports whether DatabaseAction's verdict proves no row will
+// reference this clip, and logs which verdict it was. Pending, saved and
+// unknown let the export go ahead.
+func (a *SaveAudioAction) abortedByDatabase() bool {
+	var msg, operation string
+	switch a.DetectionCtx.databaseOutcome() {
+	case dbOutcomeSkipped:
+		msg, operation = "Skipping audio export: database save skipped", "audio_export_db_skipped"
+	case dbOutcomeFailed:
+		msg, operation = "Skipping audio export: database save failed", "audio_export_db_failed"
+	default:
+		return false
 	}
 	GetLogger().Debug(msg,
 		logger.String("component", "analysis.processor.actions"),
@@ -994,6 +965,7 @@ func (a *SaveAudioAction) logSkippedByDatabase(outcome int32) {
 		logger.String("species", a.species),
 		logger.String("clip_name", a.ClipName),
 		logger.String("operation", operation))
+	return true
 }
 
 // relativeClipPath is the clip's name relative to the export directory, which is

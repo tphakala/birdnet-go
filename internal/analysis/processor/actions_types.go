@@ -62,11 +62,14 @@ const (
 // upstream actions (Database) without polling, when used with CompositeAction for
 // sequential execution. An action enqueued by a composite step shares it too.
 //
-// The context is created once per detection in getActionsForItem() and shared among
-// all actions that need access to the database-assigned detection ID.
+// The context is created once per detection in getDefaultActions(). The steps of
+// the database composite (Database, the MQTT enqueue step, SSE) share it and run
+// in order; SaveAudioAction runs as its own job outside the composite and waits at
+// most noteIDWaitTimeout for the database outcome.
 type DetectionContext struct {
-	// NoteID holds the database primary key after successful save.
-	// Use atomic operations: Store() in DatabaseAction, Load() in MqttAction/SSEAction/SaveAudioAction.
+	// NoteID holds the database primary key after a successful save. It is written
+	// only through markDatabaseSaved, which also settles dbOutcome, and read by
+	// MqttAction, SSEAction and SaveAudioAction.
 	NoteID atomic.Uint64
 
 	// ClipSaved indicates whether the audio clip was successfully exported to disk.
@@ -89,11 +92,11 @@ type DetectionContext struct {
 	// write the denoise marker: the clip can be encoded before its row exists.
 	clipDenoise atomic.Int32
 
-	// dbOutcome tracks the final database save verdict so independent actions
-	// (SaveAudioAction) can abort promptly when DatabaseAction skips or terminally
-	// fails instead of waiting for NoteID and writing orphaned files. Zero value is
-	// dbOutcomePending, and dbOutcomeCh is lazily allocated under dbOutcomeMu only
-	// when a waiter blocks while pending.
+	// dbOutcome is DatabaseAction's verdict on the detection, one of the dbOutcome*
+	// values, set once. SaveAudioAction waits for it at most noteIDWaitTimeout; a
+	// verdict that lands later does not stop an export already under way.
+	// dbOutcomeCh is allocated under dbOutcomeMu only when a waiter blocks while
+	// the verdict is pending, and is closed when the verdict is set.
 	dbOutcome   atomic.Int32
 	dbOutcomeMu sync.Mutex
 	dbOutcomeCh chan struct{}
@@ -101,13 +104,23 @@ type DetectionContext struct {
 
 // Values of DetectionContext.dbOutcome.
 const (
+	// dbOutcomePending: no verdict yet.
 	dbOutcomePending int32 = iota
+	// dbOutcomeSaved: the row is stored and NoteID is published.
 	dbOutcomeSaved
+	// dbOutcomeSkipped: the event tracker skipped the detection before any save,
+	// so nothing was stored.
 	dbOutcomeSkipped
+	// dbOutcomeFailed: the save ended with an error proving nothing was stored
+	// (isRepeatableSaveError).
 	dbOutcomeFailed
+	// dbOutcomeUnknown: the save ended without that proof, an unmarked error or a
+	// panic, so the row may exist.
 	dbOutcomeUnknown
 )
 
+// setDatabaseOutcome moves dbOutcome out of pending once and wakes any waiter;
+// later calls are ignored.
 func (d *DetectionContext) setDatabaseOutcome(outcome int32) {
 	if d == nil || outcome == dbOutcomePending {
 		return
@@ -119,6 +132,7 @@ func (d *DetectionContext) setDatabaseOutcome(outcome int32) {
 	d.dbOutcomeMu.Unlock()
 }
 
+// markDatabaseSaved publishes the stored row's ID, then settles the outcome as saved.
 func (d *DetectionContext) markDatabaseSaved(noteID uint64) {
 	if d == nil {
 		return
@@ -127,18 +141,22 @@ func (d *DetectionContext) markDatabaseSaved(noteID uint64) {
 	d.setDatabaseOutcome(dbOutcomeSaved)
 }
 
+// markDatabaseSkipped settles the outcome as skipped by the event tracker.
 func (d *DetectionContext) markDatabaseSkipped() {
 	d.setDatabaseOutcome(dbOutcomeSkipped)
 }
 
+// markDatabaseFailed settles the outcome as a failure that stored nothing.
 func (d *DetectionContext) markDatabaseFailed() {
 	d.setDatabaseOutcome(dbOutcomeFailed)
 }
 
+// markDatabaseUnknown settles the outcome as a failure that may have stored the row.
 func (d *DetectionContext) markDatabaseUnknown() {
 	d.setDatabaseOutcome(dbOutcomeUnknown)
 }
 
+// databaseOutcome returns the current verdict, dbOutcomePending for a nil receiver.
 func (d *DetectionContext) databaseOutcome() int32 {
 	if d == nil {
 		return dbOutcomePending
@@ -339,7 +357,7 @@ type SaveAudioAction struct {
 	plannedRate   int
 	NoteID        uint              // Note ID for correlation logging with pre-renderer
 	PreRenderer   PreRendererSubmit // Injected from processor
-	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers
+	DetectionCtx  *DetectionContext // Shared with DatabaseAction: the export reads its outcome and NoteID, and sets ClipSaved.
 	EventTracker  *EventTracker
 	Description   string
 	CorrelationID string // Detection correlation ID for log tracking

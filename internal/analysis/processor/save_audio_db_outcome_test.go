@@ -30,6 +30,7 @@ type recordingPreRenderer struct {
 	noteIDs []uint
 }
 
+// Submit implements PreRendererSubmit.
 func (r *recordingPreRenderer) Submit(job interface {
 	GetPCMData() []byte
 	GetSampleRate() int
@@ -44,6 +45,7 @@ func (r *recordingPreRenderer) Submit(job interface {
 	return nil
 }
 
+// Stop implements PreRendererSubmit.
 func (r *recordingPreRenderer) Stop() {}
 
 func (r *recordingPreRenderer) submittedNoteIDs() []uint {
@@ -66,6 +68,13 @@ func (r *zeroIDSaveRepository) Save(_ context.Context, _ *detection.Result, _ []
 // may already be persisted.
 func unknownOutcomeConnectivityError() error {
 	return fmt.Errorf("failed to commit detection: %w", errors.NewStd("invalid connection"))
+}
+
+// unmarkedCommitError is a COMMIT-phase failure that is neither a connectivity
+// error nor marked ErrDetectionSaveRetrySafe: the row may exist, so the clip
+// must be exported.
+func unmarkedCommitError() error {
+	return fmt.Errorf("failed to commit detection: %w", errors.NewStd("disk I/O error"))
 }
 
 func newTestSaveAudioAction(t *testing.T, clipName string, detCtx *DetectionContext, preRenderer PreRendererSubmit) (action *SaveAudioAction, exportDir string) {
@@ -109,7 +118,7 @@ func newTestDatabaseAction(repo datastore.DetectionRepository, tracker *EventTra
 }
 
 func runRateLimitedDatabaseSkip(ctx context.Context, detCtx *DetectionContext, clipName string) error {
-	tracker := NewEventTracker(15 * time.Second)
+	tracker := NewEventTracker(testEventTrackerInterval)
 	repo := NewMockDetectionRepository()
 
 	first := newTestDatabaseAction(repo, tracker, &DetectionContext{}, "first.wav")
@@ -130,9 +139,9 @@ func runRateLimitedDatabaseSkip(ctx context.Context, detCtx *DetectionContext, c
 func runTerminalDatabaseFailure(ctx context.Context, detCtx *DetectionContext, clipName, errMsg string) error {
 	repo := &scriptedSaveRepository{
 		MockDetectionRepository: NewMockDetectionRepository(),
-		script:                  []error{errors.NewStd(errMsg)},
+		script:                  []error{fmt.Errorf("failed to save detection: %w: %w", datastore.ErrDetectionSaveRetrySafe, errors.NewStd(errMsg))},
 	}
-	db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, clipName)
+	db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, clipName)
 	if err := db.Execute(ctx, nil); err == nil {
 		return errors.NewStd("expected terminal database save error, got nil")
 	}
@@ -145,29 +154,33 @@ func runTerminalDatabaseFailure(ctx context.Context, detCtx *DetectionContext, c
 // Not parallel because logtest.CaptureBuffer swaps logger.Global().
 func TestSaveAudioAction_AbortsWhenDatabaseSkippedOrFailed(t *testing.T) {
 	tests := []struct {
-		name     string
-		settleDB func(ctx context.Context, detCtx *DetectionContext) error
+		name          string
+		settleDB      func(ctx context.Context, detCtx *DetectionContext) error
+		wantOperation string
 	}{
 		{
 			name: "rate_limited_skip",
 			settleDB: func(ctx context.Context, detCtx *DetectionContext) error {
 				return runRateLimitedDatabaseSkip(ctx, detCtx, "skipped.wav")
 			},
+			wantOperation: "audio_export_db_skipped",
 		},
 		{
 			name: "terminal_db_failure",
 			settleDB: func(ctx context.Context, detCtx *DetectionContext) error {
 				return runTerminalDatabaseFailure(ctx, detCtx, "failed.wav", "disk full")
 			},
+			wantOperation: "audio_export_db_failed",
 		},
 		{
-			name: "retry_exhausted_db_failure",
+			name:          "retry_exhausted_db_failure",
+			wantOperation: "audio_export_db_failed",
 			settleDB: func(ctx context.Context, detCtx *DetectionContext) error {
 				repo := &scriptedSaveRepository{
 					MockDetectionRepository: NewMockDetectionRepository(),
 					script:                  []error{refusedRetrySafeError(), refusedRetrySafeError()},
 				}
-				db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "exhausted.wav")
+				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "exhausted.wav")
 				db.maxAttempts.Store(2)
 				if err := db.Execute(ctx, nil); err == nil {
 					return errors.NewStd("expected first retryable error, got nil")
@@ -202,16 +215,18 @@ func TestSaveAudioAction_AbortsWhenDatabaseSkippedOrFailed(t *testing.T) {
 				require.NoError(t, err)
 				assert.Empty(t, entries, "no orphaned clip file should be written")
 				assert.NotContains(t, logs.String(), "audio_export_success")
+				assert.Contains(t, logs.String(), tc.wantOperation, "the log names the verdict that stopped the export")
 			})
 		})
 	}
 }
 
 // TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome verifies that when
-// SaveAudioAction enters its wait before DatabaseAction settles, it wakes via the
-// outcome channel before the 50ms poll interval rather than polling or stalling 5s.
+// SaveAudioAction enters its wait before DatabaseAction settles, it wakes on the
+// outcome channel instead of waiting out noteIDWaitTimeout. The verdict lands
+// halfway through the wait, so a missed wake shows as the full timeout.
 func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) {
-	const settleDelay = 25 * time.Millisecond
+	const settleDelay = noteIDWaitTimeout / 2
 
 	tests := []struct {
 		name         string
@@ -223,7 +238,7 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 			name: "saved_with_id",
 			settleDB: func(ctx context.Context, detCtx *DetectionContext) (uint, error) {
 				repo := NewMockDetectionRepository()
-				db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "saved.wav")
+				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "saved.wav")
 				if err := db.Execute(ctx, nil); err != nil {
 					return 0, err
 				}
@@ -238,7 +253,7 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 			name: "saved_with_zero_id",
 			settleDB: func(ctx context.Context, detCtx *DetectionContext) (uint, error) {
 				repo := &zeroIDSaveRepository{MockDetectionRepository: NewMockDetectionRepository()}
-				db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "zero_id.wav")
+				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "zero_id.wav")
 				if err := db.Execute(ctx, nil); err != nil {
 					return 0, err
 				}
@@ -271,9 +286,24 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 					MockDetectionRepository: NewMockDetectionRepository(),
 					script:                  []error{unknownOutcomeConnectivityError()},
 				}
-				db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "unknown.wav")
+				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "unknown.wav")
 				if err := db.Execute(ctx, nil); err == nil {
 					return 0, errors.NewStd("expected connectivity error, got nil")
+				}
+				return 0, nil
+			},
+			wantExported: true,
+		},
+		{
+			name: "unmarked_terminal_error_exports",
+			settleDB: func(ctx context.Context, detCtx *DetectionContext) (uint, error) {
+				repo := &scriptedSaveRepository{
+					MockDetectionRepository: NewMockDetectionRepository(),
+					script:                  []error{unmarkedCommitError()},
+				}
+				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "unmarked.wav")
+				if err := db.Execute(ctx, nil); err == nil {
+					return 0, errors.NewStd("expected commit error, got nil")
 				}
 				return 0, nil
 			},
@@ -309,7 +339,7 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 
 				require.NoError(t, settleErr)
 				require.NoError(t, err)
-				assert.Less(t, elapsed, noteIDPollInterval, "SaveAudioAction must wake via outcome channel before poll tick")
+				assert.Less(t, elapsed, noteIDWaitTimeout, "SaveAudioAction must wake on the database verdict, not the timeout")
 
 				outputPath := filepath.Join(tmpDir, "concurrent.wav")
 				if tc.wantExported {
@@ -399,8 +429,8 @@ func TestSaveAudioAction_DeferredExtendedCaptureAbortsWhenDatabaseSettled(t *tes
 }
 
 // TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext verifies that
-// retryable DB outages, nil DetectionCtx, and direct NoteID.Store callers continue
-// to export clips as before.
+// retryable DB outages, unknown save outcomes, a nil DetectionCtx and a context
+// cancelled while the verdict is pending all export the clip.
 func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 	t.Parallel()
 
@@ -412,7 +442,7 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 				MockDetectionRepository: NewMockDetectionRepository(),
 				script:                  []error{refusedRetrySafeError()},
 			}
-			db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "outage.wav")
+			db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "outage.wav")
 			db.maxAttempts.Store(5)
 			require.Error(t, db.Execute(t.Context(), nil))
 
@@ -436,7 +466,7 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 				MockDetectionRepository: NewMockDetectionRepository(),
 				script:                  []error{unknownOutcomeConnectivityError()},
 			}
-			db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "unknown.wav")
+			db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "unknown.wav")
 			require.Error(t, db.Execute(t.Context(), nil))
 
 			pre := &recordingPreRenderer{}
@@ -458,7 +488,7 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			detCtx := &DetectionContext{}
 			repo := &panickingSaveRepository{MockDetectionRepository: NewMockDetectionRepository()}
-			db := newTestDatabaseAction(repo, NewEventTracker(15*time.Second), detCtx, "panicked.wav")
+			db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "panicked.wav")
 			assert.Panics(t, func() {
 				_ = db.Execute(t.Context(), nil)
 			})
@@ -493,29 +523,25 @@ func TestSaveAudioAction_FailOpenOnRetryableOutageAndNilContext(t *testing.T) {
 		})
 	})
 
-	t.Run("direct_note_id_store_without_database_action", func(t *testing.T) {
+	t.Run("context_cancelled_while_pending_exports", func(t *testing.T) {
 		t.Parallel()
 		synctest.Test(t, func(t *testing.T) {
 			detCtx := &DetectionContext{}
 			pre := &recordingPreRenderer{}
-			action, tmpDir := newTestSaveAudioAction(t, "direct_id.wav", detCtx, pre)
+			action, tmpDir := newTestSaveAudioAction(t, "cancelled.wav", detCtx, pre)
 
-			done := make(chan struct{})
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
 			go func() {
-				defer close(done)
-				time.Sleep(25 * time.Millisecond)
-				detCtx.NoteID.Store(99)
+				time.Sleep(noteIDWaitTimeout / 2)
+				cancel()
 			}()
 
 			start := time.Now()
-			require.NoError(t, action.Execute(t.Context(), nil))
-			elapsed := time.Since(start)
-			<-done
+			require.NoError(t, action.Execute(ctx, nil))
+			assert.Less(t, time.Since(start), noteIDWaitTimeout, "a cancelled context must end the wait")
 
-			assert.Less(t, elapsed, 2*noteIDPollInterval, "direct NoteID.Store must wake on poll tick rather than stalling until noteIDWaitTimeout")
-			assert.Equal(t, uint(99), action.NoteID)
-			assert.Equal(t, []uint{99}, pre.submittedNoteIDs())
-			info, err := os.Stat(filepath.Join(tmpDir, "direct_id.wav"))
+			info, err := os.Stat(filepath.Join(tmpDir, "cancelled.wav"))
 			require.NoError(t, err)
 			assert.Positive(t, info.Size())
 		})
