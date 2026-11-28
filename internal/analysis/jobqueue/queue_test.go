@@ -1080,6 +1080,36 @@ func TestEnqueue_NotifiesDroppedActionOutsideTheLock(t *testing.T) {
 	assert.Equal(t, int32(1), drops.Load(), "OnDropped runs once for the dropped job")
 }
 
+// dropNotifiedTypedAction is a TypedAction that counts OnDropped calls.
+type dropNotifiedTypedAction struct {
+	drops atomic.Int32
+}
+
+func (a *dropNotifiedTypedAction) Execute(context.Context, int) error { return nil }
+func (a *dropNotifiedTypedAction) GetDescription() string             { return "typed drop-notified action" }
+
+// OnDropped implements DropHandler.
+func (a *dropNotifiedTypedAction) OnDropped() { a.drops.Add(1) }
+
+// TestEnqueueTyped_NotifiesDroppedTypedAction pins that a TypedAction that
+// implements DropHandler is told when drop-oldest removes its job, although the
+// queue holds it behind typedActionAdapter.
+func TestEnqueueTyped_NotifiesDroppedTypedAction(t *testing.T) {
+	queue := &TypedJobQueue[int]{JobQueue: NewJobQueueWithOptions(1, false)}
+	// An hourly tick keeps the first job pending, so drop-oldest can pick it.
+	queue.SetProcessingInterval(time.Hour)
+	queue.StartWithContext(t.Context())
+	t.Cleanup(func() { _ = queue.Stop() })
+
+	victim := &dropNotifiedTypedAction{}
+	_, err := queue.EnqueueTyped(victim, 1, RetryConfig{})
+	require.NoError(t, err)
+	_, err = queue.EnqueueTyped(&dropNotifiedTypedAction{}, 2, RetryConfig{})
+	require.NoError(t, err, "the enqueue that dropped the old job succeeds")
+
+	assert.Equal(t, int32(1), victim.drops.Load(), "the dropped typed action is notified once")
+}
+
 // overrunAction ignores its context, like BirdWeatherAction. Its first start
 // runs firstAttempt; every later start returns nil at once. It records the
 // virtual time of each start.

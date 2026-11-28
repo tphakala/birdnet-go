@@ -85,7 +85,7 @@ type Action interface {
 // DropHandler is implemented by an Action that must learn when the queue drops
 // its job, to make room for a new one, before the job ever ran. OnDropped is
 // called once, after the queue lock is released, on the goroutine of the
-// Enqueue call that caused the drop.
+// Enqueue call that caused the drop. A TypedAction may implement it too.
 type DropHandler interface {
 	OnDropped()
 }

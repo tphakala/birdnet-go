@@ -1076,6 +1076,14 @@ func (a *typedActionAdapter[T]) GetDescription() string {
 	return a.action.GetDescription()
 }
 
+// OnDropped implements DropHandler: it tells the wrapped action that its job was
+// dropped, when that action implements DropHandler.
+func (a *typedActionAdapter[T]) OnDropped() {
+	if h, ok := a.action.(DropHandler); ok {
+		h.OnDropped()
+	}
+}
+
 // GetMaxJobs returns the maximum number of jobs allowed in the queue
 func (q *JobQueue) GetMaxJobs() int {
 	return q.maxJobs
