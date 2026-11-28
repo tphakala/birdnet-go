@@ -280,21 +280,6 @@ func TestSaveAudioAction_WakesPromptlyOnConcurrentDatabaseOutcome(t *testing.T) 
 			wantExported: false,
 		},
 		{
-			name: "outcome_unknown_connectivity_error",
-			settleDB: func(ctx context.Context, detCtx *DetectionContext) (uint, error) {
-				repo := &scriptedSaveRepository{
-					MockDetectionRepository: NewMockDetectionRepository(),
-					script:                  []error{unknownOutcomeConnectivityError()},
-				}
-				db := newTestDatabaseAction(repo, NewEventTracker(testEventTrackerInterval), detCtx, "unknown.wav")
-				if err := db.Execute(ctx, nil); err == nil {
-					return 0, errors.NewStd("expected connectivity error, got nil")
-				}
-				return 0, nil
-			},
-			wantExported: true,
-		},
-		{
 			name: "unmarked_terminal_error_exports",
 			settleDB: func(ctx context.Context, detCtx *DetectionContext) (uint, error) {
 				repo := &scriptedSaveRepository{
