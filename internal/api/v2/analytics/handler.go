@@ -24,6 +24,7 @@ package analytics
 
 import (
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -45,6 +46,12 @@ type Handler struct {
 	// /insights/* and /dashboard/kpis endpoints. It is created lazily in
 	// RegisterInsightsRoutes (only when the v2 manager is available).
 	insightsRepo repository.InsightsRepository
+
+	// labelRepo and taxonomicClassRepo read each species' taxonomic class from the
+	// v2 labels for the daily summary. Created in RegisterAnalyticsRoutes when the
+	// v2 manager is available; nil otherwise, and the class is then left empty.
+	labelRepo          repository.LabelRepository
+	taxonomicClassRepo repository.TaxonomicClassRepository
 }
 
 // New constructs the analytics domain handler around the shared core and the
@@ -69,6 +76,12 @@ func New(
 // supplied group. It preserves the facade's previous initAnalyticsRoutes entry
 // (all endpoints publicly accessible, in the same order).
 func (c *Handler) RegisterAnalyticsRoutes(g *echo.Group) {
+	if c.V2Manager != nil {
+		db, useV2Prefix, isMySQL := c.v2RepositoryConfig()
+		c.labelRepo = repository.NewLabelRepository(db, nil, useV2Prefix, isMySQL)
+		c.taxonomicClassRepo = repository.NewTaxonomicClassRepository(db, nil, useV2Prefix)
+	}
+
 	// Create analytics API group - publicly accessible
 	analyticsGroup := g.Group("/analytics")
 
@@ -133,12 +146,7 @@ func (c *Handler) RegisterInsightsRoutes(g *echo.Group) {
 	if c.V2Manager == nil {
 		return
 	}
-	db := c.V2Manager.DB()
-	isMySQL := c.V2Manager.IsMySQL()
-	var useV2Prefix bool
-	if tp, ok := c.V2Manager.(interface{ TablePrefix() string }); ok {
-		useV2Prefix = tp.TablePrefix() != ""
-	}
+	db, useV2Prefix, isMySQL := c.v2RepositoryConfig()
 	c.insightsRepo = repository.NewInsightsRepository(db, useV2Prefix, isMySQL)
 
 	insightsGroup := g.Group("/insights")
@@ -166,4 +174,11 @@ func (c *Handler) RegisterDatabaseOverviewRoutes(g *echo.Group) {
 	dbGroup.GET("/overview", c.GetDatabaseOverview, authMiddleware)
 
 	c.LogInfoIfEnabled("Database overview route initialized")
+}
+
+// v2RepositoryConfig returns what the v2 repository constructors need from the v2
+// manager: its database, whether tables carry the v2 prefix, and whether it is MySQL.
+// Callers must check that c.V2Manager is not nil.
+func (c *Handler) v2RepositoryConfig() (*gorm.DB, bool, bool) {
+	return c.V2Manager.DB(), c.V2Manager.TablePrefix() != "", c.V2Manager.IsMySQL()
 }
