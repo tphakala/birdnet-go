@@ -18,6 +18,7 @@ package v2only
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -862,9 +863,12 @@ func retrySafe(err error) error {
 // saveDetection is the single v2 write path behind every save entry point. It
 // resolves the model, labels and audio source, writes the detection and its
 // predictions in one transaction, then stores model contributions best effort.
-// It returns the database-assigned detection ID. A failure that happened before
-// COMMIT was sent wraps datastore.ErrDetectionSaveRetrySafe; a failure of COMMIT
-// itself does not, because the server may have applied it.
+// It returns the database-assigned detection ID. A failure of the reference data
+// lookups and writes, Begin or the inserts wraps
+// datastore.ErrDetectionSaveRetrySafe, and so does a transaction database/sql
+// rolled back because its context ended before COMMIT was sent; any other COMMIT
+// error does not, because it cannot be told apart from a COMMIT the server may
+// have applied.
 func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint, error) {
 	// Use the model info from the write if available, otherwise fall back to the default.
 	// This allows multi-model detections to be attributed to the correct model.
@@ -957,9 +961,10 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 	// The repository doesn't currently support transaction injection.
 	//
 	// bodyDone is set as the last statement of the transaction function, so a
-	// Transaction error with bodyDone set came from COMMIT: the server may or may
-	// not have applied it, and the error is not marked retry safe. Every earlier
-	// failure (reference data, Begin, the inserts, which roll back) stored nothing.
+	// Transaction error with bodyDone set came from Tx.Commit: unless
+	// rolledBackBeforeCommit holds, the server may or may not have applied it, and
+	// the error is not marked retry safe. Every earlier failure (reference data,
+	// Begin, the inserts, which roll back) stored nothing.
 	var bodyDone bool
 	if err := ds.manager.DB().WithContext(txCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(det).Error; err != nil {
@@ -978,10 +983,10 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 		bodyDone = true
 		return nil
 	}); err != nil {
-		if bodyDone {
-			return 0, err
+		if !bodyDone || rolledBackBeforeCommit(txCtx, err) {
+			return 0, retrySafe(err)
 		}
-		return 0, retrySafe(err)
+		return 0, err
 	}
 
 	// Contributions are supplementary and run after the commit, so they are detached
@@ -991,6 +996,17 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 	ds.saveModelContributionsBestEffort(contribCtx, det.ID, w.modelContributions)
 
 	return det.ID, nil
+}
+
+// rolledBackBeforeCommit reports whether a Transaction error that followed the
+// body is database/sql declining to send COMMIT: Tx.Commit returns sql.ErrTxDone
+// or the transaction context's error only before it calls the driver, and the
+// transaction is then rolled back. It relies on the drivers' Commit taking no
+// context (go-sql-driver/mysql, mattn/go-sqlite3), so neither can return such an
+// error from COMMIT itself; a driver that aborted an in-flight COMMIT with a
+// context error would break the context half of this check.
+func rolledBackBeforeCommit(txCtx context.Context, err error) bool {
+	return errors.Is(err, sql.ErrTxDone) || (txCtx.Err() != nil && errors.Is(err, txCtx.Err()))
 }
 
 // resolveSaveSource resolves the audio source row for a write and returns its ID,

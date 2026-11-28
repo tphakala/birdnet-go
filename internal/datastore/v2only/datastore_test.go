@@ -2,6 +2,8 @@ package v2only
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -20,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
+	"gorm.io/gorm"
 )
 
 // buildTestConfig constructs the shared repositories and Config for in-memory test datastores.
@@ -476,6 +479,78 @@ func TestV2OnlyDatastore_SaveAndGet(t *testing.T) {
 	assert.Equal(t, "12:30:00", notes[0].Time)
 	assert.Equal(t, "Passer domesticus", notes[0].ScientificName)
 	assert.InDelta(t, 0.85, notes[0].Confidence, 0.001)
+}
+
+// TestSaveDetection_RollbackBeforeCommitIsRetrySafe pins that a transaction whose
+// context ends after the inserts but before COMMIT is marked retry safe:
+// database/sql refuses to send COMMIT and rolls the transaction back, so nothing
+// was stored and a repeat cannot create a second row.
+func TestSaveDetection_RollbackBeforeCommitIsRetrySafe(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	detectionsTable := ds.detectionsTableName()
+	// Cancel once the detection insert has run inside the transaction; the
+	// reference data creates before the transaction must not trigger it.
+	require.NoError(t, ds.manager.DB().Callback().Create().After("gorm:create").
+		Register("test:cancel_before_commit", func(tx *gorm.DB) {
+			if tx.Statement.Table == detectionsTable && tx.Error == nil {
+				cancel()
+			}
+		}))
+
+	note := &datastore.Note{
+		Date:           "2024-01-15",
+		Time:           "12:30:00",
+		ScientificName: "Passer domesticus",
+		CommonName:     "House Sparrow",
+		Confidence:     0.85,
+		ClipName:       "rolled_back.wav",
+	}
+	_, err := ds.saveDetection(ctx, writeFromNote(note, nil, time.UTC))
+	require.Error(t, err)
+	require.ErrorIs(t, err, datastore.ErrDetectionSaveRetrySafe, "COMMIT was never sent")
+	assert.True(t, errors.Is(err, sql.ErrTxDone) || errors.Is(err, context.Canceled),
+		"the error came from Tx.Commit: %v", err)
+	assert.NotContains(t, err.Error(), "failed to save detection", "the body completed")
+
+	var rows int64
+	require.NoError(t, ds.manager.DB().WithContext(t.Context()).Table(detectionsTable).Count(&rows).Error)
+	assert.Zero(t, rows, "the transaction was rolled back")
+}
+
+// TestRolledBackBeforeCommit pins each half of the check on its own: which error
+// Tx.Commit returns after the context ends depends on scheduling, so the save
+// test above cannot tell the two apart. A COMMIT error that is not the context's
+// own error must stay unmarked even when the context has ended.
+func TestRolledBackBeforeCommit(t *testing.T) {
+	live := t.Context()
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	expired, cancelExpired := context.WithDeadline(t.Context(), time.Unix(0, 0))
+	defer cancelExpired()
+
+	tests := []struct {
+		name  string
+		txCtx context.Context
+		err   error
+		want  bool
+	}{
+		{"tx done with live context", live, sql.ErrTxDone, true},
+		{"wrapped tx done", live, fmt.Errorf("commit: %w", sql.ErrTxDone), true},
+		{"cancelled context error", cancelled, context.Canceled, true},
+		{"expired deadline error", expired, context.DeadlineExceeded, true},
+		{"context error with live context", live, context.Canceled, false},
+		{"driver error after context ended", cancelled, driver.ErrBadConn, false},
+		{"other context error than the one that ended it", cancelled, context.DeadlineExceeded, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, rolledBackBeforeCommit(tt.txCtx, tt.err))
+		})
+	}
 }
 
 func TestV2OnlyDatastore_GetAllDetectedSpeciesReturnsOnlyDetectionLabels(t *testing.T) {
