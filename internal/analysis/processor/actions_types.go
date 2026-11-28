@@ -112,11 +112,12 @@ type DetectionContext struct {
 
 	// unconfirmedClip is the clip SaveAudioAction exported while the verdict was
 	// still pending; it stays set after a saved or unknown verdict, which never
-	// removes it, and is nil when no clip was held or once one is taken. Whichever of SaveAudioAction and DatabaseAction
-	// finishes last removes it when the verdict proves no row: SaveAudioAction
-	// stores the clip and then reads the verdict, DatabaseAction stores the
-	// verdict and then takes the clip, so at least one of them sees both, and the
-	// Swap lets only one of them remove it.
+	// claims it, and is nil when no clip was held or once one is taken. Whichever
+	// of SaveAudioAction and DatabaseAction finishes last claims it for removal
+	// when the verdict proves no row: SaveAudioAction stores the clip and then
+	// reads the verdict, DatabaseAction stores the verdict and then takes the
+	// clip, so at least one of them sees both, and the Swap lets only one of them
+	// claim it. The claimed file can still stay on disk (see exportedClip.remove).
 	unconfirmedClip atomic.Pointer[exportedClip]
 }
 
@@ -177,14 +178,14 @@ func (d *DetectionContext) markDatabaseSaved(noteID uint64) {
 }
 
 // markDatabaseSkipped settles the outcome as skipped by the event tracker and
-// removes a clip already exported for it.
+// claims a clip already exported for it for removal (removeClipWithoutRow).
 func (d *DetectionContext) markDatabaseSkipped() {
 	d.setDatabaseOutcome(dbOutcomeSkipped, 0)
 	d.removeClipWithoutRow()
 }
 
 // markDatabaseFailed settles the outcome as a failure that stored nothing and
-// removes a clip already exported for it.
+// claims a clip already exported for it for removal (removeClipWithoutRow).
 func (d *DetectionContext) markDatabaseFailed() {
 	d.setDatabaseOutcome(dbOutcomeFailed, 0)
 	d.removeClipWithoutRow()
@@ -221,10 +222,11 @@ func (d *DetectionContext) verdictKeepsClip() bool {
 }
 
 // holdUnconfirmedClip offers a clip exported before the verdict was known for
-// removal, removes it at once when the verdict already proves no row, and
-// reports whether it does. It reports the verdict, not which side removed the
-// file: DatabaseAction can take and remove the clip between the Store and this
-// side's own removal call, and the caller must stop before its success log then.
+// removal, claims it at once when the verdict already proves no row, and
+// reports whether the verdict proves no row. It reports the verdict, not which
+// side claimed the clip or whether the file was removed: DatabaseAction can
+// take the clip between the Store and this side's own call, and the caller
+// must stop before its success log then.
 // A nil receiver holds nothing and reports false.
 func (d *DetectionContext) holdUnconfirmedClip(c *exportedClip) (noRow bool) {
 	if d == nil {
@@ -235,9 +237,10 @@ func (d *DetectionContext) holdUnconfirmedClip(c *exportedClip) (noRow bool) {
 	return d.verdictProvesNoRow()
 }
 
-// removeClipWithoutRow removes the held clip, at most once, when the verdict
-// proves no row will reference it. It does file I/O, so it must not run under
-// dbOutcomeMu.
+// removeClipWithoutRow takes the held clip, at most once, when the verdict
+// proves no row will reference it, and hands it to exportedClip.remove, which
+// keeps the file when it was replaced or cannot be removed. It does file I/O,
+// so it must not run under dbOutcomeMu.
 func (d *DetectionContext) removeClipWithoutRow() {
 	if d == nil || !d.verdictProvesNoRow() {
 		return

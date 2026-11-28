@@ -987,7 +987,8 @@ func (a *SaveAudioAction) waitForDatabaseOutcome(ctx context.Context) bool {
 
 // offerClipForRemoval offers the clip just written at outputPath for removal
 // when the database verdict is still pending or proves no row, and reports
-// whether the verdict proves no row (the clip is then removed). A clip outside
+// whether the verdict proves no row (the clip is then claimed for removal,
+// which exportedClip.remove can still decline). A clip outside
 // the export directory is never offered: it is kept (fail open). written must
 // already carry its file identity (os.SameFile(written, written) called right
 // after the Stat): on Windows os.Stat leaves the identity to be read from the
