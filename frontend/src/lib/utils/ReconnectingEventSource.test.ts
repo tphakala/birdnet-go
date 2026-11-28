@@ -1,5 +1,15 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ReconnectingEventSource } from './ReconnectingEventSource';
+import { ReconnectingEventSource as BaseReconnectingEventSource } from './ReconnectingEventSource';
+
+let trackedInstances: BaseReconnectingEventSource[] = [];
+
+class ReconnectingEventSource extends BaseReconnectingEventSource {
+  constructor(...args: ConstructorParameters<typeof BaseReconnectingEventSource>) {
+    super(...args);
+    trackedInstances.push(this);
+  }
+}
 
 // Native EventSource readyState constants
 const CONNECTING = 0;
@@ -87,6 +97,13 @@ describe('ReconnectingEventSource', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     MockEventSource.instances = [];
+  });
+
+  afterEach(() => {
+    for (const es of trackedInstances) {
+      es.close();
+    }
+    trackedInstances = [];
   });
 
   it('opens the native EventSource with the given url and forwards withCredentials', () => {
@@ -224,6 +241,7 @@ describe('ReconnectingEventSource', () => {
       vi.advanceTimersByTime(499);
       expect(MockEventSource.instances).toHaveLength(1);
       vi.advanceTimersByTime(1); // 500ms initial window reached
+
       expect(MockEventSource.instances).toHaveLength(2);
 
       es.close();
@@ -269,11 +287,13 @@ describe('ReconnectingEventSource', () => {
       lastInstance().simulateOpen();
       lastInstance().simulateFailure();
       vi.advanceTimersByTime(500);
+
       expect(MockEventSource.instances).toHaveLength(2);
 
       // failure 2 (no successful open): window 1000ms
       lastInstance().simulateFailure();
       vi.advanceTimersByTime(999);
+
       expect(MockEventSource.instances).toHaveLength(2);
       vi.advanceTimersByTime(1);
       expect(MockEventSource.instances).toHaveLength(3);
@@ -304,6 +324,7 @@ describe('ReconnectingEventSource', () => {
 
       // Window is back to the initial 500ms, not grown.
       vi.advanceTimersByTime(499);
+
       expect(MockEventSource.instances).toHaveLength(2);
       vi.advanceTimersByTime(1);
       expect(MockEventSource.instances).toHaveLength(3);
@@ -325,6 +346,7 @@ describe('ReconnectingEventSource', () => {
       expect(onerror).not.toHaveBeenCalled();
       expect(es.readyState).toBe(CONNECTING);
       vi.advanceTimersByTime(500);
+
       expect(MockEventSource.instances).toHaveLength(2);
 
       es.close();
@@ -399,6 +421,7 @@ describe('ReconnectingEventSource', () => {
       const es = new ReconnectingEventSource('/x', { eventSourceClass: ESClass });
       lastInstance().simulateFailure();
       vi.advanceTimersByTime(500);
+
       expect(MockEventSource.instances).toHaveLength(2);
       es.close();
     });
@@ -412,6 +435,127 @@ describe('ReconnectingEventSource', () => {
 
       // The scheduled reconnect timer was cleared by close() inside the callback.
       expect(MockEventSource.instances).toHaveLength(1);
+    });
+  });
+
+  describe('page visibility handling', () => {
+    let hiddenGetter: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      MockEventSource.instances = [];
+      hiddenGetter = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    });
+
+    afterEach(() => {
+      hiddenGetter.mockRestore();
+    });
+
+    it('disconnects native source when document becomes hidden', () => {
+      const es = new ReconnectingEventSource('/stream', {
+        eventSourceClass: ESClass,
+        pauseOnHidden: true,
+      });
+      expect(MockEventSource.instances).toHaveLength(1);
+      lastInstance().simulateOpen();
+      expect(es.readyState).toBe(ReconnectingEventSource.OPEN);
+
+      // Simulate document becoming hidden
+      hiddenGetter.mockReturnValue(true);
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(lastInstance().closed).toBe(true);
+      expect(es.readyState).toBe(ReconnectingEventSource.CONNECTING);
+
+      es.close();
+    });
+
+    it('reconnects native source when document becomes visible again', () => {
+      const es = new ReconnectingEventSource('/stream', {
+        eventSourceClass: ESClass,
+        pauseOnHidden: true,
+      });
+      expect(MockEventSource.instances).toHaveLength(1);
+      lastInstance().simulateOpen();
+
+      // Hide
+      hiddenGetter.mockReturnValue(true);
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(MockEventSource.instances).toHaveLength(1);
+      expect(lastInstance().closed).toBe(true);
+
+      // Show again
+      hiddenGetter.mockReturnValue(false);
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(MockEventSource.instances).toHaveLength(2);
+      expect(lastInstance().closed).toBe(false);
+
+      es.close();
+    });
+
+    it('defers initial connection if constructed while document is hidden', () => {
+      hiddenGetter.mockReturnValue(true);
+      const initialCount = MockEventSource.instances.length;
+
+      const es = new ReconnectingEventSource('/stream', {
+        eventSourceClass: ESClass,
+        pauseOnHidden: true,
+      });
+      expect(MockEventSource.instances).toHaveLength(initialCount);
+      expect(es.readyState).toBe(ReconnectingEventSource.CONNECTING);
+
+      // Becomes visible
+      hiddenGetter.mockReturnValue(false);
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(MockEventSource.instances).toHaveLength(initialCount + 1);
+      lastInstance().simulateOpen();
+      expect(es.readyState).toBe(ReconnectingEventSource.OPEN);
+
+      es.close();
+    });
+
+    it('removes visibility listener on close', () => {
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+      const es = new ReconnectingEventSource('/stream', {
+        eventSourceClass: ESClass,
+        pauseOnHidden: true,
+      });
+      es.close();
+
+      expect(removeSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+      removeSpy.mockRestore();
+    });
+
+    it('does not pause on visibility by default when pauseOnHidden is omitted', () => {
+      const es = new ReconnectingEventSource('/stream', { eventSourceClass: ESClass });
+      expect(MockEventSource.instances).toHaveLength(1);
+      lastInstance().simulateOpen();
+
+      hiddenGetter.mockReturnValue(true);
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(lastInstance().closed).toBe(false);
+      expect(es.readyState).toBe(ReconnectingEventSource.OPEN);
+
+      es.close();
+    });
+
+    it('does not pause on visibility when pauseOnHidden is false', () => {
+      const es = new ReconnectingEventSource('/stream', {
+        eventSourceClass: ESClass,
+        pauseOnHidden: false,
+      });
+      expect(MockEventSource.instances).toHaveLength(1);
+      lastInstance().simulateOpen();
+
+      hiddenGetter.mockReturnValue(true);
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      expect(lastInstance().closed).toBe(false);
+      expect(es.readyState).toBe(ReconnectingEventSource.OPEN);
+
+      es.close();
     });
   });
 });

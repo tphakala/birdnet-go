@@ -648,13 +648,22 @@ Performance Optimizations:
 
     try {
       // ReconnectingEventSource with configuration
+      let hasOpenedOnce = false;
       eventSource = new ReconnectingEventSource(buildAppUrl('/api/v2/detections/stream'), {
         max_retry_time: 30000, // Max 30 seconds between reconnection attempts
         withCredentials: false,
+        pauseOnHidden: true,
       });
 
       eventSource.onopen = () => {
         logger.debug('SSE connection opened');
+        if (hasOpenedOnce) {
+          fetchRecentDetections();
+          if (selectedDate === serverTodayDate) {
+            fetchDailySummary();
+          }
+        }
+        hasOpenedOnce = true;
       };
 
       eventSource.onmessage = event => {
