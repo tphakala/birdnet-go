@@ -228,7 +228,7 @@ func TestGetSpeciesStats_MatchesSpeciesSummary(t *testing.T) {
 	seedCorrectReview(t, db, seedDetection(t, db, label, 3000, 0.7))
 	seedDetection(t, db, label, 4000, 0.5)
 
-	summary, err := repo.GetSpeciesSummary(t.Context(), 0, 10000, nil)
+	summary, err := repo.GetSpeciesSummary(t.Context(), 0, 10000, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, summary, 1)
 	got, err := repo.GetSpeciesStats(t.Context(), statsSpeciesA)
@@ -239,6 +239,27 @@ func TestGetSpeciesStats_MatchesSpeciesSummary(t *testing.T) {
 	assert.Equal(t, summary[0].LastDetection, got.LastDetectedAt)
 	assert.InDelta(t, summary[0].AvgConfidence, got.AvgConfidence, confidenceTolerance)
 	assert.InDelta(t, summary[0].MaxConfidence, got.MaxConfidence, confidenceTolerance)
+}
+
+func TestGetSpeciesSummary_MinConfidence(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewDetectionRepository(db, nil, false, false)
+	highLabel := seedLabel(t, db, statsSpeciesA)
+	lowLabel := seedLabel(t, db, statsSpeciesB)
+
+	seedDetection(t, db, highLabel, 1000, 0.50)
+	seedDetection(t, db, highLabel, 2000, 0.85)
+	seedDetection(t, db, lowLabel, 1500, 0.76)
+
+	filtered, err := repo.GetSpeciesSummary(t.Context(), 0, 10000, nil, 0.80)
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, statsSpeciesA, filtered[0].ScientificName)
+	assert.Equal(t, int64(1), filtered[0].TotalDetections)
+	assert.Equal(t, int64(2000), filtered[0].FirstDetection)
+	assert.Equal(t, int64(2000), filtered[0].LastDetection)
+	assert.InDelta(t, 0.85, filtered[0].AvgConfidence, confidenceTolerance)
+	assert.InDelta(t, 0.85, filtered[0].MaxConfidence, confidenceTolerance)
 }
 
 // TestGetSpeciesStats_UsesIndexSearches pins that the aggregate seeks an index on

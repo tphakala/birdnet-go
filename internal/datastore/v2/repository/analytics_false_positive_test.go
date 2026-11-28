@@ -53,7 +53,7 @@ func TestGetSpeciesSummary_ExcludesFalsePositives(t *testing.T) {
 	// Turdus merula has only a false positive.
 	seedFalsePositiveReview(t, db, seedDetection(t, db, turdus, 1500, 0.8))
 
-	got, err := repo.GetSpeciesSummary(ctx, 500, 5000, nil)
+	got, err := repo.GetSpeciesSummary(ctx, 500, 5000, nil, 0)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "a species with only false positives must not be listed")
 	assert.Equal(t, "Parus major", got[0].ScientificName)

@@ -3099,7 +3099,7 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil)
+	v2Data, err := ds.detection.GetSpeciesSummary(ctx, start, end, nil, 0)
 	if err != nil {
 		return nil, err
 	}

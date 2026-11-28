@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"maps"
+	"math"
 	"net/http"
 	"regexp"
 	"slices"
@@ -19,6 +20,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
@@ -637,11 +640,13 @@ func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.S
 func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 	startDate := ctx.QueryParam("start_date")
 	endDate := ctx.QueryParam("end_date")
+	minConfidence := c.parseOptionalFloat(ctx, "min_confidence", 0.0, apicore.PercentageMultiplier)
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 
 	c.LogInfoIfEnabled("Retrieving species summary",
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
+		logger.Float64("min_confidence", minConfidence),
 		logger.String("ip", ip),
 		logger.String("path", path),
 	)
@@ -650,8 +655,14 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 		return err
 	}
 
-	// Retrieve species summary data from the datastore
-	summaryData, dbDuration, err := c.fetchSpeciesSummaryData(ctx, startDate, endDate)
+	repo := c.speciesSummaryRepo()
+	if repo == nil && minConfidence > 0 {
+		return c.HandleError(ctx, nil, "min_confidence filter on species summary requires the enhanced (v2) database", http.StatusConflict)
+	}
+
+	// Retrieve species summary data from the v2 repository when available, falling
+	// back to the legacy datastore interface for legacy-only setups when minConfidence == 0.
+	summaryData, dbDuration, err := c.fetchSpeciesSummaryData(ctx, repo, startDate, endDate, minConfidence)
 	c.LogInfoIfEnabled("Database query completed",
 		logger.Int64("duration_ms", dbDuration.Milliseconds()),
 		logger.Int("record_count", len(summaryData)),
@@ -663,6 +674,7 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 		return c.handleAnalyticsQueryError(ctx, err, "Species summary", "Failed to get species summary data",
 			logger.String("start_date", startDate),
 			logger.String("end_date", endDate),
+			logger.Float64("min_confidence", minConfidence),
 			logger.String("ip", ip),
 			logger.String("path", path),
 		)
@@ -681,6 +693,7 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Species summary retrieved",
 		logger.String("start_date", startDate),
 		logger.String("end_date", endDate),
+		logger.Float64("min_confidence", minConfidence),
 		logger.Int("count", len(response)),
 		logger.Int("limit", limit),
 		logger.String("ip", ip),
@@ -690,13 +703,90 @@ func (c *Handler) GetSpeciesSummary(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, response)
 }
 
-// fetchSpeciesSummaryData fetches species summary data with timing
-func (c *Handler) fetchSpeciesSummaryData(ctx echo.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, time.Duration, error) {
+// fetchSpeciesSummaryData fetches species summary data with timing, preferring the
+// v2 detection repository so minConfidence is applied in SQL without expanding the
+// deprecated legacy datastore.Interface.
+func (c *Handler) fetchSpeciesSummaryData(ctx echo.Context, repo repository.DetectionRepository, startDate, endDate string, minConfidence float64) ([]datastore.SpeciesSummaryData, time.Duration, error) {
 	dbStart := time.Now()
 	queryCtx, cancel := withAnalyticsTimeout(ctx)
 	defer cancel()
+
+	if repo != nil {
+		loc := time.Local
+		start, end, err := parseSpeciesSummaryDateRange(startDate, endDate, loc)
+		if err != nil {
+			return nil, time.Since(dbStart), err
+		}
+		v2Data, err := repo.GetSpeciesSummary(queryCtx, start, end, nil, minConfidence)
+		if err != nil {
+			return nil, time.Since(dbStart), err
+		}
+
+		var nameMap map[string]string
+		if c.loadCommonNameMap != nil {
+			nameMap = c.loadCommonNameMap()
+		}
+		bn, bnErr := c.GetBirdNETInstance()
+
+		result := make([]datastore.SpeciesSummaryData, 0, len(v2Data))
+		for _, d := range v2Data {
+			sciName := detection.ExtractScientificName(d.ScientificName)
+			commonName := apicore.ResolveCommonName(nameMap, sciName)
+			var speciesCode string
+			if bnErr == nil && bn != nil {
+				if code, ok := bn.GetSpeciesCode(sciName); ok {
+					speciesCode = code
+				}
+			}
+			result = append(result, datastore.SpeciesSummaryData{
+				ScientificName: sciName,
+				CommonName:     commonName,
+				SpeciesCode:    speciesCode,
+				Count:          int(d.TotalDetections),
+				FirstSeen:      summaryTimeOrZero(d.FirstDetection, loc),
+				LastSeen:       summaryTimeOrZero(d.LastDetection, loc),
+				AvgConfidence:  d.AvgConfidence,
+				MaxConfidence:  d.MaxConfidence,
+			})
+		}
+		return result, time.Since(dbStart), nil
+	}
+
 	summaryData, err := c.DS.GetSpeciesSummaryData(queryCtx, startDate, endDate)
 	return summaryData, time.Since(dbStart), err
+}
+
+func parseSpeciesSummaryDateRange(startDate, endDate string, loc *time.Location) (start, end int64, err error) {
+	if startDate != "" {
+		day, parseErr := wallclock.ParseDate(startDate)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("invalid start date format: %w", parseErr)
+		}
+		dayStart, _ := wallclock.DayBounds(day, loc)
+		start = dayStart.Unix()
+	}
+	if endDate != "" {
+		day, parseErr := wallclock.ParseDate(endDate)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("invalid end date format: %w", parseErr)
+		}
+		_, dayEnd := wallclock.DayBounds(day, loc)
+		end = dayEnd.Unix()
+	}
+	if end == 0 {
+		end = math.MaxInt64
+	}
+	return start, end, nil
+}
+
+func summaryTimeOrZero(epoch int64, loc *time.Location) time.Time {
+	if epoch <= 0 {
+		return time.Time{}
+	}
+	if loc == nil {
+		loc = time.Local
+	}
+	return time.Unix(epoch, 0).In(loc)
 }
 
 // convertSummaryDataToResponse converts datastore models to API response

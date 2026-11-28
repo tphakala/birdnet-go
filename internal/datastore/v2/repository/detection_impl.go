@@ -1714,7 +1714,7 @@ func (r *detectionRepository) GetLocksByDetectionIDs(ctx context.Context, detect
 
 // GetSpeciesSummary returns summary statistics for all species.
 // Groups by scientific_name to aggregate across all models for the same species.
-func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error) {
+func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint, minConfidence float64) ([]SpeciesSummaryData, error) {
 	var results []SpeciesSummaryData
 
 	detTable := r.tableName()
@@ -1735,6 +1735,10 @@ func (r *detectionRepository) GetSpeciesSummary(ctx context.Context, start, end 
 		Joins(fmt.Sprintf("LEFT JOIN %s ON %s.id = %s.detection_id", revTable, detTable, revTable)).
 		Where(fmt.Sprintf("%s.detected_at >= ? AND %s.detected_at < ?", detTable, detTable), start, end).
 		Where(fmt.Sprintf("(%s.verified IS NULL OR %s.verified != ?)", revTable, revTable), string(entities.VerificationFalsePositive))
+
+	if minConfidence > 0 {
+		query = query.Where(fmt.Sprintf("%s.confidence >= ?", detTable), minConfidence)
+	}
 
 	if modelID != nil {
 		query = query.Where(fmt.Sprintf("%s.model_id = ?", detTable), *modelID)

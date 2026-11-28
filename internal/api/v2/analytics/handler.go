@@ -27,6 +27,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
@@ -45,6 +46,28 @@ type Handler struct {
 	// /insights/* and /dashboard/kpis endpoints. It is created lazily in
 	// RegisterInsightsRoutes (only when the v2 manager is available).
 	insightsRepo repository.InsightsRepository
+
+	// detectionRepo is the v2 detection repository used when available (optional
+	// override for tests; otherwise constructed lazily from V2Manager).
+	detectionRepo repository.DetectionRepository
+}
+
+func (c *Handler) speciesSummaryRepo() repository.DetectionRepository {
+	if c.detectionRepo != nil {
+		return c.detectionRepo
+	}
+	if c.V2Manager == nil || !datastoreV2.IsEnhancedDatabase() {
+		return nil
+	}
+	db := c.V2Manager.DB()
+	if db == nil {
+		return nil
+	}
+	var useV2Prefix bool
+	if tp, ok := c.V2Manager.(interface{ TablePrefix() string }); ok {
+		useV2Prefix = tp.TablePrefix() != ""
+	}
+	return repository.NewDetectionRepository(db, nil, useV2Prefix, c.V2Manager.IsMySQL())
 }
 
 // New constructs the analytics domain handler around the shared core and the
