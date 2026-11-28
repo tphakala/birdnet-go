@@ -1074,8 +1074,8 @@ func newHourlyQueue(t *testing.T, maxJobs int) *jobqueue.JobQueue {
 }
 
 // TestProcessApprovedDetection_FullQueueLogsOnlyAtWarn pins that a task the full
-// queue refuses is logged once, at Warn, by EnqueueTaskCtx, and not a second
-// time at Error by the enqueue loop.
+// queue refuses is logged at Warn by EnqueueTaskCtx and that the enqueue loop
+// adds no Error line for it.
 func TestProcessApprovedDetection_FullQueueLogsOnlyAtWarn(t *testing.T) {
 	conf.StoreSettings(nil)
 	t.Cleanup(func() { conf.StoreSettings(nil) })
